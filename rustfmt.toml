@@ -1,0 +1,16 @@
+edition = "2018"
+
+# check this ever so often
+unstable_features = true
+
+blank_lines_upper_bound = 1
+comment_width = 80
+condense_wildcard_suffixes = true
+format_strings = true
+match_block_trailing_comma = true
+max_width = 100
+merge_derives = true
+imports_granularity = "Crate"
+reorder_impl_items = true
+use_field_init_shorthand = true
+wrap_comments = true
