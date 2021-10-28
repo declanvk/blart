@@ -22,6 +22,10 @@ fn lookup_on_non_copy_leaf() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l1` and `l2`
+    // nodes which they are derived from.
     unsafe {
         let l1_search = search::<String>(root, &[1, 2, 3]).unwrap();
         let l2_search = search::<String>(root, &[1, 2, 4]).unwrap();
@@ -76,6 +80,10 @@ fn lookup_on_full_node4() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
+    // which they are derived from.
     unsafe {
         assert_eq!(search::<i32>(root, &[1, 2, 1]), Some(&121));
         assert_eq!(search::<i32>(root, &[1, 2, 2]), Some(&122));
@@ -145,6 +153,10 @@ fn lookup_on_node16() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
+    // which they are derived from.
     unsafe {
         assert_eq!(search::<i32>(root, &[1, 2, 1]), Some(&121));
         assert_eq!(search::<i32>(root, &[1, 2, 2]), Some(&122));
@@ -184,6 +196,10 @@ fn lookup_on_node48() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
+    // which they are derived from.
     unsafe {
         assert_eq!(search::<i32>(root, &[1, 2, 1]), Some(&121));
         assert_eq!(search::<i32>(root, &[1, 2, 2]), Some(&122));
@@ -223,6 +239,10 @@ fn lookup_on_node256() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
+    // which they are derived from.
     unsafe {
         assert_eq!(search::<i32>(root, &[1, 2, 1]), Some(&121));
         assert_eq!(search::<i32>(root, &[1, 2, 2]), Some(&122));
@@ -302,6 +322,10 @@ fn lookup_on_n16_n4_layer_tree() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
+    // which they are derived from.
     unsafe {
         assert_eq!(search::<i32>(root, &[1, 2, 3, 5, 6, 1]), Some(&123561));
         assert_eq!(search::<i32>(root, &[1, 2, 3, 5, 6, 2]), Some(&123562));
@@ -361,6 +385,10 @@ fn lookup_on_n48_n4_layer_tree() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
+    // which they are derived from.
     unsafe {
         assert_eq!(search::<i32>(root, &[1, 2, 3, 5, 6, 1]), Some(&123561));
         assert_eq!(search::<i32>(root, &[1, 2, 3, 5, 6, 2]), Some(&123562));
@@ -420,6 +448,10 @@ fn lookup_on_n256_n4_layer_tree() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
+    // which they are derived from.
     unsafe {
         assert_eq!(search::<i32>(root, &[1, 2, 3, 5, 6, 1]), Some(&123561));
         assert_eq!(search::<i32>(root, &[1, 2, 3, 5, 6, 2]), Some(&123562));
@@ -479,6 +511,10 @@ fn lookup_on_n4_n4_layer_tree() {
     // SAFETY: All the `search` calls are safe because they are specifing the `i32`
     // output type parameter, the same one that was used to construct the leaf
     // nodes.
+    //
+    // The references returned from the `search` function only live for the scope of
+    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
+    // which they are derived from.
     unsafe {
         assert_eq!(search::<i32>(root, &[1, 2, 3, 5, 6, 1]), Some(&123561));
         assert_eq!(search::<i32>(root, &[1, 2, 3, 5, 6, 2]), Some(&123562));

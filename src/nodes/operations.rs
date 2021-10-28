@@ -6,19 +6,23 @@ use super::{
     InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, NodeType, OpaqueNodePtr,
 };
 
-/// Search in the given tree for the value stored with the given key. The depth
+/// Search in the given tree for the value stored with the given key.
 ///
 /// # Safety
 ///
 ///   - The provided value type parameter, `T`, must be equal to the value type
 ///     of all the leaves stored in the tree.
-pub unsafe fn search<T>(root: OpaqueNodePtr, key: &[u8]) -> Option<&T> {
+///   - The reference returned from this function must not outlive the leaf node
+///     it was derived from. Generally, the reference should not be live past a
+///     mutation of this same tree via the `insert` or `delete` methods, as it
+///     may invalidate the reference.
+pub unsafe fn search<'k, 'v, T>(root: OpaqueNodePtr, key: &'k [u8]) -> Option<&'v T> {
     let mut current_node = root;
     let mut current_depth = 0;
 
     loop {
-        if let Some(og_leaf_node) = current_node.cast::<LeafNode<T>>() {
-            let leaf_node = og_leaf_node.read();
+        if let Some(leaf_node_ptr) = current_node.cast::<LeafNode<T>>() {
+            let leaf_node = leaf_node_ptr.read();
 
             // Specifically we are matching the leaf node stored key against the full search
             // key to confirm that it is the right value. Due to the method used for prefix
@@ -26,7 +30,7 @@ pub unsafe fn search<T>(root: OpaqueNodePtr, key: &[u8]) -> Option<&T> {
             // tree.
             if leaf_node.matches_key(key) {
                 let value_ref = unsafe {
-                    let value_ptr = ptr::addr_of_mut!((*og_leaf_node.to_ptr()).value);
+                    let value_ptr = ptr::addr_of_mut!((*leaf_node_ptr.to_ptr()).value);
 
                     value_ptr.as_ref().unwrap()
                 };
