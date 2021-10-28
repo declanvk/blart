@@ -3,6 +3,37 @@ use crate::nodes::NodePtr;
 use super::*;
 
 #[test]
+fn lookup_on_non_copy_leaf() {
+    let mut l1: LeafNode<String> = LeafNode::new(vec![1, 2, 3], "Hello world my name is".into());
+    let mut l2: LeafNode<String> = LeafNode::new(vec![1, 2, 4], "geregog".into());
+
+    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+
+    let mut inner_node = InnerNode4::empty();
+
+    // Update inner node prefix and child slots
+    inner_node.header.write_prefix(&[1, 2]);
+    inner_node.write_child(3, l1_ptr);
+    inner_node.write_child(4, l2_ptr);
+
+    let root = NodePtr::from(&mut inner_node).to_opaque();
+
+    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
+    // output type parameter, the same one that was used to construct the leaf
+    // nodes.
+    unsafe {
+        let l1_search = search::<String>(root, &[1, 2, 3]).unwrap();
+        let l2_search = search::<String>(root, &[1, 2, 4]).unwrap();
+
+        assert_eq!(l1_search, "Hello world my name is");
+        assert!(ptr::eq(l1_search, &l1.value));
+        assert_eq!(l2_search, "geregog");
+        assert!(ptr::eq(l2_search, &l2.value));
+    }
+}
+
+#[test]
 fn lookup_on_leaf() {
     let mut leaf: LeafNode<i32> = LeafNode::new(vec![1, 2, 3], 123);
     let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();

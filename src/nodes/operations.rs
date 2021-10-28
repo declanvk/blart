@@ -12,10 +12,7 @@ use super::{
 ///
 ///   - The provided value type parameter, `T`, must be equal to the value type
 ///     of all the leaves stored in the tree.
-pub unsafe fn search<T>(root: OpaqueNodePtr, key: &[u8]) -> Option<&T>
-where
-    T: Copy,
-{
+pub unsafe fn search<T>(root: OpaqueNodePtr, key: &[u8]) -> Option<&T> {
     let mut current_node = root;
     let mut current_depth = 0;
 
