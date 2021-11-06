@@ -238,13 +238,26 @@ impl<V> OpaqueNodePtr<V> {
     /// Create a non-opaque node pointer that will eliminate future type
     /// assertions, if the type of the pointed node matches the given
     /// node type.
-    pub fn cast<N: TaggedNode>(&self) -> Option<NodePtr<N>> {
+    pub fn cast<N: TaggedNode>(self) -> Option<NodePtr<N>> {
         if self.is::<N>() {
             // SAFETY: This cast is safe because all Node_ types have `repr(C)`
             // and have the `Header` field first.
             Some(NodePtr(self.0.cast::<N>()))
         } else {
             None
+        }
+    }
+
+    /// Cast this opaque pointer type an enum that contains a pointer to the
+    /// concrete node type.
+    pub fn to_node_ptr(self) -> InnerNodePtr<V> {
+        let header = self.read();
+        match header.node_type {
+            NodeType::Node4 => InnerNodePtr::Node4(self.cast::<InnerNode4<V>>().unwrap()),
+            NodeType::Node16 => InnerNodePtr::Node16(self.cast::<InnerNode16<V>>().unwrap()),
+            NodeType::Node48 => InnerNodePtr::Node48(self.cast::<InnerNode48<V>>().unwrap()),
+            NodeType::Node256 => InnerNodePtr::Node256(self.cast::<InnerNode256<V>>().unwrap()),
+            NodeType::Leaf => InnerNodePtr::LeafNode(self.cast::<LeafNode<V>>().unwrap()),
         }
     }
 
@@ -275,6 +288,21 @@ impl<V> OpaqueNodePtr<V> {
     pub fn to_ptr(self) -> *mut Header {
         self.0.as_ptr()
     }
+}
+
+/// An that encapsulates all the types of Nodes
+#[derive(Debug)]
+pub enum InnerNodePtr<V> {
+    /// Node that references between 2 and 4 children
+    Node4(NodePtr<InnerNode4<V>>),
+    /// Node that references between 5 and 16 children
+    Node16(NodePtr<InnerNode16<V>>),
+    /// Node that references between 17 and 49 children
+    Node48(NodePtr<InnerNode48<V>>),
+    /// Node that references between 49 and 256 children
+    Node256(NodePtr<InnerNode256<V>>),
+    /// Node that contains a single value
+    LeafNode(NodePtr<LeafNode<V>>),
 }
 
 /// A pointer to a Node{4,16,48,256}.
@@ -458,10 +486,7 @@ impl<V> InnerNode4<V> {
 
     /// Grow this node into the next larger class, copying over children and
     /// prefix information.
-    pub fn grow(self) -> InnerNode16<V>
-    where
-        V: fmt::Debug,
-    {
+    pub fn grow(self) -> InnerNode16<V> {
         let mut header = self.header;
         header.node_type = InnerNode16::<V>::TYPE;
         let mut keys = MaybeUninit::<u8>::uninit_array::<16>();

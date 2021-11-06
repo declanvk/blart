@@ -1,6 +1,5 @@
-use crate::nodes::NodePtr;
-
 use super::*;
+use crate::{nodes::NodePtr, InnerNode16, InnerNode256, InnerNode48};
 
 #[test]
 fn lookup_on_non_copy_leaf() {
@@ -363,7 +362,7 @@ fn lookup_on_n48_n4_layer_tree() {
 
     let mut n4_left = InnerNode4::empty();
     let mut n4_right = InnerNode4::empty();
-    let mut n48 = InnerNode48::empty();
+    let mut n48 = InnerNode4::empty();
 
     // Update inner node prefix and child slots
     n4_left.header.write_prefix(&[5, 6]);
