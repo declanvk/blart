@@ -28,15 +28,15 @@ pub enum NodeType {
 }
 
 impl NodeType {
-    /// The lower and upper bounds on the number of child nodes that this
+    /// The upper bound on the number of child nodes that this
     /// NodeType can have.
-    pub const fn capacity_bounds(self) -> (usize, usize) {
+    pub const fn upper_capacity(self) -> usize {
         match self {
-            NodeType::Node4 => (2, 4),
-            NodeType::Node16 => (5, 16),
-            NodeType::Node48 => (17, 48),
-            NodeType::Node256 => (49, 256),
-            NodeType::Leaf => (0, 0),
+            NodeType::Node4 => 4,
+            NodeType::Node16 => 16,
+            NodeType::Node48 => 48,
+            NodeType::Node256 => 256,
+            NodeType::Leaf => 0,
         }
     }
 }
@@ -48,7 +48,7 @@ pub struct Header {
     /// The size (in bytes) of the prefix stored in the header
     pub prefix_size: u32,
     /// Number of children this internal node points to
-    pub num_children: u8,
+    num_children: u16,
     /// The type of representation for this current node
     pub node_type: NodeType,
     /// The key prefix for this node.
@@ -130,7 +130,8 @@ impl Header {
         // be initialized up to NUM_PREFIX_BYTES bytes (the max length of the array).
         unsafe {
             MaybeUninit::slice_assume_init_ref(
-                &self.prefix[..cmp::min(NUM_PREFIX_BYTES, self.prefix_size as usize)],
+                &self.prefix
+                    [..cmp::min(NUM_PREFIX_BYTES, usize::try_from(self.prefix_size).unwrap())],
             )
         }
     }
@@ -160,6 +161,17 @@ impl Header {
         } else {
             num_matching_bytes
         }
+    }
+
+    /// Return true if the number of children of this node is greater than or
+    /// equal to the maximum capacity of this node type.
+    pub fn is_full(&self) -> bool {
+        self.num_children() >= self.node_type.upper_capacity()
+    }
+
+    /// Return the number of children of this node.
+    pub fn num_children(&self) -> usize {
+        usize::from(self.num_children)
     }
 }
 
@@ -256,7 +268,7 @@ impl<N: TaggedNode> NodePtr<N> {
 
 impl<N: TaggedNode> Clone for NodePtr<N> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0)
     }
 }
 impl<N: TaggedNode> Copy for NodePtr<N> {}
@@ -310,7 +322,7 @@ impl InnerNode4 {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
         // be initialized
         let keys = unsafe {
-            MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children as usize])
+            MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children()])
         };
 
         for (child_index, key) in keys.iter().enumerate() {
@@ -323,7 +335,7 @@ impl InnerNode4 {
             }
         }
 
-        return None;
+        None
     }
 
     /// Write a new child pointer with key fragment to this inner node.
@@ -332,9 +344,9 @@ impl InnerNode4 {
     ///
     /// Panics when the node is full.
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr) {
-        let child_index = self.header.num_children;
-        self.keys[usize::from(child_index)].write(key_fragment);
-        self.child_pointers[usize::from(child_index)].write(child_pointer);
+        let child_index = self.header.num_children();
+        self.keys[child_index].write(key_fragment);
+        self.child_pointers[child_index].write(child_pointer);
         self.header.num_children += 1;
     }
 }
@@ -380,16 +392,14 @@ impl InnerNode16 {
     pub fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr> {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
         // be initialized
-        unsafe {
-            MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children as usize])
-        }
-        .binary_search(&key_fragment)
-        .map(|child_index| {
-            // SAFETY: The `child_pointers` array is initialized to a matching length with
-            // the `keys` array.
-            unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) }
-        })
-        .ok()
+        unsafe { MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children()]) }
+            .binary_search(&key_fragment)
+            .map(|child_index| {
+                // SAFETY: The `child_pointers` array is initialized to a matching length with
+                // the `keys` array.
+                unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) }
+            })
+            .ok()
     }
 
     /// Write a new child pointer with key fragment to this inner node.
@@ -398,9 +408,9 @@ impl InnerNode16 {
     ///
     /// Panics when the node is full.
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr) {
-        let child_index = self.header.num_children;
-        self.keys[usize::from(child_index)].write(key_fragment);
-        self.child_pointers[usize::from(child_index)].write(child_pointer);
+        let child_index = self.header.num_children();
+        self.keys[child_index].write(key_fragment);
+        self.child_pointers[child_index].write(child_pointer);
         self.header.num_children += 1;
     }
 }
@@ -505,9 +515,9 @@ impl InnerNode48 {
     ///
     /// Panics when the node is full.
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr) {
-        let child_index = self.header.num_children;
+        let child_index = self.header.num_children();
         self.child_indices[usize::from(key_fragment)] = Node48Index::try_from(child_index).unwrap();
-        self.child_pointers[usize::from(child_index)].write(child_pointer);
+        self.child_pointers[child_index].write(child_pointer);
         self.header.num_children += 1;
     }
 }
@@ -831,5 +841,34 @@ mod tests {
         assert_eq!(h.prefix_size, 8);
 
         h.ltrim_prefix(0);
+    }
+
+    #[test]
+    fn header_is_full() {
+        let mut n = InnerNode4::empty();
+
+        assert!(!n.header.is_full());
+
+        let mut l1 = LeafNode::new(Box::new([]), ());
+        let mut l2 = LeafNode::new(Box::new([]), ());
+        let mut l3 = LeafNode::new(Box::new([]), ());
+        let mut l4 = LeafNode::new(Box::new([]), ());
+
+        {
+            let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+            let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+            let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+            let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+            n.write_child(0, l1_ptr);
+            n.write_child(1, l2_ptr);
+            n.write_child(2, l3_ptr);
+
+            assert!(!n.header.is_full());
+
+            n.write_child(3, l4_ptr);
+
+            assert!(n.header.is_full());
+        }
     }
 }
