@@ -43,7 +43,7 @@ impl NodeType {
 }
 
 /// The common header for all inner nodes
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Header {
     /// The size (in bytes) of the prefix stored in the header
@@ -60,6 +60,18 @@ pub struct Header {
     /// Only the first `prefix_size` bytes are guaranteed to be initialized.
     // size NUM_PREFIX_BYTES, alignment 1
     pub prefix: [MaybeUninit<u8>; NUM_PREFIX_BYTES],
+}
+
+impl fmt::Debug for Header {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let prefix = self.read_prefix();
+        f.debug_struct("Header")
+            .field("prefix_size", &self.prefix_size)
+            .field("num_children", &self.num_children)
+            .field("node_type", &self.node_type)
+            .field("prefix", &prefix)
+            .finish()
+    }
 }
 
 impl Header {
@@ -190,7 +202,6 @@ impl Default for Header {
 ///
 /// Could be any one of the NodeTypes, need to perform check on the runtime type
 /// and then cast to a `NodeRef`.
-#[derive(Debug, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct OpaqueNodePtr<V>(NonNull<Header>, PhantomData<V>);
 
@@ -199,6 +210,20 @@ impl<V> Copy for OpaqueNodePtr<V> {}
 impl<V> Clone for OpaqueNodePtr<V> {
     fn clone(&self) -> Self {
         Self(self.0.clone(), PhantomData)
+    }
+}
+
+impl<V> fmt::Debug for OpaqueNodePtr<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("OpaqueNodePtr").field(&self.0).finish()
+    }
+}
+
+impl<V> Eq for OpaqueNodePtr<V> {}
+
+impl<V> PartialEq for OpaqueNodePtr<V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0 && self.1 == other.1
     }
 }
 
@@ -334,7 +359,6 @@ pub trait TaggedNode {
 }
 
 /// Node that references between 2 and 4 children
-#[derive(Debug)]
 #[repr(C)]
 pub struct InnerNode4<V> {
     /// The common node fields.
@@ -364,6 +388,17 @@ impl<V> Clone for InnerNode4<V> {
     }
 }
 
+impl<V> fmt::Debug for InnerNode4<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (keys, child_pointers) = self.initialized_portion();
+        f.debug_struct("InnerNode4")
+            .field("header", &self.header)
+            .field("keys", &keys)
+            .field("child_pointers", &child_pointers)
+            .finish()
+    }
+}
+
 impl<V> InnerNode4<V> {
     /// Create an empty `Node4`.
     pub fn empty() -> Self {
@@ -377,19 +412,11 @@ impl<V> InnerNode4<V> {
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
     pub fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
-        // SAFETY: The array prefix with length `header.num_children` is guaranteed to
-        // be initialized
-        let keys = unsafe {
-            MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children()])
-        };
+        let (keys, child_pointers) = self.initialized_portion();
 
         for (child_index, key) in keys.iter().enumerate() {
             if *key == key_fragment {
-                // SAFETY: The `child_pointers` array is initialized to a matching length with
-                // the `keys` array.
-                let child = unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) };
-
-                return Some(child);
+                return Some(child_pointers[child_index]);
             }
         }
 
@@ -411,53 +438,38 @@ impl<V> InnerNode4<V> {
     /// Return an iterator over all the children of this node with their
     /// associated key fragment
     pub fn iter(&self) -> impl Iterator<Item = (u8, OpaqueNodePtr<V>)> + '_ {
+        let (keys, child_pointers) = self.initialized_portion();
+        keys.iter().copied().zip(child_pointers.iter().copied())
+    }
+
+    /// Return the initialized portions of the keys and child pointer arrays.
+    pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<V>]) {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
         // be initialized
-        let (keys, child_pointers) = unsafe {
+        unsafe {
             (
                 MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children()]),
                 MaybeUninit::slice_assume_init_ref(
                     &self.child_pointers[0..self.header.num_children()],
                 ),
             )
-        };
-
-        keys.iter().copied().zip(child_pointers.iter().copied())
+        }
     }
 
     /// Grow this node into the next larger class, copying over children and
     /// prefix information.
-    pub fn grow(self) -> InnerNode16<V> {
+    pub fn grow(self) -> InnerNode16<V>
+    where
+        V: fmt::Debug,
+    {
         let mut header = self.header;
         header.node_type = InnerNode16::<V>::TYPE;
         let mut keys = MaybeUninit::<u8>::uninit_array::<16>();
         let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<16>();
 
-        unsafe {
-            // SAFETY:
-            //  - Source and destination are both valid for reads and writes and aligned as
-            //    they are derived from references with the appropriate mutability (& for
-            //    src, &mut for dst)
-            //  - Source and destination are not overlapping as they are separate arrays.
-            ptr::copy_nonoverlapping(
-                MaybeUninit::slice_as_ptr(&self.keys),
-                MaybeUninit::slice_as_mut_ptr(keys.as_mut()),
-                header.num_children(),
-            );
-        }
-
-        unsafe {
-            // SAFETY:
-            //  - Source and destination are both valid for reads and writes and aligned as
-            //    they are derived from references with the appropriate mutability (& for
-            //    src, &mut for dst)
-            //  - Source and destination are not overlapping as they are separate arrays.
-            ptr::copy_nonoverlapping(
-                MaybeUninit::slice_as_ptr(&self.child_pointers),
-                MaybeUninit::slice_as_mut_ptr(child_pointers.as_mut()),
-                header.num_children(),
-            );
-        }
+        keys[..header.num_children()].copy_from_slice(&self.keys[..header.num_children()]);
+        child_pointers[..header.num_children()]
+            .copy_from_slice(&self.child_pointers[..header.num_children()]);
 
         InnerNode16 {
             header,
@@ -474,7 +486,6 @@ impl<V> TaggedNode for InnerNode4<V> {
 }
 
 /// Node that references between 5 and 16 children
-#[derive(Debug)]
 #[repr(C)]
 pub struct InnerNode16<V> {
     /// The common node fields.
@@ -504,6 +515,17 @@ impl<V> Clone for InnerNode16<V> {
     }
 }
 
+impl<V> fmt::Debug for InnerNode16<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (keys, child_pointers) = self.initialized_portion();
+        f.debug_struct("InnerNode16")
+            .field("header", &self.header)
+            .field("keys", &keys)
+            .field("child_pointers", &child_pointers)
+            .finish()
+    }
+}
+
 impl<V> InnerNode16<V> {
     /// Create an empty `Node16`.
     pub fn empty() -> Self {
@@ -520,16 +542,15 @@ impl<V> InnerNode16<V> {
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
     pub fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
-        // SAFETY: The array prefix with length `header.num_children` is guaranteed to
-        // be initialized
-        unsafe { MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children()]) }
-            .binary_search(&key_fragment)
-            .map(|child_index| {
-                // SAFETY: The `child_pointers` array is initialized to a matching length with
-                // the `keys` array.
-                unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) }
-            })
-            .ok()
+        let (keys, child_pointers) = self.initialized_portion();
+
+        for (child_index, key) in keys.iter().enumerate() {
+            if *key == key_fragment {
+                return Some(child_pointers[child_index]);
+            }
+        }
+
+        None
     }
 
     /// Write a new child pointer with key fragment to this inner node.
@@ -547,18 +568,23 @@ impl<V> InnerNode16<V> {
     /// Return an iterator over all the children of this node with their
     /// associated key fragment
     pub fn iter(&self) -> impl Iterator<Item = (u8, OpaqueNodePtr<V>)> + '_ {
+        let (keys, child_pointers) = self.initialized_portion();
+
+        keys.iter().copied().zip(child_pointers.iter().copied())
+    }
+
+    /// Return the initialized portions of the keys and child pointer arrays.
+    pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<V>]) {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
         // be initialized
-        let (keys, child_pointers) = unsafe {
+        unsafe {
             (
                 MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children()]),
                 MaybeUninit::slice_assume_init_ref(
                     &self.child_pointers[0..self.header.num_children()],
                 ),
             )
-        };
-
-        keys.iter().copied().zip(child_pointers.iter().copied())
+        }
     }
 
     /// Grow this node into the next larger class, copying over children and
@@ -569,28 +595,16 @@ impl<V> InnerNode16<V> {
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
         let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<48>();
 
-        // SAFETY: The array prefix with length `header.num_children` is guaranteed to
-        // be initialized
-        let initialized_keys =
-            unsafe { MaybeUninit::slice_assume_init_ref(&self.keys[0..header.num_children()]) };
-        for (index, key) in initialized_keys.iter().copied().enumerate() {
+        let (n16_keys, _) = self.initialized_portion();
+
+        for (index, key) in n16_keys.iter().copied().enumerate() {
             // PANIC SAFETY: This `try_from` will not panic because index is guaranteed to
             // be 15 or less because of the length of the `InnerNode16.keys` array.
             child_indices[usize::from(key)] = RestrictedNodeIndex::<48>::try_from(index).unwrap();
         }
 
-        unsafe {
-            // SAFETY:
-            //  - Source and destination are both valid for reads and writes and aligned as
-            //    they are derived from references with the appropriate mutability (& for
-            //    src, &mut for dst)
-            //  - Source and destination are not overlapping as they are separate arrays.
-            ptr::copy_nonoverlapping(
-                MaybeUninit::slice_as_ptr(&self.child_pointers),
-                MaybeUninit::slice_as_mut_ptr(child_pointers.as_mut()),
-                header.num_children(),
-            );
-        }
+        child_pointers[..header.num_children()]
+            .copy_from_slice(&self.child_pointers[..header.num_children()]);
 
         InnerNode48 {
             header,
@@ -697,13 +711,9 @@ impl<V> InnerNode48<V> {
     /// key fragment.
     pub fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
         let index = &self.child_indices[key_fragment as usize];
+        let child_pointers = self.initialized_child_pointers();
         if *index != RestrictedNodeIndex::<48>::EMPTY {
-            let child_index = usize::from(u8::from(*index));
-            // SAFETY: This type requires all slots in the `self.child_pointers` array to be
-            // initialized if they are pointed to by a non-PartialNodeIndex<48>::EMPTY child
-            // index.
-            let child = unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) };
-            Some(child)
+            Some(child_pointers[usize::from(u8::from(*index))])
         } else {
             None
         }
@@ -725,11 +735,7 @@ impl<V> InnerNode48<V> {
     /// Return an iterator over all the children of this node with their
     /// associated key fragment
     pub fn iter(&self) -> impl Iterator<Item = (u8, OpaqueNodePtr<V>)> + '_ {
-        // SAFETY: The array prefix with length `header.num_children` is guaranteed to
-        // be initialized
-        let child_pointers = unsafe {
-            MaybeUninit::slice_assume_init_ref(&self.child_pointers[0..self.header.num_children()])
-        };
+        let child_pointers = self.initialized_child_pointers();
 
         self.child_indices
             .iter()
@@ -744,6 +750,15 @@ impl<V> InnerNode48<V> {
                     child_pointers[usize::from(u8::from(*index))],
                 )
             })
+    }
+
+    /// Return the initialized portions of the child pointer array.
+    pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<V>] {
+        // SAFETY: The array prefix with length `header.num_children` is guaranteed to
+        // be initialized
+        unsafe {
+            MaybeUninit::slice_assume_init_ref(&self.child_pointers[0..self.header.num_children()])
+        }
     }
 
     /// Grow this node into the next larger class, copying over children and
@@ -953,6 +968,76 @@ mod tests {
     }
 
     #[test]
+    fn node4_write_child() {
+        let mut n = InnerNode4::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n.write_child(3, l1_ptr);
+        n.write_child(123, l2_ptr);
+        n.write_child(1, l3_ptr);
+
+        assert_eq!(n.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n.lookup_child(1), Some(l3_ptr));
+    }
+
+    #[test]
+    fn node4_grow() {
+        let mut n4 = InnerNode4::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n4.write_child(3, l1_ptr);
+        n4.write_child(123, l2_ptr);
+        n4.write_child(1, l3_ptr);
+
+        let n16 = n4.grow();
+
+        assert_eq!(n16.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n16.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n16.lookup_child(1), Some(l3_ptr));
+        assert_eq!(n16.lookup_child(4), None);
+    }
+
+    #[test]
+    fn node4_iterate() {
+        let mut n4 = InnerNode4::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n4.write_child(3, l1_ptr);
+        n4.write_child(123, l2_ptr);
+        n4.write_child(1, l3_ptr);
+
+        let pairs = n4.iter().collect::<Vec<_>>();
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
+            .is_some());
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 123 && *ptr == l2_ptr)
+            .is_some());
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 1 && *ptr == l3_ptr)
+            .is_some());
+    }
+
+    #[test]
     fn node16_lookup() {
         let mut n = InnerNode16::empty();
         let mut l1 = LeafNode::new(Box::new([]), ());
@@ -974,6 +1059,76 @@ mod tests {
         n.child_pointers[2].write(l3_ptr);
 
         assert_eq!(n.lookup_child(123), Some(l2_ptr));
+    }
+
+    #[test]
+    fn node16_write_child() {
+        let mut n = InnerNode16::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n.write_child(3, l1_ptr);
+        n.write_child(123, l2_ptr);
+        n.write_child(1, l3_ptr);
+
+        assert_eq!(n.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n.lookup_child(1), Some(l3_ptr));
+    }
+
+    #[test]
+    fn node16_grow() {
+        let mut n16 = InnerNode16::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n16.write_child(3, l1_ptr);
+        n16.write_child(123, l2_ptr);
+        n16.write_child(1, l3_ptr);
+
+        let n48 = n16.grow();
+
+        assert_eq!(n48.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n48.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n48.lookup_child(1), Some(l3_ptr));
+        assert_eq!(n48.lookup_child(4), None);
+    }
+
+    #[test]
+    fn node16_iterate() {
+        let mut n = InnerNode16::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n.write_child(3, l1_ptr);
+        n.write_child(123, l2_ptr);
+        n.write_child(1, l3_ptr);
+
+        let pairs = n.iter().collect::<Vec<_>>();
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
+            .is_some());
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 123 && *ptr == l2_ptr)
+            .is_some());
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 1 && *ptr == l3_ptr)
+            .is_some());
     }
 
     #[test]
@@ -1002,6 +1157,76 @@ mod tests {
     }
 
     #[test]
+    fn node48_write_child() {
+        let mut n = InnerNode48::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n.write_child(3, l1_ptr);
+        n.write_child(123, l2_ptr);
+        n.write_child(1, l3_ptr);
+
+        assert_eq!(n.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n.lookup_child(1), Some(l3_ptr));
+    }
+
+    #[test]
+    fn node48_grow() {
+        let mut n48 = InnerNode48::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n48.write_child(3, l1_ptr);
+        n48.write_child(123, l2_ptr);
+        n48.write_child(1, l3_ptr);
+
+        let n256 = n48.grow();
+
+        assert_eq!(n256.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n256.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n256.lookup_child(1), Some(l3_ptr));
+        assert_eq!(n256.lookup_child(4), None);
+    }
+
+    #[test]
+    fn node48_iterate() {
+        let mut n = InnerNode48::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n.write_child(3, l1_ptr);
+        n.write_child(123, l2_ptr);
+        n.write_child(1, l3_ptr);
+
+        let pairs = n.iter().collect::<Vec<_>>();
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
+            .is_some());
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 123 && *ptr == l2_ptr)
+            .is_some());
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 1 && *ptr == l3_ptr)
+            .is_some());
+    }
+
+    #[test]
     fn node256_lookup() {
         let mut n = InnerNode256::empty();
         let mut l1 = LeafNode::new(Box::new([]), ());
@@ -1020,6 +1245,54 @@ mod tests {
         n.child_pointers[3] = Some(l3_ptr);
 
         assert_eq!(n.lookup_child(123), Some(l2_ptr));
+    }
+
+    #[test]
+    fn node256_write_child() {
+        let mut n = InnerNode256::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n.write_child(3, l1_ptr);
+        n.write_child(123, l2_ptr);
+        n.write_child(1, l3_ptr);
+
+        assert_eq!(n.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n.lookup_child(1), Some(l3_ptr));
+    }
+
+    #[test]
+    fn node256_iterate() {
+        let mut n = InnerNode256::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n.write_child(3, l1_ptr);
+        n.write_child(123, l2_ptr);
+        n.write_child(1, l3_ptr);
+
+        let pairs = n.iter().collect::<Vec<_>>();
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
+            .is_some());
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 123 && *ptr == l2_ptr)
+            .is_some());
+        assert!(pairs
+            .iter()
+            .find(|(key_fragment, ptr)| *key_fragment == 1 && *ptr == l3_ptr)
+            .is_some());
     }
 
     #[test]
