@@ -957,15 +957,15 @@ mod tests {
         //
         // 4 bytes of padding are inserted after the `keys` field to align the field to
         // an 8 byte boundary.
-        assert_eq!(mem::size_of::<InnerNode4<usize>>() - header_size, 40);
+        assert_eq!(mem::size_of::<InnerNode4<usize>>(), 56);
         // key map: 16 * (1 byte) = 16 bytes
         // child map: 16 * (8 bytes (on 64-bit platform)) = 128
-        assert_eq!(mem::size_of::<InnerNode16<usize>>() - header_size, 144);
+        assert_eq!(mem::size_of::<InnerNode16<usize>>(), 160);
         // key map: 256 * (1 byte) = 256 bytes
         // child map: 48 * (8 bytes (on 64-bit platform)) = 384
-        assert_eq!(mem::size_of::<InnerNode48<usize>>() - header_size, 640);
+        assert_eq!(mem::size_of::<InnerNode48<usize>>(), 656);
         // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
-        assert_eq!(mem::size_of::<InnerNode256<usize>>() - header_size, 2048);
+        assert_eq!(mem::size_of::<InnerNode256<usize>>(), 2064);
     }
 
     #[test]
