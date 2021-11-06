@@ -237,10 +237,12 @@ impl<N: TaggedNode> NodePtr<N> {
     ///
     /// # Safety
     ///
-    /// Given pointer must be non-null, aligned, and point to a valid value of
-    /// N.
+    /// Given pointer must be non-null, aligned, and valid for reads or writes
+    /// of a value of N type.
     pub unsafe fn new(ptr: *mut N) -> Self {
-        NodePtr(NonNull::new_unchecked(ptr))
+        // SAFETY: The safety requirements of this function match the
+        // requirements of `NonNull::new_unchecked`.
+        unsafe { NodePtr(NonNull::new_unchecked(ptr)) }
     }
 
     /// Cast node pointer back to an opaque version, losing type information
@@ -419,45 +421,45 @@ impl TaggedNode for InnerNode16 {
     const TYPE: NodeType = NodeType::Node16;
 }
 
-/// A restricted index only valid from 0 to 47.
+/// A restricted index only valid from 0 to LIMIT - 1.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(transparent)]
-pub struct Node48Index(u8);
+pub struct RestrictedNodeIndex<const LIMIT: u8>(u8);
 
-impl Node48Index {
-    /// A placeholder index value that indicates
-    pub const EMPTY: Self = Node48Index(255);
+impl<const LIMIT: u8> RestrictedNodeIndex<LIMIT> {
+    /// A placeholder index value that indicates that the index is not occupied
+    pub const EMPTY: Self = RestrictedNodeIndex(LIMIT);
 }
 
-impl From<Node48Index> for u8 {
-    fn from(src: Node48Index) -> Self {
+impl<const LIMIT: u8> From<RestrictedNodeIndex<LIMIT>> for u8 {
+    fn from(src: RestrictedNodeIndex<LIMIT>) -> Self {
         src.0
     }
 }
 
-impl TryFrom<u8> for Node48Index {
+impl<const LIMIT: u8> TryFrom<usize> for RestrictedNodeIndex<LIMIT> {
     type Error = TryFromByteError;
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value < 48 {
-            Ok(Node48Index(value))
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        if value < usize::from(LIMIT) {
+            Ok(RestrictedNodeIndex(value as u8))
         } else {
-            Err(TryFromByteError(value))
+            Err(TryFromByteError(LIMIT, value))
         }
     }
 }
 
 /// The error type returned when attempting to construct an index outside the
-/// accepted range of a Node48Index.
+/// accepted range of a PartialNodeIndex.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TryFromByteError(u8);
+pub struct TryFromByteError(u8, usize);
 
 impl fmt::Display for TryFromByteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Input value [{}] is outside the allowed value range of Node48Index.",
-            self.0
+            "Input value [{}] is greater than the allowed maximum [{}] for PartialNodeIndex.",
+            self.1, self.0
         )
     }
 }
@@ -473,9 +475,9 @@ pub struct InnerNode48 {
     /// An array that maps key bytes (as the index) to the index value in the
     /// `child_pointers` array.
     ///
-    /// All the `child_indices` values are guaranteed to be `Node48Index::EMPTY`
-    /// when the node is constructed.
-    pub child_indices: [Node48Index; 256],
+    /// All the `child_indices` values are guaranteed to be
+    /// `PartialNodeIndex<48>::EMPTY` when the node is constructed.
+    pub child_indices: [RestrictedNodeIndex<48>; 256],
     /// For each element in this array, it is assumed to be initialized if there
     /// is a index in the `child_indices` array that points to it
     pub child_pointers: [MaybeUninit<OpaqueNodePtr>; 48],
@@ -489,7 +491,7 @@ impl InnerNode48 {
                 node_type: NodeType::Node48,
                 ..Header::default()
             },
-            child_indices: [Node48Index::EMPTY; 256],
+            child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
             child_pointers: MaybeUninit::uninit_array(),
         }
     }
@@ -498,10 +500,11 @@ impl InnerNode48 {
     /// key fragment.
     pub fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr> {
         let index = &self.child_indices[key_fragment as usize];
-        if *index != Node48Index::EMPTY {
+        if *index != RestrictedNodeIndex::<48>::EMPTY {
             let child_index = usize::from(u8::from(*index));
             // SAFETY: This type requires all slots in the `self.child_pointers` array to be
-            // initialized if they are pointed to by a non-Node48Index::EMPTY child index.
+            // initialized if they are pointed to by a non-PartialNodeIndex<48>::EMPTY child
+            // index.
             let child = unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) };
             Some(child)
         } else {
@@ -516,7 +519,8 @@ impl InnerNode48 {
     /// Panics when the node is full.
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr) {
         let child_index = self.header.num_children();
-        self.child_indices[usize::from(key_fragment)] = Node48Index::try_from(child_index).unwrap();
+        self.child_indices[usize::from(key_fragment)] =
+            RestrictedNodeIndex::<48>::try_from(child_index).unwrap();
         self.child_pointers[child_index].write(child_pointer);
         self.header.num_children += 1;
     }
