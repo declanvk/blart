@@ -580,15 +580,15 @@ pub struct LeafNode<T> {
     /// The leaf value.
     pub value: T,
     /// The full key that the `value` was stored with.
-    pub key: Vec<u8>,
+    pub key: Box<[u8]>,
 }
 
 impl<T> LeafNode<T> {
     /// Create a new leaf node with the given value.
-    pub fn new(key: impl Into<Vec<u8>>, value: T) -> Self {
+    pub fn new(key: Box<[u8]>, value: T) -> Self {
         LeafNode {
             value,
-            key: key.into(),
+            key,
             header: Header {
                 node_type: NodeType::Leaf,
                 ..Header::default()
@@ -598,7 +598,7 @@ impl<T> LeafNode<T> {
 
     /// Check that the provided key is the same one as the stored key.
     pub fn matches_key(&self, possible_key: &[u8]) -> bool {
-        self.key.eq(&possible_key)
+        self.key.as_ref().eq(possible_key)
     }
 }
 
@@ -647,9 +647,9 @@ mod tests {
     #[test]
     fn node4_lookup() {
         let mut n = InnerNode4::empty();
-        let mut l1 = LeafNode::new(vec![], ());
-        let mut l2 = LeafNode::new(vec![], ());
-        let mut l3 = LeafNode::new(vec![], ());
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -671,9 +671,9 @@ mod tests {
     #[test]
     fn node16_lookup() {
         let mut n = InnerNode16::empty();
-        let mut l1 = LeafNode::new(&[][..], ());
-        let mut l2 = LeafNode::new(&[][..], ());
-        let mut l3 = LeafNode::new(&[][..], ());
+        let mut l1 = LeafNode::new(Box::new([]), ());
+        let mut l2 = LeafNode::new(Box::new([]), ());
+        let mut l3 = LeafNode::new(Box::new([]), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -695,9 +695,9 @@ mod tests {
     #[test]
     fn node48_lookup() {
         let mut n = InnerNode48::empty();
-        let mut l1 = LeafNode::new(&[][..], ());
-        let mut l2 = LeafNode::new(&[][..], ());
-        let mut l3 = LeafNode::new(&[][..], ());
+        let mut l1 = LeafNode::new(Box::new([]), ());
+        let mut l2 = LeafNode::new(Box::new([]), ());
+        let mut l3 = LeafNode::new(Box::new([]), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -720,9 +720,9 @@ mod tests {
     #[test]
     fn node256_lookup() {
         let mut n = InnerNode256::empty();
-        let mut l1 = LeafNode::new(&[][..], ());
-        let mut l2 = LeafNode::new(&[][..], ());
-        let mut l3 = LeafNode::new(&[][..], ());
+        let mut l1 = LeafNode::new(Box::new([]), ());
+        let mut l2 = LeafNode::new(Box::new([]), ());
+        let mut l3 = LeafNode::new(Box::new([]), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
