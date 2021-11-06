@@ -10,18 +10,16 @@ use super::{
 ///
 /// # Safety
 ///
-///   - The provided value type parameter, `T`, must be equal to the value type
-///     of all the leaves stored in the tree.
 ///   - The reference returned from this function must not outlive the leaf node
 ///     it was derived from. Generally, the reference should not be live past a
 ///     mutation of this same tree via the `insert` or `delete` methods, as it
 ///     may invalidate the reference.
-pub unsafe fn search<'k, 'v, T>(root: OpaqueNodePtr, key: &'k [u8]) -> Option<&'v T> {
+pub unsafe fn search<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option<&'v V> {
     let mut current_node = root;
     let mut current_depth = 0;
 
     loop {
-        if let Some(leaf_node_ptr) = current_node.cast::<LeafNode<T>>() {
+        if let Some(leaf_node_ptr) = current_node.cast::<LeafNode<V>>() {
             let leaf_node = leaf_node_ptr.read();
 
             // Specifically we are matching the leaf node stored key against the full search
