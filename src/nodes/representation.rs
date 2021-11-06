@@ -84,6 +84,43 @@ impl Header {
         self.prefix_size += u32::try_from(new_bytes.len()).unwrap();
     }
 
+    /// The number of bytes from the start of the prefix.
+    ///
+    /// # Panics
+    ///
+    ///  - Panics if the starting point is greater than or equal to the prefix
+    ///    size
+    ///  - Panics if the prefix size is greater than NUM_PREFIX_BYTES (there are
+    ///    bytes represented by the prefix that are not present in memory).
+    pub fn ltrim_prefix(&mut self, num_bytes: usize) {
+        assert!(
+            num_bytes <= usize::try_from(self.prefix_size).unwrap(),
+            "Number of bytes to trim [{}] must be less than or equal to prefix size [{}].",
+            num_bytes,
+            self.prefix_size
+        );
+        assert!(
+            usize::try_from(self.prefix_size).unwrap() <= NUM_PREFIX_BYTES,
+            "Cannot trim prefix when the prefix size [{}] is greater than the number of stored \
+             bytes [{}].",
+            self.prefix_size,
+            NUM_PREFIX_BYTES
+        );
+
+        self.prefix_size -= u32::try_from(num_bytes).unwrap();
+        unsafe {
+            // SAFETY:
+            //   - self.prefix is valid for writes and aligned
+            ptr::copy(
+                self.prefix
+                    .as_ptr()
+                    .offset(isize::try_from(num_bytes).unwrap()),
+                self.prefix.as_mut_ptr(),
+                usize::try_from(self.prefix_size).unwrap(),
+            )
+        }
+    }
+
     /// Read the initialized portion of the prefix present in the header.
     ///
     /// The `prefix_size` can be larger than the `read_prefix().len()` because
@@ -748,5 +785,51 @@ mod tests {
             h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 100, 200, 254, 255]),
             12
         );
+    }
+
+    #[test]
+    fn header_delete_prefix() {
+        let mut h = Header::empty();
+        h.write_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(h.prefix_size, 8);
+
+        h.ltrim_prefix(0);
+        assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(h.prefix_size, 8);
+
+        h.ltrim_prefix(3);
+        assert_eq!(h.read_prefix(), &[4, 5, 6, 7, 8]);
+        assert_eq!(h.prefix_size, 5);
+
+        h.ltrim_prefix(1);
+        assert_eq!(h.read_prefix(), &[5, 6, 7, 8]);
+        assert_eq!(h.prefix_size, 4);
+
+        h.ltrim_prefix(4);
+        assert_eq!(h.read_prefix(), &[]);
+        assert_eq!(h.prefix_size, 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn header_ltrim_prefix_too_many_bytes_panic() {
+        let mut h = Header::empty();
+        h.write_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(h.prefix_size, 8);
+
+        h.ltrim_prefix(10);
+    }
+
+    #[test]
+    #[should_panic]
+    fn header_ltrim_prefix_non_stored_bytes_panic() {
+        let mut h = Header::empty();
+        h.write_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+        assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(h.prefix_size, 8);
+
+        h.ltrim_prefix(0);
     }
 }
