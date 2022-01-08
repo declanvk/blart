@@ -38,6 +38,10 @@ fn node_sizes() {
     assert_eq!(mem::size_of::<InnerNode48<usize>>(), 672);
     // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
     assert_eq!(mem::size_of::<InnerNode256<usize>>(), 2080);
+
+    // Assert that pointer is expected size and has non-null optimization
+    assert_eq!(mem::size_of::<Option<OpaqueNodePtr<()>>>(), 8);
+    assert_eq!(mem::size_of::<OpaqueNodePtr<()>>(), 8);
 }
 
 #[test]

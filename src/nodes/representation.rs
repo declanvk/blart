@@ -428,184 +428,25 @@ pub trait InnerNode: Node {
     fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>>;
 }
 
-/// Node that references between 2 and 4 children
-pub struct InnerNode4<V> {
+/// Node type that has a compact representation for key bytes and children
+/// pointers.
+pub struct InnerBlockNode<V, const SIZE: usize> {
     /// The common node fields.
     pub header: Header,
-    /// An array that contains the child data.
-    ///
-    /// This array will only be initialized for the first`header.num_children`
-    /// values.
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; 4],
     /// An array that contains single key bytes in the same index as the
     /// `child_pointers` array contains the matching child tree.
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
-    pub keys: [MaybeUninit<u8>; 4],
-}
-
-impl<V> Clone for InnerNode4<V> {
-    fn clone(&self) -> Self {
-        Self {
-            header: self.header.clone(),
-            keys: self.keys,
-            child_pointers: self.child_pointers,
-        }
-    }
-}
-
-impl<V> fmt::Debug for InnerNode4<V> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (keys, child_pointers) = self.initialized_portion();
-        f.debug_struct("InnerNode4")
-            .field("header", &self.header)
-            .field("keys", &keys)
-            .field("child_pointers", &child_pointers)
-            .finish()
-    }
-}
-
-impl<V> InnerNode4<V> {
-    /// Create an empty `Node4`.
-    pub fn empty() -> Self {
-        InnerNode4 {
-            header: Header::empty(),
-            child_pointers: MaybeUninit::uninit_array(),
-            keys: MaybeUninit::uninit_array(),
-        }
-    }
-
-    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        let (keys, _) = self.initialized_portion();
-
-        for (child_index, key) in keys.iter().enumerate() {
-            if *key == key_fragment {
-                return Some(child_index);
-            }
-        }
-
-        None
-    }
-
-    /// Return an iterator over all the children of this node with their
-    /// associated key fragment
-    pub fn iter(&self) -> Zip<Copied<Iter<u8>>, Copied<Iter<OpaqueNodePtr<V>>>> {
-        let (keys, child_pointers) = self.initialized_portion();
-        keys.iter().copied().zip(child_pointers.iter().copied())
-    }
-
-    /// Return the initialized portions of the keys and child pointer arrays.
-    pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<V>]) {
-        // SAFETY: The array prefix with length `header.num_children` is guaranteed to
-        // be initialized
-        unsafe {
-            (
-                MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children()]),
-                MaybeUninit::slice_assume_init_ref(
-                    &self.child_pointers[0..self.header.num_children()],
-                ),
-            )
-        }
-    }
-}
-
-impl<V> Node for InnerNode4<V> {
-    type Value = V;
-
-    const TYPE: NodeType = NodeType::Node4;
-}
-
-impl<V> InnerNode for InnerNode4<V> {
-    type GrownNode = InnerNode16<Self::Value>;
-
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
-        let child_index = self.lookup_child_index(key_fragment)?;
-        // SAFETY: The value at `child_index` is guaranteed to be initialized because
-        // the `lookup_child_index` function will only search in the initialized portion
-        // of the `child_pointers` array.
-        Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) })
-    }
-
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        let (keys, _) = self.initialized_portion();
-        let num_children = self.header.num_children();
-        match keys.binary_search(&key_fragment) {
-            Ok(child_index) => {
-                // overwrite existing key
-                self.child_pointers[child_index].write(child_pointer);
-            },
-            Err(child_index) => {
-                // add new key
-                // make sure new index is not beyond bounds, checks node is not full
-                assert!(child_index < self.keys.len(), "node is full");
-
-                if child_index != self.keys.len() - 1 {
-                    self.keys
-                        .copy_within(child_index..num_children, child_index + 1);
-                    self.child_pointers
-                        .copy_within(child_index..num_children, child_index + 1);
-                }
-
-                self.keys[child_index].write(key_fragment);
-                self.child_pointers[child_index].write(child_pointer);
-
-                self.header.num_children += 1;
-            },
-        }
-    }
-
-    fn grow(&self) -> Self::GrownNode {
-        let header = self.header.clone();
-        let mut keys = MaybeUninit::<u8>::uninit_array::<16>();
-        let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<16>();
-
-        keys[..header.num_children()].copy_from_slice(&self.keys[..header.num_children()]);
-        child_pointers[..header.num_children()]
-            .copy_from_slice(&self.child_pointers[..header.num_children()]);
-
-        InnerNode16 {
-            header,
-            keys,
-            child_pointers,
-        }
-    }
-
-    fn header(&self) -> &Header {
-        &self.header
-    }
-
-    fn header_mut(&mut self) -> &mut Header {
-        &mut self.header
-    }
-
-    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next()?.1)
-    }
-
-    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next_back()?.1)
-    }
-}
-
-/// Node that references between 5 and 16 children
-pub struct InnerNode16<V> {
-    /// The common node fields.
-    pub header: Header,
-    /// An array that contains single key bytes in the same index as the
-    /// `child_pointers` array contains the matching child tree.
-    ///
-    /// This array will only be initialized for `header.num_children` values,
-    /// starting from the 0 index.
-    pub keys: [MaybeUninit<u8>; 16],
+    pub keys: [MaybeUninit<u8>; SIZE],
     /// An array that contains the child data.
     ///
-    /// This array will only be initialized for `header.num_children` values,
-    /// starting from the 0 index.
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; 16],
+    /// This array will only be initialized for the first `header.num_children`
+    /// values.
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; SIZE],
 }
 
-impl<V> Clone for InnerNode16<V> {
+impl<V, const SIZE: usize> Clone for InnerBlockNode<V, SIZE> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -615,10 +456,11 @@ impl<V> Clone for InnerNode16<V> {
     }
 }
 
-impl<V> fmt::Debug for InnerNode16<V> {
+impl<V, const SIZE: usize> fmt::Debug for InnerBlockNode<V, SIZE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (keys, child_pointers) = self.initialized_portion();
-        f.debug_struct("InnerNode16")
+        f.debug_struct("InnerNodeBlock")
+            .field("SIZE", &SIZE)
             .field("header", &self.header)
             .field("keys", &keys)
             .field("child_pointers", &child_pointers)
@@ -626,10 +468,10 @@ impl<V> fmt::Debug for InnerNode16<V> {
     }
 }
 
-impl<V> InnerNode16<V> {
-    /// Create an empty `Node16`.
+impl<V, const SIZE: usize> InnerBlockNode<V, SIZE> {
+    /// Create an empty [`InnerNodeBlock`] with the given [`NodeType`].
     pub fn empty() -> Self {
-        InnerNode16 {
+        InnerBlockNode {
             header: Header::default(),
             child_pointers: MaybeUninit::uninit_array(),
             keys: MaybeUninit::uninit_array(),
@@ -652,7 +494,6 @@ impl<V> InnerNode16<V> {
     /// associated key fragment
     pub fn iter(&self) -> Zip<Copied<Iter<u8>>, Copied<Iter<OpaqueNodePtr<V>>>> {
         let (keys, child_pointers) = self.initialized_portion();
-
         keys.iter().copied().zip(child_pointers.iter().copied())
     }
 
@@ -669,18 +510,8 @@ impl<V> InnerNode16<V> {
             )
         }
     }
-}
 
-impl<V> Node for InnerNode16<V> {
-    type Value = V;
-
-    const TYPE: NodeType = NodeType::Node16;
-}
-
-impl<V> InnerNode for InnerNode16<V> {
-    type GrownNode = InnerNode48<Self::Value>;
-
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
+    fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
         let child_index = self.lookup_child_index(key_fragment)?;
         // SAFETY: The value at `child_index` is guaranteed to be initialized because
         // the `lookup_child_index` function will only search in the initialized portion
@@ -688,7 +519,7 @@ impl<V> InnerNode for InnerNode16<V> {
         Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) })
     }
 
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+    fn write_child_inner(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
         let (keys, _) = self.initialized_portion();
         let num_children = self.header.num_children();
         match keys.binary_search(&key_fragment) {
@@ -716,7 +547,23 @@ impl<V> InnerNode for InnerNode16<V> {
         }
     }
 
-    fn grow(&self) -> Self::GrownNode {
+    fn grow_block<const NEW_SIZE: usize>(&self) -> InnerBlockNode<V, NEW_SIZE> {
+        let header = self.header.clone();
+        let mut keys = MaybeUninit::<u8>::uninit_array::<NEW_SIZE>();
+        let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<NEW_SIZE>();
+
+        keys[..header.num_children()].copy_from_slice(&self.keys[..header.num_children()]);
+        child_pointers[..header.num_children()]
+            .copy_from_slice(&self.child_pointers[..header.num_children()]);
+
+        InnerBlockNode {
+            header,
+            keys,
+            child_pointers,
+        }
+    }
+
+    fn grow_node48(&self) -> InnerNode48<V> {
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
         let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<48>();
@@ -737,6 +584,72 @@ impl<V> InnerNode for InnerNode16<V> {
             child_indices,
             child_pointers,
         }
+    }
+}
+
+/// Node that references between 2 and 4 children
+pub type InnerNode4<V> = InnerBlockNode<V, 4>;
+
+impl<V> Node for InnerNode4<V> {
+    type Value = V;
+
+    const TYPE: NodeType = NodeType::Node4;
+}
+
+impl<V> InnerNode for InnerNode4<V> {
+    type GrownNode = InnerNode16<V>;
+
+    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
+        Self::lookup_child_inner(self, key_fragment)
+    }
+
+    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+        Self::write_child_inner(self, key_fragment, child_pointer)
+    }
+
+    fn grow(&self) -> Self::GrownNode {
+        self.grow_block()
+    }
+
+    fn header(&self) -> &Header {
+        &self.header
+    }
+
+    fn header_mut(&mut self) -> &mut Header {
+        &mut self.header
+    }
+
+    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next()?.1)
+    }
+
+    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next_back()?.1)
+    }
+}
+
+/// Node that references between 5 and 16 children
+pub type InnerNode16<V> = InnerBlockNode<V, 16>;
+
+impl<V> Node for InnerNode16<V> {
+    type Value = V;
+
+    const TYPE: NodeType = NodeType::Node16;
+}
+
+impl<V> InnerNode for InnerNode16<V> {
+    type GrownNode = InnerNode48<Self::Value>;
+
+    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
+        Self::lookup_child_inner(self, key_fragment)
+    }
+
+    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+        Self::write_child_inner(self, key_fragment, child_pointer)
+    }
+
+    fn grow(&self) -> Self::GrownNode {
+        self.grow_node48()
     }
 
     fn header(&self) -> &Header {
