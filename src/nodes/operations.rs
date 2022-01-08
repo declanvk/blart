@@ -1,6 +1,6 @@
 //! Tie node lookup and manipulation
 
-use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr, TaggedNode};
+use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
 use std::ptr;
 
 /// Search in the given tree for the value stored with the given key.
@@ -66,6 +66,11 @@ pub unsafe fn search<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option
 ///
 ///   - Panics if the key already exists in the trie.
 ///   - Panics if the key is a prefix of another key that exists in the trie.
+///
+/// # Safety
+///
+///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
+///    node object, otherwise a deallocation may create dangling pointers.
 pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
     let current_node = root;
     let mut current_depth = 0;
@@ -86,14 +91,12 @@ pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
             current_depth += prefix_size;
 
             let new_leaf_key_byte = new_leaf.key[current_depth];
-            // SAFETY: TODO
-            let new_leaf_pointer = unsafe { allocate_node(new_leaf) };
+            let new_leaf_pointer = NodePtr::allocate_node(new_leaf);
 
             new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
             new_n4.write_child(leaf_node.key[current_depth], *current_node);
 
-            // SAFETY: TODO
-            *current_node = unsafe { allocate_node(new_n4) }.to_opaque();
+            *current_node = NodePtr::allocate_node(new_n4).to_opaque();
 
             return;
         }
@@ -108,8 +111,7 @@ pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
             let matched_prefix_size = usize::try_from(matched_prefix_size).unwrap();
 
             let new_leaf_key_byte = new_leaf.key[current_depth + matched_prefix_size];
-            // SAFETY: TODO
-            let new_leaf_pointer = unsafe { allocate_node(new_leaf) }.to_opaque();
+            let new_leaf_pointer = NodePtr::allocate_node(new_leaf).to_opaque();
 
             new_n4.write_child(new_leaf_key_byte, new_leaf_pointer);
             new_n4.write_child(header.read_prefix()[matched_prefix_size], *current_node);
@@ -121,8 +123,7 @@ pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
 
             // Updated the header information here
             current_node.write(*header);
-            // SAFETY: TODO
-            *current_node = unsafe { allocate_node(new_n4) }.to_opaque();
+            *current_node = NodePtr::allocate_node(new_n4).to_opaque();
             return;
         }
 
@@ -152,7 +153,9 @@ pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
                     // over.
 
                     // SAFETY: We determine that the current node is not a leaf by checking earlier
-                    // in the loop
+                    // in the loop. The uniqueness requirement for the `current_node` must be upheld
+                    // at the `insert` function level. The `insert` function does not create
+                    // aliasing node pointers.
                     unsafe {
                         grow_unchecked(current_node);
                     }
@@ -196,37 +199,46 @@ unsafe fn lookup_child_unchecked<V>(
 ///
 /// # Safety
 ///
-/// The current node must not be a leaf node.
+///  - The current node must not be a leaf node.
+///  - The `current_node` must be a reference to the only existing pointer to
+///    the node object, otherwise the possible deallocation may create dangling
+///    pointers.
 unsafe fn grow_unchecked<V>(current_node: &mut OpaqueNodePtr<V>) {
     match current_node.to_node_ptr() {
         InnerNodePtr::Node4(old_node) => {
             let inner_node = old_node.read();
             let new_node = inner_node.grow();
-            let new_node = unsafe { allocate_node(new_node) }.to_opaque();
+            let new_node = NodePtr::allocate_node(new_node).to_opaque();
             *current_node = new_node;
-            // SAFETY: TODO
+            // SAFETY: The `deallocate_node` function is only called a single time. The
+            // uniqueness requirement is passed up to the `grow_unchecked` safet
+            // requirements.
             unsafe {
-                deallocate_node(old_node);
+                NodePtr::deallocate_node(old_node);
             }
         },
         InnerNodePtr::Node16(old_node) => {
             let inner_node = old_node.read();
             let new_node = inner_node.grow();
-            let new_node = unsafe { allocate_node(new_node) }.to_opaque();
+            let new_node = NodePtr::allocate_node(new_node).to_opaque();
             *current_node = new_node;
-            // SAFETY: TODO
+            // SAFETY: The `deallocate_node` function is only called a single time. The
+            // uniqueness requirement is passed up to the `grow_unchecked` safet
+            // requirements.
             unsafe {
-                deallocate_node(old_node);
+                NodePtr::deallocate_node(old_node);
             }
         },
         InnerNodePtr::Node48(old_node) => {
             let inner_node = old_node.read();
             let new_node = inner_node.grow();
-            let new_node = unsafe { allocate_node(new_node) }.to_opaque();
+            let new_node = NodePtr::allocate_node(new_node).to_opaque();
             *current_node = new_node;
-            // SAFETY: TODO
+            // SAFETY: The `deallocate_node` function is only called a single time. The
+            // uniqueness requirement is passed up to the `grow_unchecked` safet
+            // requirements.
             unsafe {
-                deallocate_node(old_node);
+                NodePtr::deallocate_node(old_node);
             }
         },
         InnerNodePtr::Node256(_) => {
@@ -252,32 +264,28 @@ unsafe fn insert_child_unchecked<V>(
     match current_node.to_node_ptr() {
         InnerNodePtr::Node4(old_node) => {
             old_node.update(|mut inner_node| {
-                // SAFETY: TODO
-                let new_leaf_ptr = unsafe { allocate_node(new_leaf) };
+                let new_leaf_ptr = NodePtr::allocate_node(new_leaf);
                 inner_node.write_child(key_fragment, new_leaf_ptr.to_opaque());
                 inner_node
             });
         },
         InnerNodePtr::Node16(old_node) => {
             old_node.update(|mut inner_node| {
-                // SAFETY: TODO
-                let new_leaf_ptr = unsafe { allocate_node(new_leaf) };
+                let new_leaf_ptr = NodePtr::allocate_node(new_leaf);
                 inner_node.write_child(key_fragment, new_leaf_ptr.to_opaque());
                 inner_node
             });
         },
         InnerNodePtr::Node48(old_node) => {
             old_node.update(|mut inner_node| {
-                // SAFETY: TODO
-                let new_leaf_ptr = unsafe { allocate_node(new_leaf) };
+                let new_leaf_ptr = NodePtr::allocate_node(new_leaf);
                 inner_node.write_child(key_fragment, new_leaf_ptr.to_opaque());
                 inner_node
             });
         },
         InnerNodePtr::Node256(old_node) => {
             old_node.update(|mut inner_node| {
-                // SAFETY: TODO
-                let new_leaf_ptr = unsafe { allocate_node(new_leaf) };
+                let new_leaf_ptr = NodePtr::allocate_node(new_leaf);
                 inner_node.write_child(key_fragment, new_leaf_ptr.to_opaque());
                 inner_node
             });
@@ -285,29 +293,6 @@ unsafe fn insert_child_unchecked<V>(
         InnerNodePtr::LeafNode(_) => unreachable!(
             "This branch is not possible because of the safety invariants of the function."
         ),
-    }
-}
-
-/// # Safety
-///
-/// TODO
-unsafe fn allocate_node<N: TaggedNode>(node: N) -> NodePtr<N> {
-    // SAFETY: TODO
-    unsafe { NodePtr::new(Box::into_raw(Box::new(node))) }
-}
-
-/// # Safety
-///
-/// TODO
-unsafe fn deallocate_node<N: TaggedNode>(node: NodePtr<N>) {
-    // SAFETY: TODO
-    // This function is unsafe because improper use may lead to memory problems. For
-    // example, a double-free may occur if the function is called twice on the same
-    // raw pointer.
-    //
-    // The safety conditions are described in the memory layout section.
-    unsafe {
-        Box::from_raw(node.to_ptr());
     }
 }
 

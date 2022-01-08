@@ -85,8 +85,14 @@ impl Header {
         }
     }
 
-    /// Write a new prefix to this header, updating the existing prefix if
+    /// Write prefix bytes to this header, appending to existing bytes if
     /// present.
+    ///
+    /// If the total numbers of bytes (existing + new) is greater than
+    /// [`NUM_PREFIX_BYTES`], the prefix is truncated to [`NUM_PREFIX_BYTES`]
+    /// length and remainder are represented implicitly by the length. This
+    /// doesn't present an issue to the radix tree operation (lookup, insert,
+    /// etc) because the full key is always stored in the leaf nodes.
     pub fn write_prefix(&mut self, new_bytes: &[u8]) {
         let prefix_size = usize::try_from(self.prefix_size).unwrap();
         if prefix_size < self.prefix.len() {
@@ -101,14 +107,14 @@ impl Header {
         self.prefix_size += u32::try_from(new_bytes.len()).unwrap();
     }
 
-    /// The number of bytes from the start of the prefix.
+    /// Remove the specified number of bytes from the start of the prefix.
     ///
     /// # Panics
     ///
-    ///  - Panics if the starting point is greater than or equal to the prefix
-    ///    size
-    ///  - Panics if the prefix size is greater than NUM_PREFIX_BYTES (there are
-    ///    bytes represented by the prefix that are not present in memory).
+    ///  - Panics if the number of bytes to remove is greater than or equal to
+    ///    the prefix size
+    ///  - Panics if the prefix size is greater than [`NUM_PREFIX_BYTES`] (there
+    ///    are bytes represented by the prefix that are not present in memory).
     pub fn ltrim_prefix(&mut self, num_bytes: usize) {
         assert!(
             num_bytes <= usize::try_from(self.prefix_size).unwrap(),
@@ -141,7 +147,7 @@ impl Header {
     /// Read the initialized portion of the prefix present in the header.
     ///
     /// The `prefix_size` can be larger than the `read_prefix().len()` because
-    /// only NUM_PREFIX_BYTES are stored.
+    /// only [`NUM_PREFIX_BYTES`] are stored.
     pub fn read_prefix(&self) -> &[u8] {
         // SAFETY: The array prefix with length `header.prefix_size` is guaranteed to
         // be initialized up to NUM_PREFIX_BYTES bytes (the max length of the array).
@@ -209,7 +215,7 @@ impl<V> Copy for OpaqueNodePtr<V> {}
 
 impl<V> Clone for OpaqueNodePtr<V> {
     fn clone(&self) -> Self {
-        Self(self.0.clone(), PhantomData)
+        Self(self.0, PhantomData)
     }
 }
 
@@ -229,7 +235,7 @@ impl<V> PartialEq for OpaqueNodePtr<V> {
 
 impl<V> OpaqueNodePtr<V> {
     /// Return `true` if this Node_ pointer points to the specified concrete
-    /// NodeType.
+    /// [`NodeType`].
     pub fn is<N: TaggedNode>(&self) -> bool {
         // SAFETY: inner pointer is guaranteed not to be null by `NonNull` wrapper.
         unsafe { (*self.0.as_ptr()).node_type == N::TYPE }
@@ -274,8 +280,8 @@ impl<V> OpaqueNodePtr<V> {
 
     /// Write a new value for the header without moving the old value.
     ///
-    /// The old value is overwritten without dropping because the Header struct
-    /// is Copy.
+    /// The old value is overwritten without dropping because the [Header]
+    /// struct is Copy.
     pub fn write(self, updated_value: Header) {
         // SAFETY: The requirements of proper alignment and validity for
         // writes are required by the construction of the NodePtr type. An
@@ -321,6 +327,30 @@ impl<N: TaggedNode> NodePtr<N> {
         // SAFETY: The safety requirements of this function match the
         // requirements of `NonNull::new_unchecked`.
         unsafe { NodePtr(NonNull::new_unchecked(ptr)) }
+    }
+
+    /// Allocate the given [`TaggedNode`] on the [`std::alloc::Global`] heap and
+    /// return a [`NodePtr`] that wrap the raw pointer.
+    pub fn allocate_node(node: N) -> Self {
+        // SAFETY: The pointer from [`Box::into_raw`] is non-null, aligned, and valid
+        // for reads and writes of the [`TaggedNode`] `N`.
+        unsafe { NodePtr::new(Box::into_raw(Box::new(node))) }
+    }
+
+    /// Deallocate a [`TaggedNode`] object created with the
+    /// [`NodePtr::allocate_node`] function.
+    ///
+    /// # Safety
+    ///
+    ///  - This function can only be called when there is only a single
+    ///    remaining [`NodePtr`] to the object, otherwise other pointers would
+    ///    be referenced deallocated memory.
+    ///  - This function can only be called once for a given node object.
+    pub unsafe fn deallocate_node(node: Self) {
+        // SAFETY: Covered by safety condition on functiom
+        unsafe {
+            Box::from_raw(node.to_ptr());
+        }
     }
 
     /// Cast node pointer back to an opaque version, losing type information
@@ -409,9 +439,9 @@ impl<V> Copy for InnerNode4<V> {}
 impl<V> Clone for InnerNode4<V> {
     fn clone(&self) -> Self {
         Self {
-            header: self.header.clone(),
-            keys: self.keys.clone(),
-            child_pointers: self.child_pointers.clone(),
+            header: self.header,
+            keys: self.keys,
+            child_pointers: self.child_pointers,
         }
     }
 }
@@ -533,9 +563,9 @@ impl<V> Copy for InnerNode16<V> {}
 impl<V> Clone for InnerNode16<V> {
     fn clone(&self) -> Self {
         Self {
-            header: self.header.clone(),
-            keys: self.keys.clone(),
-            child_pointers: self.child_pointers.clone(),
+            header: self.header,
+            keys: self.keys,
+            child_pointers: self.child_pointers,
         }
     }
 }
@@ -712,9 +742,9 @@ impl<V> Copy for InnerNode48<V> {}
 impl<V> Clone for InnerNode48<V> {
     fn clone(&self) -> Self {
         Self {
-            header: self.header.clone(),
-            child_indices: self.child_indices.clone(),
-            child_pointers: self.child_pointers.clone(),
+            header: self.header,
+            child_indices: self.child_indices,
+            child_pointers: self.child_pointers,
         }
     }
 }
@@ -825,8 +855,8 @@ impl<V> Copy for InnerNode256<V> {}
 impl<V> Clone for InnerNode256<V> {
     fn clone(&self) -> Self {
         Self {
-            header: self.header.clone(),
-            child_pointers: self.child_pointers.clone(),
+            header: self.header,
+            child_pointers: self.child_pointers,
         }
     }
 }
