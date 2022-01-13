@@ -370,20 +370,24 @@ impl<N: TaggedNode> NodePtr<N> {
         ManuallyDrop::new(unsafe { ptr::read(self.0.as_ptr()) })
     }
 
-    /// Read the current value value of this node, update it, then write it back
-    /// to memory.
+    /// With the given closure, perform an update to the underlying node through
+    /// a mutable reference.
     ///
-    /// If the given closure panics, then the value will not be updated.
-    pub fn update(self, f: impl FnOnce(ManuallyDrop<N>) -> ManuallyDrop<N>) {
-        let inner_value = self.read();
+    /// # Safety
+    ///
+    ///  - This function must not be called concurrent with any other read or
+    ///    mutation of the underlying node.
+    pub unsafe fn update<O>(mut self, f: impl FnOnce(&mut N) -> O) -> O {
+        // SAFETY: The pointer is properly aligned and points to a initialized instance
+        // of N that is dereferenceable. The lifetime of this reference is bounded to
+        // this function and will not escape the code. However, calls to this function
+        // must enforce the uniqueness constraint that is associated with mutable
+        // references.
+        let inner_value = unsafe { self.0.as_mut() };
 
-        let updated_value = (f)(inner_value);
+        let ouput_value = (f)(inner_value);
 
-        // SAFETY: The requirements of proper alignment and validity for
-        // writes are required by the construction of the NodePtr type. An
-        // OpaqueNodePtr can only be constructed from an earlier instance of a
-        // NodePtr.
-        unsafe { ptr::write(self.0.as_ptr(), ManuallyDrop::into_inner(updated_value)) }
+        ouput_value
     }
 
     /// Acquires the underlying *mut pointer.

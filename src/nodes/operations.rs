@@ -11,6 +11,9 @@ use std::ptr;
 ///     it was derived from. Generally, the reference should not be live past a
 ///     mutation of this same tree via the `insert` or `delete` methods, as it
 ///     may invalidate the reference.
+///   - This function cannot be called concurrently to any reads or writes of
+///     `root` or any child node of `root`. This function will arbitrarily read
+///     to any child in the given tree.
 pub unsafe fn search<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option<&'v V> {
     let mut current_node = root;
     let mut current_depth = 0;
@@ -71,7 +74,13 @@ pub unsafe fn search<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option
 ///
 ///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
 ///    node object, otherwise a deallocation may create dangling pointers.
-pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
+///  - This function cannot be called concurrently to any reads or writes of the
+///    `root` node or any child node of `root`. This function will arbitrarily
+///    read or write to any child in the given tree.
+pub unsafe fn insert<V>(
+    root: &mut OpaqueNodePtr<V>,
+    new_leaf: LeafNode<V>,
+) -> NodePtr<LeafNode<V>> {
     let current_node = root;
     let mut current_depth = 0;
 
@@ -98,7 +107,7 @@ pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
 
             *current_node = NodePtr::allocate_node(new_n4).to_opaque();
 
-            return;
+            return new_leaf_pointer;
         }
 
         // since header is mutable will need to write it back
@@ -111,9 +120,9 @@ pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
             let matched_prefix_size = usize::try_from(matched_prefix_size).unwrap();
 
             let new_leaf_key_byte = new_leaf.key[current_depth + matched_prefix_size];
-            let new_leaf_pointer = NodePtr::allocate_node(new_leaf).to_opaque();
+            let new_leaf_pointer = NodePtr::allocate_node(new_leaf);
 
-            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer);
+            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
             new_n4.write_child(header.read_prefix()[matched_prefix_size], *current_node);
 
             new_n4
@@ -124,7 +133,7 @@ pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
             // Updated the header information here
             current_node.write(*header);
             *current_node = NodePtr::allocate_node(new_n4).to_opaque();
-            return;
+            return new_leaf_pointer;
         }
 
         current_depth += usize::try_from(header.prefix_size).unwrap();
@@ -162,12 +171,12 @@ pub unsafe fn insert<V>(root: &mut OpaqueNodePtr<V>, new_leaf: LeafNode<V>) {
                 }
 
                 // SAFETY: We determine that the current node is not a leaf by checking earlier
-                // in the loop
-                unsafe {
+                // in the loop. The requirement of no other current read or write to the
+                // `current_node` is carried to the caller of `insert`. From inside the `insert`
+                // function, there are no other current reads or writes.
+                return unsafe {
                     insert_child_unchecked(*current_node, new_leaf.key[current_depth], new_leaf)
                 };
-
-                return;
             },
         }
     }
@@ -255,44 +264,41 @@ unsafe fn grow_unchecked<V>(current_node: &mut OpaqueNodePtr<V>) {
 ///
 /// # Safety
 ///
-/// The current node must not be a leaf node.
+///  - The current node must not be a leaf node.
+///  - This function must not be called concurrently with any other read or
+///    mutation of the given `current_node`.
 unsafe fn insert_child_unchecked<V>(
     current_node: OpaqueNodePtr<V>,
     key_fragment: u8,
     new_leaf: LeafNode<V>,
-) {
-    match current_node.to_node_ptr() {
-        InnerNodePtr::Node4(old_node) => {
-            old_node.update(|mut inner_node| {
+) -> NodePtr<LeafNode<V>> {
+    // SAFETY: The `update` function safety requirements are passed onto the caller.
+    unsafe {
+        match current_node.to_node_ptr() {
+            InnerNodePtr::Node4(old_node) => old_node.update(|inner_node| {
                 let new_leaf_ptr = NodePtr::allocate_node(new_leaf);
                 inner_node.write_child(key_fragment, new_leaf_ptr.to_opaque());
-                inner_node
-            });
-        },
-        InnerNodePtr::Node16(old_node) => {
-            old_node.update(|mut inner_node| {
+                new_leaf_ptr
+            }),
+            InnerNodePtr::Node16(old_node) => old_node.update(|inner_node| {
                 let new_leaf_ptr = NodePtr::allocate_node(new_leaf);
                 inner_node.write_child(key_fragment, new_leaf_ptr.to_opaque());
-                inner_node
-            });
-        },
-        InnerNodePtr::Node48(old_node) => {
-            old_node.update(|mut inner_node| {
+                new_leaf_ptr
+            }),
+            InnerNodePtr::Node48(old_node) => old_node.update(|inner_node| {
                 let new_leaf_ptr = NodePtr::allocate_node(new_leaf);
                 inner_node.write_child(key_fragment, new_leaf_ptr.to_opaque());
-                inner_node
-            });
-        },
-        InnerNodePtr::Node256(old_node) => {
-            old_node.update(|mut inner_node| {
+                new_leaf_ptr
+            }),
+            InnerNodePtr::Node256(old_node) => old_node.update(|inner_node| {
                 let new_leaf_ptr = NodePtr::allocate_node(new_leaf);
                 inner_node.write_child(key_fragment, new_leaf_ptr.to_opaque());
-                inner_node
-            });
-        },
-        InnerNodePtr::LeafNode(_) => unreachable!(
-            "This branch is not possible because of the safety invariants of the function."
-        ),
+                new_leaf_ptr
+            }),
+            InnerNodePtr::LeafNode(_) => unreachable!(
+                "This branch is not possible because of the safety invariants of the function."
+            ),
+        }
     }
 }
 
