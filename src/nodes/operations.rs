@@ -212,6 +212,11 @@ unsafe fn lookup_child_unchecked<V>(
 ///  - The `current_node` must be a reference to the only existing pointer to
 ///    the node object, otherwise the possible deallocation may create dangling
 ///    pointers.
+///
+/// # Panic
+///
+///  - Panics if the current node is a `InnerNode256` as this cannot grow any
+///    larger.
 unsafe fn grow_unchecked<V>(current_node: &mut OpaqueNodePtr<V>) {
     match current_node.to_node_ptr() {
         InnerNodePtr::Node4(old_node) => {
@@ -220,7 +225,7 @@ unsafe fn grow_unchecked<V>(current_node: &mut OpaqueNodePtr<V>) {
             let new_node = NodePtr::allocate_node(new_node).to_opaque();
             *current_node = new_node;
             // SAFETY: The `deallocate_node` function is only called a single time. The
-            // uniqueness requirement is passed up to the `grow_unchecked` safet
+            // uniqueness requirement is passed up to the `grow_unchecked` safety
             // requirements.
             unsafe {
                 NodePtr::deallocate_node(old_node);
@@ -232,7 +237,7 @@ unsafe fn grow_unchecked<V>(current_node: &mut OpaqueNodePtr<V>) {
             let new_node = NodePtr::allocate_node(new_node).to_opaque();
             *current_node = new_node;
             // SAFETY: The `deallocate_node` function is only called a single time. The
-            // uniqueness requirement is passed up to the `grow_unchecked` safet
+            // uniqueness requirement is passed up to the `grow_unchecked` safety
             // requirements.
             unsafe {
                 NodePtr::deallocate_node(old_node);
@@ -244,7 +249,7 @@ unsafe fn grow_unchecked<V>(current_node: &mut OpaqueNodePtr<V>) {
             let new_node = NodePtr::allocate_node(new_node).to_opaque();
             *current_node = new_node;
             // SAFETY: The `deallocate_node` function is only called a single time. The
-            // uniqueness requirement is passed up to the `grow_unchecked` safet
+            // uniqueness requirement is passed up to the `grow_unchecked` safety
             // requirements.
             unsafe {
                 NodePtr::deallocate_node(old_node);
@@ -299,6 +304,79 @@ unsafe fn insert_child_unchecked<V>(
                 "This branch is not possible because of the safety invariants of the function."
             ),
         }
+    }
+}
+
+/// Deallocate the given node and all children of the given node.
+///
+/// This will also deallocate the leaf nodes with their value type data.
+///
+/// # Safety
+///
+///  - The `current_node` must be the only existing pointer to the node object
+///    and all the children of the node object, otherwise the deallocation may
+///    create dangling pointers.
+pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
+    // TODO: Consider an iterative solution to handle tree with long keys.
+
+    match root.to_node_ptr() {
+        InnerNodePtr::Node4(inner) => {
+            {
+                let inner = inner.read();
+                for (_, child) in inner.iter() {
+                    // SAFETY: The safety requirements of this function are already satisfied by the
+                    // caller as this is a recursive call.
+                    unsafe { deallocate_tree(child) }
+                }
+            }
+            // SAFETY: The uniqueness requirement of the `deallocate_node` function is
+            // satisfied by the safety requirements on the `deallocate_tree` function.
+            unsafe { NodePtr::deallocate_node(inner) }
+        },
+        InnerNodePtr::Node16(inner) => {
+            {
+                let inner = inner.read();
+                for (_, child) in inner.iter() {
+                    // SAFETY: The safety requirements of this function are already satisfied by the
+                    // caller as this is a recursive call.
+                    unsafe { deallocate_tree(child) }
+                }
+            }
+            // SAFETY: The uniqueness requirement of the `deallocate_node` function is
+            // satisfied by the safety requirements on the `deallocate_tree` function.
+            unsafe { NodePtr::deallocate_node(inner) }
+        },
+        InnerNodePtr::Node48(inner) => {
+            {
+                let inner = inner.read();
+                for (_, child) in inner.iter() {
+                    // SAFETY: The safety requirements of this function are already satisfied by the
+                    // caller as this is a recursive call.
+                    unsafe { deallocate_tree(child) }
+                }
+            }
+            // SAFETY: The uniqueness requirement of the `deallocate_node` function is
+            // satisfied by the safety requirements on the `deallocate_tree` function.
+            unsafe { NodePtr::deallocate_node(inner) }
+        },
+        InnerNodePtr::Node256(inner) => {
+            {
+                let inner = inner.read();
+                for (_, child) in inner.iter() {
+                    // SAFETY: The safety requirements of this function are already satisfied by the
+                    // caller as this is a recursive call.
+                    unsafe { deallocate_tree(child) }
+                }
+            }
+            // SAFETY: The uniqueness requirement of the `deallocate_node` function is
+            // satisfied by the safety requirements on the `deallocate_tree` function.
+            unsafe { NodePtr::deallocate_node(inner) }
+        },
+        InnerNodePtr::LeafNode(inner) => {
+            // SAFETY: The uniqueness requirement of the `deallocate_node` function is
+            // satisfied by the safety requirements on the `deallocate_tree` function.
+            unsafe { NodePtr::deallocate_node(inner) }
+        },
     }
 }
 
