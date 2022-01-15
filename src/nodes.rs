@@ -2,6 +2,7 @@
 
 mod operations;
 mod representation;
+pub mod visitor;
 
 pub use operations::*;
 pub use representation::*;
