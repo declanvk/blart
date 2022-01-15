@@ -725,7 +725,6 @@ impl fmt::Display for TryFromByteError {
 impl Error for TryFromByteError {}
 
 /// Node that references between 17 and 49 children
-#[derive(Debug)]
 #[repr(C)]
 pub struct InnerNode48<V> {
     /// The common node fields.
@@ -739,6 +738,16 @@ pub struct InnerNode48<V> {
     /// For each element in this array, it is assumed to be initialized if there
     /// is a index in the `child_indices` array that points to it
     pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; 48],
+}
+
+impl<V> fmt::Debug for InnerNode48<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InnerNode48")
+            .field("header", &self.header)
+            .field("child_indices", &self.child_indices)
+            .field("child_pointers", &self.child_pointers)
+            .finish()
+    }
 }
 
 impl<V> Copy for InnerNode48<V> {}
@@ -845,13 +854,21 @@ impl<V> TaggedNode for InnerNode48<V> {
 }
 
 /// Node that references between 49 and 256 children
-#[derive(Debug)]
 #[repr(C)]
 pub struct InnerNode256<V> {
     /// The common node fields.
     pub header: Header,
     /// An array that directly maps a key byte (as index) to a child node.
     pub child_pointers: [Option<OpaqueNodePtr<V>>; 256],
+}
+
+impl<V> fmt::Debug for InnerNode256<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InnerNode256")
+            .field("header", &self.header)
+            .field("child_pointers", &self.child_pointers)
+            .finish()
+    }
 }
 
 impl<V> Copy for InnerNode256<V> {}
