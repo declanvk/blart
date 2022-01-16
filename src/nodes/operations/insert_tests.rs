@@ -1,3 +1,5 @@
+use std::iter::once;
+
 use super::*;
 use crate::NodeType;
 
@@ -8,8 +10,8 @@ fn insert_to_small_trees() {
 
     let new_leaf = LeafNode::new(Box::new([1, 2, 5, 6]), "1256".to_string());
 
-    let tree = &mut first_leaf.to_opaque();
-    let new_leaf = unsafe { insert(tree, new_leaf) };
+    let mut tree = first_leaf.to_opaque();
+    tree = unsafe { insert(tree, new_leaf) };
 
     assert_eq!(tree.read().node_type, NodeType::Node4);
 
@@ -19,7 +21,7 @@ fn insert_to_small_trees() {
         let root = new_root.read();
 
         assert_eq!(root.header.read_prefix(), &[1, 2]);
-        assert_eq!(root.lookup_child(5), Some(new_leaf.to_opaque()));
+        assert!(root.lookup_child(5).is_some());
         assert_eq!(root.lookup_child(3), Some(first_leaf.to_opaque()));
         assert_eq!(root.lookup_child(1), None);
     }
@@ -35,4 +37,49 @@ fn insert_to_small_trees() {
     assert_eq!(unsafe { search(new_root.to_opaque(), &[1, 2, 3, 5]) }, None);
 
     unsafe { deallocate_tree(new_root.to_opaque()) };
+}
+
+#[test]
+fn insert_into_left_skewed_tree_deallocate() {
+    const KEY_LENGTH_LIMIT: usize = u8::MAX as usize;
+    let first_leaf = NodePtr::allocate_node(LeafNode::new(Box::new([0, u8::MAX]), 1));
+    let mut current_root = first_leaf.to_opaque();
+
+    for key_size in 2..KEY_LENGTH_LIMIT {
+        let key = (0..key_size)
+            .chain(once(u8::MAX as usize))
+            .map(|byte| (byte % (u8::MAX as usize + 1)) as u8)
+            .collect::<Vec<_>>();
+
+        current_root = unsafe {
+            insert(
+                current_root,
+                LeafNode::new(key.into_boxed_slice(), key_size),
+            )
+        };
+    }
+
+    for key_size in 1..KEY_LENGTH_LIMIT {
+        let key = (0..key_size)
+            .chain(once(u8::MAX as usize))
+            .map(|byte| (byte % (u8::MAX as usize + 1)) as u8)
+            .collect::<Vec<_>>();
+
+        let search_result = unsafe { search(current_root, key.as_ref()) };
+
+        assert_eq!(search_result.copied(), Some(key_size));
+    }
+
+    unsafe { deallocate_tree(current_root) };
+}
+
+#[test]
+#[should_panic]
+fn insert_prefix_expect_panic() {
+    let first_leaf =
+        NodePtr::allocate_node(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+
+    let new_leaf = LeafNode::new(Box::new([1, 2]), "12".to_string());
+    let tree = first_leaf.to_opaque();
+    unsafe { insert(tree, new_leaf) };
 }

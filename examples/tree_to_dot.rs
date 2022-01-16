@@ -71,7 +71,7 @@ fn make_tree(iter: impl Iterator<Item = Box<[u8]>>) -> Option<OpaqueNodePtr<usiz
     for (value, key) in iter {
         // SAFETY: There are no other pointers to `current_root` node. There are no
         // concurrent reads or writes to the `current_root` node ongoing.
-        unsafe { insert(&mut current_root, LeafNode::new(key, value)) };
+        current_root = unsafe { insert(current_root, LeafNode::new(key, value)) };
     }
 
     Some(current_root)

@@ -26,7 +26,7 @@ pub trait Visitable<T> {
     /// in the [`Visitor`] trait. For example the [`Visitable`] implementation
     /// for [`InnerNode4`] looks like:
     ///
-    /// ```rust,nocompile
+    /// ```rust,compile_fail
     /// impl<T> Visitable<T> for InnerNode4<T> {
     ///     ...
     ///  

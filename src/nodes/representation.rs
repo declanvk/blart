@@ -474,11 +474,19 @@ impl<V> InnerNode4<V> {
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
     pub fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
-        let (keys, child_pointers) = self.initialized_portion();
+        let child_index = self.lookup_child_index(key_fragment)?;
+        // SAFETY: The value at `child_index` is guaranteed to be initialized because
+        // the `lookup_child_index` function will only search in the initialized portion
+        // of the `child_pointers` array.
+        return Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) });
+    }
+
+    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        let (keys, _) = self.initialized_portion();
 
         for (child_index, key) in keys.iter().enumerate() {
             if *key == key_fragment {
-                return Some(child_pointers[child_index]);
+                return Some(child_index);
             }
         }
 
@@ -495,6 +503,16 @@ impl<V> InnerNode4<V> {
         self.keys[child_index].write(key_fragment);
         self.child_pointers[child_index].write(child_pointer);
         self.header.num_children += 1;
+    }
+
+    /// Write to an existing key to update the child pointer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the key is not already set in the node.
+    pub fn overwrite_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+        let child_index = self.lookup_child_index(key_fragment).unwrap();
+        self.child_pointers[child_index].write(child_pointer);
     }
 
     /// Return an iterator over all the children of this node with their
@@ -601,11 +619,19 @@ impl<V> InnerNode16<V> {
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
     pub fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
-        let (keys, child_pointers) = self.initialized_portion();
+        let child_index = self.lookup_child_index(key_fragment)?;
+        // SAFETY: The value at `child_index` is guaranteed to be initialized because
+        // the `lookup_child_index` function will only search in the initialized portion
+        // of the `child_pointers` array.
+        return Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) });
+    }
+
+    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        let (keys, _) = self.initialized_portion();
 
         for (child_index, key) in keys.iter().enumerate() {
             if *key == key_fragment {
-                return Some(child_pointers[child_index]);
+                return Some(child_index);
             }
         }
 
@@ -622,6 +648,16 @@ impl<V> InnerNode16<V> {
         self.keys[child_index].write(key_fragment);
         self.child_pointers[child_index].write(child_pointer);
         self.header.num_children += 1;
+    }
+
+    /// Write to an existing key to update the child pointer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the key is not already set in the node.
+    pub fn overwrite_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+        let child_index = self.lookup_child_index(key_fragment).unwrap();
+        self.child_pointers[child_index].write(child_pointer);
     }
 
     /// Return an iterator over all the children of this node with their
@@ -778,7 +814,7 @@ impl<V> InnerNode48<V> {
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
     pub fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
-        let index = &self.child_indices[key_fragment as usize];
+        let index = &self.child_indices[usize::from(key_fragment)];
         let child_pointers = self.initialized_child_pointers();
         if *index != RestrictedNodeIndex::<48>::EMPTY {
             Some(child_pointers[usize::from(u8::from(*index))])
@@ -798,6 +834,19 @@ impl<V> InnerNode48<V> {
             RestrictedNodeIndex::<48>::try_from(child_index).unwrap();
         self.child_pointers[child_index].write(child_pointer);
         self.header.num_children += 1;
+    }
+
+    /// Write to an existing key to update the child pointer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the key is not already set in the node.
+    pub fn overwrite_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+        let index = &self.child_indices[usize::from(key_fragment)];
+        if *index == RestrictedNodeIndex::<48>::EMPTY {
+            panic!("given key is not already set in node!");
+        }
+        self.child_pointers[usize::from(u8::from(*index))] = MaybeUninit::new(child_pointer);
     }
 
     /// Return an iterator over all the children of this node with their
@@ -904,6 +953,18 @@ impl<V> InnerNode256<V> {
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
         self.child_pointers[usize::from(key_fragment)] = Some(child_pointer);
         self.header.num_children += 1;
+    }
+
+    /// Write to an existing key to update the child pointer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the key is not already set in the node.
+    pub fn overwrite_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+        if self.child_pointers[usize::from(key_fragment)].is_none() {
+            panic!("given key is not already set in node!");
+        }
+        self.child_pointers[usize::from(key_fragment)] = Some(child_pointer);
     }
 
     /// Return an iterator over all the children of this node with their
