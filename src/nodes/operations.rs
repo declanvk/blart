@@ -14,7 +14,7 @@ use std::{error::Error, fmt::Display, ptr};
 ///   - This function cannot be called concurrently to any reads or writes of
 ///     `root` or any child node of `root`. This function will arbitrarily read
 ///     to any child in the given tree.
-pub unsafe fn search<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option<&'v V> {
+pub unsafe fn search_unchecked<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option<&'v V> {
     let mut current_node = root;
     let mut current_depth = 0;
 
@@ -79,7 +79,7 @@ pub unsafe fn search<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn insert<V>(
+pub unsafe fn insert_unchecked<V>(
     root: OpaqueNodePtr<V>,
     new_leaf: LeafNode<V>,
 ) -> Result<OpaqueNodePtr<V>, InsertError> {
@@ -127,6 +127,13 @@ pub unsafe fn insert<V>(
             // common prefix into a new parent node
             let mut new_n4 = InnerNode4::empty();
             let matched_prefix_size = usize::try_from(matched_prefix_size).unwrap();
+
+            if (depth + matched_prefix_size) >= new_leaf.key.len() {
+                // then the key has insufficient bytes to be unique. It must be
+                // a prefix of an existing key
+
+                return Err(InsertError::PrefixKey(new_leaf.key));
+            }
 
             let new_leaf_key_byte = new_leaf.key[depth + matched_prefix_size];
             let new_leaf_pointer = NodePtr::allocate_node(new_leaf);

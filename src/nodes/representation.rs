@@ -122,13 +122,6 @@ impl Header {
             num_bytes,
             self.prefix_size
         );
-        assert!(
-            usize::try_from(self.prefix_size).unwrap() <= NUM_PREFIX_BYTES,
-            "Cannot trim prefix when the prefix size [{}] is greater than the number of stored \
-             bytes [{}].",
-            self.prefix_size,
-            NUM_PREFIX_BYTES
-        );
 
         self.prefix_size -= u32::try_from(num_bytes).unwrap();
         unsafe {
@@ -173,17 +166,9 @@ impl Header {
             num_matching_bytes += 1;
         }
 
-        if usize::try_from(num_matching_bytes).unwrap() == NUM_PREFIX_BYTES
-            && self.prefix_size > num_matching_bytes
-        {
-            // If we've matched the max number of bytes, but there are still more in the
-            // conceptual prefix we just assume that the prefix matches and continue on.
-            // This will be checked in the end by a final comparison vs the key stored
-            // alongside the value
-            cmp::min(self.prefix_size, u32::try_from(possible_key.len()).unwrap())
-        } else {
-            num_matching_bytes
-        }
+        // We do not consider the bytes that are beyond the `NUM_PREFIX_BYTES` and are
+        // not represented in memory.
+        num_matching_bytes
     }
 
     /// Return true if the number of children of this node is greater than or

@@ -450,14 +450,14 @@ fn header_check_prefix() {
     assert_eq!(h.match_prefix(&[]), 0);
 
     assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]), 8);
-    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 12);
+    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 8);
     assert_eq!(
         h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]),
-        12
+        8
     );
     assert_eq!(
         h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 100, 200, 254, 255]),
-        12
+        8
     );
 }
 

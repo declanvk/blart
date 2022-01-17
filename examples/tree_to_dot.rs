@@ -1,5 +1,7 @@
 use argh::FromArgs;
-use rad_tree::{deallocate_tree, insert, visitor::DotPrinter, LeafNode, NodePtr, OpaqueNodePtr};
+use rad_tree::{
+    deallocate_tree, insert_unchecked, visitor::DotPrinter, LeafNode, NodePtr, OpaqueNodePtr,
+};
 use std::{
     error::Error,
     fmt::Display,
@@ -71,7 +73,8 @@ fn make_tree(iter: impl Iterator<Item = Box<[u8]>>) -> Option<OpaqueNodePtr<usiz
     for (value, key) in iter {
         // SAFETY: There are no other pointers to `current_root` node. There are no
         // concurrent reads or writes to the `current_root` node ongoing.
-        current_root = unsafe { insert(current_root, LeafNode::new(key, value)).unwrap() };
+        current_root =
+            unsafe { insert_unchecked(current_root, LeafNode::new(key, value)).unwrap() };
     }
 
     Some(current_root)
