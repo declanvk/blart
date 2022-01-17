@@ -1,7 +1,7 @@
 //! Tie node lookup and manipulation
 
 use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
-use std::ptr;
+use std::{error::Error, fmt::Display, ptr};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -65,10 +65,12 @@ pub unsafe fn search<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option
 
 /// Insert the given key-value pair into the tree.
 ///
-/// # Panics
+/// # Errors
 ///
-///   - Panics if the key already exists in the trie.
-///   - Panics if the key is a prefix of another key that exists in the trie.
+///   - Returns a [`InsertError::EmptyKey`] if the given key is an empty array.
+///   - Returns a [`InsertError::PrefixKey`] if the given key is a prefix of
+///     another key that exists in the trie. Or if the given key is prefixed by
+///     an existing key in the trie.
 ///
 /// # Safety
 ///
@@ -77,13 +79,16 @@ pub unsafe fn search<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> OpaqueNodePtr<V> {
+pub unsafe fn insert<V>(
+    root: OpaqueNodePtr<V>,
+    new_leaf: LeafNode<V>,
+) -> Result<OpaqueNodePtr<V>, InsertError> {
     // TODO: Consider an iterative solution to handle tree with long keys.
     fn insert_rec_inner<V>(
         mut root: OpaqueNodePtr<V>,
         new_leaf: LeafNode<V>,
         mut depth: usize,
-    ) -> OpaqueNodePtr<V> {
+    ) -> Result<OpaqueNodePtr<V>, InsertError> {
         if let Some(leaf_node_ptr) = root.cast::<LeafNode<V>>() {
             let leaf_node = leaf_node_ptr.read();
 
@@ -98,13 +103,20 @@ pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> Opaque
                 .write_prefix(&new_leaf.key[depth..(depth + prefix_size)]);
             depth += prefix_size;
 
+            if depth >= new_leaf.key.len() || depth >= leaf_node.key.len() {
+                // then the key has insufficient bytes to be unique. It must be
+                // a prefix of an existing key OR an existing key is a prefix of it
+
+                return Err(InsertError::PrefixKey(new_leaf.key));
+            }
+
             let new_leaf_key_byte = new_leaf.key[depth];
             let new_leaf_pointer = NodePtr::allocate_node(new_leaf);
 
             new_n4.write_child(leaf_node.key[depth], root);
             new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
 
-            return NodePtr::allocate_node(new_n4).to_opaque();
+            return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
 
         // since header is mutable will need to write it back
@@ -129,7 +141,7 @@ pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> Opaque
 
             // Updated the header information here
             root.write(*header);
-            return NodePtr::allocate_node(new_n4).to_opaque();
+            return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
 
         depth += usize::try_from(header.prefix_size).unwrap();
@@ -137,11 +149,7 @@ pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> Opaque
         let next_key_fragment = if depth < new_leaf.key.len() {
             new_leaf.key[depth]
         } else {
-            panic!(
-                "Attempted to insert a key [{:?}] which is a prefix of an existing key in the \
-                 tree!",
-                new_leaf.key
-            )
+            return Err(InsertError::PrefixKey(new_leaf.key));
         };
 
         // SAFETY: We checked that the current node is not a leaf earlier in the loop
@@ -149,7 +157,7 @@ pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> Opaque
 
         match next_child_node {
             Some(next_child_node) => {
-                let new_child = insert_rec_inner(next_child_node, new_leaf, depth + 1);
+                let new_child = insert_rec_inner(next_child_node, new_leaf, depth + 1)?;
                 // SAFETY: We determine that the current node is not a leaf by checking earlier
                 // in the loop. The requirement of no other current read or write to the
                 // `current_node` is carried to the caller of `insert`. From inside the `insert`
@@ -157,8 +165,6 @@ pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> Opaque
                 unsafe {
                     overwrite_child_unchecked(root, next_key_fragment, new_child);
                 }
-
-                root
             },
             None => {
                 if header.is_full() {
@@ -185,14 +191,45 @@ pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> Opaque
                         NodePtr::allocate_node(new_leaf).to_opaque(),
                     );
                 }
-
-                root
             },
         }
+
+        Ok(root)
+    }
+
+    if new_leaf.key.is_empty() {
+        return Err(InsertError::EmptyKey);
     }
 
     insert_rec_inner(root, new_leaf, 0)
 }
+
+/// The error type for the insert operation on the tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InsertError {
+    /// Attempted to insert an empty key.
+    EmptyKey,
+    /// Attempted to insert a key which was a prefix of an existing key in the
+    /// tree.
+    PrefixKey(Box<[u8]>),
+}
+
+impl Display for InsertError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InsertError::EmptyKey => write!(f, "Key is an empty array of bytes."),
+            InsertError::PrefixKey(key) => {
+                write!(
+                    f,
+                    "Attempted to insert a key [{key:?}] which is either a prefix of an existing \
+                     key or an existing key is a prefix of the new key."
+                )
+            },
+        }
+    }
+}
+
+impl Error for InsertError {}
 
 /// Lookup the child of the current node, excluding the possibility of a
 /// LeafNode.

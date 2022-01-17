@@ -11,7 +11,7 @@ fn insert_to_small_trees() {
     let new_leaf = LeafNode::new(Box::new([1, 2, 5, 6]), "1256".to_string());
 
     let mut tree = first_leaf.to_opaque();
-    tree = unsafe { insert(tree, new_leaf) };
+    tree = unsafe { insert(tree, new_leaf).unwrap() };
 
     assert_eq!(tree.read().node_type, NodeType::Node4);
 
@@ -41,7 +41,12 @@ fn insert_to_small_trees() {
 
 #[test]
 fn insert_into_left_skewed_tree_deallocate() {
+    #[cfg(not(miri))]
     const KEY_LENGTH_LIMIT: usize = u8::MAX as usize;
+
+    #[cfg(miri)]
+    const KEY_LENGTH_LIMIT: usize = 16usize;
+
     let first_leaf = NodePtr::allocate_node(LeafNode::new(Box::new([0, u8::MAX]), 1));
     let mut current_root = first_leaf.to_opaque();
 
@@ -56,6 +61,7 @@ fn insert_into_left_skewed_tree_deallocate() {
                 current_root,
                 LeafNode::new(key.into_boxed_slice(), key_size),
             )
+            .unwrap()
         };
     }
 
@@ -74,12 +80,42 @@ fn insert_into_left_skewed_tree_deallocate() {
 }
 
 #[test]
-#[should_panic]
-fn insert_prefix_expect_panic() {
+fn insert_prefix_key_errors() {
     let first_leaf =
         NodePtr::allocate_node(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
 
     let new_leaf = LeafNode::new(Box::new([1, 2]), "12".to_string());
     let tree = first_leaf.to_opaque();
-    unsafe { insert(tree, new_leaf) };
+    let result = unsafe { insert(tree, new_leaf) };
+
+    assert_eq!(result, Err(InsertError::PrefixKey(Box::new([1, 2]))));
+
+    unsafe { deallocate_tree(tree) }
+}
+
+#[test]
+fn insert_prefix_key_with_existing_prefix_errors() {
+    let first_leaf = NodePtr::allocate_node(LeafNode::new(Box::new([1, 2]), "12".to_string()));
+
+    let new_leaf = LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string());
+    let tree = first_leaf.to_opaque();
+    let result = unsafe { insert(tree, new_leaf) };
+
+    assert_eq!(result, Err(InsertError::PrefixKey(Box::new([1, 2, 3, 4]))));
+
+    unsafe { deallocate_tree(tree) }
+}
+
+#[test]
+fn insert_empty_key_errors() {
+    let first_leaf =
+        NodePtr::allocate_node(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+    let new_leaf = LeafNode::new(Box::new([]), "1256".to_string());
+
+    let tree = first_leaf.to_opaque();
+    let result = unsafe { insert(tree, new_leaf) };
+
+    assert_eq!(result, Err(InsertError::EmptyKey));
+
+    unsafe { deallocate_tree(tree) }
 }
