@@ -87,6 +87,9 @@ fn write_tree(output: &mut dyn Write, tree: &OpaqueNodePtr<usize>) -> Result<(),
 enum TreeShape {
     LeftSkew,
     FullNode4,
+    FullNode16,
+    FullNode48,
+    FullNode256,
 }
 
 impl TreeShape {
@@ -94,6 +97,9 @@ impl TreeShape {
         match self {
             TreeShape::LeftSkew => Box::new(TreeShape::generate_left_skew_keys(tree_size)),
             TreeShape::FullNode4 => Box::new(TreeShape::generate_full_keys(tree_size, 4)),
+            TreeShape::FullNode16 => Box::new(TreeShape::generate_full_keys(tree_size, 16)),
+            TreeShape::FullNode48 => Box::new(TreeShape::generate_full_keys(tree_size, 48)),
+            TreeShape::FullNode256 => Box::new(TreeShape::generate_full_keys(tree_size, 256)),
         }
     }
 
@@ -149,11 +155,18 @@ impl TreeShape {
                 // update the stack for next value
 
                 for digit_idx in (0..self.tree_height).rev() {
-                    self.digit_stack[digit_idx] += 1;
+                    if let Some(updated_digit) = self.digit_stack[digit_idx].checked_add(1) {
+                        self.digit_stack[digit_idx] = updated_digit
+                    } else {
+                        // At 256, max width
+                        self.digit_stack.pop();
+                        continue;
+                    }
 
                     if usize::from(self.digit_stack[digit_idx]) >= self.node_width {
                         self.digit_stack.pop();
                     } else {
+                        // under limit
                         break;
                     }
                 }
@@ -183,6 +196,9 @@ impl FromStr for TreeShape {
         match s {
             "left_skew" => Ok(TreeShape::LeftSkew),
             "full_node4" => Ok(TreeShape::FullNode4),
+            "full_node16" => Ok(TreeShape::FullNode16),
+            "full_node48" => Ok(TreeShape::FullNode48),
+            "full_node256" => Ok(TreeShape::FullNode256),
             _ => Err(ShapeParseError(s.into())),
         }
     }

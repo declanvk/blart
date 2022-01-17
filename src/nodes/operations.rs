@@ -101,8 +101,8 @@ pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> Opaque
             let new_leaf_key_byte = new_leaf.key[depth];
             let new_leaf_pointer = NodePtr::allocate_node(new_leaf);
 
-            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
             new_n4.write_child(leaf_node.key[depth], root);
+            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
 
             return NodePtr::allocate_node(new_n4).to_opaque();
         }
@@ -119,8 +119,8 @@ pub unsafe fn insert<V>(root: OpaqueNodePtr<V>, new_leaf: LeafNode<V>) -> Opaque
             let new_leaf_key_byte = new_leaf.key[depth + matched_prefix_size];
             let new_leaf_pointer = NodePtr::allocate_node(new_leaf);
 
-            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
             new_n4.write_child(header.read_prefix()[matched_prefix_size], root);
+            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
 
             new_n4
                 .header
