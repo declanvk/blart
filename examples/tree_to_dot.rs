@@ -5,15 +5,20 @@ use rad_tree::{
 use std::{
     error::Error,
     fmt::Display,
-    fs::OpenOptions,
-    io::{self, BufWriter, Write},
+    fs::{File, OpenOptions},
+    io::{self, BufRead, BufReader, BufWriter, Write},
     iter,
+    path::PathBuf,
     str::FromStr,
 };
 
 #[derive(FromArgs)]
 /// Reach new heights.
 struct TreeToDotArgs {
+    /// input to read keys from an external file
+    #[argh(option)]
+    input_file: Option<PathBuf>,
+
     /// what shape of tree to generate
     #[argh(positional)]
     shape: TreeShape,
@@ -32,7 +37,7 @@ struct TreeToDotArgs {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: TreeToDotArgs = argh::from_env();
 
-    let tree = if let Some(tree) = make_tree(args.shape.generate_keys(args.size)) {
+    let tree = if let Some(tree) = make_tree(args.shape.generate_keys(args.size, args.input_file)) {
         tree
     } else {
         return Err(Box::new(EmptyTreeError));
@@ -93,17 +98,42 @@ enum TreeShape {
     FullNode16,
     FullNode48,
     FullNode256,
+    FromTextFile,
 }
 
 impl TreeShape {
-    fn generate_keys(self, tree_size: usize) -> Box<dyn Iterator<Item = Box<[u8]>>> {
+    fn generate_keys(
+        self,
+        tree_size: usize,
+        text_file_path: Option<PathBuf>,
+    ) -> Box<dyn Iterator<Item = Box<[u8]>>> {
         match self {
             TreeShape::LeftSkew => Box::new(TreeShape::generate_left_skew_keys(tree_size)),
             TreeShape::FullNode4 => Box::new(TreeShape::generate_full_keys(tree_size, 4)),
             TreeShape::FullNode16 => Box::new(TreeShape::generate_full_keys(tree_size, 16)),
             TreeShape::FullNode48 => Box::new(TreeShape::generate_full_keys(tree_size, 48)),
             TreeShape::FullNode256 => Box::new(TreeShape::generate_full_keys(tree_size, 256)),
+            TreeShape::FromTextFile => {
+                let text_file = OpenOptions::new()
+                    .read(true)
+                    .open(
+                        text_file_path
+                            .expect("file path not passed to 'from_text_file' tree shape"),
+                    )
+                    .expect("unable to open text file");
+                Box::new(TreeShape::read_keys_from_text_file(text_file))
+            },
         }
+    }
+
+    fn read_keys_from_text_file(text_file: File) -> impl Iterator<Item = Box<[u8]>> {
+        BufReader::new(text_file).lines().map(|line| {
+            let line = line.expect("unable to read line");
+            line.split(",")
+                .map(u8::from_str)
+                .collect::<Result<Box<[u8]>, _>>()
+                .expect("unable to parse bytes")
+        })
     }
 
     fn generate_left_skew_keys(tree_size: usize) -> impl Iterator<Item = Box<[u8]>> {
@@ -202,6 +232,7 @@ impl FromStr for TreeShape {
             "full_node16" => Ok(TreeShape::FullNode16),
             "full_node48" => Ok(TreeShape::FullNode48),
             "full_node256" => Ok(TreeShape::FullNode256),
+            "from_text_file" => Ok(TreeShape::FromTextFile),
             _ => Err(ShapeParseError(s.into())),
         }
     }
