@@ -81,12 +81,14 @@ pub unsafe fn search_unchecked<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8])
 ///    read or write to any child in the given tree.
 pub unsafe fn insert_unchecked<V>(
     root: OpaqueNodePtr<V>,
-    new_leaf: LeafNode<V>,
+    key: Box<[u8]>,
+    value: V,
 ) -> Result<OpaqueNodePtr<V>, InsertError> {
     // TODO: Consider an iterative solution to handle tree with long keys.
     fn insert_rec_inner<V>(
         mut root: OpaqueNodePtr<V>,
-        new_leaf: LeafNode<V>,
+        key: Box<[u8]>,
+        value: V,
         mut depth: usize,
     ) -> Result<OpaqueNodePtr<V>, InsertError> {
         if let Some(leaf_node_ptr) = root.cast::<LeafNode<V>>() {
@@ -95,23 +97,23 @@ pub unsafe fn insert_unchecked<V>(
             let mut new_n4 = InnerNode4::empty();
             let prefix_size = leaf_node.key[depth..]
                 .iter()
-                .zip(new_leaf.key[depth..].iter())
+                .zip(key[depth..].iter())
                 .take_while(|(k1, k2)| k1 == k2)
                 .count();
             new_n4
                 .header
-                .write_prefix(&new_leaf.key[depth..(depth + prefix_size)]);
+                .write_prefix(&key[depth..(depth + prefix_size)]);
             depth += prefix_size;
 
-            if depth >= new_leaf.key.len() || depth >= leaf_node.key.len() {
+            if depth >= key.len() || depth >= leaf_node.key.len() {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key OR an existing key is a prefix of it
 
-                return Err(InsertError::PrefixKey(new_leaf.key));
+                return Err(InsertError::PrefixKey(key));
             }
 
-            let new_leaf_key_byte = new_leaf.key[depth];
-            let new_leaf_pointer = NodePtr::allocate_node(new_leaf);
+            let new_leaf_key_byte = key[depth];
+            let new_leaf_pointer = NodePtr::allocate_node(LeafNode::new(key, value));
 
             new_n4.write_child(leaf_node.key[depth], root);
             new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
@@ -121,7 +123,7 @@ pub unsafe fn insert_unchecked<V>(
 
         // since header is mutable will need to write it back
         let mut header = root.read();
-        let matched_prefix_size = header.match_prefix(&(new_leaf.key)[depth..]);
+        let matched_prefix_size = header.match_prefix(&(key)[depth..]);
         if matched_prefix_size != header.prefix_size {
             // prefix mismatch, need to split prefix into two separate nodes and take the
             // common prefix into a new parent node
@@ -135,11 +137,11 @@ pub unsafe fn insert_unchecked<V>(
                 return Err(InsertError::PrefixKey(new_leaf.key));
             }
 
-            let new_leaf_key_byte = new_leaf.key[depth + matched_prefix_size];
-            let new_leaf_pointer = NodePtr::allocate_node(new_leaf);
+            let new_leaf_key_byte = key[depth + matched_prefix_size];
+            let new_leaf_pointer = NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque();
 
             new_n4.write_child(header.read_prefix()[matched_prefix_size], root);
-            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
+            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer);
 
             new_n4
                 .header
@@ -153,10 +155,10 @@ pub unsafe fn insert_unchecked<V>(
 
         depth += usize::try_from(header.prefix_size).unwrap();
 
-        let next_key_fragment = if depth < new_leaf.key.len() {
-            new_leaf.key[depth]
+        let next_key_fragment = if depth < key.len() {
+            key[depth]
         } else {
-            return Err(InsertError::PrefixKey(new_leaf.key));
+            return Err(InsertError::PrefixKey(key));
         };
 
         // SAFETY: We checked that the current node is not a leaf earlier in the loop
@@ -164,7 +166,7 @@ pub unsafe fn insert_unchecked<V>(
 
         match next_child_node {
             Some(next_child_node) => {
-                let new_child = insert_rec_inner(next_child_node, new_leaf, depth + 1)?;
+                let new_child = insert_rec_inner(next_child_node, key, value, depth + 1)?;
                 // SAFETY: We determine that the current node is not a leaf by checking earlier
                 // in the loop. The requirement of no other current read or write to the
                 // `current_node` is carried to the caller of `insert`. From inside the `insert`
@@ -194,8 +196,8 @@ pub unsafe fn insert_unchecked<V>(
                 unsafe {
                     insert_child_unchecked(
                         root,
-                        new_leaf.key[depth],
-                        NodePtr::allocate_node(new_leaf).to_opaque(),
+                        key[depth],
+                        NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque(),
                     );
                 }
             },
@@ -204,11 +206,11 @@ pub unsafe fn insert_unchecked<V>(
         Ok(root)
     }
 
-    if new_leaf.key.is_empty() {
+    if key.is_empty() {
         return Err(InsertError::EmptyKey);
     }
 
-    insert_rec_inner(root, new_leaf, 0)
+    insert_rec_inner(root, key, value, 0)
 }
 
 /// The error type for the insert operation on the tree.

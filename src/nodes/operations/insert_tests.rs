@@ -8,10 +8,8 @@ fn insert_to_small_trees() {
     let first_leaf =
         NodePtr::allocate_node(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
 
-    let new_leaf = LeafNode::new(Box::new([1, 2, 5, 6]), "1256".to_string());
-
     let mut tree = first_leaf.to_opaque();
-    tree = unsafe { insert_unchecked(tree, new_leaf).unwrap() };
+    tree = unsafe { insert_unchecked(tree, Box::new([1, 2, 5, 6]), "1256".to_string()).unwrap() };
 
     assert_eq!(tree.read().node_type, NodeType::Node4);
 
@@ -62,13 +60,8 @@ fn insert_into_left_skewed_tree_deallocate() {
             .map(|byte| (byte % (u8::MAX as usize + 1)) as u8)
             .collect::<Vec<_>>();
 
-        current_root = unsafe {
-            insert_unchecked(
-                current_root,
-                LeafNode::new(key.into_boxed_slice(), key_size),
-            )
-            .unwrap()
-        };
+        current_root =
+            unsafe { insert_unchecked(current_root, key.into_boxed_slice(), key_size).unwrap() };
     }
 
     for key_size in 1..KEY_LENGTH_LIMIT {
@@ -90,9 +83,8 @@ fn insert_prefix_key_errors() {
     let first_leaf =
         NodePtr::allocate_node(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
 
-    let new_leaf = LeafNode::new(Box::new([1, 2]), "12".to_string());
     let tree = first_leaf.to_opaque();
-    let result = unsafe { insert_unchecked(tree, new_leaf) };
+    let result = unsafe { insert_unchecked(tree, Box::new([1, 2]), "12".to_string()) };
 
     assert_eq!(result, Err(InsertError::PrefixKey(Box::new([1, 2]))));
 
@@ -103,9 +95,8 @@ fn insert_prefix_key_errors() {
 fn insert_prefix_key_with_existing_prefix_errors() {
     let first_leaf = NodePtr::allocate_node(LeafNode::new(Box::new([1, 2]), "12".to_string()));
 
-    let new_leaf = LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string());
     let tree = first_leaf.to_opaque();
-    let result = unsafe { insert_unchecked(tree, new_leaf) };
+    let result = unsafe { insert_unchecked(tree, Box::new([1, 2, 3, 4]), "1234".to_string()) };
 
     assert_eq!(result, Err(InsertError::PrefixKey(Box::new([1, 2, 3, 4]))));
 

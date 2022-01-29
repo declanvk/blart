@@ -78,8 +78,7 @@ fn make_tree(iter: impl Iterator<Item = Box<[u8]>>) -> Option<OpaqueNodePtr<usiz
     for (value, key) in iter {
         // SAFETY: There are no other pointers to `current_root` node. There are no
         // concurrent reads or writes to the `current_root` node ongoing.
-        current_root =
-            unsafe { insert_unchecked(current_root, LeafNode::new(key, value)).unwrap() };
+        current_root = unsafe { insert_unchecked(current_root, key, value).unwrap() };
     }
 
     Some(current_root)
@@ -130,7 +129,7 @@ impl TreeShape {
         BufReader::new(text_file).lines().map(|line| {
             let line = line.expect("unable to read line");
             line.split(",")
-                .map(u8::from_str)
+                .map(|num| u8::from_str(num.trim()))
                 .collect::<Result<Box<[u8]>, _>>()
                 .expect("unable to parse bytes")
         })
