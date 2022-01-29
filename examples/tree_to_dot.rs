@@ -1,5 +1,5 @@
 use argh::FromArgs;
-use rad_tree::{
+use blart::{
     deallocate_tree, insert_unchecked, visitor::DotPrinter, LeafNode, NodePtr, OpaqueNodePtr,
 };
 use std::{

@@ -1,9 +1,9 @@
 #![no_main]
 
-use libfuzzer_sys::arbitrary::{self, Arbitrary};
-use rad_tree::{
+use blart::{
     deallocate_tree, insert_unchecked, search_unchecked, LeafNode, NodePtr, OpaqueNodePtr,
 };
+use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
 #[derive(Arbitrary, Debug)]
 enum Action {
