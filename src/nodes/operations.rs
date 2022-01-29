@@ -2,6 +2,7 @@
 
 use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
 use std::{error::Error, fmt::Display, ops::Deref, ptr};
+use std::mem::ManuallyDrop;
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -120,7 +121,10 @@ pub unsafe fn insert_unchecked<V>(
 
             return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
-
+        
+        {
+            
+        }
         // since header is mutable will need to write it back
         let mut header = root.read();
         let matched_prefix_size = header.match_prefix(&(key)[depth..]);
@@ -150,6 +154,8 @@ pub unsafe fn insert_unchecked<V>(
 
             // Updated the header information here
             root.write(Deref::deref(&header).clone());
+            // SAFETY: This header value will not be used after this point, and will no longer be referenced by the tree. That is why it is necessary to deallocate it.
+            unsafe { ManuallyDrop::drop(&mut header) };
             return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
 
