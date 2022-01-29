@@ -107,12 +107,37 @@ fn insert_prefix_key_with_existing_prefix_errors() {
 fn insert_empty_key_errors() {
     let first_leaf =
         NodePtr::allocate_node(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
-    let new_leaf = LeafNode::new(Box::new([]), "1256".to_string());
 
     let tree = first_leaf.to_opaque();
-    let result = unsafe { insert_unchecked(tree, new_leaf) };
+    let result = unsafe { insert_unchecked(tree, Box::new([]), "1256".to_string()) };
 
     assert_eq!(result, Err(InsertError::EmptyKey));
+
+    unsafe { deallocate_tree(tree) }
+}
+
+#[test]
+fn insert_key_with_long_prefix_then_split() {
+    let first_leaf = NodePtr::allocate_node(LeafNode::new(
+        Box::new([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]),
+        0,
+    ));
+
+    let mut tree = first_leaf.to_opaque();
+    tree =
+        unsafe { insert_unchecked(tree, Box::new([1, 1, 1, 1, 1, 1, 1, 1, 1, 255]), 1).unwrap() };
+
+    tree = unsafe { insert_unchecked(tree, Box::new([1, 1, 255]), 2).unwrap() };
+
+    assert_eq!(
+        *unsafe { search_unchecked(tree, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]).unwrap() },
+        0
+    );
+    assert_eq!(
+        *unsafe { search_unchecked(tree, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 255]).unwrap() },
+        1
+    );
+    assert_eq!(*unsafe { search_unchecked(tree, &[1, 1, 255]).unwrap() }, 2);
 
     unsafe { deallocate_tree(tree) }
 }

@@ -1,5 +1,6 @@
 //! Trie node representation
 
+use smallvec::SmallVec;
 use std::{
     cmp,
     error::Error,
@@ -43,30 +44,25 @@ impl NodeType {
 }
 
 /// The common header for all inner nodes
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 #[repr(C)]
 pub struct Header {
-    /// The size (in bytes) of the prefix stored in the header
-    // size 4, alignment 4
-    pub prefix_size: u32,
-    /// Number of children this internal node points to
-    // size 2, alignment 2
-    num_children: u16,
+    /// Number of children of this inner node. This field has no meaning for
+    /// a leaf node.
+    pub num_children: u16,
     /// The type of representation for this current node
-    // size 1, alignment 1
     pub node_type: NodeType,
     /// The key prefix for this node.
     ///
     /// Only the first `prefix_size` bytes are guaranteed to be initialized.
     // size NUM_PREFIX_BYTES, alignment 1
-    pub prefix: [MaybeUninit<u8>; NUM_PREFIX_BYTES],
+    pub prefix: SmallVec<[u8; NUM_PREFIX_BYTES]>,
 }
 
 impl fmt::Debug for Header {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let prefix = self.read_prefix();
         f.debug_struct("Header")
-            .field("prefix_size", &self.prefix_size)
             .field("num_children", &self.num_children)
             .field("node_type", &self.node_type)
             .field("prefix", &prefix)
@@ -78,10 +74,9 @@ impl Header {
     /// Create a new `Header` for an empty node.
     pub fn empty() -> Self {
         Header {
-            prefix_size: 0,
             num_children: 0,
             node_type: NodeType::Node4,
-            prefix: MaybeUninit::uninit_array(),
+            prefix: SmallVec::new(),
         }
     }
 
@@ -94,17 +89,7 @@ impl Header {
     /// doesn't present an issue to the radix tree operation (lookup, insert,
     /// etc) because the full key is always stored in the leaf nodes.
     pub fn write_prefix(&mut self, new_bytes: &[u8]) {
-        let prefix_size = usize::try_from(self.prefix_size).unwrap();
-        if prefix_size < self.prefix.len() {
-            // There is still space left in the actual prefix storage
-            let bytes_to_write = cmp::min(new_bytes.len(), self.prefix.len() - prefix_size);
-
-            MaybeUninit::write_slice(
-                &mut self.prefix[prefix_size..(prefix_size + bytes_to_write)],
-                &new_bytes[..bytes_to_write],
-            );
-        }
-        self.prefix_size += u32::try_from(new_bytes.len()).unwrap();
+        self.prefix.extend(new_bytes.into_iter().copied());
     }
 
     /// Remove the specified number of bytes from the start of the prefix.
@@ -113,28 +98,8 @@ impl Header {
     ///
     ///  - Panics if the number of bytes to remove is greater than or equal to
     ///    the prefix size
-    ///  - Panics if the prefix size is greater than [`NUM_PREFIX_BYTES`] (there
-    ///    are bytes represented by the prefix that are not present in memory).
     pub fn ltrim_prefix(&mut self, num_bytes: usize) {
-        assert!(
-            num_bytes <= usize::try_from(self.prefix_size).unwrap(),
-            "Number of bytes to trim [{}] must be less than or equal to prefix size [{}].",
-            num_bytes,
-            self.prefix_size
-        );
-
-        self.prefix_size -= u32::try_from(num_bytes).unwrap();
-        unsafe {
-            // SAFETY:
-            //   - self.prefix is valid for writes and aligned
-            ptr::copy(
-                self.prefix
-                    .as_ptr()
-                    .offset(isize::try_from(num_bytes).unwrap()),
-                self.prefix.as_mut_ptr(),
-                usize::try_from(self.prefix_size).unwrap(),
-            )
-        }
+        self.prefix.drain(..num_bytes).for_each(|_| ());
     }
 
     /// Read the initialized portion of the prefix present in the header.
@@ -142,22 +107,20 @@ impl Header {
     /// The `prefix_size` can be larger than the `read_prefix().len()` because
     /// only [`NUM_PREFIX_BYTES`] are stored.
     pub fn read_prefix(&self) -> &[u8] {
-        // SAFETY: The array prefix with length `header.prefix_size` is guaranteed to
-        // be initialized up to NUM_PREFIX_BYTES bytes (the max length of the array).
-        unsafe {
-            MaybeUninit::slice_assume_init_ref(
-                &self.prefix
-                    [..cmp::min(NUM_PREFIX_BYTES, usize::try_from(self.prefix_size).unwrap())],
-            )
-        }
+        self.prefix.as_ref()
+    }
+
+    /// Return the number of bytes in the prefix.
+    pub fn prefix_size(&self) -> usize {
+        self.prefix.len()
     }
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
-    pub fn match_prefix(&self, possible_key: &[u8]) -> u32 {
+    pub fn match_prefix(&self, possible_key: &[u8]) -> usize {
         let inited_prefix = self.read_prefix();
 
-        let mut num_matching_bytes: u32 = 0;
+        let mut num_matching_bytes: usize = 0;
         for index in 0..cmp::min(inited_prefix.len(), possible_key.len()) {
             if inited_prefix[index] != possible_key[index] {
                 break;
@@ -166,8 +129,6 @@ impl Header {
             num_matching_bytes += 1;
         }
 
-        // We do not consider the bytes that are beyond the `NUM_PREFIX_BYTES` and are
-        // not represented in memory.
         num_matching_bytes
     }
 
@@ -410,25 +371,23 @@ pub trait TaggedNode {
 pub struct InnerNode4<V> {
     /// The common node fields.
     pub header: Header,
+    /// An array that contains the child data.
+    ///
+    /// This array will only be initialized for the first`header.num_children`
+    /// values.
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; 4],
     /// An array that contains single key bytes in the same index as the
     /// `child_pointers` array contains the matching child tree.
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
     pub keys: [MaybeUninit<u8>; 4],
-    /// An array that contains the child data.
-    ///
-    /// This array will only be initialized for the first`header.num_children`
-    /// values.
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; 4],
 }
-
-impl<V> Copy for InnerNode4<V> {}
 
 impl<V> Clone for InnerNode4<V> {
     fn clone(&self) -> Self {
         Self {
-            header: self.header,
+            header: self.header.clone(),
             keys: self.keys,
             child_pointers: self.child_pointers,
         }
@@ -523,8 +482,8 @@ impl<V> InnerNode4<V> {
 
     /// Grow this node into the next larger class, copying over children and
     /// prefix information.
-    pub fn grow(self) -> InnerNode16<V> {
-        let mut header = self.header;
+    pub fn grow(&self) -> InnerNode16<V> {
+        let mut header = self.header.clone();
         header.node_type = InnerNode16::<V>::TYPE;
         let mut keys = MaybeUninit::<u8>::uninit_array::<16>();
         let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<16>();
@@ -565,12 +524,10 @@ pub struct InnerNode16<V> {
     pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; 16],
 }
 
-impl<V> Copy for InnerNode16<V> {}
-
 impl<V> Clone for InnerNode16<V> {
     fn clone(&self) -> Self {
         Self {
-            header: self.header,
+            header: self.header.clone(),
             keys: self.keys,
             child_pointers: self.child_pointers,
         }
@@ -669,8 +626,8 @@ impl<V> InnerNode16<V> {
 
     /// Grow this node into the next larger class, copying over children and
     /// prefix information.
-    pub fn grow(self) -> InnerNode48<V> {
-        let mut header = self.header;
+    pub fn grow(&self) -> InnerNode48<V> {
+        let mut header = self.header.clone();
         header.node_type = InnerNode48::<V>::TYPE;
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
         let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<48>();
@@ -771,12 +728,10 @@ impl<V> fmt::Debug for InnerNode48<V> {
     }
 }
 
-impl<V> Copy for InnerNode48<V> {}
-
 impl<V> Clone for InnerNode48<V> {
     fn clone(&self) -> Self {
         Self {
-            header: self.header,
+            header: self.header.clone(),
             child_indices: self.child_indices,
             child_pointers: self.child_pointers,
         }
@@ -865,8 +820,8 @@ impl<V> InnerNode48<V> {
 
     /// Grow this node into the next larger class, copying over children and
     /// prefix information.
-    pub fn grow(self) -> InnerNode256<V> {
-        let mut header = self.header;
+    pub fn grow(&self) -> InnerNode256<V> {
+        let mut header = self.header.clone();
         header.node_type = InnerNode256::<V>::TYPE;
         let mut child_pointers = [None; 256];
 
@@ -905,12 +860,10 @@ impl<V> fmt::Debug for InnerNode256<V> {
     }
 }
 
-impl<V> Copy for InnerNode256<V> {}
-
 impl<V> Clone for InnerNode256<V> {
     fn clone(&self) -> Self {
         Self {
-            header: self.header,
+            header: self.header.clone(),
             child_pointers: self.child_pointers,
         }
     }

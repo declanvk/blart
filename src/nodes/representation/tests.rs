@@ -28,22 +28,22 @@ fn opaque_node_ptr_is_correct() {
 #[test]
 #[cfg(target_pointer_width = "64")]
 fn node_sizes() {
-    let header_size = mem::size_of::<Header>();
-    assert_eq!(header_size, 16);
+    assert_eq!(mem::size_of::<Header>(), 32);
+    assert_eq!(mem::align_of::<Header>(), 8);
     // key map: 4 * (1 byte) = 4 bytes
     // child map: 4 * (8 bytes (on 64-bit platform)) = 32
     //
     // 4 bytes of padding are inserted after the `keys` field to align the field to
     // an 8 byte boundary.
-    assert_eq!(mem::size_of::<InnerNode4<usize>>(), 56);
+    assert_eq!(mem::size_of::<InnerNode4<usize>>(), 72);
     // key map: 16 * (1 byte) = 16 bytes
     // child map: 16 * (8 bytes (on 64-bit platform)) = 128
-    assert_eq!(mem::size_of::<InnerNode16<usize>>(), 160);
+    assert_eq!(mem::size_of::<InnerNode16<usize>>(), 176);
     // key map: 256 * (1 byte) = 256 bytes
     // child map: 48 * (8 bytes (on 64-bit platform)) = 384
-    assert_eq!(mem::size_of::<InnerNode48<usize>>(), 656);
+    assert_eq!(mem::size_of::<InnerNode48<usize>>(), 672);
     // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
-    assert_eq!(mem::size_of::<InnerNode256<usize>>(), 2064);
+    assert_eq!(mem::size_of::<InnerNode256<usize>>(), 2080);
 }
 
 #[test]
@@ -402,33 +402,33 @@ fn node256_iterate() {
 fn header_read_write_prefix() {
     let mut h = Header::empty();
 
-    assert_eq!(h.prefix_size, 0);
+    assert_eq!(h.prefix_size(), 0);
     assert_eq!(h.read_prefix(), &[]);
 
     h.write_prefix(&[1, 2, 3]);
 
-    assert_eq!(h.prefix_size, 3);
+    assert_eq!(h.prefix_size(), 3);
     assert_eq!(h.read_prefix(), &[1, 2, 3]);
 
     h.write_prefix(&[4, 5, 6]);
 
-    assert_eq!(h.prefix_size, 6);
+    assert_eq!(h.prefix_size(), 6);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6]);
 
     h.write_prefix(&[7, 8]);
 
-    assert_eq!(h.prefix_size, 8);
+    assert_eq!(h.prefix_size(), 8);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
 
     h.write_prefix(&[9, 10, 11, 12]);
 
-    assert_eq!(h.prefix_size, 12);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(h.prefix_size(), 12);
+    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 
     h.write_prefix(&[]);
 
-    assert_eq!(h.prefix_size, 12);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(h.prefix_size(), 12);
+    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 }
 
 #[test]
@@ -450,10 +450,10 @@ fn header_check_prefix() {
     assert_eq!(h.match_prefix(&[]), 0);
 
     assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]), 8);
-    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 8);
+    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 12);
     assert_eq!(
         h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]),
-        8
+        12
     );
     assert_eq!(
         h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 100, 200, 254, 255]),
@@ -462,27 +462,45 @@ fn header_check_prefix() {
 }
 
 #[test]
+fn empty_prefix_bytes_match() {
+    let mut h = Header::empty();
+
+    h.write_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    h.ltrim_prefix(NUM_PREFIX_BYTES);
+    // 6 bytes are represented
+
+    assert_eq!(h.match_prefix(&[1, 2, 3]), 0);
+    assert_eq!(h.match_prefix(&[0]), 0);
+    assert_eq!(h.match_prefix(&[]), 0);
+    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6]), 0);
+    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 0);
+
+    assert_eq!(h.match_prefix(&[9, 10, 11, 12]), 4);
+    assert_eq!(h.match_prefix(&[9, 10, 11, 12, 13, 14]), 6);
+}
+
+#[test]
 fn header_delete_prefix() {
     let mut h = Header::empty();
     h.write_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size, 8);
+    assert_eq!(h.prefix_size(), 8);
 
     h.ltrim_prefix(0);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size, 8);
+    assert_eq!(h.prefix_size(), 8);
 
     h.ltrim_prefix(3);
     assert_eq!(h.read_prefix(), &[4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size, 5);
+    assert_eq!(h.prefix_size(), 5);
 
     h.ltrim_prefix(1);
     assert_eq!(h.read_prefix(), &[5, 6, 7, 8]);
-    assert_eq!(h.prefix_size, 4);
+    assert_eq!(h.prefix_size(), 4);
 
     h.ltrim_prefix(4);
     assert_eq!(h.read_prefix(), &[]);
-    assert_eq!(h.prefix_size, 0);
+    assert_eq!(h.prefix_size(), 0);
 }
 
 #[test]
@@ -491,7 +509,7 @@ fn header_ltrim_prefix_too_many_bytes_panic() {
     let mut h = Header::empty();
     h.write_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size, 8);
+    assert_eq!(h.prefix_size(), 8);
 
     h.ltrim_prefix(10);
 }
@@ -502,7 +520,7 @@ fn header_ltrim_prefix_non_stored_bytes_panic() {
     let mut h = Header::empty();
     h.write_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size, 8);
+    assert_eq!(h.prefix_size(), 8);
 
     h.ltrim_prefix(0);
 }

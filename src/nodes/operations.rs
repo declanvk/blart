@@ -1,7 +1,7 @@
 //! Tie node lookup and manipulation
 
 use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
-use std::{error::Error, fmt::Display, ptr};
+use std::{error::Error, fmt::Display, ops::Deref, ptr};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -40,13 +40,13 @@ pub unsafe fn search_unchecked<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8])
         }
 
         let header = current_node.read();
-        if header.match_prefix(&key[current_depth..]) != header.prefix_size {
+        if header.match_prefix(&key[current_depth..]) != header.prefix_size() {
             return None;
         }
 
         // Since the prefix matched, we need to advance the depth by the size
         // of the prefix
-        current_depth += usize::try_from(header.prefix_size).unwrap();
+        current_depth += usize::try_from(header.prefix_size()).unwrap();
 
         let next_key_fragment = if current_depth < key.len() {
             key[current_depth]
@@ -124,17 +124,17 @@ pub unsafe fn insert_unchecked<V>(
         // since header is mutable will need to write it back
         let mut header = root.read();
         let matched_prefix_size = header.match_prefix(&(key)[depth..]);
-        if matched_prefix_size != header.prefix_size {
+        if matched_prefix_size != header.prefix_size() {
             // prefix mismatch, need to split prefix into two separate nodes and take the
             // common prefix into a new parent node
             let mut new_n4 = InnerNode4::empty();
             let matched_prefix_size = usize::try_from(matched_prefix_size).unwrap();
 
-            if (depth + matched_prefix_size) >= new_leaf.key.len() {
+            if (depth + matched_prefix_size) >= key.len() {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key
 
-                return Err(InsertError::PrefixKey(new_leaf.key));
+                return Err(InsertError::PrefixKey(key));
             }
 
             let new_leaf_key_byte = key[depth + matched_prefix_size];
@@ -149,11 +149,11 @@ pub unsafe fn insert_unchecked<V>(
             header.ltrim_prefix(matched_prefix_size + 1);
 
             // Updated the header information here
-            root.write(*header);
+            root.write(Deref::deref(&header).clone());
             return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
 
-        depth += usize::try_from(header.prefix_size).unwrap();
+        depth += usize::try_from(header.prefix_size()).unwrap();
 
         let next_key_fragment = if depth < key.len() {
             key[depth]

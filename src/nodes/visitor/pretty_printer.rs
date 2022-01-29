@@ -53,7 +53,7 @@ impl<O: Write> DotPrinter<O> {
             self.output,
             "{{<h0> {:?} | {:?} | {:?}}} | {{",
             header.node_type,
-            header.prefix_size,
+            header.prefix_size(),
             header.read_prefix()
         )?;
         // write child line
@@ -114,7 +114,7 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
             self.output,
             "{{<h0> {:?} | {:?} | {:?}}} | {{{}}}}}\"]\n",
             t.header.node_type,
-            t.header.prefix_size,
+            t.header.prefix_size(),
             t.header.read_prefix(),
             t.value
         )?;
