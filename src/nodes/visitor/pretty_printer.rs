@@ -26,12 +26,12 @@ impl<O: Write> DotPrinter<O> {
     }
 
     fn output_prelude(&mut self) -> io::Result<()> {
-        write!(self.output, "strict digraph G {{\n")?;
-        write!(self.output, "node [shape=record]\n")
+        writeln!(self.output, "strict digraph G {{")?;
+        writeln!(self.output, "node [shape=record]")
     }
 
     fn output_epilogue(&mut self) -> io::Result<()> {
-        write!(self.output, "}}\n")
+        writeln!(self.output, "}}")
     }
 
     fn get_id(&mut self) -> usize {
@@ -64,14 +64,14 @@ impl<O: Write> DotPrinter<O> {
                 write!(self.output, "| <c{idx}> {key_fragment}")?;
             }
         }
-        write!(self.output, "}}}}\"]\n")?;
+        writeln!(self.output, "}}}}\"]")?;
 
         // write all the edges
 
         for (key_frag_id, (_, child)) in to_children().enumerate() {
             let child_id = child.visit_with(self)?;
 
-            write!(self.output, "n{node_id}:c{key_frag_id} -> n{child_id}:h0\n")?;
+            writeln!(self.output, "n{node_id}:c{key_frag_id} -> n{child_id}:h0")?;
         }
 
         Ok(node_id)
@@ -110,9 +110,9 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;
         // write header line
-        write!(
+        writeln!(
             self.output,
-            "{{<h0> {:?} | {:?} | {:?}}} | {{{}}}}}\"]\n",
+            "{{<h0> {:?} | {:?} | {:?}}} | {{{}}}}}\"]",
             t.header.node_type,
             t.header.prefix_size(),
             t.header.read_prefix(),

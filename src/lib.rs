@@ -4,8 +4,12 @@
     maybe_uninit_write_slice,
     rustc_attrs
 )]
-#![deny(missing_docs, clippy::missing_safety_doc)]
-#![warn(unsafe_op_in_unsafe_fn, deprecated_in_future)]
+#![deny(
+    missing_docs,
+    clippy::missing_safety_doc,
+    unsafe_op_in_unsafe_fn,
+    deprecated_in_future
+)]
 
 //! Adaptive radix trie implementation
 //!

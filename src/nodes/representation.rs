@@ -89,7 +89,7 @@ impl Header {
     /// doesn't present an issue to the radix tree operation (lookup, insert,
     /// etc) because the full key is always stored in the leaf nodes.
     pub fn write_prefix(&mut self, new_bytes: &[u8]) {
-        self.prefix.extend(new_bytes.into_iter().copied());
+        self.prefix.extend(new_bytes.iter().copied());
     }
 
     /// Remove the specified number of bytes from the start of the prefix.
@@ -331,9 +331,7 @@ impl<N: TaggedNode> NodePtr<N> {
         // references.
         let inner_value = unsafe { self.0.as_mut() };
 
-        let ouput_value = (f)(inner_value);
-
-        ouput_value
+        (f)(inner_value)
     }
 
     /// Acquires the underlying *mut pointer.
@@ -422,7 +420,7 @@ impl<V> InnerNode4<V> {
         // SAFETY: The value at `child_index` is guaranteed to be initialized because
         // the `lookup_child_index` function will only search in the initialized portion
         // of the `child_pointers` array.
-        return Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) });
+        Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) })
     }
 
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
@@ -579,7 +577,7 @@ impl<V> InnerNode16<V> {
         // SAFETY: The value at `child_index` is guaranteed to be initialized because
         // the `lookup_child_index` function will only search in the initialized portion
         // of the `child_pointers` array.
-        return Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) });
+        Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) })
     }
 
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {

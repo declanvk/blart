@@ -46,7 +46,7 @@ pub unsafe fn search_unchecked<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8])
 
         // Since the prefix matched, we need to advance the depth by the size
         // of the prefix
-        current_depth += usize::try_from(header.prefix_size()).unwrap();
+        current_depth += header.prefix_size();
 
         let next_key_fragment = if current_depth < key.len() {
             key[current_depth]
@@ -128,7 +128,6 @@ pub unsafe fn insert_unchecked<V>(
             // prefix mismatch, need to split prefix into two separate nodes and take the
             // common prefix into a new parent node
             let mut new_n4 = InnerNode4::empty();
-            let matched_prefix_size = usize::try_from(matched_prefix_size).unwrap();
 
             if (depth + matched_prefix_size) >= key.len() {
                 // then the key has insufficient bytes to be unique. It must be
@@ -157,7 +156,7 @@ pub unsafe fn insert_unchecked<V>(
             return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
 
-        depth += usize::try_from(header.prefix_size()).unwrap();
+        depth += header.prefix_size();
 
         let next_key_fragment = if depth < key.len() {
             key[depth]
