@@ -1,20 +1,19 @@
-//! Tie node lookup and manipulation
+//! Trie node lookup and manipulation
 
 use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
-use std::{error::Error, fmt::Display, mem::ManuallyDrop, ops::Deref, ptr};
+use std::{error::Error, fmt::Display, mem::ManuallyDrop, ops::Deref};
 
 /// Search in the given tree for the value stored with the given key.
 ///
 /// # Safety
 ///
-///   - The reference returned from this function must not outlive the leaf node
-///     it was derived from. Generally, the reference should not be live past a
-///     mutation of this same tree via the `insert` or `delete` methods, as it
-///     may invalidate the reference.
 ///   - This function cannot be called concurrently to any reads or writes of
 ///     `root` or any child node of `root`. This function will arbitrarily read
 ///     to any child in the given tree.
-pub unsafe fn search_unchecked<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8]) -> Option<&'v V> {
+pub unsafe fn search_unchecked<V>(
+    root: OpaqueNodePtr<V>,
+    key: &[u8],
+) -> Option<NodePtr<LeafNode<V>>> {
     let mut current_node = root;
     let mut current_depth = 0;
 
@@ -27,13 +26,7 @@ pub unsafe fn search_unchecked<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8])
             // compression, we don't explicity store all the compressed prefixes down the
             // tree.
             if leaf_node.matches_key(key) {
-                let value_ref = unsafe {
-                    let value_ptr = ptr::addr_of_mut!((*leaf_node_ptr.to_ptr()).value);
-
-                    value_ptr.as_ref().unwrap()
-                };
-
-                return Some(value_ref);
+                return Some(leaf_node_ptr);
             } else {
                 return None;
             }
@@ -64,6 +57,8 @@ pub unsafe fn search_unchecked<'k, 'v, V>(root: OpaqueNodePtr<V>, key: &'k [u8])
 }
 
 /// Insert the given key-value pair into the tree.
+///
+/// Returns either a pointer to the new tree root or an error.
 ///
 /// # Errors
 ///

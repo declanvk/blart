@@ -24,21 +24,25 @@ fn insert_to_small_trees() {
         assert_eq!(root.lookup_child(1), None);
     }
     assert_eq!(
-        unsafe { search_unchecked(new_root.to_opaque(), &[1, 2, 5, 6]).unwrap() },
+        unsafe {
+            &search_unchecked(new_root.to_opaque(), &[1, 2, 5, 6])
+                .unwrap()
+                .read()
+                .value
+        },
         "1256"
     );
     assert_eq!(
-        unsafe { search_unchecked(new_root.to_opaque(), &[1, 2, 3, 4]).unwrap() },
+        unsafe {
+            &search_unchecked(new_root.to_opaque(), &[1, 2, 3, 4])
+                .unwrap()
+                .read()
+                .value
+        },
         "1234"
     );
-    assert_eq!(
-        unsafe { search_unchecked(new_root.to_opaque(), &[1, 2, 5, 7]) },
-        None
-    );
-    assert_eq!(
-        unsafe { search_unchecked(new_root.to_opaque(), &[1, 2, 3, 5]) },
-        None
-    );
+    assert!(unsafe { search_unchecked(new_root.to_opaque(), &[1, 2, 5, 7]).is_none() });
+    assert!(unsafe { search_unchecked(new_root.to_opaque(), &[1, 2, 3, 5]).is_none() });
 
     unsafe { deallocate_tree(new_root.to_opaque()) };
 }
@@ -72,7 +76,7 @@ fn insert_into_left_skewed_tree_deallocate() {
 
         let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
 
-        assert_eq!(search_result.copied(), Some(key_size));
+        assert_eq!(search_result.unwrap().read().value, key_size);
     }
 
     unsafe { deallocate_tree(current_root) };
@@ -130,14 +134,27 @@ fn insert_key_with_long_prefix_then_split() {
     tree = unsafe { insert_unchecked(tree, Box::new([1, 1, 255]), 2).unwrap() };
 
     assert_eq!(
-        *unsafe { search_unchecked(tree, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]).unwrap() },
+        unsafe {
+            search_unchecked(tree, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255])
+                .unwrap()
+                .read()
+                .value
+        },
         0
     );
     assert_eq!(
-        *unsafe { search_unchecked(tree, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 255]).unwrap() },
+        unsafe {
+            search_unchecked(tree, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 255])
+                .unwrap()
+                .read()
+                .value
+        },
         1
     );
-    assert_eq!(*unsafe { search_unchecked(tree, &[1, 1, 255]).unwrap() }, 2);
+    assert_eq!(
+        unsafe { search_unchecked(tree, &[1, 1, 255]).unwrap().read().value },
+        2
+    );
 
     unsafe { deallocate_tree(tree) }
 }

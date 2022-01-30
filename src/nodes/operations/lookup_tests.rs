@@ -30,10 +30,8 @@ fn lookup_on_non_copy_leaf() {
         let l1_search = search_unchecked::<String>(root, &[1, 2, 3]).unwrap();
         let l2_search = search_unchecked::<String>(root, &[1, 2, 4]).unwrap();
 
-        assert_eq!(l1_search, "Hello world my name is");
-        assert!(ptr::eq(l1_search, &l1.value));
-        assert_eq!(l2_search, "geregog");
-        assert!(ptr::eq(l2_search, &l2.value));
+        assert_eq!(l1_search.read().value, "Hello world my name is");
+        assert_eq!(l2_search.read().value, "geregog");
     }
 }
 
@@ -45,12 +43,14 @@ fn lookup_on_leaf() {
     // SAFETY: The type parameter (`i32`) matches the type that the leaf was
     // constructed with.
     unsafe {
-        assert_eq!(search_unchecked::<i32>(leaf_ptr, &[1, 2, 3]), Some(&123));
-        assert!(ptr::eq(
-            search_unchecked::<i32>(leaf_ptr, &[1, 2, 3]).unwrap(),
-            &leaf.value
-        ));
-        assert_eq!(search_unchecked::<i32>(leaf_ptr, &[0, 0, 0]), None)
+        assert_eq!(
+            search_unchecked::<i32>(leaf_ptr, &[1, 2, 3])
+                .unwrap()
+                .read()
+                .value,
+            123
+        );
+        assert!(search_unchecked::<i32>(leaf_ptr, &[0, 0, 0]).is_none())
     }
 }
 
@@ -85,15 +85,39 @@ fn lookup_on_full_node4() {
     // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
     // which they are derived from.
     unsafe {
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 1]), Some(&121));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 2]), Some(&122));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3]), Some(&123));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4]), Some(&124));
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 1])
+                .unwrap()
+                .read()
+                .value,
+            121
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 2])
+                .unwrap()
+                .read()
+                .value,
+            122
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 3])
+                .unwrap()
+                .read()
+                .value,
+            123
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 4])
+                .unwrap()
+                .read()
+                .value,
+            124
+        );
 
-        assert_eq!(search_unchecked::<i32>(root, &[]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 10]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[0, 2, 1]), None);
+        assert!(search_unchecked::<i32>(root, &[]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 10]).is_none());
+        assert!(search_unchecked::<i32>(root, &[0, 2, 1]).is_none());
     }
 }
 
@@ -115,14 +139,14 @@ fn lookup_on_empty_nodes() {
         // SAFETY: All the `search` calls are safe because there are no leaves in this
         // tree.
         unsafe {
-            assert_eq!(search_unchecked::<()>(root, &[1, 2, 1]), None);
-            assert_eq!(search_unchecked::<()>(root, &[1, 2, 2]), None);
-            assert_eq!(search_unchecked::<()>(root, &[1, 2, 3]), None);
-            assert_eq!(search_unchecked::<()>(root, &[1, 2, 4]), None);
-            assert_eq!(search_unchecked::<()>(root, &[]), None);
-            assert_eq!(search_unchecked::<()>(root, &[1, 2]), None);
-            assert_eq!(search_unchecked::<()>(root, &[1, 2, 10]), None);
-            assert_eq!(search_unchecked::<()>(root, &[0, 2, 1]), None);
+            assert!(search_unchecked::<()>(root, &[1, 2, 1]).is_none());
+            assert!(search_unchecked::<()>(root, &[1, 2, 2]).is_none());
+            assert!(search_unchecked::<()>(root, &[1, 2, 3]).is_none());
+            assert!(search_unchecked::<()>(root, &[1, 2, 4]).is_none());
+            assert!(search_unchecked::<()>(root, &[]).is_none());
+            assert!(search_unchecked::<()>(root, &[1, 2]).is_none());
+            assert!(search_unchecked::<()>(root, &[1, 2, 10]).is_none());
+            assert!(search_unchecked::<()>(root, &[0, 2, 1]).is_none());
         }
     }
 }
@@ -158,15 +182,39 @@ fn lookup_on_node16() {
     // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
     // which they are derived from.
     unsafe {
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 1]), Some(&121));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 2]), Some(&122));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3]), Some(&123));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4]), Some(&124));
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 1])
+                .unwrap()
+                .read()
+                .value,
+            121
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 2])
+                .unwrap()
+                .read()
+                .value,
+            122
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 3])
+                .unwrap()
+                .read()
+                .value,
+            123
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 4])
+                .unwrap()
+                .read()
+                .value,
+            124
+        );
 
-        assert_eq!(search_unchecked::<i32>(root, &[]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 10]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[0, 2, 1]), None);
+        assert!(search_unchecked::<i32>(root, &[]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 10]).is_none());
+        assert!(search_unchecked::<i32>(root, &[0, 2, 1]).is_none());
     }
 }
 
@@ -201,15 +249,39 @@ fn lookup_on_node48() {
     // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
     // which they are derived from.
     unsafe {
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 1]), Some(&121));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 2]), Some(&122));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3]), Some(&123));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4]), Some(&124));
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 1])
+                .unwrap()
+                .read()
+                .value,
+            121
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 2])
+                .unwrap()
+                .read()
+                .value,
+            122
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 3])
+                .unwrap()
+                .read()
+                .value,
+            123
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 4])
+                .unwrap()
+                .read()
+                .value,
+            124
+        );
 
-        assert_eq!(search_unchecked::<i32>(root, &[]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 10]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[0, 2, 1]), None);
+        assert!(search_unchecked::<i32>(root, &[]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 10]).is_none());
+        assert!(search_unchecked::<i32>(root, &[0, 2, 1]).is_none());
     }
 }
 
@@ -244,15 +316,39 @@ fn lookup_on_node256() {
     // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
     // which they are derived from.
     unsafe {
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 1]), Some(&121));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 2]), Some(&122));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3]), Some(&123));
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4]), Some(&124));
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 1])
+                .unwrap()
+                .read()
+                .value,
+            121
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 2])
+                .unwrap()
+                .read()
+                .value,
+            122
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 3])
+                .unwrap()
+                .read()
+                .value,
+            123
+        );
+        assert_eq!(
+            search_unchecked::<i32>(root, &[1, 2, 4])
+                .unwrap()
+                .read()
+                .value,
+            124
+        );
 
-        assert_eq!(search_unchecked::<i32>(root, &[]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 10]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[0, 2, 1]), None);
+        assert!(search_unchecked::<i32>(root, &[]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 10]).is_none());
+        assert!(search_unchecked::<i32>(root, &[0, 2, 1]).is_none());
     }
 }
 
@@ -328,35 +424,47 @@ fn lookup_on_n16_n4_layer_tree() {
     // which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1]),
-            Some(&123561)
+            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1])
+                .unwrap()
+                .read()
+                .value,
+            123561
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2]),
-            Some(&123562)
+            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2])
+                .unwrap()
+                .read()
+                .value,
+            123562
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3]),
-            Some(&124783)
+            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3])
+                .unwrap()
+                .read()
+                .value,
+            124783
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4]),
-            Some(&124784)
+            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4])
+                .unwrap()
+                .read()
+                .value,
+            124784
         );
 
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]), None);
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]).is_none());
 
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]), None);
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]).is_none());
     }
 }
 
@@ -403,35 +511,47 @@ fn lookup_on_n48_n4_layer_tree() {
     // which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1]),
-            Some(&123561)
+            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1])
+                .unwrap()
+                .read()
+                .value,
+            123561
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2]),
-            Some(&123562)
+            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2])
+                .unwrap()
+                .read()
+                .value,
+            123562
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3]),
-            Some(&124783)
+            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3])
+                .unwrap()
+                .read()
+                .value,
+            124783
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4]),
-            Some(&124784)
+            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4])
+                .unwrap()
+                .read()
+                .value,
+            124784
         );
 
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]), None);
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]).is_none());
 
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]), None);
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]).is_none());
     }
 }
 
@@ -478,35 +598,47 @@ fn lookup_on_n256_n4_layer_tree() {
     // which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1]),
-            Some(&123561)
+            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1])
+                .unwrap()
+                .read()
+                .value,
+            123561
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2]),
-            Some(&123562)
+            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2])
+                .unwrap()
+                .read()
+                .value,
+            123562
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3]),
-            Some(&124783)
+            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3])
+                .unwrap()
+                .read()
+                .value,
+            124783
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4]),
-            Some(&124784)
+            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4])
+                .unwrap()
+                .read()
+                .value,
+            124784
         );
 
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]), None);
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]).is_none());
 
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]), None);
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]).is_none());
     }
 }
 
@@ -553,34 +685,46 @@ fn lookup_on_n4_n4_layer_tree() {
     // which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1]),
-            Some(&123561)
+            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1])
+                .unwrap()
+                .read()
+                .value,
+            123561
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2]),
-            Some(&123562)
+            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2])
+                .unwrap()
+                .read()
+                .value,
+            123562
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3]),
-            Some(&124783)
+            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3])
+                .unwrap()
+                .read()
+                .value,
+            124783
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4]),
-            Some(&124784)
+            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4])
+                .unwrap()
+                .read()
+                .value,
+            124784
         );
 
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]), None);
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]).is_none());
 
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]), None);
-        assert_eq!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]), None);
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]).is_none());
+        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]).is_none());
     }
 }

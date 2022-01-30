@@ -30,7 +30,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                         Ok(new_root) => {
                             let search_value =
                                 unsafe { search_unchecked(new_root, key.as_ref()).unwrap() };
-                            assert_eq!(*search_value, next_value);
+                            assert_eq!(search_value.read().value, next_value);
 
                             Some(new_root)
                         },
@@ -47,8 +47,9 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             Action::Search { key } => {
                 if let Some(root) = current_root {
                     let search_result = unsafe { search_unchecked(root, key.as_ref()) };
-                    if let Some(value) = search_result {
-                        assert!(*value < next_value);
+                    if let Some(leaf) = search_result {
+                        let leaf = leaf.read();
+                        assert!(leaf.value < next_value);
                     }
                 }
             },
