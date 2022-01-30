@@ -243,7 +243,6 @@ impl<V> OpaqueNodePtr<V> {
 }
 
 /// An that encapsulates all the types of Nodes
-#[derive(Debug)]
 pub enum InnerNodePtr<V> {
     /// Node that references between 2 and 4 children
     Node4(NodePtr<InnerNode4<V>>),
@@ -257,8 +256,19 @@ pub enum InnerNodePtr<V> {
     LeafNode(NodePtr<LeafNode<V>>),
 }
 
+impl<V> fmt::Debug for InnerNodePtr<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
+            Self::Node16(arg0) => f.debug_tuple("Node16").field(arg0).finish(),
+            Self::Node48(arg0) => f.debug_tuple("Node48").field(arg0).finish(),
+            Self::Node256(arg0) => f.debug_tuple("Node256").field(arg0).finish(),
+            Self::LeafNode(arg0) => f.debug_tuple("LeafNode").field(arg0).finish(),
+        }
+    }
+}
+
 /// A pointer to a Node{4,16,48,256}.
-#[derive(Debug, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct NodePtr<N: TaggedNode>(NonNull<N>);
 
@@ -352,6 +362,20 @@ impl<N: TaggedNode> From<&mut N> for NodePtr<N> {
         // SAFETY: Pointer is non-null, aligned, and pointing to a valid instance of N
         // because it was constructed from a mutable reference.
         unsafe { NodePtr::new(node_ref as *mut _) }
+    }
+}
+
+impl<N: TaggedNode> PartialEq for NodePtr<N> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<N: TaggedNode> Eq for NodePtr<N> {}
+
+impl<N: TaggedNode> fmt::Debug for NodePtr<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("NodePtr").field(&self.0).finish()
     }
 }
 

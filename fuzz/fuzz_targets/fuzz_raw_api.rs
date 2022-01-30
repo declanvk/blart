@@ -1,7 +1,8 @@
 #![no_main]
 
 use blart::{
-    deallocate_tree, insert_unchecked, search_unchecked, LeafNode, NodePtr, OpaqueNodePtr,
+    deallocate_tree, insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
+    LeafNode, NodePtr, OpaqueNodePtr,
 };
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
@@ -15,6 +16,7 @@ enum Action {
         // the key to perform a lookup on
         key: Box<[u8]>,
     },
+    MinimumMaximum,
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -50,6 +52,21 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     if let Some(leaf) = search_result {
                         let leaf = leaf.read();
                         assert!(leaf.value < next_value);
+                    }
+                }
+            },
+            Action::MinimumMaximum => {
+                if let Some(root) = current_root {
+                    let min_value = unsafe { minimum_unchecked(root) };
+                    let max_value = unsafe { maximum_unchecked(root) };
+
+                    match (min_value, max_value) {
+                        (Some(min_leaf), Some(max_leaf)) => {
+                            if min_leaf != max_leaf {
+                                assert!(min_leaf.read().key < max_leaf.read().key);
+                            }
+                        },
+                        _ => panic!("A non-empty tree should have both a minimum and maximum leaf"),
                     }
                 }
             },

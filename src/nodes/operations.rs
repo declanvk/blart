@@ -1,7 +1,7 @@
 //! Trie node lookup and manipulation
 
 use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
-use std::{error::Error, fmt::Display, mem::ManuallyDrop, ops::Deref};
+use std::{error::Error, fmt::Display, mem::ManuallyDrop};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -143,11 +143,7 @@ pub unsafe fn insert_unchecked<V>(
             header.ltrim_prefix(matched_prefix_size + 1);
 
             // Updated the header information here
-            root.write(Deref::deref(&header).clone());
-            // SAFETY: This header value will not be used after this point, and will no
-            // longer be referenced by the tree. That is why it is necessary to deallocate
-            // it.
-            unsafe { ManuallyDrop::drop(&mut header) };
+            root.write(ManuallyDrop::into_inner(header));
             return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
 
@@ -464,8 +460,81 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
     }
 }
 
+/// Search for the leaf with the minimum key, by lexicographic ordering.
+///
+/// # Safety
+///
+///   - This function cannot be called concurrently to any reads or writes of
+///     `root` or any child node of `root`. This function will arbitrarily read
+///     to any child in the given tree.
+pub unsafe fn minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<LeafNode<V>>> {
+    let mut current_node = root;
+
+    loop {
+        match current_node.to_node_ptr() {
+            InnerNodePtr::Node4(inner_node) => {
+                let inner_node = inner_node.read();
+                current_node = inner_node.iter().next()?.1;
+            },
+            InnerNodePtr::Node16(inner_node) => {
+                let inner_node = inner_node.read();
+                current_node = inner_node.iter().next()?.1;
+            },
+            InnerNodePtr::Node48(inner_node) => {
+                let inner_node = inner_node.read();
+                current_node = inner_node.iter().next()?.1;
+            },
+            InnerNodePtr::Node256(inner_node) => {
+                let inner_node = inner_node.read();
+                current_node = inner_node.iter().next()?.1;
+            },
+            InnerNodePtr::LeafNode(inner_node) => {
+                return Some(inner_node);
+            },
+        }
+    }
+}
+
+/// Search for the leaf with the maximum key, by lexicographic ordering.
+///
+/// # Safety
+///
+///   - This function cannot be called concurrently to any reads or writes of
+///     `root` or any child node of `root`. This function will arbitrarily read
+///     to any child in the given tree.
+pub unsafe fn maximum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<LeafNode<V>>> {
+    let mut current_node = root;
+
+    loop {
+        match current_node.to_node_ptr() {
+            InnerNodePtr::Node4(inner_node) => {
+                let inner_node = inner_node.read();
+                current_node = inner_node.iter().last()?.1;
+            },
+            InnerNodePtr::Node16(inner_node) => {
+                let inner_node = inner_node.read();
+                current_node = inner_node.iter().last()?.1;
+            },
+            InnerNodePtr::Node48(inner_node) => {
+                let inner_node = inner_node.read();
+                current_node = inner_node.iter().last()?.1;
+            },
+            InnerNodePtr::Node256(inner_node) => {
+                let inner_node = inner_node.read();
+                current_node = inner_node.iter().last()?.1;
+            },
+            InnerNodePtr::LeafNode(inner_node) => {
+                return Some(inner_node);
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod lookup_tests;
 
 #[cfg(test)]
 mod insert_tests;
+
+#[cfg(test)]
+mod minmax_tests;
