@@ -1,8 +1,7 @@
 //! Tie node lookup and manipulation
 
 use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
-use std::{error::Error, fmt::Display, ops::Deref, ptr};
-use std::mem::ManuallyDrop;
+use std::{error::Error, fmt::Display, mem::ManuallyDrop, ops::Deref, ptr};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -121,10 +120,7 @@ pub unsafe fn insert_unchecked<V>(
 
             return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
-        
-        {
-            
-        }
+
         // since header is mutable will need to write it back
         let mut header = root.read();
         let matched_prefix_size = header.match_prefix(&(key)[depth..]);
@@ -154,7 +150,9 @@ pub unsafe fn insert_unchecked<V>(
 
             // Updated the header information here
             root.write(Deref::deref(&header).clone());
-            // SAFETY: This header value will not be used after this point, and will no longer be referenced by the tree. That is why it is necessary to deallocate it.
+            // SAFETY: This header value will not be used after this point, and will no
+            // longer be referenced by the tree. That is why it is necessary to deallocate
+            // it.
             unsafe { ManuallyDrop::drop(&mut header) };
             return Ok(NodePtr::allocate_node(new_n4).to_opaque());
         }
@@ -381,16 +379,16 @@ unsafe fn overwrite_child_unchecked<V>(
     unsafe {
         match current_node.to_node_ptr() {
             InnerNodePtr::Node4(old_node) => old_node.update(|inner_node| {
-                inner_node.overwrite_child(key_fragment, child);
+                inner_node.write_child(key_fragment, child);
             }),
             InnerNodePtr::Node16(old_node) => old_node.update(|inner_node| {
-                inner_node.overwrite_child(key_fragment, child);
+                inner_node.write_child(key_fragment, child);
             }),
             InnerNodePtr::Node48(old_node) => old_node.update(|inner_node| {
-                inner_node.overwrite_child(key_fragment, child);
+                inner_node.write_child(key_fragment, child);
             }),
             InnerNodePtr::Node256(old_node) => old_node.update(|inner_node| {
-                inner_node.overwrite_child(key_fragment, child);
+                inner_node.write_child(key_fragment, child);
             }),
             InnerNodePtr::LeafNode(_) => unreachable!(
                 "This branch is not possible because of the safety invariants of the function."

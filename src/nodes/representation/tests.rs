@@ -76,17 +76,47 @@ fn node4_write_child() {
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
+    let mut l4 = LeafNode::new(vec![].into(), ());
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
     n.write_child(3, l1_ptr);
     n.write_child(123, l2_ptr);
     n.write_child(1, l3_ptr);
+    n.write_child(88, l4_ptr);
 
     assert_eq!(n.lookup_child(3), Some(l1_ptr));
     assert_eq!(n.lookup_child(123), Some(l2_ptr));
     assert_eq!(n.lookup_child(1), Some(l3_ptr));
+    assert_eq!(n.lookup_child(88), Some(l4_ptr));
+
+    assert_eq!(n.lookup_child(87), None);
+    assert_eq!(n.lookup_child(u8::MIN), None);
+    assert_eq!(n.lookup_child(u8::MAX), None);
+}
+
+#[test]
+#[should_panic]
+fn node4_write_child_full_panic() {
+    let mut n = InnerNode4::empty();
+    let mut l1 = LeafNode::new(vec![].into(), ());
+    let mut l2 = LeafNode::new(vec![].into(), ());
+    let mut l3 = LeafNode::new(vec![].into(), ());
+    let mut l4 = LeafNode::new(vec![].into(), ());
+    let mut l5 = LeafNode::new(vec![].into(), ());
+    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+    let l5_ptr = NodePtr::from(&mut l5).to_opaque();
+
+    n.write_child(3, l1_ptr);
+    n.write_child(123, l2_ptr);
+    n.write_child(1, l3_ptr);
+    n.write_child(88, l4_ptr);
+    n.write_child(85, l5_ptr);
 }
 
 #[test]
@@ -126,18 +156,7 @@ fn node4_iterate() {
     n4.write_child(1, l3_ptr);
 
     let pairs = n4.iter().collect::<Vec<_>>();
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
-        .is_some());
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 123 && *ptr == l2_ptr)
-        .is_some());
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 1 && *ptr == l3_ptr)
-        .is_some());
+    assert_eq!(pairs, &[(1, l3_ptr), (3, l1_ptr), (123, l2_ptr),])
 }
 
 #[test]
@@ -167,20 +186,40 @@ fn node16_lookup() {
 #[test]
 fn node16_write_child() {
     let mut n = InnerNode16::empty();
-    let mut l1 = LeafNode::new(vec![].into(), ());
-    let mut l2 = LeafNode::new(vec![].into(), ());
-    let mut l3 = LeafNode::new(vec![].into(), ());
-    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let mut leaves = vec![LeafNode::new(vec![].into(), ()); 16];
+    {
+        let leaf_pointers = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect::<Vec<_>>();
 
-    n.write_child(3, l1_ptr);
-    n.write_child(123, l2_ptr);
-    n.write_child(1, l3_ptr);
+        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            n.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        }
 
-    assert_eq!(n.lookup_child(3), Some(l1_ptr));
-    assert_eq!(n.lookup_child(123), Some(l2_ptr));
-    assert_eq!(n.lookup_child(1), Some(l3_ptr));
+        for (idx, leaf_pointer) in leaf_pointers.into_iter().enumerate() {
+            assert_eq!(
+                n.lookup_child(u8::try_from(idx).unwrap()),
+                Some(leaf_pointer)
+            );
+        }
+    }
+}
+
+#[test]
+#[should_panic]
+fn node16_write_child_full_panic() {
+    let mut n = InnerNode16::empty();
+    let mut leaves = vec![LeafNode::new(vec![].into(), ()); 17];
+    {
+        let leaf_pointers = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque());
+
+        for (idx, leaf_pointer) in leaf_pointers.enumerate() {
+            n.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        }
+    }
 }
 
 #[test]
@@ -220,18 +259,7 @@ fn node16_iterate() {
     n.write_child(1, l3_ptr);
 
     let pairs = n.iter().collect::<Vec<_>>();
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
-        .is_some());
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 123 && *ptr == l2_ptr)
-        .is_some());
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 1 && *ptr == l3_ptr)
-        .is_some());
+    assert_eq!(pairs, &[(1, l3_ptr), (3, l1_ptr), (123, l2_ptr),])
 }
 
 #[test]
@@ -262,20 +290,40 @@ fn node48_lookup() {
 #[test]
 fn node48_write_child() {
     let mut n = InnerNode48::empty();
-    let mut l1 = LeafNode::new(vec![].into(), ());
-    let mut l2 = LeafNode::new(vec![].into(), ());
-    let mut l3 = LeafNode::new(vec![].into(), ());
-    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let mut leaves = vec![LeafNode::new(vec![].into(), ()); 48];
+    {
+        let leaf_pointers = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect::<Vec<_>>();
 
-    n.write_child(3, l1_ptr);
-    n.write_child(123, l2_ptr);
-    n.write_child(1, l3_ptr);
+        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            n.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        }
 
-    assert_eq!(n.lookup_child(3), Some(l1_ptr));
-    assert_eq!(n.lookup_child(123), Some(l2_ptr));
-    assert_eq!(n.lookup_child(1), Some(l3_ptr));
+        for (idx, leaf_pointer) in leaf_pointers.into_iter().enumerate() {
+            assert_eq!(
+                n.lookup_child(u8::try_from(idx).unwrap()),
+                Some(leaf_pointer)
+            );
+        }
+    }
+}
+
+#[test]
+#[should_panic]
+fn node48_write_child_full_panic() {
+    let mut n = InnerNode48::empty();
+    let mut leaves = vec![LeafNode::new(vec![].into(), ()); 49];
+    {
+        let leaf_pointers = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque());
+
+        for (idx, leaf_pointer) in leaf_pointers.enumerate() {
+            n.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        }
+    }
 }
 
 #[test]
@@ -353,20 +401,24 @@ fn node256_lookup() {
 #[test]
 fn node256_write_child() {
     let mut n = InnerNode256::empty();
-    let mut l1 = LeafNode::new(vec![].into(), ());
-    let mut l2 = LeafNode::new(vec![].into(), ());
-    let mut l3 = LeafNode::new(vec![].into(), ());
-    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let mut leaves = vec![LeafNode::new(vec![].into(), ()); 256];
+    {
+        let leaf_pointers = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect::<Vec<_>>();
 
-    n.write_child(3, l1_ptr);
-    n.write_child(123, l2_ptr);
-    n.write_child(1, l3_ptr);
+        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            n.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        }
 
-    assert_eq!(n.lookup_child(3), Some(l1_ptr));
-    assert_eq!(n.lookup_child(123), Some(l2_ptr));
-    assert_eq!(n.lookup_child(1), Some(l3_ptr));
+        for (idx, leaf_pointer) in leaf_pointers.into_iter().enumerate() {
+            assert_eq!(
+                n.lookup_child(u8::try_from(idx).unwrap()),
+                Some(leaf_pointer)
+            );
+        }
+    }
 }
 
 #[test]

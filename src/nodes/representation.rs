@@ -437,26 +437,40 @@ impl<V> InnerNode4<V> {
         None
     }
 
-    /// Write a new child pointer with key fragment to this inner node.
+    /// Write a child pointer with key fragment to this inner node.
+    ///
+    /// If the key fragment already exists in the node, overwrite the existing
+    /// child pointer.
     ///
     /// # Panics
     ///
     /// Panics when the node is full.
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        let child_index = self.header.num_children();
-        self.keys[child_index].write(key_fragment);
-        self.child_pointers[child_index].write(child_pointer);
-        self.header.num_children += 1;
-    }
+        let (keys, _) = self.initialized_portion();
+        let num_children = self.header.num_children();
+        match keys.binary_search(&key_fragment) {
+            Ok(child_index) => {
+                // overwrite existing key
+                self.child_pointers[child_index].write(child_pointer);
+            },
+            Err(child_index) => {
+                // add new key
+                // make sure new index is not beyond bounds, checks node is not full
+                assert!(child_index < self.keys.len(), "node is full");
 
-    /// Write to an existing key to update the child pointer.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the key is not already set in the node.
-    pub fn overwrite_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        let child_index = self.lookup_child_index(key_fragment).unwrap();
-        self.child_pointers[child_index].write(child_pointer);
+                if child_index != self.keys.len() - 1 {
+                    self.keys
+                        .copy_within(child_index..num_children, child_index + 1);
+                    self.child_pointers
+                        .copy_within(child_index..num_children, child_index + 1);
+                }
+
+                self.keys[child_index].write(key_fragment);
+                self.child_pointers[child_index].write(child_pointer);
+
+                self.header.num_children += 1;
+            },
+        }
     }
 
     /// Return an iterator over all the children of this node with their
@@ -580,26 +594,40 @@ impl<V> InnerNode16<V> {
         None
     }
 
-    /// Write a new child pointer with key fragment to this inner node.
+    /// Write a child pointer with key fragment to this inner node.
+    ///
+    /// If the key fragment already exists in the node, overwrite the existing
+    /// child pointer.
     ///
     /// # Panics
     ///
     /// Panics when the node is full.
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        let child_index = self.header.num_children();
-        self.keys[child_index].write(key_fragment);
-        self.child_pointers[child_index].write(child_pointer);
-        self.header.num_children += 1;
-    }
+        let (keys, _) = self.initialized_portion();
+        let num_children = self.header.num_children();
+        match keys.binary_search(&key_fragment) {
+            Ok(child_index) => {
+                // overwrite existing key
+                self.child_pointers[child_index].write(child_pointer);
+            },
+            Err(child_index) => {
+                // add new key
+                // make sure new index is not beyond bounds, checks node is not full
+                assert!(child_index < self.keys.len(), "node is full");
 
-    /// Write to an existing key to update the child pointer.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the key is not already set in the node.
-    pub fn overwrite_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        let child_index = self.lookup_child_index(key_fragment).unwrap();
-        self.child_pointers[child_index].write(child_pointer);
+                if child_index != self.keys.len() - 1 {
+                    self.keys
+                        .copy_within(child_index..num_children, child_index + 1);
+                    self.child_pointers
+                        .copy_within(child_index..num_children, child_index + 1);
+                }
+
+                self.keys[child_index].write(key_fragment);
+                self.child_pointers[child_index].write(child_pointer);
+
+                self.header.num_children += 1;
+            },
+        }
     }
 
     /// Return an iterator over all the children of this node with their
@@ -763,30 +791,29 @@ impl<V> InnerNode48<V> {
         }
     }
 
-    /// Write a new child pointer with key fragment to this inner node.
+    /// Write a child pointer with key fragment to this inner node.
+    ///
+    /// If the key fragment already exists in the node, overwrite the existing
+    /// child pointer.
     ///
     /// # Panics
     ///
     /// Panics when the node is full.
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        let child_index = self.header.num_children();
-        self.child_indices[usize::from(key_fragment)] =
-            RestrictedNodeIndex::<48>::try_from(child_index).unwrap();
-        self.child_pointers[child_index].write(child_pointer);
-        self.header.num_children += 1;
-    }
+        let key_fragment_idx = usize::from(key_fragment);
+        let child_index = if self.child_indices[key_fragment_idx] == RestrictedNodeIndex::EMPTY {
+            let child_index = self.header.num_children();
+            assert!(child_index < self.child_pointers.len(), "node is full");
 
-    /// Write to an existing key to update the child pointer.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the key is not already set in the node.
-    pub fn overwrite_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        let index = &self.child_indices[usize::from(key_fragment)];
-        if *index == RestrictedNodeIndex::<48>::EMPTY {
-            panic!("given key is not already set in node!");
-        }
-        self.child_pointers[usize::from(u8::from(*index))] = MaybeUninit::new(child_pointer);
+            self.child_indices[key_fragment_idx] =
+                RestrictedNodeIndex::<48>::try_from(child_index).unwrap();
+            self.header.num_children += 1;
+            child_index
+        } else {
+            // overwrite existing
+            usize::from(u8::from(self.child_indices[key_fragment_idx]))
+        };
+        self.child_pointers[child_index].write(child_pointer);
     }
 
     /// Return an iterator over all the children of this node with their
@@ -887,22 +914,17 @@ impl<V> InnerNode256<V> {
         self.child_pointers[key_fragment as usize]
     }
 
-    /// Write a new child pointer with key fragment to this inner node.
+    /// Write a child pointer with key fragment to this inner node.
+    ///
+    /// If the key fragment already exists in the node, overwrite the existing
+    /// child pointer.
     pub fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        self.child_pointers[usize::from(key_fragment)] = Some(child_pointer);
-        self.header.num_children += 1;
-    }
-
-    /// Write to an existing key to update the child pointer.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the key is not already set in the node.
-    pub fn overwrite_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
-        if self.child_pointers[usize::from(key_fragment)].is_none() {
-            panic!("given key is not already set in node!");
+        let key_fragment_idx = usize::from(key_fragment);
+        let existing_pointer = self.child_pointers[key_fragment_idx];
+        self.child_pointers[key_fragment_idx] = Some(child_pointer);
+        if existing_pointer.is_none() {
+            self.header.num_children += 1;
         }
-        self.child_pointers[usize::from(key_fragment)] = Some(child_pointer);
     }
 
     /// Return an iterator over all the children of this node with their
@@ -932,7 +954,7 @@ impl<V> TaggedNode for InnerNode256<V> {
 }
 
 /// Node that contains a single leaf value.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct LeafNode<V> {
     /// The common node fields.
