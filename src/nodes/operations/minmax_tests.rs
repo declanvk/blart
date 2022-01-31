@@ -1,6 +1,5 @@
-use std::iter;
-
 use super::*;
+use crate::nodes::tests_common::{generate_key_fixed_length, generate_keys_skewed};
 
 #[test]
 fn leaf_tree_min_max_same() {
@@ -17,20 +16,7 @@ fn leaf_tree_min_max_same() {
 
 #[test]
 fn large_tree_same_length_keys_min_max() {
-    const LEN: usize = 3;
-    const STOPS: u8 = 5;
-    let mut keys = iter::successors(Some(vec![u8::MIN; LEN].into_boxed_slice()), move |prev| {
-        if prev.iter().all(|digit| *digit == u8::MAX) {
-            None
-        } else {
-            Some(
-                prev.iter()
-                    .map(|digit| digit.saturating_add(u8::MAX / STOPS))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            )
-        }
-    });
+    let mut keys = generate_key_fixed_length(3, 5);
     let mut root = NodePtr::allocate_node(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
@@ -52,16 +38,7 @@ fn large_tree_same_length_keys_min_max() {
 
 #[test]
 fn skewed_tree_min_max() {
-    const MAX_LEN: usize = 12;
-    let mut keys = iter::successors(Some(vec![u8::MAX; 1].into_boxed_slice()), |prev| {
-        if prev.len() < MAX_LEN {
-            let mut key = vec![u8::MIN; prev.len()];
-            key.push(u8::MAX);
-            Some(key.into_boxed_slice())
-        } else {
-            None
-        }
-    });
+    let mut keys = generate_keys_skewed(12);
 
     let mut root = NodePtr::allocate_node(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 

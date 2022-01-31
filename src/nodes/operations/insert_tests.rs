@@ -1,7 +1,5 @@
-use std::iter::once;
-
 use super::*;
-use crate::NodeType;
+use crate::{nodes::tests_common::generate_keys_skewed, NodeType};
 
 #[test]
 fn insert_to_small_trees() {
@@ -55,28 +53,18 @@ fn insert_into_left_skewed_tree_deallocate() {
     #[cfg(miri)]
     const KEY_LENGTH_LIMIT: usize = 16usize;
 
-    let first_leaf = NodePtr::allocate_node(LeafNode::new(Box::new([0, u8::MAX]), 1));
-    let mut current_root = first_leaf.to_opaque();
+    let mut keys = generate_keys_skewed(KEY_LENGTH_LIMIT);
+    let mut current_root =
+        NodePtr::allocate_node(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
-    for key_size in 2..KEY_LENGTH_LIMIT {
-        let key = (0..key_size)
-            .chain(once(u8::MAX as usize))
-            .map(|byte| (byte % (u8::MAX as usize + 1)) as u8)
-            .collect::<Vec<_>>();
-
-        current_root =
-            unsafe { insert_unchecked(current_root, key.into_boxed_slice(), key_size).unwrap() };
+    for (idx, key) in keys.enumerate() {
+        current_root = unsafe { insert_unchecked(current_root, key, idx + 1).unwrap() };
     }
 
-    for key_size in 1..KEY_LENGTH_LIMIT {
-        let key = (0..key_size)
-            .chain(once(u8::MAX as usize))
-            .map(|byte| (byte % (u8::MAX as usize + 1)) as u8)
-            .collect::<Vec<_>>();
-
+    for (value, key) in generate_keys_skewed(KEY_LENGTH_LIMIT).enumerate() {
         let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
 
-        assert_eq!(search_result.unwrap().read().value, key_size);
+        assert_eq!(search_result.unwrap().read().value, value);
     }
 
     unsafe { deallocate_tree(current_root) };
