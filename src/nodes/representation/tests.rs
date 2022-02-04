@@ -29,7 +29,6 @@ fn opaque_node_ptr_is_correct() {
 #[cfg(target_pointer_width = "64")]
 fn node_sizes() {
     assert_eq!(mem::size_of::<Header>(), 32);
-    assert_eq!(mem::align_of::<Header>(), 8);
     // key map: 4 * (1 byte) = 4 bytes
     // child map: 4 * (8 bytes (on 64-bit platform)) = 32
     //
@@ -44,6 +43,16 @@ fn node_sizes() {
     assert_eq!(mem::size_of::<InnerNode48<usize>>(), 672);
     // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
     assert_eq!(mem::size_of::<InnerNode256<usize>>(), 2080);
+}
+
+#[test]
+fn node_alignment() {
+    assert_eq!(mem::align_of::<InnerNode4<u8>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode16<u8>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode48<u8>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode256<u8>>(), 8);
+    assert_eq!(mem::align_of::<LeafNode<u8>>(), 8);
+    assert_eq!(mem::align_of::<Header>(), 8);
 }
 
 #[test]
