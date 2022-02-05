@@ -1,5 +1,15 @@
 # BLART
 
+## Fuzzing
+
+To run the fuzzer I use the command:
+
+```bash
+cargo fuzz run -j 8 -s address fuzz_raw_api -- -max_len=32768 -max_total_time=3600 && cargo fuzz cmin fuzz_raw_api
+```
+
+This will run the fuzzer for a total of 3600 seconds (1 hour), using 8 jobs (half of the total number of cores on my dev box), and using the address sanitizer. The `cmin` command is used to compact the corpus after generating new entries.
+
 ## License
 
 Licensed under either of

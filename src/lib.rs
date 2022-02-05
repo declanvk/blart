@@ -1,9 +1,4 @@
-#![feature(
-    maybe_uninit_uninit_array,
-    maybe_uninit_slice,
-    maybe_uninit_write_slice,
-    rustc_attrs
-)]
+#![feature(maybe_uninit_uninit_array, maybe_uninit_slice)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,
