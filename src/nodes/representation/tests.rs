@@ -53,6 +53,23 @@ fn node_alignment() {
     assert_eq!(mem::align_of::<InnerNode256<u8>>(), 8);
     assert_eq!(mem::align_of::<LeafNode<u8>>(), 8);
     assert_eq!(mem::align_of::<Header>(), 8);
+
+    let n4 = InnerNode4::<()>::empty();
+    let n16 = InnerNode4::<()>::empty();
+    let n48 = InnerNode4::<()>::empty();
+    let n256 = InnerNode4::<()>::empty();
+
+    let n4_ptr = &n4 as *const _ as usize;
+    let n16_ptr = &n16 as *const _ as usize;
+    let n48_ptr = &n48 as *const _ as usize;
+    let n256_ptr = &n256 as *const _ as usize;
+
+    // Ensure that there are 3 bits of unused space in the node pointer because of
+    // the alignment.
+    assert!(n4_ptr.trailing_zeros() >= 3);
+    assert!(n16_ptr.trailing_zeros() >= 3);
+    assert!(n48_ptr.trailing_zeros() >= 3);
+    assert!(n256_ptr.trailing_zeros() >= 3);
 }
 
 #[test]
