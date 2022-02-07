@@ -10,7 +10,7 @@
 
 use std::{fmt, marker::PhantomData, mem::align_of, num::NonZeroUsize, ptr::NonNull};
 
-/// A data-carry non-null pointer type.
+/// A non-null pointer type which carries several bits of metadata.
 #[repr(transparent)]
 pub struct TaggedPointer<P>(NonZeroUsize, PhantomData<P>);
 
@@ -33,10 +33,15 @@ impl<P> TaggedPointer<P> {
     ///
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
+    //
+    // We can take a raw pointer here because we do not derefence the pointer in the body of the
+    // function.
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(pointer: *mut P) -> Option<TaggedPointer<P>> {
         if pointer.is_null() {
             return None;
         }
+
         // SAFETY: After checking, this pointer is guaranteed to not be null.
         unsafe { Some(Self::new_unchecked(pointer)) }
     }
@@ -61,7 +66,9 @@ impl<P> TaggedPointer<P> {
         let stripped_ptr = ptr_val & Self::POINTER_MASK;
 
         TaggedPointer(
-            // SAFETY: TODO
+            // SAFETY: The non-zero safety requirement is defered to the caller of this function,
+            // who must provide a non-null (non-zero) pointer. This assumes that null is always a
+            // zero value.
             unsafe { NonZeroUsize::new_unchecked(stripped_ptr) },
             PhantomData,
         )
@@ -100,7 +107,7 @@ impl<P> TaggedPointer<P> {
     ///
     /// # Panics
     ///  - Panics if any bits other than the lowest [`Self::NUM_BITS`] are
-    ///    non-zero.
+    ///    non-zero in the new `data` value.
     pub fn set_data(&mut self, data: usize) {
         assert_eq!(
             data & Self::POINTER_MASK,
@@ -110,8 +117,43 @@ impl<P> TaggedPointer<P> {
         let data = data & Self::DATA_MASK;
 
         // clear the data bits and then write the new data
-        // SAFETY: TODO
+        // SAFETY: This value will always be non-zero because the upper bits (from
+        // POINTER_MASK) will always be non-zero. This a property of the type and its
+        // construction.
         self.0 = unsafe { NonZeroUsize::new_unchecked((self.0.get() & Self::POINTER_MASK) | data) };
+    }
+
+    /// Casts to a [`TaggedPointer`] of another type.
+    ///
+    /// This function will transfer the data bits from the original pointer to
+    /// the new pointer.
+    ///
+    /// # Errors
+    ///
+    ///  - This function will error if the alignment of the new type does not
+    ///    equal the alignment of the existing type. This is because the number
+    ///    of data-carrying bits could be different.
+    pub fn cast<Q>(self) -> Result<TaggedPointer<Q>, AlignmentCastError> {
+        // TODO: Consider allowing casts from smaller to larger alignment, as the number
+        // of data-bits could expand.
+        if Self::NUM_BITS != TaggedPointer::<Q>::NUM_BITS {
+            return Err(AlignmentCastError {
+                input_alignment: Self::ALIGNMENT,
+                output_alignment: TaggedPointer::<Q>::ALIGNMENT,
+            });
+        }
+
+        let data = self.to_data();
+        let raw_ptr = self.to_ptr();
+        let cast_raw_ptr = raw_ptr.cast::<Q>();
+
+        // SAFETY: The `cast_raw_ptr` is guaranteed to be non-null because it is derived
+        // from an existing `TaggedPointer` which carries that guarantee.
+        let mut new_tagged = unsafe { TaggedPointer::new_unchecked(cast_raw_ptr) };
+
+        new_tagged.set_data(data);
+
+        Ok(new_tagged)
     }
 }
 
@@ -175,7 +217,7 @@ impl<P> PartialEq for TaggedPointer<P> {
 
 impl<P> Clone for TaggedPointer<P> {
     fn clone(&self) -> Self {
-        Self(self.0.clone(), self.1.clone())
+        Self(self.0, self.1)
     }
 }
 
@@ -195,6 +237,30 @@ impl<P> fmt::Pointer for TaggedPointer<P> {
         fmt::Pointer::fmt(&self.to_ptr(), f)
     }
 }
+
+/// The error type returned when a [`TaggedPointer::cast`] fails because the
+/// alignment of the input type and the alignment of the output type are
+/// different.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct AlignmentCastError {
+    /// The alignment of the input type.
+    pub input_alignment: usize,
+    /// The alignment of the output type.
+    pub output_alignment: usize,
+}
+
+impl fmt::Display for AlignmentCastError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "cannot cast tagged pointer to point to a type with a different alignment. Existing \
+             type alignment [{}]. Attempted type alignment [{}].",
+            self.input_alignment, self.output_alignment
+        )
+    }
+}
+
+impl std::error::Error for AlignmentCastError {}
 
 #[cfg(test)]
 mod tests {
@@ -355,5 +421,31 @@ mod tests {
             TaggedPointer::<u128>::POINTER_MASK,
             0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
         );
+    }
+
+    #[test]
+    fn cast_checks_alignment() {
+        let mut p1 = TaggedPointer::new(Box::into_raw(Box::new(1u64))).unwrap();
+        let mut p2 = TaggedPointer::new(Box::into_raw(Box::new(2u32))).unwrap();
+
+        p1.set_data(1);
+        p2.set_data(2);
+
+        let p1_i64 = p1.cast::<i64>().unwrap();
+        assert_eq!(p1_i64.to_data(), 1);
+        assert!(p1.cast::<u32>().is_err());
+        assert!(p1.cast::<u16>().is_err());
+        assert!(p1.cast::<u8>().is_err());
+
+        let p2_i32 = p2.cast::<i32>().unwrap();
+        assert_eq!(p2_i32.to_data(), 2);
+        assert!(p2.cast::<u64>().is_err());
+        assert!(p2.cast::<u16>().is_err());
+        assert!(p2.cast::<u8>().is_err());
+
+        unsafe {
+            Box::from_raw(p1.to_ptr());
+            Box::from_raw(p2.to_ptr());
+        }
     }
 }
