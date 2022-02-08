@@ -423,6 +423,12 @@ pub trait InnerNode: Node {
     fn is_full(&self) -> bool {
         Self::TYPE.upper_capacity() >= self.header().num_children()
     }
+
+    /// Return the first child of this inner node, if it exists.
+    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>>;
+
+    /// Return the last child of this inner node, if it exists.
+    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>>;
 }
 
 /// Node that references between 2 and 4 children
@@ -574,6 +580,14 @@ impl<V> InnerNode for InnerNode4<V> {
 
     fn header_mut(&mut self) -> &mut Header {
         &mut self.header
+    }
+
+    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next()?.1)
+    }
+
+    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next_back()?.1)
     }
 }
 
@@ -734,6 +748,14 @@ impl<V> InnerNode for InnerNode16<V> {
 
     fn header_mut(&mut self) -> &mut Header {
         &mut self.header
+    }
+
+    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next()?.1)
+    }
+
+    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next_back()?.1)
     }
 }
 
@@ -955,6 +977,14 @@ impl<V> InnerNode for InnerNode48<V> {
     fn header_mut(&mut self) -> &mut Header {
         &mut self.header
     }
+
+    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next()?.1)
+    }
+
+    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next_back()?.1)
+    }
 }
 
 /// Node that references between 49 and 256 children
@@ -1049,6 +1079,14 @@ impl<V> InnerNode for InnerNode256<V> {
 
     fn header_mut(&mut self) -> &mut Header {
         &mut self.header
+    }
+
+    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next()?.1)
+    }
+
+    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
+        Some(self.iter().next_back()?.1)
     }
 }
 
