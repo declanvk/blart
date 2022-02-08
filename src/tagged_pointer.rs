@@ -12,7 +12,7 @@ use std::{fmt, marker::PhantomData, mem::align_of, num::NonZeroUsize, ptr::NonNu
 
 /// A non-null pointer type which carries several bits of metadata.
 #[repr(transparent)]
-pub struct TaggedPointer<P>(NonZeroUsize, PhantomData<P>);
+pub struct TaggedPointer<P>(NonZeroUsize, PhantomData<NonNull<P>>);
 
 impl<P> TaggedPointer<P> {
     /// The ABI-required minimum alignment of the `P` type.
@@ -225,9 +225,9 @@ impl<P> Copy for TaggedPointer<P> {}
 
 impl<P> fmt::Debug for TaggedPointer<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("TaggedPointer")
-            .field(&self.0)
-            .field(&self.1)
+        f.debug_struct("TaggedPointer")
+            .field("pointer", &self.to_ptr())
+            .field("data", &self.to_data())
             .finish()
     }
 }
