@@ -1,7 +1,7 @@
 //! Trie node lookup and manipulation
 
-use super::{InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
-use std::{error::Error, fmt::Display, mem::ManuallyDrop};
+use super::{Header, InnerNode, InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
+use std::{error::Error, fmt::Display};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -14,41 +14,63 @@ pub unsafe fn search_unchecked<V>(
     root: OpaqueNodePtr<V>,
     key: &[u8],
 ) -> Option<NodePtr<LeafNode<V>>> {
-    let mut current_node = root;
-    let mut current_depth = 0;
-
-    loop {
-        if let Some(leaf_node_ptr) = current_node.cast::<LeafNode<V>>() {
-            let leaf_node = leaf_node_ptr.read();
-
-            // Specifically we are matching the leaf node stored key against the full search
-            // key to confirm that it is the right value. Due to the method used for prefix
-            // compression, we don't explicity store all the compressed prefixes down the
-            // tree.
-            if leaf_node.matches_key(key) {
-                return Some(leaf_node_ptr);
-            } else {
-                return None;
-            }
-        }
-
-        let header = current_node.read();
-        if header.match_prefix(&key[current_depth..]) != header.prefix_size() {
+    fn test_prefix_continue_search<N: InnerNode>(
+        inner_ptr: NodePtr<N>,
+        key: &[u8],
+        current_depth: &mut usize,
+    ) -> Option<OpaqueNodePtr<N::Value>> {
+        // SAFETY: The lifetime produced from this is bounded to this scope and does not
+        // escape. Further, no other code mutates the node referenced, which is further
+        // enforced the "no concurrent reads or writes" requirement on the
+        // `search_unchecked` function.
+        let inner_node = unsafe { inner_ptr.as_ref() };
+        let header = inner_node.header();
+        if header.match_prefix(&key[*current_depth..]) != header.prefix_size() {
             return None;
         }
 
         // Since the prefix matched, we need to advance the depth by the size
         // of the prefix
-        current_depth += header.prefix_size();
+        *current_depth += header.prefix_size();
 
-        let next_key_fragment = if current_depth < key.len() {
-            key[current_depth]
+        let next_key_fragment = if *current_depth < key.len() {
+            key[*current_depth]
         } else {
             return None;
         };
 
-        // SAFETY: We checked that the current node is not a leaf earlier in the loop
-        let next_child_node = unsafe { lookup_child_unchecked(current_node, next_key_fragment) };
+        inner_node.lookup_child(next_key_fragment)
+    }
+
+    let mut current_node = root;
+    let mut current_depth = 0;
+
+    loop {
+        let next_child_node = match current_node.to_node_ptr() {
+            InnerNodePtr::Node4(inner_ptr) => {
+                test_prefix_continue_search(inner_ptr, key, &mut current_depth)
+            },
+            InnerNodePtr::Node16(inner_ptr) => {
+                test_prefix_continue_search(inner_ptr, key, &mut current_depth)
+            },
+            InnerNodePtr::Node48(inner_ptr) => {
+                test_prefix_continue_search(inner_ptr, key, &mut current_depth)
+            },
+            InnerNodePtr::Node256(inner_ptr) => {
+                test_prefix_continue_search(inner_ptr, key, &mut current_depth)
+            },
+            InnerNodePtr::LeafNode(leaf_node_ptr) => {
+                let leaf_node = leaf_node_ptr.read();
+
+                // Specifically we are matching the leaf node stored key against the full search
+                // key to confirm that it is the right value.
+                if leaf_node.matches_key(key) {
+                    return Some(leaf_node_ptr);
+                } else {
+                    return None;
+                }
+            },
+        };
 
         current_node = next_child_node?;
         // Increment by a single byte
@@ -79,59 +101,34 @@ pub unsafe fn insert_unchecked<V>(
     key: Box<[u8]>,
     value: V,
 ) -> Result<OpaqueNodePtr<V>, InsertError> {
-    // TODO: Consider an iterative solution to handle tree with long keys.
-    fn insert_rec_inner<V>(
-        mut root: OpaqueNodePtr<V>,
+    enum TestResult<V> {
+        MismatchPrefix(OpaqueNodePtr<V>),
+        Error(InsertError),
+        Continue(u8, Box<[u8]>, V),
+    }
+
+    fn test_prefix_update_depth_split_mismatch<V>(
+        root: OpaqueNodePtr<V>,
+        header: &mut Header,
         key: Box<[u8]>,
         value: V,
-        mut depth: usize,
-    ) -> Result<OpaqueNodePtr<V>, InsertError> {
-        if let Some(leaf_node_ptr) = root.cast::<LeafNode<V>>() {
-            let leaf_node = leaf_node_ptr.read();
-
-            let mut new_n4 = InnerNode4::empty();
-            let prefix_size = leaf_node.key[depth..]
-                .iter()
-                .zip(key[depth..].iter())
-                .take_while(|(k1, k2)| k1 == k2)
-                .count();
-            new_n4
-                .header
-                .write_prefix(&key[depth..(depth + prefix_size)]);
-            depth += prefix_size;
-
-            if depth >= key.len() || depth >= leaf_node.key.len() {
-                // then the key has insufficient bytes to be unique. It must be
-                // a prefix of an existing key OR an existing key is a prefix of it
-
-                return Err(InsertError::PrefixKey(key));
-            }
-
-            let new_leaf_key_byte = key[depth];
-            let new_leaf_pointer = NodePtr::allocate_node(LeafNode::new(key, value));
-
-            new_n4.write_child(leaf_node.key[depth], root);
-            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
-
-            return Ok(NodePtr::allocate_node(new_n4).to_opaque());
-        }
-
+        depth: &mut usize,
+    ) -> TestResult<V> {
         // since header is mutable will need to write it back
-        let mut header = root.read();
-        let matched_prefix_size = header.match_prefix(&(key)[depth..]);
+        let matched_prefix_size = header.match_prefix(&key[*depth..]);
         if matched_prefix_size != header.prefix_size() {
             // prefix mismatch, need to split prefix into two separate nodes and take the
             // common prefix into a new parent node
             let mut new_n4 = InnerNode4::empty();
 
-            if (depth + matched_prefix_size) >= key.len() {
+            if (*depth + matched_prefix_size) >= key.len() {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key
 
-                return Err(InsertError::PrefixKey(key));
+                return TestResult::Error(InsertError::PrefixKey(key));
             }
 
-            let new_leaf_key_byte = key[depth + matched_prefix_size];
+            let new_leaf_key_byte = key[*depth + matched_prefix_size];
             let new_leaf_pointer = NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque();
 
             new_n4.write_child(header.read_prefix()[matched_prefix_size], root);
@@ -143,57 +140,261 @@ pub unsafe fn insert_unchecked<V>(
             header.ltrim_prefix(matched_prefix_size + 1);
 
             // Updated the header information here
-            root.write(ManuallyDrop::into_inner(header));
-            return Ok(NodePtr::allocate_node(new_n4).to_opaque());
+            return TestResult::MismatchPrefix(NodePtr::allocate_node(new_n4).to_opaque());
         }
 
-        depth += header.prefix_size();
+        *depth += header.prefix_size();
 
-        let next_key_fragment = if depth < key.len() {
-            key[depth]
+        if *depth < key.len() {
+            TestResult::Continue(key[*depth], key, value)
         } else {
-            return Err(InsertError::PrefixKey(key));
-        };
+            TestResult::Error(InsertError::PrefixKey(key))
+        }
+    }
 
-        // SAFETY: We checked that the current node is not a leaf earlier in the loop
-        let next_child_node = unsafe { lookup_child_unchecked(root, next_key_fragment) };
+    // TODO: Consider an iterative solution to handle tree with long keys.
+    fn insert_rec_inner<V>(
+        mut root: OpaqueNodePtr<V>,
+        key: Box<[u8]>,
+        value: V,
+        mut depth: usize,
+    ) -> Result<OpaqueNodePtr<V>, InsertError> {
+        match root.to_node_ptr() {
+            InnerNodePtr::Node4(inner_ptr) => {
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates or reads the node referenced, which is
+                // further enforced the "no concurrent reads or writes"
+                // requirement on the `insert_unchecked` function.
+                let inner_node = unsafe { inner_ptr.as_mut() };
+                let (next_key_fragment, key, value) = match test_prefix_update_depth_split_mismatch(
+                    root,
+                    &mut inner_node.header,
+                    key,
+                    value,
+                    &mut depth,
+                ) {
+                    TestResult::MismatchPrefix(new_node) => {
+                        return Ok(new_node);
+                    },
+                    TestResult::Error(error) => {
+                        return Err(error);
+                    },
+                    TestResult::Continue(next_key_fragment, key, value) => {
+                        (next_key_fragment, key, value)
+                    },
+                };
 
-        match next_child_node {
-            Some(next_child_node) => {
-                let new_child = insert_rec_inner(next_child_node, key, value, depth + 1)?;
-                // SAFETY: We determine that the current node is not a leaf by checking earlier
-                // in the loop. The requirement of no other current read or write to the
-                // `current_node` is carried to the caller of `insert`. From inside the `insert`
-                // function, there are no other current reads or writes.
-                unsafe {
-                    overwrite_child_unchecked(root, next_key_fragment, new_child);
+                match inner_node.lookup_child(next_key_fragment) {
+                    Some(next_child_node) => {
+                        let new_child = insert_rec_inner(next_child_node, key, value, depth + 1)?;
+
+                        inner_node.write_child(next_key_fragment, new_child);
+                    },
+                    None => {
+                        if inner_node.is_full() {
+                            // we will create a new node of the next larger type and copy all the
+                            // children over.
+
+                            let mut new_node = inner_node.grow();
+                            new_node.write_child(
+                                key[depth],
+                                NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque(),
+                            );
+
+                            root = NodePtr::allocate_node(new_node).to_opaque();
+                            // SAFETY: The `deallocate_node` function is only called a
+                            // single time. The uniqueness requirement is passed up to the
+                            // `grow_unchecked` safety requirements.
+                            unsafe {
+                                NodePtr::deallocate_node(inner_ptr);
+                            }
+                        } else {
+                            inner_node.write_child(
+                                key[depth],
+                                NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque(),
+                            )
+                        }
+                    },
                 }
             },
-            None => {
-                if header.is_full() {
-                    // we will create a new node of the next larger type and copy all the children
-                    // over.
+            InnerNodePtr::Node16(inner_ptr) => {
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates or reads the node referenced, which is
+                // further enforced the "no concurrent reads or writes"
+                // requirement on the `insert_unchecked` function.
+                let inner_node = unsafe { inner_ptr.as_mut() };
+                let (next_key_fragment, key, value) = match test_prefix_update_depth_split_mismatch(
+                    root,
+                    &mut inner_node.header,
+                    key,
+                    value,
+                    &mut depth,
+                ) {
+                    TestResult::MismatchPrefix(new_node) => {
+                        return Ok(new_node);
+                    },
+                    TestResult::Error(error) => {
+                        return Err(error);
+                    },
+                    TestResult::Continue(next_key_fragment, key, value) => {
+                        (next_key_fragment, key, value)
+                    },
+                };
 
-                    // SAFETY: We determine that the current node is not a leaf by checking earlier
-                    // in the loop. The uniqueness requirement for the `current_node` must be upheld
-                    // at the `insert` function level. The `insert` function does not create
-                    // aliasing node pointers.
-                    unsafe {
-                        root = grow_unchecked(root);
-                    }
+                match inner_node.lookup_child(next_key_fragment) {
+                    Some(next_child_node) => {
+                        let new_child = insert_rec_inner(next_child_node, key, value, depth + 1)?;
+
+                        inner_node.write_child(next_key_fragment, new_child);
+                    },
+                    None => {
+                        if inner_node.is_full() {
+                            // we will create a new node of the next larger type and copy all the
+                            // children over.
+
+                            let mut new_node = inner_node.grow();
+                            new_node.write_child(
+                                key[depth],
+                                NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque(),
+                            );
+
+                            root = NodePtr::allocate_node(new_node).to_opaque();
+                            // SAFETY: The `deallocate_node` function is only called a
+                            // single time. The uniqueness requirement is passed up to the
+                            // `grow_unchecked` safety requirements.
+                            unsafe {
+                                NodePtr::deallocate_node(inner_ptr);
+                            }
+                        } else {
+                            inner_node.write_child(
+                                key[depth],
+                                NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque(),
+                            )
+                        }
+                    },
                 }
+            },
+            InnerNodePtr::Node48(inner_ptr) => {
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates or reads the node referenced, which is
+                // further enforced the "no concurrent reads or writes"
+                // requirement on the `insert_unchecked` function.
+                let inner_node = unsafe { inner_ptr.as_mut() };
+                let (next_key_fragment, key, value) = match test_prefix_update_depth_split_mismatch(
+                    root,
+                    &mut inner_node.header,
+                    key,
+                    value,
+                    &mut depth,
+                ) {
+                    TestResult::MismatchPrefix(new_node) => {
+                        return Ok(new_node);
+                    },
+                    TestResult::Error(error) => {
+                        return Err(error);
+                    },
+                    TestResult::Continue(next_key_fragment, key, value) => {
+                        (next_key_fragment, key, value)
+                    },
+                };
 
-                // SAFETY: We determine that the current node is not a leaf by checking earlier
-                // in the loop. The requirement of no other current read or write to the
-                // `current_node` is carried to the caller of `insert`. From inside the `insert`
-                // function, there are no other current reads or writes.
-                unsafe {
-                    insert_child_unchecked(
-                        root,
+                match inner_node.lookup_child(next_key_fragment) {
+                    Some(next_child_node) => {
+                        let new_child = insert_rec_inner(next_child_node, key, value, depth + 1)?;
+
+                        inner_node.write_child(next_key_fragment, new_child);
+                    },
+                    None => {
+                        if inner_node.is_full() {
+                            // we will create a new node of the next larger type and copy all the
+                            // children over.
+
+                            let mut new_node = inner_node.grow();
+                            new_node.write_child(
+                                key[depth],
+                                NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque(),
+                            );
+
+                            root = NodePtr::allocate_node(new_node).to_opaque();
+                            // SAFETY: The `deallocate_node` function is only called a
+                            // single time. The uniqueness requirement is passed up to the
+                            // `grow_unchecked` safety requirements.
+                            unsafe {
+                                NodePtr::deallocate_node(inner_ptr);
+                            }
+                        } else {
+                            inner_node.write_child(
+                                key[depth],
+                                NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque(),
+                            )
+                        }
+                    },
+                }
+            },
+            InnerNodePtr::Node256(inner_ptr) => {
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates or reads the node referenced, which is
+                // further enforced the "no concurrent reads or writes"
+                // requirement on the `insert_unchecked` function.
+                let inner_node = unsafe { inner_ptr.as_mut() };
+                let (next_key_fragment, key, value) = match test_prefix_update_depth_split_mismatch(
+                    root,
+                    &mut inner_node.header,
+                    key,
+                    value,
+                    &mut depth,
+                ) {
+                    TestResult::MismatchPrefix(new_node) => {
+                        return Ok(new_node);
+                    },
+                    TestResult::Error(error) => {
+                        return Err(error);
+                    },
+                    TestResult::Continue(next_key_fragment, key, value) => {
+                        (next_key_fragment, key, value)
+                    },
+                };
+
+                match inner_node.lookup_child(next_key_fragment) {
+                    Some(next_child_node) => {
+                        let new_child = insert_rec_inner(next_child_node, key, value, depth + 1)?;
+
+                        inner_node.write_child(next_key_fragment, new_child);
+                    },
+                    None => inner_node.write_child(
                         key[depth],
                         NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque(),
-                    );
+                    ),
                 }
+            },
+            InnerNodePtr::LeafNode(leaf_node_ptr) => {
+                let leaf_node = leaf_node_ptr.read();
+
+                let mut new_n4 = InnerNode4::empty();
+                let prefix_size = leaf_node.key[depth..]
+                    .iter()
+                    .zip(key[depth..].iter())
+                    .take_while(|(k1, k2)| k1 == k2)
+                    .count();
+                new_n4
+                    .header
+                    .write_prefix(&key[depth..(depth + prefix_size)]);
+                depth += prefix_size;
+
+                if depth >= key.len() || depth >= leaf_node.key.len() {
+                    // then the key has insufficient bytes to be unique. It must be
+                    // a prefix of an existing key OR an existing key is a prefix of it
+
+                    return Err(InsertError::PrefixKey(key));
+                }
+
+                let new_leaf_key_byte = key[depth];
+                let new_leaf_pointer = NodePtr::allocate_node(LeafNode::new(key, value));
+
+                new_n4.write_child(leaf_node.key[depth], root);
+                new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
+
+                return Ok(NodePtr::allocate_node(new_n4).to_opaque());
             },
         }
 
@@ -233,159 +434,6 @@ impl Display for InsertError {
 }
 
 impl Error for InsertError {}
-
-/// Lookup the child of the current node, excluding the possibility of a
-/// LeafNode.
-///
-/// # Safety
-///
-/// The current node must not be a leaf node.
-unsafe fn lookup_child_unchecked<V>(
-    current_node: OpaqueNodePtr<V>,
-    next_key_fragment: u8,
-) -> Option<OpaqueNodePtr<V>> {
-    match current_node.to_node_ptr() {
-        InnerNodePtr::Node4(inner_node) => inner_node.read().lookup_child(next_key_fragment),
-        InnerNodePtr::Node16(inner_node) => inner_node.read().lookup_child(next_key_fragment),
-        InnerNodePtr::Node48(inner_node) => inner_node.read().lookup_child(next_key_fragment),
-        InnerNodePtr::Node256(inner_node) => inner_node.read().lookup_child(next_key_fragment),
-        InnerNodePtr::LeafNode(_) => unreachable!(
-            "This branch is not possible because of the safety invariants of the function."
-        ),
-    }
-}
-
-/// Grow the current node into the next larger size, excluding the possibility
-/// of a LeafNode.
-///
-/// # Safety
-///
-///  - The current node must not be a leaf node.
-///  - The `current_node` must be a reference to the only existing pointer to
-///    the node object, otherwise the possible deallocation may create dangling
-///    pointers.
-///
-/// # Panic
-///
-///  - Panics if the current node is a `InnerNode256` as this cannot grow any
-///    larger.
-unsafe fn grow_unchecked<V>(current_node: OpaqueNodePtr<V>) -> OpaqueNodePtr<V> {
-    match current_node.to_node_ptr() {
-        InnerNodePtr::Node4(old_node) => {
-            let inner_node = old_node.read();
-            let new_node = inner_node.grow();
-
-            // SAFETY: The `deallocate_node` function is only called a single time. The
-            // uniqueness requirement is passed up to the `grow_unchecked` safety
-            // requirements.
-            unsafe {
-                NodePtr::deallocate_node(old_node);
-            }
-
-            NodePtr::allocate_node(new_node).to_opaque()
-        },
-        InnerNodePtr::Node16(old_node) => {
-            let inner_node = old_node.read();
-            let new_node = inner_node.grow();
-
-            // SAFETY: The `deallocate_node` function is only called a single time. The
-            // uniqueness requirement is passed up to the `grow_unchecked` safety
-            // requirements.
-            unsafe {
-                NodePtr::deallocate_node(old_node);
-            }
-
-            NodePtr::allocate_node(new_node).to_opaque()
-        },
-        InnerNodePtr::Node48(old_node) => {
-            let inner_node = old_node.read();
-            let new_node = inner_node.grow();
-
-            // SAFETY: The `deallocate_node` function is only called a single time. The
-            // uniqueness requirement is passed up to the `grow_unchecked` safety
-            // requirements.
-            unsafe {
-                NodePtr::deallocate_node(old_node);
-            }
-
-            NodePtr::allocate_node(new_node).to_opaque()
-        },
-        InnerNodePtr::Node256(_) => unreachable!("Unable to grow a Node256, something went wrong!"),
-        InnerNodePtr::LeafNode(_) => unreachable!(
-            "This branch is not possible because of the safety invariants of the function."
-        ),
-    }
-}
-
-/// Insert a new child into the current node, excluding the possibility of a
-/// leaf node.
-///
-/// # Safety
-///
-///  - The current node must not be a leaf node.
-///  - This function must not be called concurrently with any other read or
-///    mutation of the given `current_node`.
-unsafe fn insert_child_unchecked<V>(
-    current_node: OpaqueNodePtr<V>,
-    key_fragment: u8,
-    child: OpaqueNodePtr<V>,
-) {
-    // SAFETY: The `update` function safety requirements are passed onto the caller.
-    unsafe {
-        match current_node.to_node_ptr() {
-            InnerNodePtr::Node4(old_node) => old_node.update(|inner_node| {
-                inner_node.write_child(key_fragment, child);
-            }),
-            InnerNodePtr::Node16(old_node) => old_node.update(|inner_node| {
-                inner_node.write_child(key_fragment, child);
-            }),
-            InnerNodePtr::Node48(old_node) => old_node.update(|inner_node| {
-                inner_node.write_child(key_fragment, child);
-            }),
-            InnerNodePtr::Node256(old_node) => old_node.update(|inner_node| {
-                inner_node.write_child(key_fragment, child);
-            }),
-            InnerNodePtr::LeafNode(_) => unreachable!(
-                "This branch is not possible because of the safety invariants of the function."
-            ),
-        }
-    }
-}
-
-/// Overwrite a child in the current node, excluding the possibility of a
-/// leaf node.
-///
-/// # Safety
-///
-///  - The current node must not be a leaf node.
-///  - This function must not be called concurrently with any other read or
-///    mutation of the given `current_node`.
-unsafe fn overwrite_child_unchecked<V>(
-    current_node: OpaqueNodePtr<V>,
-    key_fragment: u8,
-    child: OpaqueNodePtr<V>,
-) {
-    // SAFETY: The `update` function safety requirements are passed onto the caller.
-    unsafe {
-        match current_node.to_node_ptr() {
-            InnerNodePtr::Node4(old_node) => old_node.update(|inner_node| {
-                inner_node.write_child(key_fragment, child);
-            }),
-            InnerNodePtr::Node16(old_node) => old_node.update(|inner_node| {
-                inner_node.write_child(key_fragment, child);
-            }),
-            InnerNodePtr::Node48(old_node) => old_node.update(|inner_node| {
-                inner_node.write_child(key_fragment, child);
-            }),
-            InnerNodePtr::Node256(old_node) => old_node.update(|inner_node| {
-                inner_node.write_child(key_fragment, child);
-            }),
-            InnerNodePtr::LeafNode(_) => unreachable!(
-                "This branch is not possible because of the safety invariants of the function."
-            ),
-        }
-    }
-}
 
 /// Deallocate the given node and all children of the given node.
 ///
@@ -473,19 +521,35 @@ pub unsafe fn minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<Lea
     loop {
         match current_node.to_node_ptr() {
             InnerNodePtr::Node4(inner_node) => {
-                let inner_node = inner_node.read();
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `minimum_unchecked` function.
+                let inner_node = unsafe { inner_node.as_ref() };
                 current_node = inner_node.iter().next()?.1;
             },
             InnerNodePtr::Node16(inner_node) => {
-                let inner_node = inner_node.read();
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `minimum_unchecked` function.
+                let inner_node = unsafe { inner_node.as_ref() };
                 current_node = inner_node.iter().next()?.1;
             },
             InnerNodePtr::Node48(inner_node) => {
-                let inner_node = inner_node.read();
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `minimum_unchecked` function.
+                let inner_node = unsafe { inner_node.as_ref() };
                 current_node = inner_node.iter().next()?.1;
             },
             InnerNodePtr::Node256(inner_node) => {
-                let inner_node = inner_node.read();
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `minimum_unchecked` function.
+                let inner_node = unsafe { inner_node.as_ref() };
                 current_node = inner_node.iter().next()?.1;
             },
             InnerNodePtr::LeafNode(inner_node) => {
@@ -508,20 +572,36 @@ pub unsafe fn maximum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<Lea
     loop {
         match current_node.to_node_ptr() {
             InnerNodePtr::Node4(inner_node) => {
-                let inner_node = inner_node.read();
-                current_node = inner_node.iter().last()?.1;
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `maximum_unchecked` function.
+                let inner_node = unsafe { inner_node.as_ref() };
+                current_node = inner_node.iter().next_back()?.1;
             },
             InnerNodePtr::Node16(inner_node) => {
-                let inner_node = inner_node.read();
-                current_node = inner_node.iter().last()?.1;
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `maximum_unchecked` function.
+                let inner_node = unsafe { inner_node.as_ref() };
+                current_node = inner_node.iter().next_back()?.1;
             },
             InnerNodePtr::Node48(inner_node) => {
-                let inner_node = inner_node.read();
-                current_node = inner_node.iter().last()?.1;
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `maximum_unchecked` function.
+                let inner_node = unsafe { inner_node.as_ref() };
+                current_node = inner_node.iter().next_back()?.1;
             },
             InnerNodePtr::Node256(inner_node) => {
-                let inner_node = inner_node.read();
-                current_node = inner_node.iter().last()?.1;
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `maximum_unchecked` function.
+                let inner_node = unsafe { inner_node.as_ref() };
+                current_node = inner_node.iter().next_back()?.1;
             },
             InnerNodePtr::LeafNode(inner_node) => {
                 return Some(inner_node);

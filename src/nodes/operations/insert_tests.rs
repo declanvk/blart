@@ -1,5 +1,5 @@
 use super::*;
-use crate::{nodes::tests_common::generate_keys_skewed, NodeType};
+use crate::{nodes::tests_common::generate_keys_skewed, InnerNode, NodeType};
 
 #[test]
 fn insert_to_small_trees() {
@@ -9,7 +9,7 @@ fn insert_to_small_trees() {
     let mut tree = first_leaf.to_opaque();
     tree = unsafe { insert_unchecked(tree, Box::new([1, 2, 5, 6]), "1256".to_string()).unwrap() };
 
-    assert_eq!(tree.read().node_type, NodeType::Node4);
+    assert_eq!(tree.node_type(), NodeType::Node4);
 
     let new_root = tree.cast::<InnerNode4<String>>().unwrap();
 
@@ -47,8 +47,10 @@ fn insert_to_small_trees() {
 
 #[test]
 fn insert_into_left_skewed_tree_deallocate() {
+    // TODO: Increase this back to `u8::MAX` after updating to an iterative insert
+    // algorithm.
     #[cfg(not(miri))]
-    const KEY_LENGTH_LIMIT: usize = u8::MAX as usize;
+    const KEY_LENGTH_LIMIT: usize = (u8::MAX / 2) as usize;
 
     #[cfg(miri)]
     const KEY_LENGTH_LIMIT: usize = 16usize;

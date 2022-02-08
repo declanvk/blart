@@ -1,4 +1,4 @@
-use crate::{Header, OpaqueNodePtr};
+use crate::{Header, NodeType, OpaqueNodePtr};
 
 use super::{Visitable, Visitor};
 use std::{
@@ -42,6 +42,7 @@ impl<O: Write> DotPrinter<O> {
 
     fn write_node<T: Display, IT: Iterator<Item = (u8, OpaqueNodePtr<T>)>>(
         &mut self,
+        node_type: NodeType,
         header: &Header,
         to_children: impl Fn() -> IT,
     ) -> io::Result<usize> {
@@ -52,7 +53,7 @@ impl<O: Write> DotPrinter<O> {
         write!(
             self.output,
             "{{<h0> {:?} | {:?} | {:?}}} | {{",
-            header.node_type,
+            node_type,
             header.prefix_size(),
             header.read_prefix()
         )?;
@@ -90,19 +91,19 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
     }
 
     fn visit_node4(&mut self, t: &crate::InnerNode4<T>) -> Self::Output {
-        self.write_node(&t.header, || t.iter())
+        self.write_node(NodeType::Node4, &t.header, || t.iter())
     }
 
     fn visit_node16(&mut self, t: &crate::InnerNode16<T>) -> Self::Output {
-        self.write_node(&t.header, || t.iter())
+        self.write_node(NodeType::Node16, &t.header, || t.iter())
     }
 
     fn visit_node48(&mut self, t: &crate::InnerNode48<T>) -> Self::Output {
-        self.write_node(&t.header, || t.iter())
+        self.write_node(NodeType::Node48, &t.header, || t.iter())
     }
 
     fn visit_node256(&mut self, t: &crate::InnerNode256<T>) -> Self::Output {
-        self.write_node(&t.header, || t.iter())
+        self.write_node(NodeType::Node256, &t.header, || t.iter())
     }
 
     fn visit_leaf(&mut self, t: &crate::LeafNode<T>) -> Self::Output {
@@ -112,10 +113,9 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         // write header line
         writeln!(
             self.output,
-            "{{<h0> {:?} | {:?} | {:?}}} | {{{}}}}}\"]",
-            t.header.node_type,
-            t.header.prefix_size(),
-            t.header.read_prefix(),
+            "{{<h0> {:?} | {:?}}} | {{{}}}}}\"]",
+            NodeType::Leaf,
+            t.prefix,
             t.value
         )?;
 

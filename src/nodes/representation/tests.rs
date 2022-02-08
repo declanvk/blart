@@ -9,20 +9,15 @@ fn opaque_node_ptr_is_correct() {
     let mut n48 = InnerNode48::<usize>::empty();
     let mut n256 = InnerNode256::<usize>::empty();
 
-    let n4_ptr = NodePtr::from(&mut n4);
-    let n16_ptr = NodePtr::from(&mut n16);
-    let n48_ptr = NodePtr::from(&mut n48);
-    let n256_ptr = NodePtr::from(&mut n256);
+    let n4_ptr = NodePtr::from(&mut n4).to_opaque();
+    let n16_ptr = NodePtr::from(&mut n16).to_opaque();
+    let n48_ptr = NodePtr::from(&mut n48).to_opaque();
+    let n256_ptr = NodePtr::from(&mut n256).to_opaque();
 
-    let opaque_n4_ptr = n4_ptr.to_opaque();
-    let opaque_n16_ptr = n16_ptr.to_opaque();
-    let opaque_n48_ptr = n48_ptr.to_opaque();
-    let opaque_n256_ptr = n256_ptr.to_opaque();
-
-    assert!(opaque_n4_ptr.is::<InnerNode4<usize>>());
-    assert!(opaque_n16_ptr.is::<InnerNode16<usize>>());
-    assert!(opaque_n48_ptr.is::<InnerNode48<usize>>());
-    assert!(opaque_n256_ptr.is::<InnerNode256<usize>>());
+    assert!(n4_ptr.is::<InnerNode4<usize>>());
+    assert!(n16_ptr.is::<InnerNode16<usize>>());
+    assert!(n48_ptr.is::<InnerNode48<usize>>());
+    assert!(n256_ptr.is::<InnerNode256<usize>>());
 }
 
 #[test]
@@ -53,6 +48,27 @@ fn node_alignment() {
     assert_eq!(mem::align_of::<InnerNode256<u8>>(), 8);
     assert_eq!(mem::align_of::<LeafNode<u8>>(), 8);
     assert_eq!(mem::align_of::<Header>(), 8);
+
+    assert_eq!(
+        mem::align_of::<InnerNode4<u8>>(),
+        mem::align_of::<OpaqueValue>()
+    );
+    assert_eq!(
+        mem::align_of::<InnerNode16<u8>>(),
+        mem::align_of::<OpaqueValue>()
+    );
+    assert_eq!(
+        mem::align_of::<InnerNode48<u8>>(),
+        mem::align_of::<OpaqueValue>()
+    );
+    assert_eq!(
+        mem::align_of::<InnerNode256<u8>>(),
+        mem::align_of::<OpaqueValue>()
+    );
+    assert_eq!(
+        mem::align_of::<LeafNode<u8>>(),
+        mem::align_of::<OpaqueValue>()
+    );
 
     let n4 = InnerNode4::<()>::empty();
     let n16 = InnerNode4::<()>::empty();
@@ -601,33 +617,4 @@ fn header_ltrim_prefix_non_stored_bytes_panic() {
     assert_eq!(h.prefix_size(), 8);
 
     h.ltrim_prefix(0);
-}
-
-#[test]
-fn header_is_full() {
-    let mut n = InnerNode4::empty();
-
-    assert!(!n.header.is_full());
-
-    let mut l1 = LeafNode::new(Box::new([]), ());
-    let mut l2 = LeafNode::new(Box::new([]), ());
-    let mut l3 = LeafNode::new(Box::new([]), ());
-    let mut l4 = LeafNode::new(Box::new([]), ());
-
-    {
-        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
-        let l4_ptr = NodePtr::from(&mut l4).to_opaque();
-
-        n.write_child(0, l1_ptr);
-        n.write_child(1, l2_ptr);
-        n.write_child(2, l3_ptr);
-
-        assert!(!n.header.is_full());
-
-        n.write_child(3, l4_ptr);
-
-        assert!(n.header.is_full());
-    }
 }

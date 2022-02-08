@@ -1,4 +1,4 @@
-#![feature(maybe_uninit_uninit_array, maybe_uninit_slice)]
+#![feature(maybe_uninit_uninit_array, maybe_uninit_slice, never_type)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,
