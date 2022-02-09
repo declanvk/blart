@@ -440,9 +440,9 @@ impl Error for InsertError {}
 /// This will also deallocate the leaf nodes with their value type data.
 ///
 /// # Safety
-///  - The `current_node` must be the only existing pointer to the node object
-///    and all the children of the node object, otherwise the deallocation may
-///    create dangling pointers.
+///
+///  - This function must only be called once for this root node and all
+///    descendants, otherwise a double-free could result.
 pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
     let mut stack = Vec::new();
 
@@ -452,43 +452,59 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
         match next_node_ptr.to_node_ptr() {
             InnerNodePtr::Node4(inner_ptr) => {
                 {
+                    // SAFETY: The scope of this reference is bounded and we enforce that no
+                    // mutation of the reference memory takes place within the lifetime. The
+                    // deallocation of the node happens outside of this block, after the lifetime
+                    // ends.
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     stack.extend(inner_node.iter().map(|(_, child)| child));
                 }
-                // SAFETY: The uniqueness requirement of the `deallocate_node` function is
-                // satisfied by the safety requirements on the `deallocate_tree` function.
+                // SAFETY: The single call per node requirement is enforced by the safety
+                // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner_ptr) }
             },
             InnerNodePtr::Node16(inner_ptr) => {
                 {
+                    // SAFETY: The scope of this reference is bounded and we enforce that no
+                    // mutation of the reference memory takes place within the lifetime. The
+                    // deallocation of the node happens outside of this block, after the lifetime
+                    // ends.
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     stack.extend(inner_node.iter().map(|(_, child)| child));
                 }
-                // SAFETY: The uniqueness requirement of the `deallocate_node` function is
-                // satisfied by the safety requirements on the `deallocate_tree` function.
+                // SAFETY: The single call per node requirement is enforced by the safety
+                // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner_ptr) }
             },
             InnerNodePtr::Node48(inner_ptr) => {
                 {
+                    // SAFETY: The scope of this reference is bounded and we enforce that no
+                    // mutation of the reference memory takes place within the lifetime. The
+                    // deallocation of the node happens outside of this block, after the lifetime
+                    // ends.
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     stack.extend(inner_node.iter().map(|(_, child)| child));
                 }
-                // SAFETY: The uniqueness requirement of the `deallocate_node` function is
-                // satisfied by the safety requirements on the `deallocate_tree` function.
+                // SAFETY: The single call per node requirement is enforced by the safety
+                // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner_ptr) }
             },
             InnerNodePtr::Node256(inner_ptr) => {
                 {
+                    // SAFETY: The scope of this reference is bounded and we enforce that no
+                    // mutation of the reference memory takes place within the lifetime. The
+                    // deallocation of the node happens outside of this block, after the lifetime
+                    // ends.
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     stack.extend(inner_node.iter().map(|(_, child)| child));
                 }
-                // SAFETY: The uniqueness requirement of the `deallocate_node` function is
-                // satisfied by the safety requirements on the `deallocate_tree` function.
+                // SAFETY: The single call per node requirement is enforced by the safety
+                // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner_ptr) }
             },
             InnerNodePtr::LeafNode(inner) => {
-                // SAFETY: The uniqueness requirement of the `deallocate_node` function is
-                // satisfied by the safety requirements on the `deallocate_tree` function.
+                // SAFETY: The single call per node requirement is enforced by the safety
+                // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner) }
             },
         }

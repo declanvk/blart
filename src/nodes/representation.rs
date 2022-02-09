@@ -277,22 +277,19 @@ impl<N: Node> NodePtr<N> {
         unsafe { NodePtr(NonNull::new_unchecked(ptr)) }
     }
 
-    /// Allocate the given [`InnerNode`] on the [`std::alloc::Global`] heap and
+    /// Allocate the given [`Node`] on the [`std::alloc::Global`] heap and
     /// return a [`NodePtr`] that wrap the raw pointer.
     pub fn allocate_node(node: N) -> Self {
         // SAFETY: The pointer from [`Box::into_raw`] is non-null, aligned, and valid
-        // for reads and writes of the [`TaggedNode`] `N`.
+        // for reads and writes of the [`Node`] `N`.
         unsafe { NodePtr::new(Box::into_raw(Box::new(node))) }
     }
 
-    /// Deallocate a [`InnerNode`] object created with the
+    /// Deallocate a [`Node`] object created with the
     /// [`NodePtr::allocate_node`] function.
     ///
     /// # Safety
     ///
-    ///  - This function can only be called when there is only a single
-    ///    remaining [`NodePtr`] to the object, otherwise other pointers would
-    ///    be referenced deallocated memory.
     ///  - This function can only be called once for a given node object.
     pub unsafe fn deallocate_node(node: Self) {
         // SAFETY: Covered by safety condition on functiom
