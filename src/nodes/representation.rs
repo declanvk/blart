@@ -877,7 +877,7 @@ impl<'n, V> Iterator for InnerNode48Iter<'n, V> {
     type Item = (u8, OpaqueNodePtr<V>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some((key_fragment, child_index)) = self.child_indices_iter.next() {
+        for (key_fragment, child_index) in self.child_indices_iter.by_ref() {
             if *child_index == RestrictedNodeIndex::<48>::EMPTY {
                 continue;
             } else {
@@ -898,7 +898,7 @@ impl<'n, V> Iterator for InnerNode48Iter<'n, V> {
 
 impl<'n, V> DoubleEndedIterator for InnerNode48Iter<'n, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        while let Some((key_fragment, child_index)) = self.child_indices_iter.next_back() {
+        for (key_fragment, child_index) in self.child_indices_iter.by_ref().rev() {
             if *child_index == RestrictedNodeIndex::<48>::EMPTY {
                 continue;
             } else {
@@ -1010,6 +1010,11 @@ impl<V> Clone for InnerNode256<V> {
     }
 }
 
+type InnerNode256Iter<'n, V> = FilterMap<
+    Enumerate<Iter<'n, Option<OpaqueNodePtr<V>>>>,
+    fn((usize, &Option<OpaqueNodePtr<V>>)) -> Option<(u8, OpaqueNodePtr<V>)>,
+>;
+
 impl<V> InnerNode256<V> {
     /// Create an empty `InnerNode256`.
     pub fn empty() -> Self {
@@ -1021,12 +1026,7 @@ impl<V> InnerNode256<V> {
 
     /// Return an iterator over all the children of this node with their
     /// associated key fragment
-    pub fn iter(
-        &self,
-    ) -> FilterMap<
-        Enumerate<Iter<Option<OpaqueNodePtr<V>>>>,
-        fn((usize, &Option<OpaqueNodePtr<V>>)) -> Option<(u8, OpaqueNodePtr<V>)>,
-    > {
+    pub fn iter(&self) -> InnerNode256Iter<V> {
         self.child_pointers
             .iter()
             .enumerate()
