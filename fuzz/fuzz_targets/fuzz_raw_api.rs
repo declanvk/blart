@@ -17,6 +17,7 @@ enum Action {
         key: Box<[u8]>,
     },
     MinimumMaximum,
+    Deallocate,
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -68,6 +69,13 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                         },
                         _ => panic!("A non-empty tree should have both a minimum and maximum leaf"),
                     }
+                }
+            },
+            Action::Deallocate => {
+                if let Some(root) = current_root {
+                    unsafe { deallocate_tree(root) };
+
+                    current_root = None;
                 }
             },
         }
