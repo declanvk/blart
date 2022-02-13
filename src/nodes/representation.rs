@@ -469,7 +469,7 @@ impl<V, const SIZE: usize> fmt::Debug for InnerBlockNode<V, SIZE> {
 }
 
 impl<V, const SIZE: usize> InnerBlockNode<V, SIZE> {
-    /// Create an empty [`InnerNodeBlock`] with the given [`NodeType`].
+    /// Create an empty [`InnerBlockNode`] with the given [`NodeType`].
     pub fn empty() -> Self {
         InnerBlockNode {
             header: Header::default(),
