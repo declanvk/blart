@@ -1,5 +1,9 @@
 # BLART
 
+## Documentation
+
+- [Documentation for the `main` branch](https://declanvk.github.io/blart/)
+
 ## Fuzzing
 
 To run the fuzzer I use the command:

@@ -35,7 +35,7 @@ jobs:
           command: test
           args: --all
 
-  format-lint:
+  format:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
