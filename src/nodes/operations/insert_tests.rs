@@ -1,5 +1,5 @@
 use super::*;
-use crate::{nodes::tests_common::generate_keys_skewed, NodeType};
+use crate::{tests_common::generate_keys_skewed, NodeType};
 
 #[test]
 fn insert_to_small_trees() {

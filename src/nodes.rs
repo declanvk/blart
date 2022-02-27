@@ -6,6 +6,3 @@ pub mod visitor;
 
 pub use operations::*;
 pub use representation::*;
-
-#[cfg(test)]
-mod tests_common;

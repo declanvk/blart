@@ -14,5 +14,7 @@
 
 mod nodes;
 pub mod tagged_pointer;
+#[doc(hidden)]
+pub mod tests_common;
 
 pub use nodes::*;

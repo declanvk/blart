@@ -1,5 +1,5 @@
 use super::*;
-use crate::nodes::tests_common::{generate_key_fixed_length, generate_keys_skewed};
+use crate::tests_common::{generate_key_fixed_length, generate_keys_skewed};
 
 #[test]
 fn leaf_tree_min_max_same() {
