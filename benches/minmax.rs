@@ -24,21 +24,21 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     }
 
     {
-        let mut skewed_group = c.benchmark_group("skewed");
-        skewed_group.bench_function("minimum", |b| {
+        let mut minimum_group = c.benchmark_group("minimum");
+        minimum_group.bench_function("skewed", |b| {
             b.iter(|| unsafe { minimum_unchecked(skewed_root).unwrap() })
         });
-        skewed_group.bench_function("maximum", |b| {
-            b.iter(|| unsafe { maximum_unchecked(skewed_root).unwrap() })
+        minimum_group.bench_function("fixed_length", |b| {
+            b.iter(|| unsafe { minimum_unchecked(fixed_length_root).unwrap() })
         });
     }
 
     {
-        let mut fixed_lengthgroup = c.benchmark_group("fixed_length");
-        fixed_lengthgroup.bench_function("minimum", |b| {
-            b.iter(|| unsafe { minimum_unchecked(fixed_length_root).unwrap() })
+        let mut maximum_group = c.benchmark_group("maximum");
+        maximum_group.bench_function("skewed", |b| {
+            b.iter(|| unsafe { maximum_unchecked(skewed_root).unwrap() })
         });
-        fixed_lengthgroup.bench_function("maximum", |b| {
+        maximum_group.bench_function("fixed_length", |b| {
             b.iter(|| unsafe { maximum_unchecked(fixed_length_root).unwrap() })
         });
     }
