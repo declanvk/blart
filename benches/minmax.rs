@@ -23,18 +23,25 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         fixed_length_root = unsafe { insert_unchecked(fixed_length_root, key, idx + 1).unwrap() };
     }
 
-    c.bench_function("minimum skewed", |b| {
-        b.iter(|| unsafe { minimum_unchecked(skewed_root).unwrap() })
-    });
-    c.bench_function("maximum skewed", |b| {
-        b.iter(|| unsafe { maximum_unchecked(skewed_root).unwrap() })
-    });
-    c.bench_function("minimum fixed_length", |b| {
-        b.iter(|| unsafe { minimum_unchecked(fixed_length_root).unwrap() })
-    });
-    c.bench_function("maximum fixed_length", |b| {
-        b.iter(|| unsafe { maximum_unchecked(fixed_length_root).unwrap() })
-    });
+    {
+        let mut skewed_group = c.benchmark_group("skewed");
+        skewed_group.bench_function("minimum", |b| {
+            b.iter(|| unsafe { minimum_unchecked(skewed_root).unwrap() })
+        });
+        skewed_group.bench_function("maximum", |b| {
+            b.iter(|| unsafe { maximum_unchecked(skewed_root).unwrap() })
+        });
+    }
+
+    {
+        let mut fixed_lengthgroup = c.benchmark_group("fixed_length");
+        fixed_lengthgroup.bench_function("minimum", |b| {
+            b.iter(|| unsafe { minimum_unchecked(fixed_length_root).unwrap() })
+        });
+        fixed_lengthgroup.bench_function("maximum", |b| {
+            b.iter(|| unsafe { maximum_unchecked(fixed_length_root).unwrap() })
+        });
+    }
 
     unsafe { deallocate_tree(fixed_length_root) };
     unsafe { deallocate_tree(skewed_root) };
