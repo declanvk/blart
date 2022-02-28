@@ -3,7 +3,6 @@
 use crate::tagged_pointer::TaggedPointer;
 use smallvec::SmallVec;
 use std::{
-    cmp,
     error::Error,
     fmt,
     iter::{Copied, Enumerate, FilterMap, Zip},
@@ -123,18 +122,11 @@ impl Header {
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
     pub fn match_prefix(&self, possible_key: &[u8]) -> usize {
-        let inited_prefix = self.read_prefix();
-
-        let mut num_matching_bytes: usize = 0;
-        for index in 0..cmp::min(inited_prefix.len(), possible_key.len()) {
-            if inited_prefix[index] != possible_key[index] {
-                break;
-            }
-
-            num_matching_bytes += 1;
-        }
-
-        num_matching_bytes
+        self.read_prefix()
+            .iter()
+            .zip(possible_key)
+            .take_while(|(a, b)| **a == **b)
+            .count()
     }
 
     /// Return the number of children of this node.
@@ -1003,8 +995,6 @@ impl<V> InnerNode for InnerNode256<V> {
 /// Node that contains a single leaf value.
 #[derive(Debug, Clone)]
 pub struct LeafNode<V> {
-    /// The key prefix for this node.
-    pub prefix: SmallVec<[u8; NUM_PREFIX_BYTES]>,
     /// The leaf value.
     pub value: V,
     /// The full key that the `value` was stored with.
@@ -1014,11 +1004,7 @@ pub struct LeafNode<V> {
 impl<V> LeafNode<V> {
     /// Create a new leaf node with the given value.
     pub fn new(key: Box<[u8]>, value: V) -> Self {
-        LeafNode {
-            value,
-            key,
-            prefix: SmallVec::default(),
-        }
+        LeafNode { value, key }
     }
 
     /// Check that the provided key is the same one as the stored key.

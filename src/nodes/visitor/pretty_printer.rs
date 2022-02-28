@@ -113,9 +113,8 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         // write header line
         writeln!(
             self.output,
-            "{{<h0> {:?} | {:?}}} | {{{}}}}}\"]",
+            "{{<h0> {:?}}} | {{{}}}}}\"]",
             NodeType::Leaf,
-            t.prefix,
             t.value
         )?;
 
