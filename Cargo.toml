@@ -13,9 +13,5 @@ argh = "0.1.7"
 criterion = { version = "0.3.5", features = ["html_reports"] }
 
 [[bench]]
-name = "minmax"
-harness = false
-
-[[bench]]
-name = "search"
+name = "raw_apis"
 harness = false
