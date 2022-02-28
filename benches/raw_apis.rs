@@ -1,16 +1,15 @@
-use std::time::Duration;
-
 use blart::{
     deallocate_tree, insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
     tests_common::{generate_key_fixed_length, generate_keys_skewed},
     LeafNode, NodePtr, OpaqueNodePtr,
 };
-use criterion::{
-    criterion_group, criterion_main, measurement::WallTime, BenchmarkGroup, Criterion,
-};
+use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion_perf_events::Perf;
+use perfcnt::linux::{HardwareEventType, PerfCounterBuilderLinux};
+use std::time::Duration;
 
 fn run_benchmarks(
-    group: &mut BenchmarkGroup<WallTime>,
+    group: &mut BenchmarkGroup<Perf>,
     key_vec: &[Box<[u8]>],
     tree_root: OpaqueNodePtr<usize>,
 ) {
@@ -36,7 +35,7 @@ fn run_benchmarks(
     });
 }
 
-pub fn criterion_benchmark(c: &mut Criterion) {
+pub fn raw_api_benches(c: &mut Criterion<Perf>) {
     let skewed_keys: Vec<_> = generate_keys_skewed(u8::MAX as usize).collect();
     let fixed_length_keys: Vec<_> = generate_key_fixed_length(25, 10).collect();
 
@@ -72,12 +71,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     unsafe { deallocate_tree(skewed_root) };
 }
 
+fn create_criterion_configuration() -> Criterion<Perf> {
+    Criterion::default()
+        .with_measurement(Perf::new(PerfCounterBuilderLinux::from_hardware_event(
+            HardwareEventType::Instructions,
+        )))
+        .sample_size(1000)
+        .measurement_time(Duration::new(10, 0))
+}
+
 criterion_group! {
     name = benches;
-    // This can be any expression that returns a `Criterion` object.
-    config = Criterion::default()
-        .sample_size(2000)
-        .measurement_time(Duration::new(20, 0));
-    targets = criterion_benchmark
+    config = create_criterion_configuration();
+    targets = raw_api_benches
 }
 criterion_main!(benches);
