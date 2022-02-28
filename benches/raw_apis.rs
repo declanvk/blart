@@ -74,6 +74,18 @@ pub fn raw_api_benches(c: &mut Criterion<Perf>) {
 fn create_criterion_configuration() -> Criterion<Perf> {
     Criterion::default()
         .with_measurement(Perf::new(PerfCounterBuilderLinux::from_hardware_event(
+            // I switched to using retired instruction counts because the variability of the wall
+            // time measurement was too high. I was regularly seeing +/-3-5% differences in the
+            // measured time, even with up to 5000 samples and duration around 30 seconds. I also
+            // tried measuring CPU cycles, which had a similar issue. This level of variability was
+            // too much to still be able to measure small differences in optimization outcomes.
+            //
+            // However, this library is likely to have major optimization issues with regards to it
+            // memory usage/layout/etc, and only using the retired instruction count will miss
+            // parts of this.
+            //
+            // Should consider making simple benchmarking tool using
+            // https://docs.rs/perf-event/latest/perf_event/events/index.html
             HardwareEventType::Instructions,
         )))
         .sample_size(1000)
