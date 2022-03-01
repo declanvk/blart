@@ -33,42 +33,38 @@ fn run_benchmarks(
     group.bench_function("maximum", |b| {
         b.iter(|| unsafe { maximum_unchecked(tree_root).unwrap() })
     });
+
+    // TODO: Add more benchmarks for:
+    //   - search on key sets with large prefixes, such that they are beyond 8
+    //     bytes of prefix.
+    //   - insert new keys into:
+    //     - an empty tree
+    //     - a tree tree that already contains the given key
+    //     - a tree node that is full and will need to grow
 }
 
-pub fn raw_api_benches(c: &mut Criterion<Perf>) {
-    let skewed_keys: Vec<_> = generate_keys_skewed(u8::MAX as usize).collect();
-    let fixed_length_keys: Vec<_> = generate_key_fixed_length(25, 10).collect();
+fn setup_tree_run_benches_cleanup(c: &mut Criterion<Perf>, keys: impl Iterator<Item = Box<[u8]>>) {
+    let keys: Vec<_> = keys.collect();
 
-    // size - skewed_keys = 256, fixed_length_keys = 251
+    let mut root = NodePtr::allocate_node(LeafNode::new(keys[0].clone(), 0)).to_opaque();
 
-    let mut skewed_root =
-        NodePtr::allocate_node(LeafNode::new(skewed_keys[0].clone(), 0)).to_opaque();
-    let mut fixed_length_root =
-        NodePtr::allocate_node(LeafNode::new(fixed_length_keys[0].clone(), 0)).to_opaque();
-
-    for (idx, key) in skewed_keys.iter().skip(1).cloned().enumerate() {
-        skewed_root = unsafe { insert_unchecked(skewed_root, key, idx + 1).unwrap() };
-    }
-    for (idx, key) in fixed_length_keys.iter().skip(1).cloned().enumerate() {
-        fixed_length_root = unsafe { insert_unchecked(fixed_length_root, key, idx + 1).unwrap() };
+    for (idx, key) in keys.iter().skip(1).cloned().enumerate() {
+        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap() };
     }
 
     {
         let mut skewed_group = c.benchmark_group("skewed");
-        run_benchmarks(&mut skewed_group, skewed_keys.as_ref(), skewed_root);
+        run_benchmarks(&mut skewed_group, keys.as_ref(), root);
     }
 
-    {
-        let mut fixed_length_group = c.benchmark_group("fixed_length");
-        run_benchmarks(
-            &mut fixed_length_group,
-            fixed_length_keys.as_ref(),
-            fixed_length_root,
-        );
-    }
+    unsafe { deallocate_tree(root) };
+}
 
-    unsafe { deallocate_tree(fixed_length_root) };
-    unsafe { deallocate_tree(skewed_root) };
+pub fn raw_api_benches(c: &mut Criterion<Perf>) {
+    // number of keys = 256
+    setup_tree_run_benches_cleanup(c, generate_keys_skewed(u8::MAX as usize));
+    // number of keys = 251
+    setup_tree_run_benches_cleanup(c, generate_key_fixed_length(25, 10));
 }
 
 fn create_criterion_configuration() -> Criterion<Perf> {
