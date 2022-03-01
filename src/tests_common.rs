@@ -56,18 +56,19 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 
 /// Generate an iterator of bytestring keys, all with the same length.
 ///
-/// This iterator will produce `max_len * value_stops + 1` keys in total. The
-/// keys will start from all 0 values, then each key digit will increment by
-/// `u8::MAX / value_stops`. Each new key will only increment a single key
-/// digit.
+/// This iterator will produce `(value_stops + 1) ^ max_len` keys in total. The
+/// keys produced by this iterator will every string from the alphabet `{ 0 *
+/// (255 / value_stops), 1 * (255 / value_stops), ..., 255 }` of length
+/// `max_len`.
 ///
 /// # Examples
 ///
 /// ```
 /// # use blart::tests_common::generate_key_fixed_length;
-/// let mut keys = generate_key_fixed_length(3, 5).collect::<Vec<_>>();
-/// assert_eq!(keys.len(), 16);
+/// let mut keys = generate_key_fixed_length(3, 2).collect::<Vec<_>>();
+/// assert_eq!(keys.len(), 27);
 /// assert_eq!(keys[0].as_ref(), &[0, 0, 0]);
+/// assert_eq!(keys[keys.len() / 2].as_ref(), &[128, 128, 128]);
 /// assert_eq!(keys[keys.len() - 1].as_ref(), &[255, 255, 255]);
 ///
 /// for k in keys {
@@ -78,20 +79,31 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 /// The above example will print
 /// ```text
 /// [0, 0, 0]
-/// [51, 0, 0]
-/// [51, 51, 0]
-/// [51, 51, 51]
-/// [102, 51, 51]
-/// [102, 102, 51]
-/// [102, 102, 102]
-/// [153, 102, 102]
-/// [153, 153, 102]
-/// [153, 153, 153]
-/// [204, 153, 153]
-/// [204, 204, 153]
-/// [204, 204, 204]
-/// [255, 204, 204]
-/// [255, 255, 204]
+/// [0, 0, 128]
+/// [0, 0, 255]
+/// [0, 128, 0]
+/// [0, 128, 128]
+/// [0, 128, 255]
+/// [0, 255, 0]
+/// [0, 255, 128]
+/// [0, 255, 255]
+/// [128, 0, 0]
+/// [128, 0, 128]
+/// [128, 0, 255]
+/// [128, 128, 0]
+/// [128, 128, 128]
+/// [128, 128, 255]
+/// [128, 255, 0]
+/// [128, 255, 128]
+/// [128, 255, 255]
+/// [255, 0, 0]
+/// [255, 0, 128]
+/// [255, 0, 255]
+/// [255, 128, 0]
+/// [255, 128, 128]
+/// [255, 128, 255]
+/// [255, 255, 0]
+/// [255, 255, 128]
 /// [255, 255, 255]
 /// ```
 ///
@@ -103,31 +115,60 @@ pub fn generate_key_fixed_length(
     max_len: usize,
     value_stops: u8,
 ) -> impl Iterator<Item = Box<[u8]>> {
-    assert!(max_len > 0);
-    assert!(value_stops > 0);
+    struct FixedLengthKeys {
+        increment: u8,
+        next_value: Option<Box<[u8]>>,
+    }
 
-    iter::successors(
-        Some(vec![u8::MIN; max_len].into_boxed_slice()),
-        move |prev| {
-            if prev.iter().all(|digit| *digit == u8::MAX) {
-                None
-            } else {
-                let first_byte = prev[0];
-                let mut next = prev.clone();
+    impl FixedLengthKeys {
+        pub fn new(max_len: usize, value_stops: u8) -> Self {
+            assert!(max_len > 0);
+            assert!(value_stops > 0);
 
-                match prev
-                    .iter()
-                    .enumerate()
-                    .find(|(_, byte)| **byte != first_byte)
-                {
-                    Some((different_idx, differed_byte)) => {
-                        next[different_idx] = differed_byte.saturating_add(u8::MAX / value_stops);
-                    },
-                    None => next[0] = first_byte.saturating_add(u8::MAX / value_stops),
+            fn div_ceil(lhs: u8, rhs: u8) -> u8 {
+                let d = lhs / rhs;
+                let r = lhs % rhs;
+                if r > 0 && rhs > 0 {
+                    d + 1
+                } else {
+                    d
                 }
-
-                Some(next)
             }
-        },
-    )
+
+            let increment = div_ceil(u8::MAX, value_stops);
+
+            FixedLengthKeys {
+                increment,
+                next_value: Some(vec![u8::MIN; max_len].into_boxed_slice()),
+            }
+        }
+    }
+
+    impl Iterator for FixedLengthKeys {
+        type Item = Box<[u8]>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let next_value = self.next_value.take()?;
+
+            if next_value.iter().all(|digit| *digit == u8::MAX) {
+                // the .take function already updated the next_value to None
+                return Some(next_value);
+            }
+
+            let mut new_next_value = next_value.clone();
+            for idx in (0..new_next_value.len()).rev() {
+                if new_next_value[idx] == u8::MAX {
+                    new_next_value[idx] = u8::MIN;
+                } else {
+                    new_next_value[idx] = new_next_value[idx].saturating_add(self.increment);
+                    break;
+                }
+            }
+
+            self.next_value = Some(new_next_value);
+            Some(next_value)
+        }
+    }
+
+    FixedLengthKeys::new(max_len, value_stops)
 }

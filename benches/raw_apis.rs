@@ -63,8 +63,8 @@ fn setup_tree_run_benches_cleanup(c: &mut Criterion<Perf>, keys: impl Iterator<I
 pub fn raw_api_benches(c: &mut Criterion<Perf>) {
     // number of keys = 256
     setup_tree_run_benches_cleanup(c, generate_keys_skewed(u8::MAX as usize));
-    // number of keys = 251
-    setup_tree_run_benches_cleanup(c, generate_key_fixed_length(25, 10));
+    // number of keys = 256
+    setup_tree_run_benches_cleanup(c, generate_key_fixed_length(8, 2));
 }
 
 fn create_criterion_configuration() -> Criterion<Perf> {

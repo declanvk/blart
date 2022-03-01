@@ -16,7 +16,12 @@ fn leaf_tree_min_max_same() {
 
 #[test]
 fn large_tree_same_length_keys_min_max() {
-    let mut keys = generate_key_fixed_length(3, 5);
+    #[cfg(not(miri))]
+    const VALUE_STOPS: u8 = 5;
+    #[cfg(miri)]
+    const VALUE_STOPS: u8 = 2;
+
+    let mut keys = generate_key_fixed_length(3, VALUE_STOPS);
     let mut root = NodePtr::allocate_node(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
