@@ -1,6 +1,6 @@
 //! Helper function for writing tests
 
-use std::iter;
+use std::{collections::HashSet, iter};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a
 /// maximum value.
@@ -41,7 +41,7 @@ use std::iter;
 /// # Panics
 ///  - Panics if `max_len` is 0.
 pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
-    assert!(max_len > 0);
+    assert!(max_len > 0, "the fixed key length must be greater than 0");
 
     iter::successors(Some(vec![u8::MAX; 1].into_boxed_slice()), move |prev| {
         if prev.len() < max_len {
@@ -122,8 +122,11 @@ pub fn generate_key_fixed_length(
 
     impl FixedLengthKeys {
         pub fn new(max_len: usize, value_stops: u8) -> Self {
-            assert!(max_len > 0);
-            assert!(value_stops > 0);
+            assert!(max_len > 0, "the fixed key length must be greater than 0");
+            assert!(
+                value_stops > 0,
+                "the number of distinct values for each key digit must be greater than 0"
+            );
 
             fn div_ceil(lhs: u8, rhs: u8) -> u8 {
                 let d = lhs / rhs;
@@ -171,4 +174,139 @@ pub fn generate_key_fixed_length(
     }
 
     FixedLengthKeys::new(max_len, value_stops)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PrefixExpansion {
+    pub base_index: usize,
+    pub expanded_length: usize,
+}
+
+/// Generate an iterator of fixed length bytestring keys, where specific
+/// portions of the key are expanded as duplicate bytes.
+///
+/// This is meant to simulate keys with shared prefixes in different portions of
+/// the key string.
+///
+/// # Examples
+///
+/// ```
+/// # use blart::tests_common::{generate_key_with_prefix, PrefixExpansion};
+/// let mut keys = generate_key_with_prefix(3, 2, [PrefixExpansion { base_index: 0, expanded_length: 3 }]).collect::<Vec<_>>();
+/// assert_eq!(keys.len(), 27);
+/// assert_eq!(keys[0].as_ref(), &[0, 0, 0, 0, 0]);
+/// assert_eq!(keys[(keys.len() / 2) - 2].as_ref(), &[128, 128, 128, 0, 255]);
+/// assert_eq!(keys[keys.len() - 1].as_ref(), &[255, 255, 255, 255, 255]);
+///
+/// for k in keys {
+///     println!("{:?}", k);
+/// }
+/// ```
+///
+/// The above example will print out:
+/// ```text
+/// [0, 0, 0, 0, 0]
+/// [0, 0, 0, 0, 128]
+/// [0, 0, 0, 0, 255]
+/// [0, 0, 0, 128, 0]
+/// [0, 0, 0, 128, 128]
+/// [0, 0, 0, 128, 255]
+/// [0, 0, 0, 255, 0]
+/// [0, 0, 0, 255, 128]
+/// [0, 0, 0, 255, 255]
+/// [128, 128, 128, 0, 0]
+/// [128, 128, 128, 0, 128]
+/// [128, 128, 128, 0, 255]
+/// [128, 128, 128, 128, 0]
+/// [128, 128, 128, 128, 128]
+/// [128, 128, 128, 128, 255]
+/// [128, 128, 128, 255, 0]
+/// [128, 128, 128, 255, 128]
+/// [128, 128, 128, 255, 255]
+/// [255, 255, 255, 0, 0]
+/// [255, 255, 255, 0, 128]
+/// [255, 255, 255, 0, 255]
+/// [255, 255, 255, 128, 0]
+/// [255, 255, 255, 128, 128]
+/// [255, 255, 255, 128, 255]
+/// [255, 255, 255, 255, 0]
+/// [255, 255, 255, 255, 128]
+/// [255, 255, 255, 255, 255]
+/// ```
+///
+/// # Panics
+///
+///  - Panics if `base_key_len` is 0.
+///  - Panics if `value_stops` is 0.
+///  - Panics if any PrefixExpansion has `expanded_length` equal to 0.
+///  - Panics if any PrefixExpansion has `base_index` greater than or equal to
+///    `base_key_len`.
+pub fn generate_key_with_prefix(
+    base_key_len: usize,
+    value_stops: u8,
+    prefix_expansions: impl AsRef<[PrefixExpansion]>,
+) -> impl Iterator<Item = Box<[u8]>> {
+    let expansions = prefix_expansions.as_ref();
+
+    assert!(
+        expansions
+            .iter()
+            .all(|expand| { expand.base_index < base_key_len }),
+        "the prefix expansion index must be less than `base_key_len`."
+    );
+    assert!(
+        expansions
+            .iter()
+            .all(|expand| { expand.expanded_length > 0 }),
+        "the prefix expansion length must be greater than 0."
+    );
+    {
+        let mut uniq_indices = HashSet::new();
+        assert!(
+            expansions
+                .iter()
+                .all(|expand| uniq_indices.insert(expand.base_index)),
+            "the prefix expansion index must be unique"
+        );
+    }
+
+    let mut sorted_expansions = expansions.iter().cloned().collect::<Vec<_>>();
+    sorted_expansions.sort_by(|a, b| a.base_index.cmp(&b.base_index));
+
+    let full_key_len = expansions
+        .iter()
+        .map(|expand| expand.expanded_length - 1)
+        .sum::<usize>()
+        + base_key_len;
+    let full_key_template = vec![u8::MIN; full_key_len].into_boxed_slice();
+
+    fn apply_expansions_to_key(
+        old_key: Box<[u8]>,
+        new_key_template: &Box<[u8]>,
+        sorted_expansions: &[PrefixExpansion],
+    ) -> Box<[u8]> {
+        let mut new_key = new_key_template.clone();
+        let mut new_key_index = 0usize;
+        let mut old_key_index = 0usize;
+
+        for expansion in sorted_expansions {
+            let before_len = expansion.base_index - old_key_index;
+            new_key[new_key_index..(new_key_index + before_len)]
+                .copy_from_slice(&old_key[old_key_index..expansion.base_index]);
+            new_key[(new_key_index + before_len)
+                ..(new_key_index + before_len + expansion.expanded_length)]
+                .fill(old_key[expansion.base_index]);
+
+            old_key_index = expansion.base_index + 1;
+            new_key_index += before_len + expansion.expanded_length
+        }
+
+        // copy over remaining bytes from the old_key
+        new_key[new_key_index..].copy_from_slice(&old_key[old_key_index..]);
+
+        new_key
+    }
+
+    generate_key_fixed_length(base_key_len, value_stops)
+        .map(move |key| apply_expansions_to_key(key, &full_key_template, &sorted_expansions))
 }
