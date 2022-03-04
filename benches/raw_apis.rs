@@ -1,6 +1,8 @@
 use blart::{
     deallocate_tree, insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
-    tests_common::{generate_key_fixed_length, generate_keys_skewed},
+    tests_common::{
+        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
+    },
     LeafNode, NodePtr, OpaqueNodePtr,
 };
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
@@ -43,7 +45,11 @@ fn run_benchmarks(
     //     - a tree node that is full and will need to grow
 }
 
-fn setup_tree_run_benches_cleanup(c: &mut Criterion<Perf>, keys: impl Iterator<Item = Box<[u8]>>) {
+fn setup_tree_run_benches_cleanup(
+    c: &mut Criterion<Perf>,
+    keys: impl Iterator<Item = Box<[u8]>>,
+    group_name: &str,
+) {
     let keys: Vec<_> = keys.collect();
 
     let mut root = NodePtr::allocate_node(LeafNode::new(keys[0].clone(), 0)).to_opaque();
@@ -53,7 +59,7 @@ fn setup_tree_run_benches_cleanup(c: &mut Criterion<Perf>, keys: impl Iterator<I
     }
 
     {
-        let mut skewed_group = c.benchmark_group("skewed");
+        let mut skewed_group = c.benchmark_group(group_name);
         run_benchmarks(&mut skewed_group, keys.as_ref(), root);
     }
 
@@ -62,9 +68,28 @@ fn setup_tree_run_benches_cleanup(c: &mut Criterion<Perf>, keys: impl Iterator<I
 
 pub fn raw_api_benches(c: &mut Criterion<Perf>) {
     // number of keys = 256
-    setup_tree_run_benches_cleanup(c, generate_keys_skewed(u8::MAX as usize));
+    setup_tree_run_benches_cleanup(c, generate_keys_skewed(u8::MAX as usize), "skewed");
     // number of keys = 256
-    setup_tree_run_benches_cleanup(c, generate_key_fixed_length(8, 2));
+    setup_tree_run_benches_cleanup(c, generate_key_fixed_length(8, 2), "fixed_length");
+    // number of keys = 256
+    setup_tree_run_benches_cleanup(
+        c,
+        generate_key_with_prefix(
+            8,
+            2,
+            [
+                PrefixExpansion {
+                    base_index: 1,
+                    expanded_length: 12,
+                },
+                PrefixExpansion {
+                    base_index: 5,
+                    expanded_length: 8,
+                },
+            ],
+        ),
+        "large_prefixes",
+    )
 }
 
 fn create_criterion_configuration() -> Criterion<Perf> {

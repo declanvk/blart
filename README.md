@@ -14,6 +14,21 @@ cargo fuzz run -j 8 -s address fuzz_raw_api -- -max_len=32768 -max_total_time=36
 
 This will run the fuzzer for a total of 3600 seconds (1 hour), using 8 jobs (half of the total number of cores on my dev box), and using the address sanitizer. The `cmin` command is used to compact the corpus after generating new entries.
 
+## Benchmarks
+
+To run the benchmarks, install [`cargo-criterion`](https://github.com/bheisler/cargo-criterion), then run:
+
+```
+cargo criterion --history-id "$(git rev-parse --short HEAD)-0"
+```
+
+If you get a "Permission denied" error, update perf_event_paranoid:
+```
+sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
+```
+For further details please take a look at the following [link](https://superuser.com/questions/980632/run-perf-without-root-rights).
+
+
 ## License
 
 Licensed under either of
