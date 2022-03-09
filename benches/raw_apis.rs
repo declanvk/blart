@@ -37,8 +37,6 @@ fn run_benchmarks(
     });
 
     // TODO: Add more benchmarks for:
-    //   - search on key sets with large prefixes, such that they are beyond 8
-    //     bytes of prefix.
     //   - insert new keys into:
     //     - an empty tree
     //     - a tree tree that already contains the given key
@@ -59,8 +57,8 @@ fn setup_tree_run_benches_cleanup(
     }
 
     {
-        let mut skewed_group = c.benchmark_group(group_name);
-        run_benchmarks(&mut skewed_group, keys.as_ref(), root);
+        let mut group = c.benchmark_group(group_name);
+        run_benchmarks(&mut group, keys.as_ref(), root);
     }
 
     unsafe { deallocate_tree(root) };

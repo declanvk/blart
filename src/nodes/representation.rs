@@ -200,22 +200,22 @@ impl<V> OpaqueNodePtr<V> {
 
     /// Cast this opaque pointer type an enum that contains a pointer to the
     /// concrete node type.
-    pub fn to_node_ptr(self) -> InnerNodePtr<V> {
+    pub fn to_node_ptr(self) -> ConcreteNodePtr<V> {
         match self.node_type() {
             NodeType::Node4 => {
-                InnerNodePtr::Node4(NodePtr(self.0.cast::<InnerNode4<V>>().unwrap().into()))
+                ConcreteNodePtr::Node4(NodePtr(self.0.cast::<InnerNode4<V>>().unwrap().into()))
             },
             NodeType::Node16 => {
-                InnerNodePtr::Node16(NodePtr(self.0.cast::<InnerNode16<V>>().unwrap().into()))
+                ConcreteNodePtr::Node16(NodePtr(self.0.cast::<InnerNode16<V>>().unwrap().into()))
             },
             NodeType::Node48 => {
-                InnerNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<V>>().unwrap().into()))
+                ConcreteNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<V>>().unwrap().into()))
             },
             NodeType::Node256 => {
-                InnerNodePtr::Node256(NodePtr(self.0.cast::<InnerNode256<V>>().unwrap().into()))
+                ConcreteNodePtr::Node256(NodePtr(self.0.cast::<InnerNode256<V>>().unwrap().into()))
             },
             NodeType::Leaf => {
-                InnerNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<V>>().unwrap().into()))
+                ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<V>>().unwrap().into()))
             },
         }
     }
@@ -226,8 +226,8 @@ impl<V> OpaqueNodePtr<V> {
     }
 }
 
-/// An that encapsulates all the types of Nodes
-pub enum InnerNodePtr<V> {
+/// An enum that encapsulates pointers to every type of Node
+pub enum ConcreteNodePtr<V> {
     /// Node that references between 2 and 4 children
     Node4(NodePtr<InnerNode4<V>>),
     /// Node that references between 5 and 16 children
@@ -240,7 +240,7 @@ pub enum InnerNodePtr<V> {
     LeafNode(NodePtr<LeafNode<V>>),
 }
 
-impl<V> fmt::Debug for InnerNodePtr<V> {
+impl<V> fmt::Debug for ConcreteNodePtr<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),

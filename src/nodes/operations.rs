@@ -1,6 +1,6 @@
 //! Trie node lookup and manipulation
 
-use super::{Header, InnerNode, InnerNode4, InnerNodePtr, LeafNode, NodePtr, OpaqueNodePtr};
+use super::{ConcreteNodePtr, Header, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr};
 use std::{error::Error, fmt::Display};
 
 /// Search in the given tree for the value stored with the given key.
@@ -47,19 +47,19 @@ pub unsafe fn search_unchecked<V>(
 
     loop {
         let next_child_node = match current_node.to_node_ptr() {
-            InnerNodePtr::Node4(inner_ptr) => {
+            ConcreteNodePtr::Node4(inner_ptr) => {
                 test_prefix_continue_search(inner_ptr, key, &mut current_depth)
             },
-            InnerNodePtr::Node16(inner_ptr) => {
+            ConcreteNodePtr::Node16(inner_ptr) => {
                 test_prefix_continue_search(inner_ptr, key, &mut current_depth)
             },
-            InnerNodePtr::Node48(inner_ptr) => {
+            ConcreteNodePtr::Node48(inner_ptr) => {
                 test_prefix_continue_search(inner_ptr, key, &mut current_depth)
             },
-            InnerNodePtr::Node256(inner_ptr) => {
+            ConcreteNodePtr::Node256(inner_ptr) => {
                 test_prefix_continue_search(inner_ptr, key, &mut current_depth)
             },
-            InnerNodePtr::LeafNode(leaf_node_ptr) => {
+            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 let leaf_node = leaf_node_ptr.read();
 
                 // Specifically we are matching the leaf node stored key against the full search
@@ -160,7 +160,7 @@ pub unsafe fn insert_unchecked<V>(
         mut depth: usize,
     ) -> Result<OpaqueNodePtr<V>, InsertError> {
         match root.to_node_ptr() {
-            InnerNodePtr::Node4(inner_ptr) => {
+            ConcreteNodePtr::Node4(inner_ptr) => {
                 // SAFETY: The lifetime produced from this is bounded to this scope and does not
                 // escape. Further, no other code mutates or reads the node referenced, which is
                 // further enforced the "no concurrent reads or writes"
@@ -217,7 +217,7 @@ pub unsafe fn insert_unchecked<V>(
                     },
                 }
             },
-            InnerNodePtr::Node16(inner_ptr) => {
+            ConcreteNodePtr::Node16(inner_ptr) => {
                 // SAFETY: The lifetime produced from this is bounded to this scope and does not
                 // escape. Further, no other code mutates or reads the node referenced, which is
                 // further enforced the "no concurrent reads or writes"
@@ -274,7 +274,7 @@ pub unsafe fn insert_unchecked<V>(
                     },
                 }
             },
-            InnerNodePtr::Node48(inner_ptr) => {
+            ConcreteNodePtr::Node48(inner_ptr) => {
                 // SAFETY: The lifetime produced from this is bounded to this scope and does not
                 // escape. Further, no other code mutates or reads the node referenced, which is
                 // further enforced the "no concurrent reads or writes"
@@ -331,7 +331,7 @@ pub unsafe fn insert_unchecked<V>(
                     },
                 }
             },
-            InnerNodePtr::Node256(inner_ptr) => {
+            ConcreteNodePtr::Node256(inner_ptr) => {
                 // SAFETY: The lifetime produced from this is bounded to this scope and does not
                 // escape. Further, no other code mutates or reads the node referenced, which is
                 // further enforced the "no concurrent reads or writes"
@@ -367,7 +367,7 @@ pub unsafe fn insert_unchecked<V>(
                     ),
                 }
             },
-            InnerNodePtr::LeafNode(leaf_node_ptr) => {
+            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 let leaf_node = leaf_node_ptr.read();
 
                 let mut new_n4 = InnerNode4::empty();
@@ -450,7 +450,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
 
     while let Some(next_node_ptr) = stack.pop() {
         match next_node_ptr.to_node_ptr() {
-            InnerNodePtr::Node4(inner_ptr) => {
+            ConcreteNodePtr::Node4(inner_ptr) => {
                 {
                     // SAFETY: The scope of this reference is bounded and we enforce that no
                     // mutation of the reference memory takes place within the lifetime. The
@@ -463,7 +463,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                 // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner_ptr) }
             },
-            InnerNodePtr::Node16(inner_ptr) => {
+            ConcreteNodePtr::Node16(inner_ptr) => {
                 {
                     // SAFETY: The scope of this reference is bounded and we enforce that no
                     // mutation of the reference memory takes place within the lifetime. The
@@ -476,7 +476,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                 // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner_ptr) }
             },
-            InnerNodePtr::Node48(inner_ptr) => {
+            ConcreteNodePtr::Node48(inner_ptr) => {
                 {
                     // SAFETY: The scope of this reference is bounded and we enforce that no
                     // mutation of the reference memory takes place within the lifetime. The
@@ -489,7 +489,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                 // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner_ptr) }
             },
-            InnerNodePtr::Node256(inner_ptr) => {
+            ConcreteNodePtr::Node256(inner_ptr) => {
                 {
                     // SAFETY: The scope of this reference is bounded and we enforce that no
                     // mutation of the reference memory takes place within the lifetime. The
@@ -502,7 +502,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                 // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner_ptr) }
             },
-            InnerNodePtr::LeafNode(inner) => {
+            ConcreteNodePtr::LeafNode(inner) => {
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
                 unsafe { NodePtr::deallocate_node(inner) }
@@ -515,9 +515,9 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
 ///
 /// # Safety
 ///
-///   - This function cannot be called concurrently to any reads or writes of
-///     `root` or any child node of `root`. This function will arbitrarily read
-///     to any child in the given tree.
+///  - This function cannot be called concurrently to any reads or writes of
+///    `root` or any child node of `root`. This function will arbitrarily read
+///    to any child in the given tree.
 pub unsafe fn minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<LeafNode<V>>> {
     fn get_next_node<N: InnerNode>(inner_node: NodePtr<N>) -> Option<OpaqueNodePtr<N::Value>> {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
@@ -532,19 +532,19 @@ pub unsafe fn minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<Lea
 
     loop {
         match current_node.to_node_ptr() {
-            InnerNodePtr::Node4(inner_node) => {
+            ConcreteNodePtr::Node4(inner_node) => {
                 current_node = get_next_node(inner_node)?;
             },
-            InnerNodePtr::Node16(inner_node) => {
+            ConcreteNodePtr::Node16(inner_node) => {
                 current_node = get_next_node(inner_node)?;
             },
-            InnerNodePtr::Node48(inner_node) => {
+            ConcreteNodePtr::Node48(inner_node) => {
                 current_node = get_next_node(inner_node)?;
             },
-            InnerNodePtr::Node256(inner_node) => {
+            ConcreteNodePtr::Node256(inner_node) => {
                 current_node = get_next_node(inner_node)?;
             },
-            InnerNodePtr::LeafNode(inner_node) => {
+            ConcreteNodePtr::LeafNode(inner_node) => {
                 return Some(inner_node);
             },
         }
@@ -555,9 +555,9 @@ pub unsafe fn minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<Lea
 ///
 /// # Safety
 ///
-///   - This function cannot be called concurrently to any reads or writes of
-///     `root` or any child node of `root`. This function will arbitrarily read
-///     to any child in the given tree.
+///  - This function cannot be called concurrently to any reads or writes of
+///    `root` or any child node of `root`. This function will arbitrarily read
+///    to any child in the given tree.
 pub unsafe fn maximum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<LeafNode<V>>> {
     fn get_next_node<N: InnerNode>(inner_node: NodePtr<N>) -> Option<OpaqueNodePtr<N::Value>> {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
@@ -572,19 +572,19 @@ pub unsafe fn maximum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<Lea
 
     loop {
         match current_node.to_node_ptr() {
-            InnerNodePtr::Node4(inner_node) => {
+            ConcreteNodePtr::Node4(inner_node) => {
                 current_node = get_next_node(inner_node)?;
             },
-            InnerNodePtr::Node16(inner_node) => {
+            ConcreteNodePtr::Node16(inner_node) => {
                 current_node = get_next_node(inner_node)?;
             },
-            InnerNodePtr::Node48(inner_node) => {
+            ConcreteNodePtr::Node48(inner_node) => {
                 current_node = get_next_node(inner_node)?;
             },
-            InnerNodePtr::Node256(inner_node) => {
+            ConcreteNodePtr::Node256(inner_node) => {
                 current_node = get_next_node(inner_node)?;
             },
-            InnerNodePtr::LeafNode(inner_node) => {
+            ConcreteNodePtr::LeafNode(inner_node) => {
                 return Some(inner_node);
             },
         }

@@ -3,7 +3,7 @@
 mod pretty_printer;
 
 use crate::{
-    InnerNode16, InnerNode256, InnerNode4, InnerNode48, InnerNodePtr, LeafNode, Node, NodePtr,
+    ConcreteNodePtr, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, Node, NodePtr,
     OpaqueNodePtr,
 };
 pub use pretty_printer::*;
@@ -46,11 +46,11 @@ pub trait Visitable<T> {
 impl<T> Visitable<T> for OpaqueNodePtr<T> {
     fn super_visit_with<V: Visitor<T>>(&self, visitor: &mut V) -> V::Output {
         match self.to_node_ptr() {
-            InnerNodePtr::Node4(inner) => inner.visit_with(visitor),
-            InnerNodePtr::Node16(inner) => inner.visit_with(visitor),
-            InnerNodePtr::Node48(inner) => inner.visit_with(visitor),
-            InnerNodePtr::Node256(inner) => inner.visit_with(visitor),
-            InnerNodePtr::LeafNode(inner) => inner.visit_with(visitor),
+            ConcreteNodePtr::Node4(inner) => inner.visit_with(visitor),
+            ConcreteNodePtr::Node16(inner) => inner.visit_with(visitor),
+            ConcreteNodePtr::Node48(inner) => inner.visit_with(visitor),
+            ConcreteNodePtr::Node256(inner) => inner.visit_with(visitor),
+            ConcreteNodePtr::LeafNode(inner) => inner.visit_with(visitor),
         }
     }
 }
