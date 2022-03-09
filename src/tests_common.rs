@@ -270,7 +270,7 @@ pub fn generate_key_with_prefix(
         );
     }
 
-    let mut sorted_expansions = expansions.iter().cloned().collect::<Vec<_>>();
+    let mut sorted_expansions = expansions.to_vec();
     sorted_expansions.sort_by(|a, b| a.base_index.cmp(&b.base_index));
 
     let full_key_len = expansions
@@ -281,11 +281,11 @@ pub fn generate_key_with_prefix(
     let full_key_template = vec![u8::MIN; full_key_len].into_boxed_slice();
 
     fn apply_expansions_to_key(
-        old_key: Box<[u8]>,
-        new_key_template: &Box<[u8]>,
+        old_key: &[u8],
+        new_key_template: &[u8],
         sorted_expansions: &[PrefixExpansion],
     ) -> Box<[u8]> {
-        let mut new_key = new_key_template.clone();
+        let mut new_key: Box<[u8]> = new_key_template.into();
         let mut new_key_index = 0usize;
         let mut old_key_index = 0usize;
 
@@ -308,5 +308,5 @@ pub fn generate_key_with_prefix(
     }
 
     generate_key_fixed_length(base_key_len, value_stops)
-        .map(move |key| apply_expansions_to_key(key, &full_key_template, &sorted_expansions))
+        .map(move |key| apply_expansions_to_key(&key, &full_key_template, &sorted_expansions))
 }
