@@ -403,6 +403,9 @@ pub trait InnerNode: Node {
     /// The type of the next larger node type.
     type GrownNode;
 
+    /// The type of the iterator over all children of the inner node
+    type Iter: Iterator<Item = (u8, OpaqueNodePtr<<Self as Node>::Value>)>;
+
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>>;
@@ -432,11 +435,15 @@ pub trait InnerNode: Node {
         Self::TYPE.upper_capacity() >= self.header().num_children()
     }
 
-    /// Return the first child of this inner node, if it exists.
-    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>>;
-
-    /// Return the last child of this inner node, if it exists.
-    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>>;
+    /// Create an iterator over all (key bytes, child pointers) in this inner
+    /// node.
+    ///
+    /// # Safety
+    ///
+    /// The iterator type does not carry any lifetime, so the caller of this
+    /// function must enforce that the lifetime of the iterator does not overlap
+    /// with any mutating operations on the node.
+    unsafe fn into_iter(&self) -> Self::Iter;
 }
 
 /// Node type that has a compact representation for key bytes and children
@@ -602,6 +609,7 @@ impl<V> Node for InnerNode4<V> {
 
 impl<V> InnerNode for InnerNode4<V> {
     type GrownNode = InnerNode16<V>;
+    type Iter = InnerBlockNodeIter<V>;
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
         Self::lookup_child_inner(self, key_fragment)
@@ -623,18 +631,10 @@ impl<V> InnerNode for InnerNode4<V> {
         &mut self.header
     }
 
-    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        // SAFETY: The lifetime of the iterator is restricted to this function call,
-        // which does not have any mutating operations on the node (guaranteed by the
-        // reference).
-        Some(unsafe { InnerBlockNodeIter::new(self) }.next()?.1)
-    }
-
-    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        // SAFETY: The lifetime of the iterator is restricted to this function call,
-        // which does not have any mutating operations on the node (guaranteed by the
-        // reference).
-        Some(unsafe { InnerBlockNodeIter::new(self) }.next_back()?.1)
+    unsafe fn into_iter(&self) -> Self::Iter {
+        // SAFETY: The safety requirements on the `into_iter` function match the `new`
+        // function
+        unsafe { InnerBlockNodeIter::new(self) }
     }
 }
 
@@ -649,6 +649,7 @@ impl<V> Node for InnerNode16<V> {
 
 impl<V> InnerNode for InnerNode16<V> {
     type GrownNode = InnerNode48<Self::Value>;
+    type Iter = InnerBlockNodeIter<V>;
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
         Self::lookup_child_inner(self, key_fragment)
@@ -670,18 +671,10 @@ impl<V> InnerNode for InnerNode16<V> {
         &mut self.header
     }
 
-    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        // SAFETY: The lifetime of the iterator is restricted to this function call,
-        // which does not have any mutating operations on the node (guaranteed by the
-        // reference).
-        Some(unsafe { InnerBlockNodeIter::new(self) }.next()?.1)
-    }
-
-    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        // SAFETY: The lifetime of the iterator is restricted to this function call,
-        // which does not have any mutating operations on the node (guaranteed by the
-        // reference).
-        Some(unsafe { InnerBlockNodeIter::new(self) }.next_back()?.1)
+    unsafe fn into_iter(&self) -> Self::Iter {
+        // SAFETY: The safety requirements on the `into_iter` function match the `new`
+        // function
+        unsafe { InnerBlockNodeIter::new(self) }
     }
 }
 
@@ -793,6 +786,7 @@ impl<V> Node for InnerNode48<V> {
 
 impl<V> InnerNode for InnerNode48<V> {
     type GrownNode = InnerNode256<Self::Value>;
+    type Iter = InnerNode48Iter<V>;
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
         let index = &self.child_indices[usize::from(key_fragment)];
@@ -846,20 +840,10 @@ impl<V> InnerNode for InnerNode48<V> {
         &mut self.header
     }
 
-    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        // SAFETY: This iterator lives only for the lifetime of this function, which
-        // does not mutate the `InnerNode48` (guaranteed by reference).
-        let mut iter = unsafe { InnerNode48Iter::new(self) };
-
-        Some(iter.next()?.1)
-    }
-
-    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        // SAFETY: This iterator lives only for the lifetime of this function, which
-        // does not mutate the `InnerNode48` (guaranteed by reference).
-        let mut iter = unsafe { InnerNode48Iter::new(self) };
-
-        Some(iter.next_back()?.1)
+    unsafe fn into_iter(&self) -> Self::Iter {
+        // SAFETY: The safety requirements on the `into_iter` function match the `new`
+        // function
+        unsafe { InnerNode48Iter::new(self) }
     }
 }
 
@@ -907,6 +891,7 @@ impl<V> Node for InnerNode256<V> {
 
 impl<V> InnerNode for InnerNode256<V> {
     type GrownNode = !;
+    type Iter = InnerNode256Iter<V>;
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
         self.child_pointers[key_fragment as usize]
@@ -933,18 +918,10 @@ impl<V> InnerNode for InnerNode256<V> {
         &mut self.header
     }
 
-    fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        // SAFETY: The iterator only lasts for this function and the reference lifetime
-        // is larger, so there are no other mutating operation on the node.
-        let mut iter = unsafe { InnerNode256Iter::new(self) };
-        Some(iter.next()?.1)
-    }
-
-    fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        // SAFETY: The iterator only lasts for this function and the reference lifetime
-        // is larger, so there are no other mutating operation on the node.
-        let mut iter = unsafe { InnerNode256Iter::new(self) };
-        Some(iter.next_back()?.1)
+    unsafe fn into_iter(&self) -> Self::Iter {
+        // SAFETY: The safety requirements on the `into_iter` function match the `new`
+        // function
+        unsafe { InnerNode256Iter::new(self) }
     }
 }
 
