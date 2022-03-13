@@ -91,19 +91,35 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
     }
 
     fn visit_node4(&mut self, t: &crate::InnerNode4<T>) -> Self::Output {
-        self.write_node(NodeType::Node4, &t.header, || t.iter())
+        self.write_node(NodeType::Node4, &t.header, || {
+            // SAFETY: This iterator lives only for the lifetime of this function, which
+            // does not mutate the `InnerNode4` (guaranteed by reference).
+            unsafe { crate::InnerBlockNodeIter::new(t) }
+        })
     }
 
     fn visit_node16(&mut self, t: &crate::InnerNode16<T>) -> Self::Output {
-        self.write_node(NodeType::Node16, &t.header, || t.iter())
+        self.write_node(NodeType::Node16, &t.header, || {
+            // SAFETY: This iterator lives only for the lifetime of this function, which
+            // does not mutate the `InnerNode4` (guaranteed by reference).
+            unsafe { crate::InnerBlockNodeIter::new(t) }
+        })
     }
 
     fn visit_node48(&mut self, t: &crate::InnerNode48<T>) -> Self::Output {
-        self.write_node(NodeType::Node48, &t.header, || t.iter())
+        self.write_node(NodeType::Node48, &t.header, || {
+            // SAFETY: This iterator lives only for the lifetime of this function, which
+            // does not mutate the `InnerNode4` (guaranteed by reference).
+            unsafe { crate::InnerNode48Iter::new(t) }
+        })
     }
 
     fn visit_node256(&mut self, t: &crate::InnerNode256<T>) -> Self::Output {
-        self.write_node(NodeType::Node256, &t.header, || t.iter())
+        self.write_node(NodeType::Node256, &t.header, || {
+            // SAFETY: This iterator lives only for the lifetime of this function, which
+            // does not mutate the `InnerNode4` (guaranteed by reference).
+            unsafe { crate::InnerNode256Iter::new(t) }
+        })
     }
 
     fn visit_leaf(&mut self, t: &crate::LeafNode<T>) -> Self::Output {

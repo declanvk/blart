@@ -201,7 +201,7 @@ fn node4_iterate() {
     n4.write_child(123, l2_ptr);
     n4.write_child(1, l3_ptr);
 
-    let pairs = n4.iter().collect::<Vec<_>>();
+    let pairs = unsafe { InnerBlockNodeIter::new(&n4).collect::<Vec<_>>() };
     assert_eq!(pairs, &[(1, l3_ptr), (3, l1_ptr), (123, l2_ptr),])
 }
 
@@ -304,7 +304,7 @@ fn node16_iterate() {
     n.write_child(123, l2_ptr);
     n.write_child(1, l3_ptr);
 
-    let pairs = n.iter().collect::<Vec<_>>();
+    let pairs = unsafe { InnerBlockNodeIter::new(&n).collect::<Vec<_>>() };
     assert_eq!(pairs, &[(1, l3_ptr), (3, l1_ptr), (123, l2_ptr),])
 }
 
@@ -408,7 +408,7 @@ fn node48_iterate() {
     n.write_child(123, l2_ptr);
     n.write_child(1, l3_ptr);
 
-    let pairs = n.iter().collect::<Vec<_>>();
+    let pairs = unsafe { InnerNode48Iter::new(&n).collect::<Vec<_>>() };
     assert!(pairs
         .iter()
         .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
@@ -481,7 +481,7 @@ fn node256_iterate() {
     n.write_child(123, l2_ptr);
     n.write_child(1, l3_ptr);
 
-    let pairs = n.iter().collect::<Vec<_>>();
+    let pairs = unsafe { InnerNode256Iter::new(&n) }.collect::<Vec<_>>();
     assert!(pairs
         .iter()
         .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)

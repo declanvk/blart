@@ -1,16 +1,20 @@
 //! Trie node representation
 
+pub use self::iterators::*;
 use crate::tagged_pointer::TaggedPointer;
 use smallvec::SmallVec;
 use std::{
     error::Error,
     fmt,
-    iter::{Copied, Enumerate, FilterMap, Zip},
     marker::PhantomData,
     mem::{ManuallyDrop, MaybeUninit},
     ptr::{self, NonNull},
-    slice::Iter,
 };
+
+mod iterators;
+
+#[cfg(test)]
+mod tests;
 
 /// The number of bytes stored for path compression in the node header.
 pub const NUM_PREFIX_BYTES: usize = 8;
@@ -252,6 +256,21 @@ impl<V> fmt::Debug for ConcreteNodePtr<V> {
     }
 }
 
+/// An enum the encapsulates every type of Node
+#[derive(Debug)]
+pub enum ConcreteNode<V> {
+    /// Node that references between 2 and 4 children
+    Node4(InnerNode4<V>),
+    /// Node that references between 5 and 16 children
+    Node16(InnerNode16<V>),
+    /// Node that references between 17 and 49 children
+    Node48(InnerNode48<V>),
+    /// Node that references between 49 and 256 children
+    Node256(InnerNode256<V>),
+    /// Node that contains a single value
+    LeafNode(LeafNode<V>),
+}
+
 /// A pointer to a Node{4,16,48,256}.
 #[repr(transparent)]
 pub struct NodePtr<N: Node>(NonNull<N>);
@@ -482,13 +501,6 @@ impl<V, const SIZE: usize> InnerBlockNode<V, SIZE> {
         None
     }
 
-    /// Return an iterator over all the children of this node with their
-    /// associated key fragment
-    pub fn iter(&self) -> Zip<Copied<Iter<u8>>, Copied<Iter<OpaqueNodePtr<V>>>> {
-        let (keys, child_pointers) = self.initialized_portion();
-        keys.iter().copied().zip(child_pointers.iter().copied())
-    }
-
     /// Return the initialized portions of the keys and child pointer arrays.
     pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<V>]) {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
@@ -612,11 +624,17 @@ impl<V> InnerNode for InnerNode4<V> {
     }
 
     fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next()?.1)
+        // SAFETY: The lifetime of the iterator is restricted to this function call,
+        // which does not have any mutating operations on the node (guaranteed by the
+        // reference).
+        Some(unsafe { InnerBlockNodeIter::new(self) }.next()?.1)
     }
 
     fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next_back()?.1)
+        // SAFETY: The lifetime of the iterator is restricted to this function call,
+        // which does not have any mutating operations on the node (guaranteed by the
+        // reference).
+        Some(unsafe { InnerBlockNodeIter::new(self) }.next_back()?.1)
     }
 }
 
@@ -653,11 +671,17 @@ impl<V> InnerNode for InnerNode16<V> {
     }
 
     fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next()?.1)
+        // SAFETY: The lifetime of the iterator is restricted to this function call,
+        // which does not have any mutating operations on the node (guaranteed by the
+        // reference).
+        Some(unsafe { InnerBlockNodeIter::new(self) }.next()?.1)
     }
 
     fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next_back()?.1)
+        // SAFETY: The lifetime of the iterator is restricted to this function call,
+        // which does not have any mutating operations on the node (guaranteed by the
+        // reference).
+        Some(unsafe { InnerBlockNodeIter::new(self) }.next_back()?.1)
     }
 }
 
@@ -751,15 +775,6 @@ impl<V> InnerNode48<V> {
         }
     }
 
-    /// Return an iterator over all the children of this node with their
-    /// associated key fragment
-    pub fn iter(&self) -> InnerNode48Iter<V> {
-        InnerNode48Iter {
-            child_indices_iter: self.child_indices.iter().enumerate(),
-            child_pointers: self.initialized_child_pointers(),
-        }
-    }
-
     /// Return the initialized portions of the child pointer array.
     pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<V>] {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
@@ -767,58 +782,6 @@ impl<V> InnerNode48<V> {
         unsafe {
             MaybeUninit::slice_assume_init_ref(&self.child_pointers[0..self.header.num_children()])
         }
-    }
-}
-
-/// An iterator over all the children of a InnerNode48.
-pub struct InnerNode48Iter<'n, V> {
-    /// A copy of the `child_indices` field from the original InnerNode48.
-    pub child_indices_iter: Enumerate<Iter<'n, RestrictedNodeIndex<48>>>,
-    /// A copy of the `child_pointers` field from the original InnerNode48.
-    pub child_pointers: &'n [OpaqueNodePtr<V>],
-}
-
-impl<'n, V> Iterator for InnerNode48Iter<'n, V> {
-    type Item = (u8, OpaqueNodePtr<V>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        for (key_fragment, child_index) in self.child_indices_iter.by_ref() {
-            if *child_index == RestrictedNodeIndex::<48>::EMPTY {
-                continue;
-            } else {
-                return Some((
-                    // PANIC SAFETY: The length of the `self.child_indices` array is 256,
-                    // so the `key_fragment` derived from
-                    // `enumerate()` will never exceed the bounds of a
-                    // u8
-                    u8::try_from(key_fragment).unwrap(),
-                    self.child_pointers[usize::from(u8::from(*child_index))],
-                ));
-            }
-        }
-
-        None
-    }
-}
-
-impl<'n, V> DoubleEndedIterator for InnerNode48Iter<'n, V> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        for (key_fragment, child_index) in self.child_indices_iter.by_ref().rev() {
-            if *child_index == RestrictedNodeIndex::<48>::EMPTY {
-                continue;
-            } else {
-                return Some((
-                    // PANIC SAFETY: The length of the `self.child_indices` array is 256,
-                    // so the `key_fragment` derived from
-                    // `enumerate()` will never exceed the bounds of a
-                    // u8
-                    u8::try_from(key_fragment).unwrap(),
-                    self.child_pointers[usize::from(u8::from(*child_index))],
-                ));
-            }
-        }
-
-        None
     }
 }
 
@@ -861,8 +824,11 @@ impl<V> InnerNode for InnerNode48<V> {
     fn grow(&self) -> Self::GrownNode {
         let header = self.header.clone();
         let mut child_pointers = [None; 256];
+        // SAFETY: This iterator lives only for the lifetime of this function, which
+        // does not mutate the `InnerNode48` (guaranteed by reference).
+        let iter = unsafe { InnerNode48Iter::new(self) };
 
-        for (key_fragment, child_pointer) in self.iter() {
+        for (key_fragment, child_pointer) in iter {
             child_pointers[usize::from(key_fragment)] = Some(child_pointer);
         }
 
@@ -881,11 +847,19 @@ impl<V> InnerNode for InnerNode48<V> {
     }
 
     fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next()?.1)
+        // SAFETY: This iterator lives only for the lifetime of this function, which
+        // does not mutate the `InnerNode48` (guaranteed by reference).
+        let mut iter = unsafe { InnerNode48Iter::new(self) };
+
+        Some(iter.next()?.1)
     }
 
     fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next_back()?.1)
+        // SAFETY: This iterator lives only for the lifetime of this function, which
+        // does not mutate the `InnerNode48` (guaranteed by reference).
+        let mut iter = unsafe { InnerNode48Iter::new(self) };
+
+        Some(iter.next_back()?.1)
     }
 }
 
@@ -915,11 +889,6 @@ impl<V> Clone for InnerNode256<V> {
     }
 }
 
-type InnerNode256Iter<'n, V> = FilterMap<
-    Enumerate<Iter<'n, Option<OpaqueNodePtr<V>>>>,
-    fn((usize, &Option<OpaqueNodePtr<V>>)) -> Option<(u8, OpaqueNodePtr<V>)>,
->;
-
 impl<V> InnerNode256<V> {
     /// Create an empty `InnerNode256`.
     pub fn empty() -> Self {
@@ -927,25 +896,6 @@ impl<V> InnerNode256<V> {
             header: Header::default(),
             child_pointers: [None; 256],
         }
-    }
-
-    /// Return an iterator over all the children of this node with their
-    /// associated key fragment
-    pub fn iter(&self) -> InnerNode256Iter<V> {
-        self.child_pointers
-            .iter()
-            .enumerate()
-            .filter_map(|(key_fragment, child_pointer)| {
-                child_pointer.map(|child_pointer| {
-                    (
-                        // PANIC SAFETY: The length of the `self.child_pointers` array is 256, so
-                        // the `key_fragment` derived from `enumerate()`
-                        // will never exceed the bounds of a u8
-                        u8::try_from(key_fragment).unwrap(),
-                        child_pointer,
-                    )
-                })
-            })
     }
 }
 
@@ -984,11 +934,17 @@ impl<V> InnerNode for InnerNode256<V> {
     }
 
     fn first_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next()?.1)
+        // SAFETY: The iterator only lasts for this function and the reference lifetime
+        // is larger, so there are no other mutating operation on the node.
+        let mut iter = unsafe { InnerNode256Iter::new(self) };
+        Some(iter.next()?.1)
     }
 
     fn last_child(&self) -> Option<OpaqueNodePtr<Self::Value>> {
-        Some(self.iter().next_back()?.1)
+        // SAFETY: The iterator only lasts for this function and the reference lifetime
+        // is larger, so there are no other mutating operation on the node.
+        let mut iter = unsafe { InnerNode256Iter::new(self) };
+        Some(iter.next_back()?.1)
     }
 }
 
@@ -1018,6 +974,3 @@ impl<V> Node for LeafNode<V> {
 
     const TYPE: NodeType = NodeType::Leaf;
 }
-
-#[cfg(test)]
-mod tests;

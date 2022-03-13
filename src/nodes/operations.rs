@@ -1,5 +1,7 @@
 //! Trie node lookup and manipulation
 
+use crate::{InnerBlockNodeIter, InnerNode256Iter, InnerNode48Iter};
+
 use super::{ConcreteNodePtr, Header, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr};
 use std::{error::Error, fmt::Display};
 
@@ -457,7 +459,12 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                     // deallocation of the node happens outside of this block, after the lifetime
                     // ends.
                     let inner_node = unsafe { inner_ptr.as_ref() };
-                    stack.extend(inner_node.iter().map(|(_, child)| child));
+                    // SAFETY: This iterator only lives for this block, a subset of the shared
+                    // lifetime of the `inner_node` variable. By the safety requirements of the
+                    // `deallocate_tree` function, no other mutation of this node can happen while
+                    // this iterator is live.
+                    let iter = unsafe { InnerBlockNodeIter::new(inner_node) };
+                    stack.extend(iter.map(|(_, child)| child));
                 }
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
@@ -470,7 +477,12 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                     // deallocation of the node happens outside of this block, after the lifetime
                     // ends.
                     let inner_node = unsafe { inner_ptr.as_ref() };
-                    stack.extend(inner_node.iter().map(|(_, child)| child));
+                    // SAFETY: This iterator only lives for this block, a subset of the shared
+                    // lifetime of the `inner_node` variable. By the safety requirements of the
+                    // `deallocate_tree` function, no other mutation of this node can happen while
+                    // this iterator is live.
+                    let iter = unsafe { InnerBlockNodeIter::new(inner_node) };
+                    stack.extend(iter.map(|(_, child)| child));
                 }
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
@@ -483,7 +495,12 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                     // deallocation of the node happens outside of this block, after the lifetime
                     // ends.
                     let inner_node = unsafe { inner_ptr.as_ref() };
-                    stack.extend(inner_node.iter().map(|(_, child)| child));
+                    // SAFETY: This iterator only lives for this block, a subset of the shared
+                    // lifetime of the `inner_node` variable. By the safety requirements of the
+                    // `deallocate_tree` function, no other mutation of this node can happen while
+                    // this iterator is live.
+                    let iter = unsafe { InnerNode48Iter::new(inner_node) };
+                    stack.extend(iter.map(|(_, child)| child));
                 }
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
@@ -496,7 +513,12 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                     // deallocation of the node happens outside of this block, after the lifetime
                     // ends.
                     let inner_node = unsafe { inner_ptr.as_ref() };
-                    stack.extend(inner_node.iter().map(|(_, child)| child));
+                    // SAFETY: This iterator only lives for this block, a subset of the shared
+                    // lifetime of the `inner_node` variable. By the safety requirements of the
+                    // `deallocate_tree` function, no other mutation of this node can happen while
+                    // this iterator is live.
+                    let iter = unsafe { InnerNode256Iter::new(inner_node) };
+                    stack.extend(iter.map(|(_, child)| child));
                 }
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
