@@ -1,8 +1,9 @@
 //! Trie node lookup and manipulation
 
-use crate::{InnerBlockNodeIter, InnerNode256Iter, InnerNode48Iter};
-
-use super::{ConcreteNodePtr, Header, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{
+    ConcreteNodePtr, Header, InnerNode, InnerNode256Iter, InnerNode4, InnerNode48Iter,
+    InnerNodeCompressedIter, LeafNode, NodePtr, OpaqueNodePtr,
+};
 use std::{error::Error, fmt::Display};
 
 /// Search in the given tree for the value stored with the given key.
@@ -463,7 +464,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                     // lifetime of the `inner_node` variable. By the safety requirements of the
                     // `deallocate_tree` function, no other mutation of this node can happen while
                     // this iterator is live.
-                    let iter = unsafe { InnerBlockNodeIter::new(inner_node) };
+                    let iter = unsafe { InnerNodeCompressedIter::new(inner_node) };
                     stack.extend(iter.map(|(_, child)| child));
                 }
                 // SAFETY: The single call per node requirement is enforced by the safety
@@ -481,7 +482,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
                     // lifetime of the `inner_node` variable. By the safety requirements of the
                     // `deallocate_tree` function, no other mutation of this node can happen while
                     // this iterator is live.
-                    let iter = unsafe { InnerBlockNodeIter::new(inner_node) };
+                    let iter = unsafe { InnerNodeCompressedIter::new(inner_node) };
                     stack.extend(iter.map(|(_, child)| child));
                 }
                 // SAFETY: The single call per node requirement is enforced by the safety

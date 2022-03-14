@@ -94,7 +94,7 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         self.write_node(NodeType::Node4, &t.header, || {
             // SAFETY: This iterator lives only for the lifetime of this function, which
             // does not mutate the `InnerNode4` (guaranteed by reference).
-            unsafe { crate::InnerBlockNodeIter::new(t) }
+            unsafe { crate::InnerNodeCompressedIter::new(t) }
         })
     }
 
@@ -102,7 +102,7 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         self.write_node(NodeType::Node16, &t.header, || {
             // SAFETY: This iterator lives only for the lifetime of this function, which
             // does not mutate the `InnerNode4` (guaranteed by reference).
-            unsafe { crate::InnerBlockNodeIter::new(t) }
+            unsafe { crate::InnerNodeCompressedIter::new(t) }
         })
     }
 

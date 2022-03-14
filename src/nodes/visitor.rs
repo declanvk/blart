@@ -3,8 +3,8 @@
 mod pretty_printer;
 
 use crate::{
-    ConcreteNodePtr, InnerBlockNodeIter, InnerNode16, InnerNode256, InnerNode256Iter, InnerNode4,
-    InnerNode48, InnerNode48Iter, LeafNode, Node, NodePtr, OpaqueNodePtr,
+    ConcreteNodePtr, InnerNode16, InnerNode256, InnerNode256Iter, InnerNode4, InnerNode48,
+    InnerNode48Iter, InnerNodeCompressedIter, LeafNode, Node, NodePtr, OpaqueNodePtr,
 };
 pub use pretty_printer::*;
 
@@ -66,9 +66,9 @@ impl<T> Visitable<T> for InnerNode4<T> {
     fn super_visit_with<V: Visitor<T>>(&self, visitor: &mut V) -> V::Output {
         // SAFETY: This iterator lives for a subset of the lifetime of this function,
         // which is entirely covered by the lifetime of reference to the
-        // `InnerBlockNode`. The invariants of the shared references mean that
+        // `InnerNodeCompressed`. The invariants of the shared references mean that
         // no other mutation of the node will happen.
-        let iter = unsafe { InnerBlockNodeIter::new(self) };
+        let iter = unsafe { InnerNodeCompressedIter::new(self) };
         combine_inner_node_child_output(iter, visitor)
     }
 
@@ -81,9 +81,9 @@ impl<T> Visitable<T> for InnerNode16<T> {
     fn super_visit_with<V: Visitor<T>>(&self, visitor: &mut V) -> V::Output {
         // SAFETY: This iterator lives for a subset of the lifetime of this function,
         // which is entirely covered by the lifetime of reference to the
-        // `InnerBlockNode`. The invariants of the shared references mean that
+        // `InnerNodeCompressed`. The invariants of the shared references mean that
         // no other mutation of the node will happen.
-        let iter = unsafe { InnerBlockNodeIter::new(self) };
+        let iter = unsafe { InnerNodeCompressedIter::new(self) };
         combine_inner_node_child_output(iter, visitor)
     }
 

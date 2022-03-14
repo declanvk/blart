@@ -448,7 +448,7 @@ pub trait InnerNode: Node {
 
 /// Node type that has a compact representation for key bytes and children
 /// pointers.
-pub struct InnerBlockNode<V, const SIZE: usize> {
+pub struct InnerNodeCompressed<V, const SIZE: usize> {
     /// The common node fields.
     pub header: Header,
     /// An array that contains single key bytes in the same index as the
@@ -464,7 +464,7 @@ pub struct InnerBlockNode<V, const SIZE: usize> {
     pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; SIZE],
 }
 
-impl<V, const SIZE: usize> Clone for InnerBlockNode<V, SIZE> {
+impl<V, const SIZE: usize> Clone for InnerNodeCompressed<V, SIZE> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -474,7 +474,7 @@ impl<V, const SIZE: usize> Clone for InnerBlockNode<V, SIZE> {
     }
 }
 
-impl<V, const SIZE: usize> fmt::Debug for InnerBlockNode<V, SIZE> {
+impl<V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<V, SIZE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (keys, child_pointers) = self.initialized_portion();
         f.debug_struct("InnerNodeBlock")
@@ -486,10 +486,10 @@ impl<V, const SIZE: usize> fmt::Debug for InnerBlockNode<V, SIZE> {
     }
 }
 
-impl<V, const SIZE: usize> InnerBlockNode<V, SIZE> {
-    /// Create an empty [`InnerBlockNode`] with the given [`NodeType`].
+impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
+    /// Create an empty [`InnerNodeCompressed`] with the given [`NodeType`].
     pub fn empty() -> Self {
-        InnerBlockNode {
+        InnerNodeCompressed {
             header: Header::default(),
             child_pointers: MaybeUninit::uninit_array(),
             keys: MaybeUninit::uninit_array(),
@@ -558,7 +558,7 @@ impl<V, const SIZE: usize> InnerBlockNode<V, SIZE> {
         }
     }
 
-    fn grow_block<const NEW_SIZE: usize>(&self) -> InnerBlockNode<V, NEW_SIZE> {
+    fn grow_block<const NEW_SIZE: usize>(&self) -> InnerNodeCompressed<V, NEW_SIZE> {
         let header = self.header.clone();
         let mut keys = MaybeUninit::<u8>::uninit_array::<NEW_SIZE>();
         let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<NEW_SIZE>();
@@ -567,7 +567,7 @@ impl<V, const SIZE: usize> InnerBlockNode<V, SIZE> {
         child_pointers[..header.num_children()]
             .copy_from_slice(&self.child_pointers[..header.num_children()]);
 
-        InnerBlockNode {
+        InnerNodeCompressed {
             header,
             keys,
             child_pointers,
@@ -599,7 +599,7 @@ impl<V, const SIZE: usize> InnerBlockNode<V, SIZE> {
 }
 
 /// Node that references between 2 and 4 children
-pub type InnerNode4<V> = InnerBlockNode<V, 4>;
+pub type InnerNode4<V> = InnerNodeCompressed<V, 4>;
 
 impl<V> Node for InnerNode4<V> {
     type Value = V;
@@ -609,7 +609,7 @@ impl<V> Node for InnerNode4<V> {
 
 impl<V> InnerNode for InnerNode4<V> {
     type GrownNode = InnerNode16<V>;
-    type Iter = InnerBlockNodeIter<V>;
+    type Iter = InnerNodeCompressedIter<V>;
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
         Self::lookup_child_inner(self, key_fragment)
@@ -634,12 +634,12 @@ impl<V> InnerNode for InnerNode4<V> {
     unsafe fn into_iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `into_iter` function match the `new`
         // function
-        unsafe { InnerBlockNodeIter::new(self) }
+        unsafe { InnerNodeCompressedIter::new(self) }
     }
 }
 
 /// Node that references between 5 and 16 children
-pub type InnerNode16<V> = InnerBlockNode<V, 16>;
+pub type InnerNode16<V> = InnerNodeCompressed<V, 16>;
 
 impl<V> Node for InnerNode16<V> {
     type Value = V;
@@ -649,7 +649,7 @@ impl<V> Node for InnerNode16<V> {
 
 impl<V> InnerNode for InnerNode16<V> {
     type GrownNode = InnerNode48<Self::Value>;
-    type Iter = InnerBlockNodeIter<V>;
+    type Iter = InnerNodeCompressedIter<V>;
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
         Self::lookup_child_inner(self, key_fragment)
@@ -674,7 +674,7 @@ impl<V> InnerNode for InnerNode16<V> {
     unsafe fn into_iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `into_iter` function match the `new`
         // function
-        unsafe { InnerBlockNodeIter::new(self) }
+        unsafe { InnerNodeCompressedIter::new(self) }
     }
 }
 

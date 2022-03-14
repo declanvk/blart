@@ -1,7 +1,7 @@
 use super::*;
 use std::{iter::FusedIterator, mem, ops::Range};
 
-/// An iterator all the children of an [`InnerBlockerNode`].
+/// An iterator all the children of an [`InnerNodeCompressed`].
 ///
 /// # Safety
 ///
@@ -9,28 +9,28 @@ use std::{iter::FusedIterator, mem, ops::Range};
 ///    of the node.
 //  - All the `NonNull` pointers in this struct are constructed from shared
 //    references and must not be used to mutate.
-pub struct InnerBlockNodeIter<V> {
+pub struct InnerNodeCompressedIter<V> {
     keys_start: NonNull<u8>,
     keys_end: NonNull<u8>,
     child_pointers_start: NonNull<OpaqueNodePtr<V>>,
     child_pointers_end: NonNull<OpaqueNodePtr<V>>,
 }
 
-impl<V> InnerBlockNodeIter<V> {
+impl<V> InnerNodeCompressedIter<V> {
     /// Create a new iterator over the children of the given
-    /// [`InnerBlockNode`].
+    /// [`InnerNodeCompressed`].
     ///
     /// # Safety
     ///  - The lifetime new `InnerBlockerNodeIter` must not overlap with any
-    ///    operations that mutate the original [`InnerBlockNode`].
-    pub unsafe fn new<const SIZE: usize>(node: &InnerBlockNode<V, SIZE>) -> Self {
+    ///    operations that mutate the original [`InnerNodeCompressed`].
+    pub unsafe fn new<const SIZE: usize>(node: &InnerNodeCompressed<V, SIZE>) -> Self {
         // SAFETY:
         //  - The pointers are guaranteed to be not null since it is derived from a
         //    reference
         //  - The `MaybeUninit::as_ptr` here is safe for a couple reasons:
         //      - The `node.header.num_children`-sized prefix of the `node.keys` and
         //        `node.child_pointers` arrays are guaranteed to be initialized, see
-        //        `InnerBlockNode` comments.
+        //        `InnerNodeCompressed` comments.
         //      - We never access the maybe initialized first value (in case of no
         //        children in node) until we verify the number of children, after which
         //        the value is known to be initialized.
@@ -64,7 +64,7 @@ impl<V> InnerBlockNodeIter<V> {
             )
         };
 
-        InnerBlockNodeIter {
+        InnerNodeCompressedIter {
             keys_start,
             keys_end,
             child_pointers_start,
@@ -119,7 +119,7 @@ impl<V> InnerBlockNodeIter<V> {
     }
 }
 
-impl<V> Iterator for InnerBlockNodeIter<V> {
+impl<V> Iterator for InnerNodeCompressedIter<V> {
     type Item = (u8, OpaqueNodePtr<V>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -153,7 +153,7 @@ impl<V> Iterator for InnerBlockNodeIter<V> {
     }
 }
 
-impl<V> DoubleEndedIterator for InnerBlockNodeIter<V> {
+impl<V> DoubleEndedIterator for InnerNodeCompressedIter<V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.keys_start == self.keys_end {
             return None;
@@ -175,7 +175,7 @@ impl<V> DoubleEndedIterator for InnerBlockNodeIter<V> {
     }
 }
 
-impl<V> FusedIterator for InnerBlockNodeIter<V> {}
+impl<V> FusedIterator for InnerNodeCompressedIter<V> {}
 
 /// An iterator over all the children of a [`InnerNode48`].
 // All the `NonNull` pointers in this struct are constructed from shared
