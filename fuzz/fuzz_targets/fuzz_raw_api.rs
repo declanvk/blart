@@ -2,7 +2,7 @@
 
 use blart::{
     deallocate_tree, insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
-    LeafNode, NodePtr, OpaqueNodePtr,
+    LeafNode, NodePtr, OpaqueNodePtr, TrieRangeFullIter,
 };
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
@@ -16,7 +16,7 @@ enum Action {
         // the key to perform a lookup on
         key: Box<[u8]>,
     },
-    MinimumMaximum,
+    MinimumMaximumAndIterator,
     Deallocate,
 }
 
@@ -56,19 +56,29 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     }
                 }
             },
-            Action::MinimumMaximum => {
+            Action::MinimumMaximumAndIterator => {
                 if let Some(root) = current_root {
-                    let min_value = unsafe { minimum_unchecked(root) };
-                    let max_value = unsafe { maximum_unchecked(root) };
+                    let min_value = unsafe { minimum_unchecked(root) }
+                        .expect("A non-empty tree should have a minimum");
+                    let max_value = unsafe { maximum_unchecked(root) }
+                        .expect("A non-empty tree should have a maximum");
+                    let mut iterator = unsafe { TrieRangeFullIter::new(root) }
+                        .map_err(|mut it| it.next().unwrap());
+                    let min_value_from_iter = iterator
+                        .as_mut()
+                        .map(|it| it.next().unwrap())
+                        .unwrap_or_else(|leaf| *leaf);
+                    let max_value_from_iter = iterator
+                        .map(|mut it| it.next_back().unwrap())
+                        .unwrap_or_else(|leaf| leaf);
 
-                    match (min_value, max_value) {
-                        (Some(min_leaf), Some(max_leaf)) => {
-                            if min_leaf != max_leaf {
-                                assert!(min_leaf.read().key < max_leaf.read().key);
-                            }
-                        },
-                        _ => panic!("A non-empty tree should have both a minimum and maximum leaf"),
-                    }
+                    let min_value = unsafe { min_value.as_ref() };
+                    let max_value = unsafe { max_value.as_ref() };
+
+                    assert!(min_value.key <= max_value.key);
+
+                    assert_eq!(min_value.key.as_ref() as *const _, min_value_from_iter.0);
+                    assert_eq!(max_value.key.as_ref() as *const _, max_value_from_iter.0);
                 }
             },
             Action::Deallocate => {

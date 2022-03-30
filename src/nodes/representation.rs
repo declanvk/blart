@@ -404,7 +404,8 @@ pub trait InnerNode: Node {
     type GrownNode;
 
     /// The type of the iterator over all children of the inner node
-    type Iter: Iterator<Item = (u8, OpaqueNodePtr<<Self as Node>::Value>)>;
+    type Iter: Iterator<Item = (u8, OpaqueNodePtr<<Self as Node>::Value>)>
+        + Into<InnerNodeIter<<Self as Node>::Value>>;
 
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
