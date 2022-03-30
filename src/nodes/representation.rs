@@ -389,8 +389,20 @@ impl<N: Node> fmt::Debug for NodePtr<N> {
     }
 }
 
+pub(crate) mod private {
+    /// This trait is used to seal other traits, such that they cannot be
+    /// implemented outside of the crate.
+    pub trait Sealed {}
+
+    impl<V> Sealed for super::InnerNode4<V> {}
+    impl<V> Sealed for super::InnerNode16<V> {}
+    impl<V> Sealed for super::InnerNode48<V> {}
+    impl<V> Sealed for super::InnerNode256<V> {}
+    impl<V> Sealed for super::LeafNode<V> {}
+}
+
 /// All nodes which contain a runtime tag that validates their type.
-pub trait Node {
+pub trait Node: private::Sealed {
     /// The runtime type of the node.
     const TYPE: NodeType;
 
