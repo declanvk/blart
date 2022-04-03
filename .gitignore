@@ -1,2 +1,5 @@
 /target
 Cargo.lock
+
+# output from memory usage tess
+dhat-output/
