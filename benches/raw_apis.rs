@@ -68,13 +68,12 @@ pub fn raw_api_benches(c: &mut Criterion<Perf>) {
     // number of keys = 256
     setup_tree_run_benches_cleanup(c, generate_keys_skewed(u8::MAX as usize), "skewed");
     // number of keys = 256
-    setup_tree_run_benches_cleanup(c, generate_key_fixed_length(8, 2), "fixed_length");
+    setup_tree_run_benches_cleanup(c, generate_key_fixed_length([2; 8]), "fixed_length");
     // number of keys = 256
     setup_tree_run_benches_cleanup(
         c,
         generate_key_with_prefix(
-            8,
-            2,
+            [2; 8],
             [
                 PrefixExpansion {
                     base_index: 1,

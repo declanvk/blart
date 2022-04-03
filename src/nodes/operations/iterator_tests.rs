@@ -89,7 +89,7 @@ fn large_fixed_length_key_iterator_front_back() {
         last_half_last: [170, 0, 0],
     };
 
-    let mut keys = generate_key_fixed_length(3, TEST_PARAMS.value_stops);
+    let mut keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
     let mut root = NodePtr::allocate_node(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
