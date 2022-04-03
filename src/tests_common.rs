@@ -56,19 +56,22 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 
 /// Generate an iterator of bytestring keys, all with the same length.
 ///
-/// This iterator will produce `(value_stops + 1) ^ max_len` keys in total. The
-/// keys produced by this iterator will every string from the alphabet `{ 0 *
-/// (255 / value_stops), 1 * (255 / value_stops), ..., 255 }` of length
-/// `max_len`.
+/// The `level_widths` argument specifies the number of values generated per
+/// digit of the array. For example, using `[3, 2, 1]` will generate keys of
+/// length 3. The generate keys will have 4 (3 + 1) unique values for the first
+/// digit, 3 unique values for the second digit, and 2 unique values for the
+/// last digit. In general, this iterator will produce `(level_widths[0] + 1)  *
+/// (level_widths[1] + 1) * ... * (level_widths[KEY_LENGTH - 1] + 1)` keys in
+/// total.
 ///
 /// # Examples
 ///
 /// ```
 /// # use blart::tests_common::generate_key_fixed_length;
-/// let mut keys = generate_key_fixed_length(3, 2).collect::<Vec<_>>();
-/// assert_eq!(keys.len(), 27);
+/// let mut keys = generate_key_fixed_length([3, 2, 1]).collect::<Vec<_>>();
+/// assert_eq!(keys.len(), 24);
 /// assert_eq!(keys[0].as_ref(), &[0, 0, 0]);
-/// assert_eq!(keys[keys.len() / 2].as_ref(), &[128, 128, 128]);
+/// assert_eq!(keys[keys.len() / 2].as_ref(), &[170, 0, 0]);
 /// assert_eq!(keys[keys.len() - 1].as_ref(), &[255, 255, 255]);
 ///
 /// for k in keys {
@@ -79,31 +82,28 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 /// The above example will print
 /// ```text
 /// [0, 0, 0]
-/// [0, 0, 128]
 /// [0, 0, 255]
 /// [0, 128, 0]
-/// [0, 128, 128]
 /// [0, 128, 255]
 /// [0, 255, 0]
-/// [0, 255, 128]
 /// [0, 255, 255]
-/// [128, 0, 0]
-/// [128, 0, 128]
-/// [128, 0, 255]
-/// [128, 128, 0]
-/// [128, 128, 128]
-/// [128, 128, 255]
-/// [128, 255, 0]
-/// [128, 255, 128]
-/// [128, 255, 255]
+/// [85, 0, 0]
+/// [85, 0, 255]
+/// [85, 128, 0]
+/// [85, 128, 255]
+/// [85, 255, 0]
+/// [85, 255, 255]
+/// [170, 0, 0]
+/// [170, 0, 255]
+/// [170, 128, 0]
+/// [170, 128, 255]
+/// [170, 255, 0]
+/// [170, 255, 255]
 /// [255, 0, 0]
-/// [255, 0, 128]
 /// [255, 0, 255]
 /// [255, 128, 0]
-/// [255, 128, 128]
 /// [255, 128, 255]
 /// [255, 255, 0]
-/// [255, 255, 128]
 /// [255, 255, 255]
 /// ```
 ///
@@ -111,20 +111,22 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 ///
 ///  - Panics if `max_len` is 0.
 ///  - Panics if `value_stops` is 0.
-pub fn generate_key_fixed_length(
-    max_len: usize,
-    value_stops: u8,
+pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
+    level_widths: [u8; KEY_LENGTH],
 ) -> impl Iterator<Item = Box<[u8]>> {
-    struct FixedLengthKeys {
-        increment: u8,
+    struct FixedLengthKeys<const KEY_LENGTH: usize> {
+        increments: [u8; KEY_LENGTH],
         next_value: Option<Box<[u8]>>,
     }
 
-    impl FixedLengthKeys {
-        pub fn new(max_len: usize, value_stops: u8) -> Self {
-            assert!(max_len > 0, "the fixed key length must be greater than 0");
+    impl<const KEY_LENGTH: usize> FixedLengthKeys<KEY_LENGTH> {
+        pub fn new(level_widths: [u8; KEY_LENGTH]) -> Self {
             assert!(
-                value_stops > 0,
+                KEY_LENGTH > 0,
+                "the fixed key length must be greater than 0"
+            );
+            assert!(
+                level_widths.iter().all(|value_stops| value_stops > &0),
                 "the number of distinct values for each key digit must be greater than 0"
             );
 
@@ -138,16 +140,16 @@ pub fn generate_key_fixed_length(
                 }
             }
 
-            let increment = div_ceil(u8::MAX, value_stops);
+            let increments = level_widths.map(|value_stops| div_ceil(u8::MAX, value_stops));
 
             FixedLengthKeys {
-                increment,
-                next_value: Some(vec![u8::MIN; max_len].into_boxed_slice()),
+                increments,
+                next_value: Some(vec![u8::MIN; KEY_LENGTH].into_boxed_slice()),
             }
         }
     }
 
-    impl Iterator for FixedLengthKeys {
+    impl<const KEY_LENGTH: usize> Iterator for FixedLengthKeys<KEY_LENGTH> {
         type Item = Box<[u8]>;
 
         fn next(&mut self) -> Option<Self::Item> {
@@ -163,7 +165,7 @@ pub fn generate_key_fixed_length(
                 if new_next_value[idx] == u8::MAX {
                     new_next_value[idx] = u8::MIN;
                 } else {
-                    new_next_value[idx] = new_next_value[idx].saturating_add(self.increment);
+                    new_next_value[idx] = new_next_value[idx].saturating_add(self.increments[idx]);
                     break;
                 }
             }
@@ -173,7 +175,7 @@ pub fn generate_key_fixed_length(
         }
     }
 
-    FixedLengthKeys::new(max_len, value_stops)
+    FixedLengthKeys::new(level_widths)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,7 +194,7 @@ pub struct PrefixExpansion {
 ///
 /// ```
 /// # use blart::tests_common::{generate_key_with_prefix, PrefixExpansion};
-/// let mut keys = generate_key_with_prefix(3, 2, [PrefixExpansion { base_index: 0, expanded_length: 3 }]).collect::<Vec<_>>();
+/// let mut keys = generate_key_with_prefix([2; 3], [PrefixExpansion { base_index: 0, expanded_length: 3 }]).collect::<Vec<_>>();
 /// assert_eq!(keys.len(), 27);
 /// assert_eq!(keys[0].as_ref(), &[0, 0, 0, 0, 0]);
 /// assert_eq!(keys[(keys.len() / 2) - 2].as_ref(), &[128, 128, 128, 0, 255]);
@@ -241,9 +243,8 @@ pub struct PrefixExpansion {
 ///  - Panics if any PrefixExpansion has `expanded_length` equal to 0.
 ///  - Panics if any PrefixExpansion has `base_index` greater than or equal to
 ///    `base_key_len`.
-pub fn generate_key_with_prefix(
-    base_key_len: usize,
-    value_stops: u8,
+pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
+    level_widths: [u8; KEY_LENGTH],
     prefix_expansions: impl AsRef<[PrefixExpansion]>,
 ) -> impl Iterator<Item = Box<[u8]>> {
     let expansions = prefix_expansions.as_ref();
@@ -251,7 +252,7 @@ pub fn generate_key_with_prefix(
     assert!(
         expansions
             .iter()
-            .all(|expand| { expand.base_index < base_key_len }),
+            .all(|expand| { expand.base_index < KEY_LENGTH }),
         "the prefix expansion index must be less than `base_key_len`."
     );
     assert!(
@@ -277,7 +278,7 @@ pub fn generate_key_with_prefix(
         .iter()
         .map(|expand| expand.expanded_length - 1)
         .sum::<usize>()
-        + base_key_len;
+        + KEY_LENGTH;
     let full_key_template = vec![u8::MIN; full_key_len].into_boxed_slice();
 
     fn apply_expansions_to_key(
@@ -307,6 +308,6 @@ pub fn generate_key_with_prefix(
         new_key
     }
 
-    generate_key_fixed_length(base_key_len, value_stops)
+    generate_key_fixed_length(level_widths)
         .map(move |key| apply_expansions_to_key(&key, &full_key_template, &sorted_expansions))
 }

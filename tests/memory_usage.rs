@@ -60,11 +60,9 @@ fn test_heap(_profiler: &dhat::Profiler, f: impl FnOnce(dhat::HeapStats)) {
 #[test]
 #[cfg(not(miri))]
 fn test_memory_usage_of_skewed_tree() {
-    #[cfg(not(miri))]
+    // TODO(#1): Increase this back to `u8::MAX` after updating to an iterative
+    // insert algorithm.
     const KEY_LENGTH_LIMIT: usize = (u8::MAX / 2) as usize;
-
-    #[cfg(miri)]
-    const KEY_LENGTH_LIMIT: usize = 16usize;
 
     let prof = get_profiler("test_memory_usage_of_skewed_tree");
 
