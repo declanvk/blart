@@ -14,7 +14,7 @@ fn test_memory_usage() {
     const PREFIX_EXPANSIONS: [PrefixExpansion; 2] = [
         PrefixExpansion {
             base_index: 0,
-            expanded_length: 3,
+            expanded_length: 9,
         },
         PrefixExpansion {
             base_index: 2,
@@ -55,8 +55,8 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_blocks, 0);
         dhat::assert_eq!(stats.curr_bytes, 0);
 
-        dhat::assert_eq!(stats.max_blocks, 351);
-        dhat::assert_eq!(stats.max_bytes, 126264);
+        dhat::assert_eq!(stats.max_blocks, 359);
+        dhat::assert_eq!(stats.max_bytes, 126392);
 
         let num_keys = KEY_LEVEL_WIDTH
             .iter()
