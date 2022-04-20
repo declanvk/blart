@@ -34,8 +34,8 @@ impl<P> TaggedPointer<P> {
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
     //
-    // We can take a raw pointer here because we do not derefence the pointer in the body of the
-    // function.
+    // The API can take a raw pointer here because it does not derefence the pointer in the body of
+    // the function.
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(pointer: *mut P) -> Option<TaggedPointer<P>> {
         if pointer.is_null() {

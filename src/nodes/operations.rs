@@ -32,8 +32,7 @@ pub unsafe fn search_unchecked<V>(
             return None;
         }
 
-        // Since the prefix matched, we need to advance the depth by the size
-        // of the prefix
+        // Since the prefix matched, advance the depth by the size of the prefix
         *current_depth += header.prefix_size();
 
         let next_key_fragment = if *current_depth < key.len() {
