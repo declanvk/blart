@@ -459,7 +459,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
             // lifetime of the `inner_node` variable. By the safety requirements of the
             // `deallocate_tree` function, no other mutation of this node can happen while
             // this iterator is live.
-            let iter = unsafe { inner_node.into_iter() };
+            let iter = unsafe { inner_node.iter() };
             stack.extend(iter.map(|(_, child)| child));
         }
         // SAFETY: The single call per node requirement is enforced by the safety
@@ -504,7 +504,7 @@ pub unsafe fn minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<Lea
         // SAFETY: The iterator is limited to the lifetime of this function call and
         // does not escape. No other code mutates the referenced node, guaranteed by the
         // `minimum_unchecked` safey requirements and the reference.
-        let mut iter = unsafe { inner_node.into_iter() };
+        let mut iter = unsafe { inner_node.iter() };
         Some(iter.next()?.1)
     }
 
@@ -549,7 +549,7 @@ pub unsafe fn maximum_unchecked<V>(root: OpaqueNodePtr<V>) -> Option<NodePtr<Lea
         // SAFETY: The iterator is limited to the lifetime of this function call and
         // does not escape. No other code mutates the referenced node, guaranteed by the
         // `minimum_unchecked` safey requirements and the reference.
-        let iter = unsafe { inner_node.into_iter() };
+        let iter = unsafe { inner_node.iter() };
         Some(iter.last()?.1)
     }
 
@@ -625,7 +625,7 @@ impl<V> TrieRangeFullIter<V> {
         // pointers. The safety requirements on the `TrieRangeFullIter` type ensure that
         // no other mutation of the tree happens while the iterator is live.
         self.node_iters
-            .push_front(unsafe { inner.as_ref().into_iter().into() })
+            .push_front(unsafe { inner.as_ref().iter().into() })
     }
 
     fn update_iters_back<N: InnerNode<Value = V>>(&mut self, inner: NodePtr<N>) {
@@ -634,7 +634,7 @@ impl<V> TrieRangeFullIter<V> {
         // pointers. The safety requirements on the `TrieRangeFullIter` type ensure that
         // no other mutation of the tree happens while the iterator is live.
         self.node_iters
-            .push_back(unsafe { inner.as_ref().into_iter().into() })
+            .push_back(unsafe { inner.as_ref().iter().into() })
     }
 
     fn leaf_to_item(node: NodePtr<LeafNode<V>>) -> (*const [u8], *const V) {
