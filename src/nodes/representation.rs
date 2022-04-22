@@ -456,7 +456,7 @@ pub trait InnerNode: Node {
     /// The iterator type does not carry any lifetime, so the caller of this
     /// function must enforce that the lifetime of the iterator does not overlap
     /// with any mutating operations on the node.
-    unsafe fn into_iter(&self) -> Self::Iter;
+    unsafe fn iter(&self) -> Self::Iter;
 }
 
 /// Node type that has a compact representation for key bytes and children
@@ -644,7 +644,7 @@ impl<V> InnerNode for InnerNode4<V> {
         &mut self.header
     }
 
-    unsafe fn into_iter(&self) -> Self::Iter {
+    unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `into_iter` function match the `new`
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
@@ -684,7 +684,7 @@ impl<V> InnerNode for InnerNode16<V> {
         &mut self.header
     }
 
-    unsafe fn into_iter(&self) -> Self::Iter {
+    unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `into_iter` function match the `new`
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
@@ -853,7 +853,7 @@ impl<V> InnerNode for InnerNode48<V> {
         &mut self.header
     }
 
-    unsafe fn into_iter(&self) -> Self::Iter {
+    unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `into_iter` function match the `new`
         // function
         unsafe { InnerNode48Iter::new(self) }
@@ -931,7 +931,7 @@ impl<V> InnerNode for InnerNode256<V> {
         &mut self.header
     }
 
-    unsafe fn into_iter(&self) -> Self::Iter {
+    unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `into_iter` function match the `new`
         // function
         unsafe { InnerNode256Iter::new(self) }
