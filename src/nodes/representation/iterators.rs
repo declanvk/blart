@@ -36,8 +36,8 @@ impl<V> InnerNodeCompressedIter<V> {
         //        the value is known to be initialized.
         let (keys_start, child_pointers_start) = unsafe {
             (
-                NonNull::new_unchecked(MaybeUninit::as_ptr(&node.keys[0]) as *mut _),
-                NonNull::new_unchecked(MaybeUninit::as_ptr(&node.child_pointers[0]) as *mut _),
+                NonNull::new_unchecked(MaybeUninit::slice_as_ptr(&node.keys) as *mut _),
+                NonNull::new_unchecked(MaybeUninit::slice_as_ptr(&node.child_pointers) as *mut _),
             )
         };
 
@@ -75,7 +75,7 @@ impl<V> InnerNodeCompressedIter<V> {
     /// The remaining number of (key, child_pointer) elements in the
     /// iterator.
     fn len(&self) -> usize {
-        self.keys_end.as_ptr() as usize - self.keys_start.as_ptr() as usize
+        self.keys_end.as_ptr().addr() - self.keys_start.as_ptr().addr()
     }
 
     /// Save the value of the iterator start pointers, then increment them.
@@ -287,8 +287,8 @@ impl<V> Iterator for InnerNode48Iter<V> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let max_len = (self.child_indices_range.end.as_ptr() as usize
-            - self.child_indices_range.start.as_ptr() as usize)
+        let max_len = (self.child_indices_range.end.as_ptr().addr()
+            - self.child_indices_range.start.as_ptr().addr())
             / mem::size_of::<RestrictedNodeIndex<48>>();
 
         (0, Some(max_len))

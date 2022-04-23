@@ -79,10 +79,10 @@ fn node_alignment() {
     let n48 = InnerNode4::<()>::empty();
     let n256 = InnerNode4::<()>::empty();
 
-    let n4_ptr = &n4 as *const _ as usize;
-    let n16_ptr = &n16 as *const _ as usize;
-    let n48_ptr = &n48 as *const _ as usize;
-    let n256_ptr = &n256 as *const _ as usize;
+    let n4_ptr = (&n4 as *const InnerNode4<()>).addr();
+    let n16_ptr = (&n16 as *const InnerNode4<()>).addr();
+    let n48_ptr = (&n48 as *const InnerNode4<()>).addr();
+    let n256_ptr = (&n256 as *const InnerNode4<()>).addr();
 
     // Ensure that there are 3 bits of unused space in the node pointer because of
     // the alignment.

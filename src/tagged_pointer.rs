@@ -8,11 +8,11 @@
 //! pointed-to type, so that it can store several bits of information. For a
 //! type with alignment `A`, the number of available bits is `log_2(A)`.
 
-use std::{fmt, marker::PhantomData, mem::align_of, num::NonZeroUsize, ptr::NonNull};
+use std::{fmt, mem::align_of, num::NonZeroUsize, ptr::NonNull};
 
 /// A non-null pointer type which carries several bits of metadata.
 #[repr(transparent)]
-pub struct TaggedPointer<P>(NonZeroUsize, PhantomData<NonNull<P>>);
+pub struct TaggedPointer<P>(NonNull<P>);
 
 impl<P> TaggedPointer<P> {
     /// The ABI-required minimum alignment of the `P` type.
@@ -58,20 +58,20 @@ impl<P> TaggedPointer<P> {
     ///
     ///  - The `pointer` value must not be null.
     pub unsafe fn new_unchecked(pointer: *mut P) -> TaggedPointer<P> {
-        let ptr_val = pointer as usize;
+        // SAFETY: The non-zero safety requirement is defered to the caller of this
+        // function, who must provide a non-null (non-zero) pointer. This
+        // assumes that null is always a zero value.
+        let unchecked_ptr = unsafe { NonNull::new_unchecked(pointer) };
+
+        let ptr_addr = unchecked_ptr.addr();
+
         // Double-check that there are no existing bits stored in the data-carrying
         // positions
-        assert_eq!(ptr_val & Self::DATA_MASK, 0);
-        // store the pointer value stripped of any values in the data-carrying positions
-        let stripped_ptr = ptr_val & Self::POINTER_MASK;
+        assert_eq!(ptr_addr.get() & Self::DATA_MASK, 0);
 
-        TaggedPointer(
-            // SAFETY: The non-zero safety requirement is defered to the caller of this function,
-            // who must provide a non-null (non-zero) pointer. This assumes that null is always a
-            // zero value.
-            unsafe { NonZeroUsize::new_unchecked(stripped_ptr) },
-            PhantomData,
-        )
+        // After the assert we know that the pointer has no bits set in the lowest
+        // couple bits.
+        TaggedPointer(unchecked_ptr)
     }
 
     /// Create a new tagged pointer and immediately set data on it.
@@ -93,14 +93,19 @@ impl<P> TaggedPointer<P> {
     ///
     /// This pointer is guaranteed to be non-null.
     pub fn to_ptr(self) -> *mut P {
-        let ptr_val = self.0.get() & Self::POINTER_MASK;
-
-        ptr_val as *mut _
+        self.0
+            .map_addr(|ptr_addr| {
+                // SAFETY: The result is guaranteed to be non-zero because this tagged pointer
+                // was created with the same non-zero value.
+                unsafe { NonZeroUsize::new_unchecked(ptr_addr.get() & Self::POINTER_MASK) }
+            })
+            .as_ptr()
     }
 
     /// Consume this tagged pointer and produce the data it carries.
     pub fn to_data(self) -> usize {
-        self.0.get() & Self::DATA_MASK
+        let ptr_addr = self.0.addr();
+        ptr_addr.get() & Self::DATA_MASK
     }
 
     /// Update the data this tagged pointer carries to a new value.
@@ -116,11 +121,15 @@ impl<P> TaggedPointer<P> {
         );
         let data = data & Self::DATA_MASK;
 
-        // clear the data bits and then write the new data
-        // SAFETY: This value will always be non-zero because the upper bits (from
-        // POINTER_MASK) will always be non-zero. This a property of the type and its
-        // construction.
-        self.0 = unsafe { NonZeroUsize::new_unchecked((self.0.get() & Self::POINTER_MASK) | data) };
+        self.0 = self.0.map_addr(|ptr_addr| {
+            let new_addr = (ptr_addr.get() & Self::POINTER_MASK) | data;
+
+            // clear the data bits and then write the new data
+            // SAFETY: This value will always be non-zero because the upper bits (from
+            // POINTER_MASK) will always be non-zero. This a property of the type and its
+            // construction.
+            unsafe { NonZeroUsize::new_unchecked(new_addr) }
+        });
     }
 
     /// Casts to a [`TaggedPointer`] of another type.
@@ -187,23 +196,18 @@ impl<P> From<&mut P> for TaggedPointer<P> {
 impl<P> std::hash::Hash for TaggedPointer<P> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
-        self.1.hash(state);
     }
 }
 
 impl<P> Ord for TaggedPointer<P> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0).then(self.1.cmp(&other.1))
+        self.0.cmp(&other.0)
     }
 }
 
 impl<P> PartialOrd for TaggedPointer<P> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.0.partial_cmp(&other.0) {
-            Some(core::cmp::Ordering::Equal) => {},
-            ord => return ord,
-        }
-        self.1.partial_cmp(&other.1)
+        self.0.partial_cmp(&other.0)
     }
 }
 
@@ -211,13 +215,13 @@ impl<P> Eq for TaggedPointer<P> {}
 
 impl<P> PartialEq for TaggedPointer<P> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1
+        self.0 == other.0
     }
 }
 
 impl<P> Clone for TaggedPointer<P> {
     fn clone(&self) -> Self {
-        Self(self.0, self.1)
+        Self(self.0)
     }
 }
 
