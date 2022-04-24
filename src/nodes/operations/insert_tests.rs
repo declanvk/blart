@@ -47,10 +47,8 @@ fn insert_to_small_trees() {
 
 #[test]
 fn insert_into_left_skewed_tree_deallocate() {
-    // TODO(#1): Increase this back to `u8::MAX` after updating to an iterative
-    // insert algorithm.
     #[cfg(not(miri))]
-    const KEY_LENGTH_LIMIT: usize = (u8::MAX / 2) as usize;
+    const KEY_LENGTH_LIMIT: usize = u8::MAX as usize;
 
     #[cfg(miri)]
     const KEY_LENGTH_LIMIT: usize = 16usize;

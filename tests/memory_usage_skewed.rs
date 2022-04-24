@@ -8,9 +8,7 @@ fn test_memory_usage() {
     };
     use common::{get_profiler, test_heap};
 
-    // TODO(#1): Increase this back to `u8::MAX` after updating to an iterative
-    // insert algorithm.
-    const KEY_LENGTH_LIMIT: usize = (u8::MAX / 2) as usize;
+    const KEY_LENGTH_LIMIT: usize = u8::MAX as usize;
 
     let keys: Vec<_> = tests_common::generate_keys_skewed(KEY_LENGTH_LIMIT).collect();
 
@@ -43,8 +41,8 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_blocks, 0);
         dhat::assert_eq!(stats.curr_bytes, 0);
 
-        dhat::assert_eq!(stats.max_blocks, 255);
-        dhat::assert_eq!(stats.max_bytes, 12498);
+        dhat::assert_eq!(stats.max_blocks, 511);
+        dhat::assert_eq!(stats.max_bytes, 25170);
 
         let mean_blocks_per_key = (stats.max_blocks as f64) / (KEY_LENGTH_LIMIT as f64);
         let mean_bytes_per_key = (stats.max_bytes as f64) / (KEY_LENGTH_LIMIT as f64);

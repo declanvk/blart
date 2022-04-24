@@ -234,6 +234,48 @@ impl<V> OpaqueNodePtr<V> {
     pub fn node_type(self) -> NodeType {
         NodeType::from_u8(self.0.to_data().try_into().unwrap()).unwrap()
     }
+
+    /// Get a mutable reference to the header if the underlying node has a
+    /// header field, otherwise return `None`.
+    ///
+    /// # Safety
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
+    ///    'h is arbitrarily chosen and does not necessarily reflect the actual
+    ///    lifetime of the data. In particular, for the duration of this
+    ///    lifetime, the memory the pointer points to must not get accessed
+    ///    (read or written) through any other pointer.
+    pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header> {
+        let header_ptr = match self.node_type() {
+            NodeType::Node4 => {
+                let node_ptr = self.0.cast::<InnerNode4<V>>().unwrap().to_ptr();
+
+                ptr::addr_of_mut!((*node_ptr).header)
+            },
+            NodeType::Node16 => {
+                let node_ptr = self.0.cast::<InnerNode16<V>>().unwrap().to_ptr();
+
+                ptr::addr_of_mut!((*node_ptr).header)
+            },
+            NodeType::Node48 => {
+                let node_ptr = self.0.cast::<InnerNode48<V>>().unwrap().to_ptr();
+
+                ptr::addr_of_mut!((*node_ptr).header)
+            },
+            NodeType::Node256 => {
+                let node_ptr = self.0.cast::<InnerNode256<V>>().unwrap().to_ptr();
+
+                ptr::addr_of_mut!((*node_ptr).header)
+            },
+            NodeType::Leaf => {
+                return None;
+            },
+        };
+
+        // SAFETY: The pointer is properly aligned and points to a initialized instance
+        // of Header that is dereferenceable. The lifetime safety requirements are
+        // passed up to the caller of this function.
+        unsafe { header_ptr.as_mut() }
+    }
 }
 
 /// An enum that encapsulates pointers to every type of Node
@@ -425,7 +467,7 @@ pub trait Node: private::Sealed {
 /// Common methods implemented by all inner node.
 pub trait InnerNode: Node {
     /// The type of the next larger node type.
-    type GrownNode;
+    type GrownNode: InnerNode<Value = <Self as Node>::Value>;
 
     /// The type of the iterator over all children of the inner node
     type Iter: Iterator<Item = (u8, OpaqueNodePtr<<Self as Node>::Value>)>
@@ -915,7 +957,7 @@ impl<V> Node for InnerNode256<V> {
 }
 
 impl<V> InnerNode for InnerNode256<V> {
-    type GrownNode = !;
+    type GrownNode = Self;
     type Iter = InnerNode256Iter<V>;
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
