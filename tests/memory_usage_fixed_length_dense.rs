@@ -1,13 +1,13 @@
-#![feature(once_cell)]
-
 mod common;
-
-use blart::{deallocate_tree, insert_unchecked, search_unchecked, tests_common, LeafNode, NodePtr};
-use common::{get_profiler, test_heap};
 
 #[test]
 #[cfg(not(miri))]
 fn test_memory_usage() {
+    use blart::{
+        deallocate_tree, insert_unchecked, search_unchecked, tests_common, LeafNode, NodePtr,
+    };
+    use common::{get_profiler, test_heap};
+
     const KEY_LEVEL_WIDTH: [u8; 3] = [50, 1, 2];
 
     let keys: Vec<_> = tests_common::generate_key_fixed_length(KEY_LEVEL_WIDTH).collect();
