@@ -1,6 +1,5 @@
-use std::mem;
-
 use super::*;
+use std::mem;
 
 #[test]
 fn opaque_node_ptr_is_correct() {
@@ -119,6 +118,8 @@ fn node4_lookup() {
 #[test]
 fn node4_write_child() {
     let mut n = InnerNode4::empty();
+    assert!(!n.is_full());
+
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -141,6 +142,8 @@ fn node4_write_child() {
     assert_eq!(n.lookup_child(87), None);
     assert_eq!(n.lookup_child(u8::MIN), None);
     assert_eq!(n.lookup_child(u8::MAX), None);
+
+    assert!(n.is_full());
 }
 
 #[test]
@@ -233,6 +236,8 @@ fn node16_lookup() {
 fn node16_write_child() {
     let mut n = InnerNode16::empty();
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); 16];
+
+    assert!(!n.is_full());
     {
         let leaf_pointers = leaves
             .iter_mut()
@@ -250,6 +255,7 @@ fn node16_write_child() {
             );
         }
     }
+    assert!(n.is_full());
 }
 
 #[test]
@@ -337,6 +343,8 @@ fn node48_lookup() {
 fn node48_write_child() {
     let mut n = InnerNode48::empty();
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); 48];
+
+    assert!(!n.is_full());
     {
         let leaf_pointers = leaves
             .iter_mut()
@@ -354,6 +362,7 @@ fn node48_write_child() {
             );
         }
     }
+    assert!(n.is_full());
 }
 
 #[test]
@@ -448,6 +457,8 @@ fn node256_lookup() {
 fn node256_write_child() {
     let mut n = InnerNode256::empty();
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); 256];
+
+    assert!(!n.is_full());
     {
         let leaf_pointers = leaves
             .iter_mut()
@@ -465,6 +476,7 @@ fn node256_write_child() {
             );
         }
     }
+    assert!(n.is_full());
 }
 
 #[test]

@@ -164,6 +164,12 @@ impl<V> fmt::Debug for OpaqueNodePtr<V> {
     }
 }
 
+impl<V> fmt::Pointer for OpaqueNodePtr<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Pointer::fmt(&self.0, f)
+    }
+}
+
 impl<V> Eq for OpaqueNodePtr<V> {}
 
 impl<V> PartialEq for OpaqueNodePtr<V> {
@@ -389,6 +395,12 @@ impl<N: Node> fmt::Debug for NodePtr<N> {
     }
 }
 
+impl<N: Node> fmt::Pointer for NodePtr<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Pointer::fmt(&self.0, f)
+    }
+}
+
 pub(crate) mod private {
     /// This trait is used to seal other traits, such that they cannot be
     /// implemented outside of the crate.
@@ -445,7 +457,7 @@ pub trait InnerNode: Node {
 
     /// Returns true if this node has no more space to store children.
     fn is_full(&self) -> bool {
-        Self::TYPE.upper_capacity() >= self.header().num_children()
+        self.header().num_children() >= Self::TYPE.upper_capacity()
     }
 
     /// Create an iterator over all (key bytes, child pointers) in this inner
@@ -645,7 +657,7 @@ impl<V> InnerNode for InnerNode4<V> {
     }
 
     unsafe fn iter(&self) -> Self::Iter {
-        // SAFETY: The safety requirements on the `into_iter` function match the `new`
+        // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
     }
@@ -685,7 +697,7 @@ impl<V> InnerNode for InnerNode16<V> {
     }
 
     unsafe fn iter(&self) -> Self::Iter {
-        // SAFETY: The safety requirements on the `into_iter` function match the `new`
+        // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
     }
@@ -854,7 +866,7 @@ impl<V> InnerNode for InnerNode48<V> {
     }
 
     unsafe fn iter(&self) -> Self::Iter {
-        // SAFETY: The safety requirements on the `into_iter` function match the `new`
+        // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNode48Iter::new(self) }
     }
@@ -932,7 +944,7 @@ impl<V> InnerNode for InnerNode256<V> {
     }
 
     unsafe fn iter(&self) -> Self::Iter {
-        // SAFETY: The safety requirements on the `into_iter` function match the `new`
+        // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNode256Iter::new(self) }
     }
