@@ -1,10 +1,18 @@
-use crate::{Header, NodeType, OpaqueNodePtr};
-
-use super::{Visitable, Visitor};
+use crate::{
+    visitor::{Visitable, Visitor},
+    InnerNode, NodeType, OpaqueNodePtr,
+};
 use std::{
     fmt::Display,
     io::{self, Write},
 };
+
+/// Settings which custom the output of the [`DotPrinter`] visitor.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DotPrinterSettings {
+    /// Add node address to output in graphs
+    pub display_node_address: bool,
+}
 
 /// A visitor the the radix trie that will print the tree in "dot" notation.
 ///
@@ -13,12 +21,25 @@ use std::{
 pub struct DotPrinter<O: Write> {
     output: O,
     next_id: usize,
+    settings: DotPrinterSettings,
 }
 
 impl<O: Write> DotPrinter<O> {
     /// Write the dot-format of the given tree to the given output.
-    pub fn print_tree<V: Display>(output: O, tree: &OpaqueNodePtr<V>) -> io::Result<()> {
-        let mut visitor = DotPrinter { output, next_id: 0 };
+    ///
+    /// # Safety
+    ///  - For the duration of this function, the given node and all its
+    ///    children nodes must not get mutated.
+    pub unsafe fn print_tree<V: Display>(
+        output: O,
+        tree: &OpaqueNodePtr<V>,
+        settings: DotPrinterSettings,
+    ) -> io::Result<()> {
+        let mut visitor = DotPrinter {
+            output,
+            next_id: 0,
+            settings,
+        };
 
         visitor.output_prelude()?;
         let _ = tree.visit_with(&mut visitor)?;
@@ -40,25 +61,39 @@ impl<O: Write> DotPrinter<O> {
         new_id
     }
 
-    fn write_node<T: Display, IT: Iterator<Item = (u8, OpaqueNodePtr<T>)>>(
+    fn write_inner_node<T: Display, N: InnerNode<Value = T>>(
         &mut self,
-        node_type: NodeType,
-        header: &Header,
-        to_children: impl Fn() -> IT,
+        inner_node: &N,
     ) -> io::Result<usize> {
+        let header = inner_node.header();
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;
         // write header line
-        write!(
-            self.output,
-            "{{<h0> {:?} | {:?} | {:?}}} | {{",
-            node_type,
-            header.prefix_size(),
-            header.read_prefix()
-        )?;
-        // write child line
-        for (idx, (key_fragment, _)) in to_children().enumerate() {
+        if self.settings.display_node_address {
+            write!(
+                self.output,
+                "{{<h0> {:p}}}  | {{{:?} | {:?} | {:?}}} | {{",
+                inner_node as *const _,
+                N::TYPE,
+                header.prefix_size(),
+                header.read_prefix()
+            )?;
+        } else {
+            write!(
+                self.output,
+                "{{<h0> {:?} | {:?} | {:?}}} | {{",
+                N::TYPE,
+                header.prefix_size(),
+                header.read_prefix()
+            )?;
+        }
+
+        // SAFETY: The `child_it` does not live beyond the following loop and will not
+        // overlap with any mutating access or operation, which is guaranteed by the
+        // `print_tree` caller requirements.
+        let child_it = unsafe { inner_node.iter() };
+        for (idx, (key_fragment, _)) in child_it.enumerate() {
             if idx == 0 {
                 write!(self.output, "<c{idx}> {key_fragment}")?;
             } else {
@@ -67,9 +102,11 @@ impl<O: Write> DotPrinter<O> {
         }
         writeln!(self.output, "}}}}\"]")?;
 
-        // write all the edges
-
-        for (key_frag_id, (_, child)) in to_children().enumerate() {
+        // SAFETY: The `child_it` does not live beyond the following loop and will not
+        // overlap with any mutating access or operation, which is guaranteed by the
+        // `print_tree` caller requirements.
+        let child_it = unsafe { inner_node.iter() };
+        for (key_frag_id, (_, child)) in child_it.enumerate() {
             let child_id = child.visit_with(self)?;
 
             writeln!(self.output, "n{node_id}:c{key_frag_id} -> n{child_id}:h0")?;
@@ -91,35 +128,19 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
     }
 
     fn visit_node4(&mut self, t: &crate::InnerNode4<T>) -> Self::Output {
-        self.write_node(NodeType::Node4, &t.header, || {
-            // SAFETY: This iterator lives only for the lifetime of this function, which
-            // does not mutate the `InnerNode4` (guaranteed by reference).
-            unsafe { crate::InnerNodeCompressedIter::new(t) }
-        })
+        self.write_inner_node(t)
     }
 
     fn visit_node16(&mut self, t: &crate::InnerNode16<T>) -> Self::Output {
-        self.write_node(NodeType::Node16, &t.header, || {
-            // SAFETY: This iterator lives only for the lifetime of this function, which
-            // does not mutate the `InnerNode4` (guaranteed by reference).
-            unsafe { crate::InnerNodeCompressedIter::new(t) }
-        })
+        self.write_inner_node(t)
     }
 
     fn visit_node48(&mut self, t: &crate::InnerNode48<T>) -> Self::Output {
-        self.write_node(NodeType::Node48, &t.header, || {
-            // SAFETY: This iterator lives only for the lifetime of this function, which
-            // does not mutate the `InnerNode4` (guaranteed by reference).
-            unsafe { crate::InnerNode48Iter::new(t) }
-        })
+        self.write_inner_node(t)
     }
 
     fn visit_node256(&mut self, t: &crate::InnerNode256<T>) -> Self::Output {
-        self.write_node(NodeType::Node256, &t.header, || {
-            // SAFETY: This iterator lives only for the lifetime of this function, which
-            // does not mutate the `InnerNode4` (guaranteed by reference).
-            unsafe { crate::InnerNode256Iter::new(t) }
-        })
+        self.write_inner_node(t)
     }
 
     fn visit_leaf(&mut self, t: &crate::LeafNode<T>) -> Self::Output {
@@ -127,12 +148,22 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;
         // write header line
-        writeln!(
-            self.output,
-            "{{<h0> {:?}}} | {{{}}}}}\"]",
-            NodeType::Leaf,
-            t.value
-        )?;
+        if self.settings.display_node_address {
+            writeln!(
+                self.output,
+                "{{<h0> {:p}}} | {{ {:?}}} | {{{}}}}}\"]",
+                t as *const _,
+                NodeType::Leaf,
+                t.value
+            )?;
+        } else {
+            writeln!(
+                self.output,
+                "{{<h0> {:?}}} | {{{}}}}}\"]",
+                NodeType::Leaf,
+                t.value
+            )?;
+        }
 
         Ok(node_id)
     }

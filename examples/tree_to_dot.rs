@@ -1,6 +1,8 @@
 use argh::FromArgs;
 use blart::{
-    deallocate_tree, insert_unchecked, visitor::DotPrinter, LeafNode, NodePtr, OpaqueNodePtr,
+    deallocate_tree, insert_unchecked,
+    visitor::{DotPrinter, DotPrinterSettings},
+    LeafNode, NodePtr, OpaqueNodePtr,
 };
 use std::{
     error::Error,
@@ -85,7 +87,16 @@ fn make_tree(iter: impl Iterator<Item = Box<[u8]>>) -> Option<OpaqueNodePtr<usiz
 }
 
 fn write_tree(output: &mut dyn Write, tree: &OpaqueNodePtr<usize>) -> Result<(), Box<dyn Error>> {
-    DotPrinter::print_tree(output, &tree)?;
+    // SAFETY: There are no concurrent mutation to the tree node or its children
+    unsafe {
+        DotPrinter::print_tree(
+            output,
+            &tree,
+            DotPrinterSettings {
+                display_node_address: false,
+            },
+        )?
+    };
 
     Ok(())
 }
