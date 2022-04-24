@@ -1,13 +1,13 @@
-#![feature(once_cell)]
-
 mod common;
-
-use blart::{deallocate_tree, insert_unchecked, search_unchecked, tests_common, LeafNode, NodePtr};
-use common::{get_profiler, test_heap};
 
 #[test]
 #[cfg(not(miri))]
 fn test_memory_usage() {
+    use blart::{
+        deallocate_tree, insert_unchecked, search_unchecked, tests_common, LeafNode, NodePtr,
+    };
+    use common::{get_profiler, test_heap};
+
     // TODO(#1): Increase this back to `u8::MAX` after updating to an iterative
     // insert algorithm.
     const KEY_LENGTH_LIMIT: usize = (u8::MAX / 2) as usize;

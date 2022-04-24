@@ -1,14 +1,13 @@
-#![feature(once_cell)]
-
 mod common;
-
-use blart::{deallocate_tree, insert_unchecked, search_unchecked, tests_common, LeafNode, NodePtr};
-use common::{get_profiler, test_heap};
 
 #[test]
 #[cfg(not(miri))]
 fn test_memory_usage() {
-    use blart::tests_common::PrefixExpansion;
+    use blart::{
+        deallocate_tree, insert_unchecked, search_unchecked, tests_common,
+        tests_common::PrefixExpansion, LeafNode, NodePtr,
+    };
+    use common::{get_profiler, test_heap};
 
     const KEY_LEVEL_WIDTH: [u8; 3] = [6, 6, 5];
     const PREFIX_EXPANSIONS: [PrefixExpansion; 2] = [
