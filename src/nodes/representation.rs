@@ -2,8 +2,8 @@
 
 pub use self::iterators::*;
 use crate::tagged_pointer::TaggedPointer;
-use smallvec::SmallVec;
 use std::{
+    cmp,
     error::Error,
     fmt,
     marker::PhantomData,
@@ -76,7 +76,9 @@ pub struct Header {
     ///
     /// Only the first `prefix_size` bytes are guaranteed to be initialized.
     // size NUM_PREFIX_BYTES, alignment 1
-    pub prefix: SmallVec<[u8; NUM_PREFIX_BYTES]>,
+    pub prefix: [u8; NUM_PREFIX_BYTES],
+    /// Number of initialized bytes in the prefix
+    pub prefix_size: usize,
 }
 
 impl Header {
@@ -84,7 +86,8 @@ impl Header {
     pub fn empty() -> Self {
         Header {
             num_children: 0,
-            prefix: SmallVec::new(),
+            prefix: [0; NUM_PREFIX_BYTES],
+            prefix_size: 0,
         }
     }
 
@@ -97,7 +100,17 @@ impl Header {
     /// doesn't present an issue to the radix tree operation (lookup, insert,
     /// etc) because the full key is always stored in the leaf nodes.
     pub fn write_prefix(&mut self, new_bytes: &[u8]) {
-        self.prefix.extend(new_bytes.iter().copied());
+        let prefix_size = self.prefix_size();
+
+        if prefix_size < NUM_PREFIX_BYTES {
+            // Only write to actual prefix if there is space
+            let remaining_prefix_capacity = NUM_PREFIX_BYTES - prefix_size;
+            let common_length = cmp::min(remaining_prefix_capacity, new_bytes.len());
+            self.prefix[prefix_size..(prefix_size + common_length)]
+                .copy_from_slice(&new_bytes[..common_length]);
+        }
+
+        self.prefix_size += new_bytes.len();
     }
 
     /// Remove the specified number of bytes from the start of the prefix.
@@ -107,7 +120,13 @@ impl Header {
     ///  - Panics if the number of bytes to remove is greater than or equal to
     ///    the prefix size
     pub fn ltrim_prefix(&mut self, num_bytes: usize) {
-        self.prefix.drain(..num_bytes).for_each(|_| ());
+        assert!(num_bytes <= self.prefix_size);
+        if num_bytes < NUM_PREFIX_BYTES {
+            self.prefix.copy_within(num_bytes.., 0);
+        } else {
+            self.prefix.fill(0);
+        }
+        self.prefix_size -= num_bytes;
     }
 
     /// Read the initialized portion of the prefix present in the header.
@@ -115,22 +134,29 @@ impl Header {
     /// The `prefix_size` can be larger than the `read_prefix().len()` because
     /// only [`NUM_PREFIX_BYTES`] are stored.
     pub fn read_prefix(&self) -> &[u8] {
-        self.prefix.as_ref()
+        &self.prefix[..cmp::min(self.prefix_size(), NUM_PREFIX_BYTES)]
     }
 
     /// Return the number of bytes in the prefix.
     pub fn prefix_size(&self) -> usize {
-        self.prefix.len()
+        usize::from(self.prefix_size)
     }
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
     pub fn match_prefix(&self, possible_key: &[u8]) -> usize {
-        self.read_prefix()
+        let num_bytes_matched = self
+            .read_prefix()
             .iter()
             .zip(possible_key)
             .take_while(|(a, b)| **a == **b)
-            .count()
+            .count();
+
+        if num_bytes_matched == NUM_PREFIX_BYTES {
+            cmp::min(possible_key.len(), self.prefix_size())
+        } else {
+            num_bytes_matched
+        }
     }
 
     /// Return the number of children of this node.

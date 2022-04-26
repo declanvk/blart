@@ -3,13 +3,7 @@
 use crate::{
     ConcreteNodePtr, InnerNode, InnerNode4, InnerNodeIter, LeafNode, NodePtr, OpaqueNodePtr,
 };
-use std::{
-    collections::VecDeque,
-    error::Error,
-    fmt::{self, Display},
-    iter,
-    ops::ControlFlow,
-};
+use std::{collections::VecDeque, error::Error, fmt::Display, iter, ops::ControlFlow};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -140,29 +134,6 @@ pub unsafe fn insert_unchecked<V>(
         /// If the inner node is full, it will be grown to the next largest
         /// size.
         IntoExisting { inner_node_ptr: OpaqueNodePtr<V> },
-    }
-
-    impl<V> fmt::Debug for InsertSearchResultType<V> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Self::MismatchPrefix {
-                    matched_prefix_size,
-                    mismatched_inner_node_ptr,
-                } => f
-                    .debug_struct("MismatchPrefix")
-                    .field("matched_prefix_size", matched_prefix_size)
-                    .field("mismatched_inner_node_ptr", mismatched_inner_node_ptr)
-                    .finish(),
-                Self::SplitLeaf { leaf_node_ptr } => f
-                    .debug_struct("SplitLeaf")
-                    .field("leaf_node_ptr", leaf_node_ptr)
-                    .finish(),
-                Self::IntoExisting { inner_node_ptr } => f
-                    .debug_struct("IntoExisting")
-                    .field("inner_node_ptr", inner_node_ptr)
-                    .finish(),
-            }
-        }
     }
 
     /// Perform an iterative search for the insert point for the given key,
