@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["blart"] = [{"text":"impl&lt;P&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"struct\" href=\"blart/tagged_pointer/struct.TaggedPointer.html\" title=\"struct blart::tagged_pointer::TaggedPointer\">TaggedPointer</a>&lt;P&gt;","synthetic":false,"types":["blart::tagged_pointer::TaggedPointer"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

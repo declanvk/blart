@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["AlignmentCastError","The error type returned when a [`TaggedPointer::cast`] fails because the alignment of the input type and the alignment of the output type are different."],["TaggedPointer","A non-null pointer type which carries several bits of metadata."]]});
