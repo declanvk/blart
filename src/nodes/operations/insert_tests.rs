@@ -146,3 +146,29 @@ fn insert_key_with_long_prefix_then_split() {
 
     unsafe { deallocate_tree(tree) }
 }
+
+#[test]
+fn insert_split_prefix_at_implicit_byte() {
+    const KEYS: [[u8; 12]; 3] = [
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 51, 51],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 43, 0, 0],
+    ];
+
+    let mut keys = KEYS.iter().map(|k| Box::<[u8]>::from(&k[..]));
+
+    let mut current_root =
+        NodePtr::allocate_node(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
+
+    for (idx, key) in keys.enumerate() {
+        current_root = unsafe { insert_unchecked(current_root, key, idx + 1).unwrap() };
+    }
+
+    for (value, key) in KEYS.iter().map(|k| &k[..]).enumerate() {
+        let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+
+        assert_eq!(search_result.unwrap().read().value, value);
+    }
+
+    unsafe { deallocate_tree(current_root) };
+}
