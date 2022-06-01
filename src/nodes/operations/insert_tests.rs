@@ -172,3 +172,44 @@ fn insert_split_prefix_at_implicit_byte() {
 
     unsafe { deallocate_tree(current_root) };
 }
+
+#[test]
+fn insert_fails_new_key_prefix_of_existing_entry() {
+    let mut current_root =
+        NodePtr::allocate_node(LeafNode::new(Box::<[u8]>::from(&[1, 2, 3, 4][..]), 0)).to_opaque();
+    current_root = unsafe {
+        insert_unchecked(current_root, Box::<[u8]>::from(&[5, 6, 7, 8, 9, 10][..]), 1).unwrap()
+    };
+
+    let insert_result =
+        unsafe { insert_unchecked(current_root, Box::<[u8]>::from(&[5, 6, 7, 8][..]), 2) };
+
+    let insert_err =
+        insert_result.expect_err("expected insert call to fail because key was prefix");
+    assert_eq!(
+        insert_err,
+        InsertError::PrefixKey(Box::<[u8]>::from(&[5, 6, 7, 8][..]))
+    );
+
+    unsafe { deallocate_tree(current_root) };
+}
+
+#[test]
+fn insert_fails_existing_key_prefixed() {
+    let mut current_root =
+        NodePtr::allocate_node(LeafNode::new(Box::<[u8]>::from(&[1, 2, 3, 4][..]), 0)).to_opaque();
+    current_root =
+        unsafe { insert_unchecked(current_root, Box::<[u8]>::from(&[5, 6, 7, 8][..]), 1).unwrap() };
+
+    let insert_result =
+        unsafe { insert_unchecked(current_root, Box::<[u8]>::from(&[5, 6, 7, 8, 9, 10][..]), 2) };
+
+    let insert_err =
+        insert_result.expect_err("expected insert call to fail because existing key was prefix");
+    assert_eq!(
+        insert_err,
+        InsertError::PrefixKey(Box::<[u8]>::from(&[5, 6, 7, 8, 9, 10][..]))
+    );
+
+    unsafe { deallocate_tree(current_root) };
+}
