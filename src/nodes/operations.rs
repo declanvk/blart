@@ -11,115 +11,30 @@ use std::{
     ops::ControlFlow,
 };
 
-/// Search in the given tree for the value stored with the given key.
-///
-/// # Safety
-///
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
-pub unsafe fn search_unchecked<V>(
-    root: OpaqueNodePtr<V>,
-    key: &[u8],
-) -> Option<NodePtr<LeafNode<V>>> {
-    fn test_prefix_continue_search<N: InnerNode>(
-        inner_ptr: NodePtr<N>,
-        key: &[u8],
-        current_depth: &mut usize,
-    ) -> Option<OpaqueNodePtr<N::Value>> {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `search_unchecked` function.
-        let inner_node = unsafe { inner_ptr.as_ref() };
-        let header = inner_node.header();
-        if header.match_prefix(&key[*current_depth..]) != header.prefix_size() {
-            return None;
-        }
+mod lookup {
+    use super::*;
 
-        // Since the prefix matched, advance the depth by the size of the prefix
-        *current_depth += header.prefix_size();
-
-        let next_key_fragment = if *current_depth < key.len() {
-            key[*current_depth]
-        } else {
-            return None;
-        };
-
-        inner_node.lookup_child(next_key_fragment)
-    }
-
-    let mut current_node = root;
-    let mut current_depth = 0;
-
-    loop {
-        let next_child_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => {
-                test_prefix_continue_search(inner_ptr, key, &mut current_depth)
-            },
-            ConcreteNodePtr::Node16(inner_ptr) => {
-                test_prefix_continue_search(inner_ptr, key, &mut current_depth)
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => {
-                test_prefix_continue_search(inner_ptr, key, &mut current_depth)
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => {
-                test_prefix_continue_search(inner_ptr, key, &mut current_depth)
-            },
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                let leaf_node = leaf_node_ptr.read();
-
-                // Specifically we are matching the leaf node stored key against the full search
-                // key to confirm that it is the right value.
-                if leaf_node.matches_key(key) {
-                    return Some(leaf_node_ptr);
-                } else {
-                    return None;
-                }
-            },
-        };
-
-        current_node = next_child_node?;
-        // Increment by a single byte
-        current_depth += 1;
-    }
-}
-
-/// Insert the given key-value pair into the tree.
-///
-/// Returns either a pointer to the new tree root or an error.
-///
-/// # Errors
-///
-///   - Returns a [`InsertError::EmptyKey`] if the given key is an empty array.
-///   - Returns a [`InsertError::PrefixKey`] if the given key is a prefix of
-///     another key that exists in the trie. Or if the given key is prefixed by
-///     an existing key in the trie.
-///
-/// # Safety
-///
-///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlyin
-///  - This function cannot be called concurrently to any reads or writes of the
-///    `root` node or any child node of `root`. This function will arbitrarily
-///    read or write to any child in the given tree.
-pub unsafe fn insert_unchecked<V>(
-    root: OpaqueNodePtr<V>,
-    key: Box<[u8]>,
-    value: V,
-) -> Result<OpaqueNodePtr<V>, InsertError> {
     /// This struct contains the results from searching for an insert point for
     /// a new node in the tree.
     ///
     /// It contains all the relevant information needed to perform the insert
     /// and update the tree.
-    struct InsertSearchResult<V> {
-        parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<V>, u8)>,
-        insert_type: InsertSearchResultType<V>,
-        key_bytes_used: usize,
+    pub struct InsertSearchResult<V> {
+        /// The parent node pointer and key byte that points to the main node
+        /// insert point.
+        ///
+        /// In the case that the root node is the main insert point, this will
+        /// have a `None` value.
+        pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<V>, u8)>,
+        /// The type of operation that needs to be performed to insert the key
+        pub(crate) insert_type: InsertSearchResultType<V>,
+        /// The number of bytes that were read from the key to find the insert
+        /// point.
+        pub(crate) key_bytes_used: usize,
     }
 
     /// The type of insert
-    enum InsertSearchResultType<V> {
+    pub enum InsertSearchResultType<V> {
         /// An insert where an inner node had a differing prefix from the key.
         ///
         /// This insert type will create a new inner node with the portion of
@@ -167,7 +82,7 @@ pub unsafe fn insert_unchecked<V>(
 
     /// Perform an iterative search for the insert point for the given key,
     /// starting at the given root node.
-    fn search_for_insert_point<V>(
+    pub fn search_for_insert_point<V>(
         root: OpaqueNodePtr<V>,
         key: &[u8],
     ) -> Result<InsertSearchResult<V>, InsertError> {
@@ -264,7 +179,60 @@ pub unsafe fn insert_unchecked<V>(
             };
         }
     }
+}
 
+/// Search in the given tree for the value stored with the given key.
+///
+/// # Safety
+///
+///  - This function cannot be called concurrently with any mutating operation
+///    on `root` or any child node of `root`. This function will arbitrarily
+///    read to any child in the given tree.
+pub unsafe fn search_unchecked<V>(
+    root: OpaqueNodePtr<V>,
+    key: &[u8],
+) -> Option<NodePtr<LeafNode<V>>> {
+    let lookup::InsertSearchResult { insert_type, .. } =
+        lookup::search_for_insert_point(root, key).ok()?;
+
+    match insert_type {
+        lookup::InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
+            let leaf_node = leaf_node_ptr.read();
+
+            // Specifically we are matching the leaf node stored key against the full search
+            // key to confirm that it is the right value.
+            if leaf_node.matches_key(key) {
+                Some(leaf_node_ptr)
+            } else {
+                None
+            }
+        },
+        _ => None,
+    }
+}
+
+/// Insert the given key-value pair into the tree.
+///
+/// Returns either a pointer to the new tree root or an error.
+///
+/// # Errors
+///
+///   - Returns a [`InsertError::EmptyKey`] if the given key is an empty array.
+///   - Returns a [`InsertError::PrefixKey`] if the given key is a prefix of
+///     another key that exists in the trie. Or if the given key is prefixed by
+///     an existing key in the trie.
+///
+/// # Safety
+///
+///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlyin
+///  - This function cannot be called concurrently to any reads or writes of the
+///    `root` node or any child node of `root`. This function will arbitrarily
+///    read or write to any child in the given tree.
+pub unsafe fn insert_unchecked<V>(
+    root: OpaqueNodePtr<V>,
+    key: Box<[u8]>,
+    value: V,
+) -> Result<OpaqueNodePtr<V>, InsertError> {
     fn write_new_child_in_existing_node<V>(
         inner_node_ptr: OpaqueNodePtr<V>,
         new_leaf_node: LeafNode<V>,
@@ -275,8 +243,7 @@ pub unsafe fn insert_unchecked<V>(
             new_leaf_node: LeafNode<V>,
             key_bytes_used: usize,
         ) -> OpaqueNodePtr<V> {
-            // SAFETY:
-            // You must enforce Rust’s aliasing rules, since the returned lifetime
+            // SAFETY: You must enforce Rust’s aliasing rules, since the returned lifetime
             // 'a is arbitrarily chosen and does not necessarily reflect the actual lifetime
             // of the node. In particular, for the duration of this lifetime, the node the
             // pointer points to must not get accessed (read or written) through any other
@@ -365,14 +332,14 @@ pub unsafe fn insert_unchecked<V>(
         return Err(InsertError::EmptyKey);
     }
 
-    let InsertSearchResult {
+    let lookup::InsertSearchResult {
         parent_ptr_and_child_key_byte,
         insert_type,
         mut key_bytes_used,
-    } = search_for_insert_point(root, key.as_ref())?;
+    } = lookup::search_for_insert_point(root, key.as_ref())?;
 
     let new_inner_node = match insert_type {
-        InsertSearchResultType::MismatchPrefix {
+        lookup::InsertSearchResultType::MismatchPrefix {
             matched_prefix_size,
             mismatched_inner_node_ptr,
         } => {
@@ -414,7 +381,7 @@ pub unsafe fn insert_unchecked<V>(
 
             NodePtr::allocate_node(new_n4).to_opaque()
         },
-        InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
+        lookup::InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
             let leaf_node = leaf_node_ptr.read();
 
             let mut new_n4 = InnerNode4::empty();
@@ -443,7 +410,7 @@ pub unsafe fn insert_unchecked<V>(
 
             NodePtr::allocate_node(new_n4).to_opaque()
         },
-        InsertSearchResultType::IntoExisting { inner_node_ptr } => {
+        lookup::InsertSearchResultType::IntoExisting { inner_node_ptr } => {
             write_new_child_in_existing_node(
                 inner_node_ptr,
                 LeafNode::new(key, value),
