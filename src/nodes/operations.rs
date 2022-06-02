@@ -386,10 +386,6 @@ pub unsafe fn insert_unchecked<V>(
             // prefix, implying that the header is present.
             let header = unsafe { mismatched_inner_node_ptr.header_mut().unwrap() };
 
-            // prefix mismatch, need to split prefix into two separate nodes and take the
-            // common prefix into a new parent node
-            let mut new_n4 = InnerNode4::empty();
-
             if (key_bytes_used + matched_prefix_size) >= key.len() {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key
@@ -400,6 +396,10 @@ pub unsafe fn insert_unchecked<V>(
             let new_leaf_key_byte = key[key_bytes_used + matched_prefix_size];
 
             let new_leaf_pointer = NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque();
+
+            // prefix mismatch, need to split prefix into two separate nodes and take the
+            // common prefix into a new parent node
+            let mut new_n4 = InnerNode4::empty();
 
             new_n4.write_child(
                 header.read_prefix()[matched_prefix_size],
