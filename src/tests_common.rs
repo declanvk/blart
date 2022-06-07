@@ -178,9 +178,13 @@ pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
     FixedLengthKeys::new(level_widths)
 }
 
+/// A single expansion of an existing existing that take an element at a
+/// specified index and copies it multiple times.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PrefixExpansion {
+    /// The index in an unspecified sequence that will be copied.
     pub base_index: usize,
+    /// The number of copies of the original element to create.
     pub expanded_length: usize,
 }
 
