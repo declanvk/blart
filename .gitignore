@@ -3,3 +3,6 @@ Cargo.lock
 
 # output from memory usage tess
 dhat-output/
+
+# fuzzing artifacts
+default.profraw

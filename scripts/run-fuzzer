@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+# This script must be run from the root directory of the `blart` git repository
+
+set -o errexit # make script exit when a command fails
+set -o nounset # make script exit when using undeclared variables
+set -o pipefail # make script exit when command fails in a pipe
+set -o xtrace # print a trace of all commands executed by script
+
+FUZZ_DURATION_SECS="${1:-3600}" # 3600 seconds = 1 hour, 14400 seconds = 4 hours
+NUM_FUZZ_WORKERS="${2:-$(nproc)}"
+FUZZ_TEST="fuzz_raw_api"
+BACKUP_FOLDER="/home/declan/backup-files/repos_github_declanvk_blart"
+
+echo "Starting fuzzing '${FUZZ_TEST}' for [${FUZZ_DURATION_SECS}] seconds using [${NUM_FUZZ_WORKERS}] jobs..."
+
+nice /home/declan/.cargo/bin/cargo +nightly fuzz run \
+    --sanitizer address --jobs "${NUM_FUZZ_WORKERS}" "${FUZZ_TEST}" \
+    -- -max_total_time="${FUZZ_DURATION_SECS}"
+
+echo "Finished fuzzing '${FUZZ_TEST}'. Attempt to minify the '${FUZZ_TEST}' corpus..."
+
+/home/declan/.cargo/bin/cargo +nightly fuzz cmin "${FUZZ_TEST}"
+
+echo "Finished minifying the '${FUZZ_TEST}' corpus. Updating the backup file for the corpus..."
+
+zip --quiet --recurse-paths "${BACKUP_FOLDER}/corpus-${FUZZ_TEST}.zip" "fuzz/corpus/${FUZZ_TEST}/"
+
+echo "Done"
