@@ -373,11 +373,11 @@ mod tests {
         assert_eq!(unsafe { *p5.to_ptr() }, 5);
 
         unsafe {
-            Box::from_raw(p1.to_ptr());
-            Box::from_raw(p2.to_ptr());
-            Box::from_raw(p3.to_ptr());
-            Box::from_raw(p4.to_ptr());
-            Box::from_raw(p5.to_ptr());
+            drop(Box::from_raw(p1.to_ptr()));
+            drop(Box::from_raw(p2.to_ptr()));
+            drop(Box::from_raw(p3.to_ptr()));
+            drop(Box::from_raw(p4.to_ptr()));
+            drop(Box::from_raw(p5.to_ptr()));
         }
     }
 
@@ -448,8 +448,8 @@ mod tests {
         assert!(p2.cast::<u8>().is_err());
 
         unsafe {
-            Box::from_raw(p1.to_ptr());
-            Box::from_raw(p2.to_ptr());
+            drop(Box::from_raw(p1.to_ptr()));
+            drop(Box::from_raw(p2.to_ptr()));
         }
     }
 }

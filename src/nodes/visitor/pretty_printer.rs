@@ -151,16 +151,18 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         if self.settings.display_node_address {
             writeln!(
                 self.output,
-                "{{<h0> {:p}}} | {{ {:?}}} | {{{}}}}}\"]",
+                "{{<h0> {:p}}} | {{{:?}}} | {{{:?}}} | {{{}}}}}\"]",
                 t as *const _,
                 NodeType::Leaf,
+                t.key,
                 t.value
             )?;
         } else {
             writeln!(
                 self.output,
-                "{{<h0> {:?}}} | {{{}}}}}\"]",
+                "{{<h0> {:?}}} | {{{:?}}} | {{{}}}}}\"]",
                 NodeType::Leaf,
+                t.key,
                 t.value
             )?;
         }

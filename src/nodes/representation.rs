@@ -364,7 +364,7 @@ impl<N: Node> NodePtr<N> {
     pub unsafe fn deallocate_node(node: Self) {
         // SAFETY: Covered by safety condition on functiom
         unsafe {
-            Box::from_raw(node.to_ptr());
+            drop(Box::from_raw(node.to_ptr()));
         }
     }
 
@@ -757,7 +757,7 @@ impl<V> InnerNode for InnerNode16<V> {
 }
 
 /// A restricted index only valid from 0 to LIMIT - 1.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct RestrictedNodeIndex<const LIMIT: u8>(u8);
 
