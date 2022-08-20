@@ -71,13 +71,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn make_tree(iter: impl Iterator<Item = Box<[u8]>>) -> Option<OpaqueNodePtr<usize>> {
-    let mut iter = iter.enumerate();
-    let (first_value, first_key) = iter.next()?;
+fn make_tree(mut iter: impl Iterator<Item = (Box<[u8]>, String)>) -> Option<OpaqueNodePtr<String>> {
+    let (first_key, first_value) = iter.next()?;
     let mut current_root =
         NodePtr::allocate_node(LeafNode::new(first_key, first_value)).to_opaque();
 
-    for (value, key) in iter {
+    for (key, value) in iter {
         // SAFETY: There are no other pointers to `current_root` node. There are no
         // concurrent reads or writes to the `current_root` node ongoing.
         current_root = unsafe { insert_unchecked(current_root, key, value).unwrap() };
@@ -86,7 +85,7 @@ fn make_tree(iter: impl Iterator<Item = Box<[u8]>>) -> Option<OpaqueNodePtr<usiz
     Some(current_root)
 }
 
-fn write_tree(output: &mut dyn Write, tree: &OpaqueNodePtr<usize>) -> Result<(), Box<dyn Error>> {
+fn write_tree(output: &mut dyn Write, tree: &OpaqueNodePtr<String>) -> Result<(), Box<dyn Error>> {
     // SAFETY: There are no concurrent mutation to the tree node or its children
     unsafe {
         DotPrinter::print_tree(
@@ -116,7 +115,7 @@ impl TreeShape {
         self,
         tree_size: usize,
         text_file_path: Option<PathBuf>,
-    ) -> Box<dyn Iterator<Item = Box<[u8]>>> {
+    ) -> Box<dyn Iterator<Item = (Box<[u8]>, String)>> {
         match self {
             TreeShape::LeftSkew => Box::new(TreeShape::generate_left_skew_keys(tree_size)),
             TreeShape::FullNode4 => Box::new(TreeShape::generate_full_keys(tree_size, 4)),
@@ -131,35 +130,51 @@ impl TreeShape {
                             .expect("file path not passed to 'from_text_file' tree shape"),
                     )
                     .expect("unable to open text file");
-                Box::new(TreeShape::read_keys_from_text_file(text_file))
+                Box::new(TreeShape::read_key_values_from_text_file(text_file))
             },
         }
     }
 
-    fn read_keys_from_text_file(text_file: File) -> impl Iterator<Item = Box<[u8]>> {
+    fn read_key_values_from_text_file(
+        text_file: File,
+    ) -> impl Iterator<Item = (Box<[u8]>, String)> {
         BufReader::new(text_file).lines().map(|line| {
             let line = line.expect("unable to read line");
-            line.split(",")
+            let entry_components = line.split(",").collect::<Vec<_>>();
+
+            let key = entry_components[..entry_components.len() - 1]
+                .iter()
                 .map(|num| u8::from_str(num.trim()))
                 .collect::<Result<Box<[u8]>, _>>()
-                .expect("unable to parse bytes")
+                .expect("unable to parse bytes");
+            let value = String::from(
+                entry_components
+                    .last()
+                    .copied()
+                    .expect("expected at least one component in line"),
+            );
+
+            (key, value)
         })
     }
 
-    fn generate_left_skew_keys(tree_size: usize) -> impl Iterator<Item = Box<[u8]>> {
-        (0..tree_size).map(|key_size| {
-            (0..key_size)
-                .map(|_| 1u8)
-                .chain(iter::once(u8::MAX))
-                .collect::<Vec<_>>()
-                .into_boxed_slice()
-        })
+    fn generate_left_skew_keys(tree_size: usize) -> impl Iterator<Item = (Box<[u8]>, String)> {
+        (0..tree_size)
+            .map(|key_size| {
+                (0..key_size)
+                    .map(|_| 1u8)
+                    .chain(iter::once(u8::MAX))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice()
+            })
+            .enumerate()
+            .map(|(value, key)| (key, value.to_string()))
     }
 
     fn generate_full_keys(
         tree_height: usize,
         node_width: usize,
-    ) -> impl Iterator<Item = Box<[u8]>> {
+    ) -> impl Iterator<Item = (Box<[u8]>, String)> {
         // tree size will be interpreted as the number of levels of all
         // InnerNode{node_width} with a last layer of leaves
         //
@@ -224,11 +239,15 @@ impl TreeShape {
             }
         }
 
-        Box::new(FullKeysIter {
-            tree_height,
-            node_width,
-            digit_stack: vec![0; tree_height],
-        })
+        Box::new(
+            FullKeysIter {
+                tree_height,
+                node_width,
+                digit_stack: vec![0; tree_height],
+            }
+            .enumerate()
+            .map(|(value, key)| (key, value.to_string())),
+        )
     }
 }
 
