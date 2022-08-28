@@ -224,7 +224,8 @@ pub unsafe fn search_unchecked<V>(
 ///
 /// # Safety
 ///
-///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlyin
+///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
+///    tree
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
@@ -243,11 +244,9 @@ pub unsafe fn insert_unchecked<V>(
             new_leaf_node: LeafNode<V>,
             key_bytes_used: usize,
         ) -> OpaqueNodePtr<V> {
-            // SAFETY: You must enforce Rust’s aliasing rules, since the returned lifetime
-            // 'a is arbitrarily chosen and does not necessarily reflect the actual lifetime
-            // of the node. In particular, for the duration of this lifetime, the node the
-            // pointer points to must not get accessed (read or written) through any other
-            // pointer.
+            // SAFETY: The `inner_node` reference lasts only for the duration of this
+            // function, and the node will not be read or written via any other source
+            // because of the safety requirements on `insert_unchecked`.
             let inner_node = unsafe { inner_node_ptr.as_mut() };
             let new_leaf_key_byte = new_leaf_node.key[key_bytes_used];
             let new_leaf_ptr = NodePtr::allocate_node(new_leaf_node).to_opaque();
@@ -264,8 +263,8 @@ pub unsafe fn insert_unchecked<V>(
                 // single time. The uniqueness requirement is passed up to the
                 // `grow_unchecked` safety requirements.
                 //
-                // Also, the `inner_node` mutable reference is invalid after this pointer and
-                // must not be used.
+                // Also, the `inner_node` mutable reference is invalid in this scope after this
+                // node is deallocated and must not be used.
                 unsafe {
                     NodePtr::deallocate_node(inner_node_ptr);
                 };

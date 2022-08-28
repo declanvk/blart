@@ -457,7 +457,7 @@ impl<V> DoubleEndedIterator for InnerNode256Iter<V> {
                 //    array and are in-bounds by construction.
                 //  - The distance between pointers is a multiple of `RestrictedIndexNodeIndex`
                 //    because we have only incremented or decremented the pointer using the
-                //    `ptr::offset` function, which maintains the multiple unvariant.
+                //    `ptr::offset` function, which maintains the multiple invariant.
                 // PANIC SAFETY:
                 //  - This function will not panic because the maximum distance from the start
                 //    to the end is 255, which will not overflow a u8.

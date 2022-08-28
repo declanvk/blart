@@ -3,7 +3,8 @@
     maybe_uninit_slice,
     nonnull_slice_from_raw_parts,
     slice_ptr_get,
-    strict_provenance
+    strict_provenance,
+    maybe_uninit_write_slice
 )]
 #![deny(
     missing_docs,
