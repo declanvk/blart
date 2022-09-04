@@ -55,7 +55,7 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_bytes, 0);
 
         dhat::assert_eq!(stats.max_blocks, 360);
-        dhat::assert_eq!(stats.max_bytes, 17280);
+        dhat::assert_eq!(stats.max_bytes, 17681);
 
         let num_keys = KEY_LEVEL_WIDTH
             .iter()
@@ -66,7 +66,7 @@ fn test_memory_usage() {
         let mean_bytes_per_key = (stats.max_bytes as f64) / num_keys;
 
         eprintln!(
-            "Inserting {} keys, this comes to [{} mean blockers per key] and [{} mean bytes per \
+            "Inserting {} keys, this comes to [{} mean blocks per key] and [{} mean bytes per \
              key].",
             num_keys, mean_blocks_per_key, mean_bytes_per_key
         )

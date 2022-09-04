@@ -2,7 +2,6 @@
 
 pub use self::iterators::*;
 use crate::tagged_pointer::TaggedPointer;
-use smallvec::SmallVec;
 use std::{
     cmp::Ordering,
     error::Error,
@@ -11,6 +10,7 @@ use std::{
     mem::{self, ManuallyDrop, MaybeUninit},
     ptr::{self, NonNull},
 };
+use tinyvec::TinyVec;
 
 mod iterators;
 
@@ -77,7 +77,7 @@ pub struct Header {
     ///
     /// Only the first `prefix_size` bytes are guaranteed to be initialized.
     // size NUM_PREFIX_BYTES, alignment 1
-    pub prefix: SmallVec<[u8; NUM_PREFIX_BYTES]>,
+    pub prefix: TinyVec<[u8; NUM_PREFIX_BYTES]>,
 }
 
 impl Header {
@@ -85,7 +85,7 @@ impl Header {
     pub fn empty() -> Self {
         Header {
             num_children: 0,
-            prefix: SmallVec::new(),
+            prefix: TinyVec::new(),
         }
     }
 

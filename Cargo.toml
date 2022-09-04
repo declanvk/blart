@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
-[dependencies.smallvec]
-version = "1.8.0"
-features = ["union", "const_generics"]
+[dependencies.tinyvec]
+version = "1.6.0"
+features = ["std", "rustc_1_57"]
 
 [dev-dependencies]
 argh = "0.1.7"
