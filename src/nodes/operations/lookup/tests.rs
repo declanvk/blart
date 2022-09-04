@@ -1,5 +1,7 @@
-use super::*;
-use crate::{nodes::NodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode48};
+use crate::{
+    nodes::NodePtr, search_unchecked, InnerNode, InnerNode16, InnerNode256, InnerNode4,
+    InnerNode48, LeafNode,
+};
 
 #[test]
 fn lookup_on_non_copy_leaf() {

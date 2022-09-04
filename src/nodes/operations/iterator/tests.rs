@@ -1,5 +1,7 @@
-use super::*;
-use crate::tests_common::generate_key_fixed_length;
+use crate::{
+    deallocate_tree, insert_unchecked, tests_common::generate_key_fixed_length, LeafNode, NodePtr,
+    TrieRangeFullIter,
+};
 
 fn map_item_to_ref<'a, V>((key_ptr, value_ptr): (*const [u8], *const V)) -> (&'a [u8], &'a V) {
     unsafe { (key_ptr.as_ref().unwrap(), value_ptr.as_ref().unwrap()) }
