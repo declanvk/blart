@@ -74,9 +74,6 @@ pub struct Header {
     /// a leaf node.
     pub num_children: u16,
     /// The key prefix for this node.
-    ///
-    /// Only the first `prefix_size` bytes are guaranteed to be initialized.
-    // size NUM_PREFIX_BYTES, alignment 1
     pub prefix: TinyVec<[u8; NUM_PREFIX_BYTES]>,
 }
 
@@ -105,10 +102,29 @@ impl Header {
     ///
     /// # Panics
     ///
-    ///  - Panics if the number of bytes to remove is greater than or equal to
-    ///    the prefix size
+    ///  - Panics if the number of bytes to remove is greater than the prefix
+    ///    size.
     pub fn ltrim_prefix(&mut self, num_bytes: usize) {
-        self.prefix.drain(..num_bytes).for_each(|_| ());
+        // this is an explicit match instead of a direct `self.prefix.drain` because it
+        // is more efficient. See `TinyVec::drain` documentation.
+        match self.prefix {
+            TinyVec::Inline(ref mut vec) => {
+                vec.drain(..num_bytes).for_each(|_| ());
+            },
+            TinyVec::Heap(ref mut vec) => {
+                vec.drain(..num_bytes).for_each(|_| ());
+            },
+        }
+    }
+
+    /// Remove the specified number of bytes from the end of the prefix.
+    ///
+    /// # Panics
+    ///
+    ///  - Panics if the number of bytes to remove is greater than the prefix
+    ///    size.
+    pub fn rtrim_prefix(&mut self, num_bytes: usize) {
+        self.prefix.truncate(self.prefix_size() - num_bytes);
     }
 
     /// Read the initialized portion of the prefix present in the header.

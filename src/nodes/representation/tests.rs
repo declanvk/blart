@@ -637,6 +637,30 @@ fn header_delete_prefix() {
 }
 
 #[test]
+fn header_rtrim_prefix() {
+    let mut h = Header::empty();
+    h.write_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(h.prefix_size(), 8);
+
+    h.rtrim_prefix(0);
+    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(h.prefix_size(), 8);
+
+    h.rtrim_prefix(3);
+    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5]);
+    assert_eq!(h.prefix_size(), 5);
+
+    h.rtrim_prefix(1);
+    assert_eq!(h.read_prefix(), &[1, 2, 3, 4]);
+    assert_eq!(h.prefix_size(), 4);
+
+    h.rtrim_prefix(4);
+    assert_eq!(h.read_prefix(), &[]);
+    assert_eq!(h.prefix_size(), 0);
+}
+
+#[test]
 #[should_panic]
 fn header_ltrim_prefix_too_many_bytes_panic() {
     let mut h = Header::empty();
