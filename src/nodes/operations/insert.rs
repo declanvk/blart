@@ -24,7 +24,7 @@ pub unsafe fn insert_unchecked<V>(
     root: OpaqueNodePtr<V>,
     key: Box<[u8]>,
     value: V,
-) -> Result<OpaqueNodePtr<V>, InsertError> {
+) -> Result<OpaqueNodePtr<V>, InsertPrefixError> {
     fn write_new_child_in_existing_node<V>(
         inner_node_ptr: OpaqueNodePtr<V>,
         new_leaf_node: LeafNode<V>,
@@ -118,11 +118,7 @@ pub unsafe fn insert_unchecked<V>(
         }
     }
 
-    if key.is_empty() {
-        return Err(InsertError::EmptyKey);
-    }
-
-    let lookup::InsertSearchResult {
+    let InsertSearchResult {
         parent_ptr_and_child_key_byte,
         insert_type,
         mut key_bytes_used,
@@ -147,7 +143,7 @@ pub unsafe fn insert_unchecked<V>(
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key
 
-                return Err(InsertError::PrefixKey(key));
+                return Err(InsertPrefixError(key));
             }
 
             let new_leaf_key_byte = key[key_bytes_used + matched_prefix_size];
@@ -189,7 +185,7 @@ pub unsafe fn insert_unchecked<V>(
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key OR an existing key is a prefix of it
 
-                return Err(InsertError::PrefixKey(key));
+                return Err(InsertPrefixError(key));
             }
 
             let new_leaf_key_byte = key[key_bytes_used];
@@ -223,32 +219,26 @@ pub unsafe fn insert_unchecked<V>(
     }
 }
 
-/// The error type for the insert operation on the tree.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InsertError {
-    /// Attempted to insert an empty key.
-    EmptyKey,
     /// Attempted to insert a key which was a prefix of an existing key in
     /// the tree.
-    PrefixKey(Box<[u8]>),
-}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InsertPrefixError(
+    /// The key that was the input to the [`insert_unchecked`] operation
+    pub Box<[u8]>,
+);
 
-impl fmt::Display for InsertError {
+impl fmt::Display for InsertPrefixError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            InsertError::EmptyKey => write!(f, "Key is an empty array of bytes."),
-            InsertError::PrefixKey(key) => {
                 write!(
                     f,
-                    "Attempted to insert a key [{key:?}] which is either a prefix of an existing \
-                     key or an existing key is a prefix of the new key."
+            "Attempted to insert a key [{:?}] which is either a prefix of an existing key or an \
+             existing key is a prefix of the new key.",
+            self.0
                 )
-            },
-        }
     }
 }
 
-impl Error for InsertError {}
+impl Error for InsertPrefixError {}
 
 #[cfg(test)]
 mod tests;

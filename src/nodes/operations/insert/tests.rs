@@ -1,6 +1,6 @@
 use crate::{
     deallocate_tree, insert_unchecked, search_unchecked, tests_common::generate_keys_skewed,
-    InnerNode, InnerNode4, InsertError, LeafNode, NodePtr, NodeType,
+    InnerNode, InnerNode4, InsertPrefixError, LeafNode, NodePtr, NodeType,
 };
 
 #[test]
@@ -80,7 +80,7 @@ fn insert_prefix_key_errors() {
     let tree = first_leaf.to_opaque();
     let result = unsafe { insert_unchecked(tree, Box::new([1, 2]), "12".to_string()) };
 
-    assert_eq!(result, Err(InsertError::PrefixKey(Box::new([1, 2]))));
+    assert_eq!(result, Err(InsertPrefixError(Box::new([1, 2]))));
 
     unsafe { deallocate_tree(tree) }
 }
@@ -92,20 +92,7 @@ fn insert_prefix_key_with_existing_prefix_errors() {
     let tree = first_leaf.to_opaque();
     let result = unsafe { insert_unchecked(tree, Box::new([1, 2, 3, 4]), "1234".to_string()) };
 
-    assert_eq!(result, Err(InsertError::PrefixKey(Box::new([1, 2, 3, 4]))));
-
-    unsafe { deallocate_tree(tree) }
-}
-
-#[test]
-fn insert_empty_key_errors() {
-    let first_leaf =
-        NodePtr::allocate_node(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
-
-    let tree = first_leaf.to_opaque();
-    let result = unsafe { insert_unchecked(tree, Box::new([]), "1256".to_string()) };
-
-    assert_eq!(result, Err(InsertError::EmptyKey));
+    assert_eq!(result, Err(InsertPrefixError(Box::new([1, 2, 3, 4]))));
 
     unsafe { deallocate_tree(tree) }
 }
@@ -190,7 +177,7 @@ fn insert_fails_new_key_prefix_of_existing_entry() {
         insert_result.expect_err("expected insert call to fail because key was prefix");
     assert_eq!(
         insert_err,
-        InsertError::PrefixKey(Box::<[u8]>::from(&[5, 6, 7, 8][..]))
+        InsertPrefixError(Box::<[u8]>::from(&[5, 6, 7, 8][..]))
     );
 
     unsafe { deallocate_tree(current_root) };
@@ -210,7 +197,7 @@ fn insert_fails_existing_key_prefixed() {
         insert_result.expect_err("expected insert call to fail because existing key was prefix");
     assert_eq!(
         insert_err,
-        InsertError::PrefixKey(Box::<[u8]>::from(&[5, 6, 7, 8, 9, 10][..]))
+        InsertPrefixError(Box::<[u8]>::from(&[5, 6, 7, 8, 9, 10][..]))
     );
 
     unsafe { deallocate_tree(current_root) };

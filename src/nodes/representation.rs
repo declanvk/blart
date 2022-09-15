@@ -88,12 +88,6 @@ impl Header {
 
     /// Write prefix bytes to this header, appending to existing bytes if
     /// present.
-    ///
-    /// If the total numbers of bytes (existing + new) is greater than
-    /// [`NUM_PREFIX_BYTES`], the prefix is truncated to [`NUM_PREFIX_BYTES`]
-    /// length and remainder are represented implicitly by the length. This
-    /// doesn't present an issue to the radix tree operation (lookup, insert,
-    /// etc) because the full key is always stored in the leaf nodes.
     pub fn write_prefix(&mut self, new_bytes: &[u8]) {
         self.prefix.extend(new_bytes.iter().copied());
     }
@@ -128,9 +122,6 @@ impl Header {
     }
 
     /// Read the initialized portion of the prefix present in the header.
-    ///
-    /// The `prefix_size` can be larger than the `read_prefix().len()` because
-    /// only [`NUM_PREFIX_BYTES`] are stored.
     pub fn read_prefix(&self) -> &[u8] {
         self.prefix.as_ref()
     }
