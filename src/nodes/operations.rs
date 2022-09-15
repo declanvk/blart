@@ -1,6 +1,6 @@
 //! Trie node lookup and manipulation
 
-use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
 
 mod insert;
 pub use insert::*;
@@ -9,39 +9,13 @@ mod minmax;
 pub use minmax::*;
 
 mod lookup;
+pub use lookup::*;
 
 mod iterator;
 pub use iterator::*;
 
-/// Search in the given tree for the value stored with the given key.
-///
-/// # Safety
-///
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
-pub unsafe fn search_unchecked<V>(
-    root: OpaqueNodePtr<V>,
-    key: &[u8],
-) -> Option<NodePtr<LeafNode<V>>> {
-    let lookup::InsertSearchResult { insert_type, .. } =
-        lookup::search_for_insert_point(root, key).ok()?;
-
-    match insert_type {
-        lookup::InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
-            let leaf_node = leaf_node_ptr.read();
-
-            // Specifically we are matching the leaf node stored key against the full search
-            // key to confirm that it is the right value.
-            if leaf_node.matches_key(key) {
-                Some(leaf_node_ptr)
-            } else {
-                None
-            }
-        },
-        _ => None,
-    }
-}
+mod delete;
+pub use delete::*;
 
 /// Deallocate the given node and all children of the given node.
 ///

@@ -1257,8 +1257,8 @@ impl<V> LeafNode<V> {
         LeafNode { value, key }
     }
 
-    /// Check that the provided key is the same one as the stored key.
-    pub fn matches_key(&self, possible_key: &[u8]) -> bool {
+    /// Check that the provided full key is the same one as the stored key.
+    pub fn matches_full_key(&self, possible_key: &[u8]) -> bool {
         self.key.as_ref().eq(possible_key)
     }
 }

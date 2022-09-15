@@ -21,13 +21,9 @@ fn lookup_on_non_copy_leaf() {
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l1` and `l2`
-    // nodes which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l1` and `l2` nodes which they are derived from.
     unsafe {
         let l1_search = search_unchecked::<String>(root, &[1, 2, 3]).unwrap();
         let l2_search = search_unchecked::<String>(root, &[1, 2, 4]).unwrap();
@@ -46,13 +42,10 @@ fn lookup_on_leaf() {
     // constructed with.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(leaf_ptr, &[1, 2, 3])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(leaf_ptr, &[1, 2, 3]).unwrap().read().value,
             123
         );
-        assert!(search_unchecked::<i32>(leaf_ptr, &[0, 0, 0]).is_none())
+        assert!(search_unchecked(leaf_ptr, &[0, 0, 0]).is_none())
     }
 }
 
@@ -79,47 +72,31 @@ fn lookup_on_full_node4() {
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
-    // which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l_` nodes which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 1])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 1]).unwrap().read().value,
             121
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 2])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 2]).unwrap().read().value,
             122
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 3]).unwrap().read().value,
             123
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 4]).unwrap().read().value,
             124
         );
 
-        assert!(search_unchecked::<i32>(root, &[]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 10]).is_none());
-        assert!(search_unchecked::<i32>(root, &[0, 2, 1]).is_none());
+        assert!(search_unchecked(root, &[]).is_none());
+        assert!(search_unchecked(root, &[1, 2]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 10]).is_none());
+        assert!(search_unchecked(root, &[0, 2, 1]).is_none());
     }
 }
 
@@ -176,47 +153,31 @@ fn lookup_on_node16() {
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
-    // which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l_` nodes which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 1])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 1]).unwrap().read().value,
             121
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 2])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 2]).unwrap().read().value,
             122
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 3]).unwrap().read().value,
             123
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 4]).unwrap().read().value,
             124
         );
 
-        assert!(search_unchecked::<i32>(root, &[]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 10]).is_none());
-        assert!(search_unchecked::<i32>(root, &[0, 2, 1]).is_none());
+        assert!(search_unchecked(root, &[]).is_none());
+        assert!(search_unchecked(root, &[1, 2]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 10]).is_none());
+        assert!(search_unchecked(root, &[0, 2, 1]).is_none());
     }
 }
 
@@ -243,47 +204,31 @@ fn lookup_on_node48() {
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
-    // which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l_` nodes which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 1])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 1]).unwrap().read().value,
             121
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 2])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 2]).unwrap().read().value,
             122
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 3]).unwrap().read().value,
             123
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 4]).unwrap().read().value,
             124
         );
 
-        assert!(search_unchecked::<i32>(root, &[]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 10]).is_none());
-        assert!(search_unchecked::<i32>(root, &[0, 2, 1]).is_none());
+        assert!(search_unchecked(root, &[]).is_none());
+        assert!(search_unchecked(root, &[1, 2]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 10]).is_none());
+        assert!(search_unchecked(root, &[0, 2, 1]).is_none());
     }
 }
 
@@ -310,47 +255,31 @@ fn lookup_on_node256() {
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
-    // which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l_` nodes which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 1])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 1]).unwrap().read().value,
             121
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 2])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 2]).unwrap().read().value,
             122
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 3]).unwrap().read().value,
             123
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4])
-                .unwrap()
-                .read()
-                .value,
+            search_unchecked(root, &[1, 2, 4]).unwrap().read().value,
             124
         );
 
-        assert!(search_unchecked::<i32>(root, &[]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 10]).is_none());
-        assert!(search_unchecked::<i32>(root, &[0, 2, 1]).is_none());
+        assert!(search_unchecked(root, &[]).is_none());
+        assert!(search_unchecked(root, &[1, 2]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 10]).is_none());
+        assert!(search_unchecked(root, &[0, 2, 1]).is_none());
     }
 }
 
@@ -417,56 +346,52 @@ fn lookup_on_n16_n4_layer_tree() {
 
     let root = NodePtr::from(&mut n16).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
-    // which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l_` nodes which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1])
+            search_unchecked(root, &[1, 2, 3, 5, 6, 1])
                 .unwrap()
                 .read()
                 .value,
             123561
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2])
+            search_unchecked(root, &[1, 2, 3, 5, 6, 2])
                 .unwrap()
                 .read()
                 .value,
             123562
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3])
+            search_unchecked(root, &[1, 2, 4, 7, 8, 3])
                 .unwrap()
                 .read()
                 .value,
             124783
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4])
+            search_unchecked(root, &[1, 2, 4, 7, 8, 4])
                 .unwrap()
                 .read()
                 .value,
             124784
         );
 
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 5, 6]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 7, 8]).is_none());
 
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 50, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 70, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 30, 5, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 40, 7, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[10, 2, 3, 5, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 20, 4, 7, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 5, 60, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 7, 80, 3]).is_none());
     }
 }
 
@@ -504,56 +429,52 @@ fn lookup_on_n48_n4_layer_tree() {
 
     let root = NodePtr::from(&mut n48).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
-    // which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l_` nodes which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1])
+            search_unchecked(root, &[1, 2, 3, 5, 6, 1])
                 .unwrap()
                 .read()
                 .value,
             123561
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2])
+            search_unchecked(root, &[1, 2, 3, 5, 6, 2])
                 .unwrap()
                 .read()
                 .value,
             123562
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3])
+            search_unchecked(root, &[1, 2, 4, 7, 8, 3])
                 .unwrap()
                 .read()
                 .value,
             124783
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4])
+            search_unchecked(root, &[1, 2, 4, 7, 8, 4])
                 .unwrap()
                 .read()
                 .value,
             124784
         );
 
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 5, 6]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 7, 8]).is_none());
 
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 50, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 70, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 30, 5, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 40, 7, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[10, 2, 3, 5, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 20, 4, 7, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 5, 60, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 7, 80, 3]).is_none());
     }
 }
 
@@ -591,56 +512,52 @@ fn lookup_on_n256_n4_layer_tree() {
 
     let root = NodePtr::from(&mut n256).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
-    // which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l_` nodes which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1])
+            search_unchecked(root, &[1, 2, 3, 5, 6, 1])
                 .unwrap()
                 .read()
                 .value,
             123561
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2])
+            search_unchecked(root, &[1, 2, 3, 5, 6, 2])
                 .unwrap()
                 .read()
                 .value,
             123562
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3])
+            search_unchecked(root, &[1, 2, 4, 7, 8, 3])
                 .unwrap()
                 .read()
                 .value,
             124783
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4])
+            search_unchecked(root, &[1, 2, 4, 7, 8, 4])
                 .unwrap()
                 .read()
                 .value,
             124784
         );
 
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 5, 6]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 7, 8]).is_none());
 
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 50, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 70, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 30, 5, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 40, 7, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[10, 2, 3, 5, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 20, 4, 7, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 5, 60, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 7, 80, 3]).is_none());
     }
 }
 
@@ -678,55 +595,51 @@ fn lookup_on_n4_n4_layer_tree() {
 
     let root = NodePtr::from(&mut n4).to_opaque();
 
-    // SAFETY: All the `search` calls are safe because they are specifing the `i32`
-    // output type parameter, the same one that was used to construct the leaf
-    // nodes.
-    //
-    // The references returned from the `search` function only live for the scope of
-    // this `unsafe` block, which is shorter that the lifetime of the `l_` nodes
-    // which they are derived from.
+    // SAFETY: The references returned from the `search` function only live for the
+    // scope of this `unsafe` block, which is shorter that the lifetime of the
+    // `l_` nodes which they are derived from.
     unsafe {
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 1])
+            search_unchecked(root, &[1, 2, 3, 5, 6, 1])
                 .unwrap()
                 .read()
                 .value,
             123561
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 3, 5, 6, 2])
+            search_unchecked(root, &[1, 2, 3, 5, 6, 2])
                 .unwrap()
                 .read()
                 .value,
             123562
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 3])
+            search_unchecked(root, &[1, 2, 4, 7, 8, 3])
                 .unwrap()
                 .read()
                 .value,
             124783
         );
         assert_eq!(
-            search_unchecked::<i32>(root, &[1, 2, 4, 7, 8, 4])
+            search_unchecked(root, &[1, 2, 4, 7, 8, 4])
                 .unwrap()
                 .read()
                 .value,
             124784
         );
 
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 6]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 8]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 5, 6]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 7, 8]).is_none());
 
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 50, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 70, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 30, 5, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 40, 7, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[10, 2, 3, 5, 6, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 20, 4, 7, 8, 3]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 3, 5, 60, 1]).is_none());
-        assert!(search_unchecked::<i32>(root, &[1, 2, 4, 7, 80, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 50, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 70, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 30, 5, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 40, 7, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[10, 2, 3, 5, 6, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 20, 4, 7, 8, 3]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 3, 5, 60, 1]).is_none());
+        assert!(search_unchecked(root, &[1, 2, 4, 7, 80, 3]).is_none());
     }
 }
