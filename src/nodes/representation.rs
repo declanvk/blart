@@ -312,32 +312,6 @@ impl<V> fmt::Debug for ConcreteNodePtr<V> {
     }
 }
 
-/// An enum that encapsulates every type of Node
-pub enum ConcreteNode<V> {
-    /// Node that references between 2 and 4 children
-    Node4(InnerNode4<V>),
-    /// Node that references between 5 and 16 children
-    Node16(InnerNode16<V>),
-    /// Node that references between 17 and 49 children
-    Node48(InnerNode48<V>),
-    /// Node that references between 49 and 256 children
-    Node256(InnerNode256<V>),
-    /// Node that contains a single value
-    LeafNode(LeafNode<V>),
-}
-
-impl<V> fmt::Debug for ConcreteNode<V> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
-            Self::Node16(arg0) => f.debug_tuple("Node16").field(arg0).finish(),
-            Self::Node48(arg0) => f.debug_tuple("Node48").field(arg0).finish(),
-            Self::Node256(arg0) => f.debug_tuple("Node256").field(arg0).finish(),
-            Self::LeafNode(_) => f.debug_tuple("LeafNode").field(&"...").finish(),
-        }
-    }
-}
-
 /// A pointer to a Node{4,16,48,256}.
 #[repr(transparent)]
 pub struct NodePtr<N: Node>(NonNull<N>);
