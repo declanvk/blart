@@ -14,9 +14,6 @@ pub use lookup::*;
 mod iterator;
 pub use iterator::*;
 
-mod delete;
-pub use delete::*;
-
 /// Deallocate the given node and all children of the given node.
 ///
 /// This will also deallocate the leaf nodes with their value type data.

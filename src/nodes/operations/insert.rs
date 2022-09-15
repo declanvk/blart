@@ -173,10 +173,9 @@ pub(crate) fn search_for_insert_point<V>(
 ///
 /// # Errors
 ///
-///   - Returns a [`InsertError::EmptyKey`] if the given key is an empty array.
-///   - Returns a [`InsertError::PrefixKey`] if the given key is a prefix of
-///     another key that exists in the trie. Or if the given key is prefixed by
-///     an existing key in the trie.
+///   - Returns a [`InsertPrefixError`] if the given key is a prefix of another
+///     key that exists in the trie. Or if the given key is prefixed by an
+///     existing key in the trie.
 ///
 /// # Safety
 ///
