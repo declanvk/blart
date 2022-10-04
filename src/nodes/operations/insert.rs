@@ -50,7 +50,7 @@ pub unsafe fn insert_unchecked<V>(
 
                 // SAFETY: The `deallocate_node` function is only called a
                 // single time. The uniqueness requirement is passed up to the
-                // `grow_unchecked` safety requirements.
+                // `insert_unchecked` safety requirements.
                 unsafe {
                     #[allow(clippy::drop_ref)]
                     drop(inner_node);
@@ -115,11 +115,12 @@ pub unsafe fn insert_unchecked<V>(
         }
     }
 
+    // SAFETY: Requirements covered by containing function
     let InsertSearchResult {
         parent_ptr_and_child_key_byte,
         insert_type,
         mut key_bytes_used,
-    } = search_for_insert_point(root, key.as_ref())?;
+    } = unsafe { search_for_insert_point(root, key.as_ref())? };
 
     let new_inner_node = match insert_type {
         InsertSearchResultType::MismatchPrefix {
@@ -350,7 +351,15 @@ impl<V> fmt::Debug for InsertSearchResultType<V> {
 
 /// Perform an iterative search for the insert point for the given key,
 /// starting at the given root node.
-pub fn search_for_insert_point<V>(
+///
+/// # Safety
+///
+///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
+///    tree
+///  - This function cannot be called concurrently to any reads or writes of the
+///    `root` node or any child node of `root`. This function will arbitrarily
+///    read or write to any child in the given tree.
+pub unsafe fn search_for_insert_point<V>(
     root: OpaqueNodePtr<V>,
     key: &[u8],
 ) -> Result<InsertSearchResult<V>, InsertPrefixError> {
