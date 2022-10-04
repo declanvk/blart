@@ -40,7 +40,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                         Err(_) => Some(old_root),
                     }
                 } else if !key.is_empty() {
-                    Some(NodePtr::allocate_node(LeafNode::new(key, next_value)).to_opaque())
+                    Some(NodePtr::allocate_node_ptr(LeafNode::new(key, next_value)).to_opaque())
                 } else {
                     None
                 };

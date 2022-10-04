@@ -22,7 +22,7 @@ fn test_memory_usage() {
     {
         let mut keys = keys.into_iter();
         let mut current_root =
-            NodePtr::allocate_node(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
+            NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
         for (idx, key) in keys.enumerate() {
             current_root = unsafe { insert_unchecked(current_root, key, idx + 1).unwrap() };

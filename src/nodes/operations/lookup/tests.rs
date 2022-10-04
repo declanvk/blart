@@ -15,7 +15,7 @@ fn lookup_on_non_copy_leaf() {
     let mut inner_node = InnerNode4::empty();
 
     // Update inner node prefix and child slots
-    inner_node.header.write_prefix(&[1, 2]);
+    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(3, l1_ptr);
     inner_node.write_child(4, l2_ptr);
 
@@ -64,7 +64,7 @@ fn lookup_on_full_node4() {
     let mut inner_node = InnerNode4::empty();
 
     // Update inner node prefix and child slots
-    inner_node.header.write_prefix(&[1, 2]);
+    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(1, l1_ptr);
     inner_node.write_child(2, l2_ptr);
     inner_node.write_child(3, l3_ptr);
@@ -145,7 +145,7 @@ fn lookup_on_node16() {
     let mut inner_node = InnerNode16::empty();
 
     // Update inner node prefix and child slots
-    inner_node.header.write_prefix(&[1, 2]);
+    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(1, l1_ptr);
     inner_node.write_child(2, l2_ptr);
     inner_node.write_child(3, l3_ptr);
@@ -196,7 +196,7 @@ fn lookup_on_node48() {
     let mut inner_node = InnerNode48::empty();
 
     // Update inner node prefix and child slots
-    inner_node.header.write_prefix(&[1, 2]);
+    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(1, l1_ptr);
     inner_node.write_child(2, l2_ptr);
     inner_node.write_child(3, l3_ptr);
@@ -247,7 +247,7 @@ fn lookup_on_node256() {
     let mut inner_node = InnerNode256::empty();
 
     // Update inner node prefix and child slots
-    inner_node.header.write_prefix(&[1, 2]);
+    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(1, l1_ptr);
     inner_node.write_child(2, l2_ptr);
     inner_node.write_child(3, l3_ptr);
@@ -329,18 +329,18 @@ fn lookup_on_n16_n4_layer_tree() {
     let mut n16 = InnerNode16::empty();
 
     // Update inner node prefix and child slots
-    n4_left.header.write_prefix(&[5, 6]);
+    n4_left.header.extend_prefix(&[5, 6]);
     n4_left.write_child(1, l1_ptr);
     n4_left.write_child(2, l2_ptr);
 
-    n4_right.header.write_prefix(&[7, 8]);
+    n4_right.header.extend_prefix(&[7, 8]);
     n4_right.write_child(3, l3_ptr);
     n4_right.write_child(4, l4_ptr);
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    n16.header.write_prefix(&[1, 2]);
+    n16.header.extend_prefix(&[1, 2]);
     n16.write_child(3, n4_left_ptr);
     n16.write_child(4, n4_right_ptr);
 
@@ -412,18 +412,18 @@ fn lookup_on_n48_n4_layer_tree() {
     let mut n48 = InnerNode4::empty();
 
     // Update inner node prefix and child slots
-    n4_left.header.write_prefix(&[5, 6]);
+    n4_left.header.extend_prefix(&[5, 6]);
     n4_left.write_child(1, l1_ptr);
     n4_left.write_child(2, l2_ptr);
 
-    n4_right.header.write_prefix(&[7, 8]);
+    n4_right.header.extend_prefix(&[7, 8]);
     n4_right.write_child(3, l3_ptr);
     n4_right.write_child(4, l4_ptr);
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    n48.header.write_prefix(&[1, 2]);
+    n48.header.extend_prefix(&[1, 2]);
     n48.write_child(3, n4_left_ptr);
     n48.write_child(4, n4_right_ptr);
 
@@ -495,18 +495,18 @@ fn lookup_on_n256_n4_layer_tree() {
     let mut n256 = InnerNode256::empty();
 
     // Update inner node prefix and child slots
-    n4_left.header.write_prefix(&[5, 6]);
+    n4_left.header.extend_prefix(&[5, 6]);
     n4_left.write_child(1, l1_ptr);
     n4_left.write_child(2, l2_ptr);
 
-    n4_right.header.write_prefix(&[7, 8]);
+    n4_right.header.extend_prefix(&[7, 8]);
     n4_right.write_child(3, l3_ptr);
     n4_right.write_child(4, l4_ptr);
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    n256.header.write_prefix(&[1, 2]);
+    n256.header.extend_prefix(&[1, 2]);
     n256.write_child(3, n4_left_ptr);
     n256.write_child(4, n4_right_ptr);
 
@@ -578,18 +578,18 @@ fn lookup_on_n4_n4_layer_tree() {
     let mut n4 = InnerNode4::empty();
 
     // Update inner node prefix and child slots
-    n4_left.header.write_prefix(&[5, 6]);
+    n4_left.header.extend_prefix(&[5, 6]);
     n4_left.write_child(1, l1_ptr);
     n4_left.write_child(2, l2_ptr);
 
-    n4_right.header.write_prefix(&[7, 8]);
+    n4_right.header.extend_prefix(&[7, 8]);
     n4_right.write_child(3, l3_ptr);
     n4_right.write_child(4, l4_ptr);
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    n4.header.write_prefix(&[1, 2]);
+    n4.header.extend_prefix(&[1, 2]);
     n4.write_child(3, n4_left_ptr);
     n4.write_child(4, n4_right_ptr);
 

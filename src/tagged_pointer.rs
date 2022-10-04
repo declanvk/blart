@@ -67,7 +67,11 @@ impl<P> TaggedPointer<P> {
 
         // Double-check that there are no existing bits stored in the data-carrying
         // positions
-        assert_eq!(ptr_addr.get() & Self::DATA_MASK, 0);
+        assert_eq!(
+            ptr_addr.get() & Self::DATA_MASK,
+            0,
+            "this pointer was not aligned"
+        );
 
         // After the assert we know that the pointer has no bits set in the lowest
         // couple bits.

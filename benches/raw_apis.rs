@@ -36,7 +36,7 @@ fn run_benchmarks(
         b.iter(|| unsafe { maximum_unchecked(tree_root).unwrap() })
     });
 
-    // TODO: Add more benchmarks for:
+    // TODO(#3): Add more benchmarks for:
     //   - insert new keys into:
     //     - an empty tree
     //     - a tree tree that already contains the given key
@@ -50,7 +50,7 @@ fn setup_tree_run_benches_cleanup(
 ) {
     let keys: Vec<_> = keys.collect();
 
-    let mut root = NodePtr::allocate_node(LeafNode::new(keys[0].clone(), 0)).to_opaque();
+    let mut root = NodePtr::allocate_node_ptr(LeafNode::new(keys[0].clone(), 0)).to_opaque();
 
     for (idx, key) in keys.iter().skip(1).cloned().enumerate() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap() };

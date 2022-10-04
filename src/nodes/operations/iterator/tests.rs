@@ -23,7 +23,8 @@ fn small_tree_iterator_front_and_back() {
 
     let root = {
         let mut keys = keys.into_iter().enumerate();
-        let mut root = NodePtr::allocate_node(LeafNode::new(keys.next().unwrap().1, 0)).to_opaque();
+        let mut root =
+            NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap().1, 0)).to_opaque();
 
         for (idx, key) in keys {
             root = unsafe { insert_unchecked(root, key, idx).unwrap() };
@@ -92,7 +93,7 @@ fn large_fixed_length_key_iterator_front_back() {
     };
 
     let mut keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
-    let mut root = NodePtr::allocate_node(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
+    let mut root = NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap() };

@@ -204,7 +204,7 @@ pub unsafe fn insert_unchecked<V>(
             // because of the safety requirements on `insert_unchecked`.
             let inner_node = unsafe { inner_node_ptr.as_mut() };
             let new_leaf_key_byte = new_leaf_node.key[key_bytes_used];
-            let new_leaf_ptr = NodePtr::allocate_node(new_leaf_node).to_opaque();
+            let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node).to_opaque();
             if inner_node.is_full() {
                 // we will create a new node of the next larger type and copy all the
                 // children over.
@@ -212,16 +212,15 @@ pub unsafe fn insert_unchecked<V>(
                 let mut new_node = inner_node.grow();
                 new_node.write_child(new_leaf_key_byte, new_leaf_ptr);
 
-                let new_inner_node = NodePtr::allocate_node(new_node).to_opaque();
+                let new_inner_node = NodePtr::allocate_node_ptr(new_node).to_opaque();
 
                 // SAFETY: The `deallocate_node` function is only called a
                 // single time. The uniqueness requirement is passed up to the
                 // `grow_unchecked` safety requirements.
-                //
-                // Also, the `inner_node` mutable reference is invalid in this scope after this
-                // node is deallocated and must not be used.
+                #[allow(clippy::drop_ref)]
                 unsafe {
-                    NodePtr::deallocate_node(inner_node_ptr);
+                    drop(inner_node);
+                    drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
                 };
 
                 new_inner_node
@@ -312,7 +311,8 @@ pub unsafe fn insert_unchecked<V>(
 
             let new_leaf_key_byte = key[key_bytes_used + matched_prefix_size];
 
-            let new_leaf_pointer = NodePtr::allocate_node(LeafNode::new(key, value)).to_opaque();
+            let new_leaf_pointer =
+                NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque();
 
             // prefix mismatch, need to split prefix into two separate nodes and take the
             // common prefix into a new parent node
@@ -326,10 +326,10 @@ pub unsafe fn insert_unchecked<V>(
 
             new_n4
                 .header
-                .write_prefix(&header.read_prefix()[..matched_prefix_size]);
+                .extend_prefix(&header.read_prefix()[..matched_prefix_size]);
             header.ltrim_prefix(matched_prefix_size + 1);
 
-            NodePtr::allocate_node(new_n4).to_opaque()
+            NodePtr::allocate_node_ptr(new_n4).to_opaque()
         },
         InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
             let leaf_node = leaf_node_ptr.read();
@@ -342,7 +342,7 @@ pub unsafe fn insert_unchecked<V>(
                 .count();
             new_n4
                 .header
-                .write_prefix(&key[key_bytes_used..(key_bytes_used + prefix_size)]);
+                .extend_prefix(&key[key_bytes_used..(key_bytes_used + prefix_size)]);
             key_bytes_used += prefix_size;
 
             if key_bytes_used >= key.len() || key_bytes_used >= leaf_node.key.len() {
@@ -353,12 +353,12 @@ pub unsafe fn insert_unchecked<V>(
             }
 
             let new_leaf_key_byte = key[key_bytes_used];
-            let new_leaf_pointer = NodePtr::allocate_node(LeafNode::new(key, value));
+            let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
 
             new_n4.write_child(leaf_node.key[key_bytes_used], leaf_node_ptr.to_opaque());
             new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
 
-            NodePtr::allocate_node(new_n4).to_opaque()
+            NodePtr::allocate_node_ptr(new_n4).to_opaque()
         },
         InsertSearchResultType::IntoExisting { inner_node_ptr } => {
             write_new_child_in_existing_node(

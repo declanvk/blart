@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn make_tree(mut iter: impl Iterator<Item = (Box<[u8]>, String)>) -> Option<OpaqueNodePtr<String>> {
     let (first_key, first_value) = iter.next()?;
     let mut current_root =
-        NodePtr::allocate_node(LeafNode::new(first_key, first_value)).to_opaque();
+        NodePtr::allocate_node_ptr(LeafNode::new(first_key, first_value)).to_opaque();
 
     for (key, value) in iter {
         // SAFETY: There are no other pointers to `current_root` node. There are no

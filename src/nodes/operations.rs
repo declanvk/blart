@@ -42,7 +42,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
         }
         // SAFETY: The single call per node requirement is enforced by the safety
         // requirements on this function.
-        unsafe { NodePtr::deallocate_node(inner_ptr) }
+        drop(unsafe { NodePtr::deallocate_node_ptr(inner_ptr) })
     }
 
     let mut stack = Vec::new();
@@ -58,7 +58,7 @@ pub unsafe fn deallocate_tree<V>(root: OpaqueNodePtr<V>) {
             ConcreteNodePtr::LeafNode(inner) => {
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
-                unsafe { NodePtr::deallocate_node(inner) }
+                drop(unsafe { NodePtr::deallocate_node_ptr(inner) })
             },
         }
     }

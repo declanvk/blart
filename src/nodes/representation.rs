@@ -88,7 +88,7 @@ impl Header {
 
     /// Write prefix bytes to this header, appending to existing bytes if
     /// present.
-    pub fn write_prefix(&mut self, new_bytes: &[u8]) {
+    pub fn extend_prefix(&mut self, new_bytes: &[u8]) {
         self.prefix.extend(new_bytes.iter().copied());
     }
 
@@ -109,16 +109,6 @@ impl Header {
                 vec.drain(..num_bytes).for_each(|_| ());
             },
         }
-    }
-
-    /// Remove the specified number of bytes from the end of the prefix.
-    ///
-    /// # Panics
-    ///
-    ///  - Panics if the number of bytes to remove is greater than the prefix
-    ///    size.
-    pub fn rtrim_prefix(&mut self, num_bytes: usize) {
-        self.prefix.truncate(self.prefix_size() - num_bytes);
     }
 
     /// Read the initialized portion of the prefix present in the header.
@@ -331,7 +321,7 @@ impl<N: Node> NodePtr<N> {
 
     /// Allocate the given [`Node`] on the [`std::alloc::Global`] heap and
     /// return a [`NodePtr`] that wrap the raw pointer.
-    pub fn allocate_node(node: N) -> Self {
+    pub fn allocate_node_ptr(node: N) -> Self {
         // SAFETY: The pointer from [`Box::into_raw`] is non-null, aligned, and valid
         // for reads and writes of the [`Node`] `N`.
         unsafe { NodePtr::new(Box::into_raw(Box::new(node))) }
@@ -343,11 +333,10 @@ impl<N: Node> NodePtr<N> {
     /// # Safety
     ///
     ///  - This function can only be called once for a given node object.
-    pub unsafe fn deallocate_node(node: Self) {
+    #[must_use]
+    pub unsafe fn deallocate_node_ptr(node: Self) -> N {
         // SAFETY: Covered by safety condition on functiom
-        unsafe {
-            drop(Box::from_raw(node.to_ptr()));
-        }
+        unsafe { *Box::from_raw(node.to_ptr()) }
     }
 
     /// Cast node pointer back to an opaque version, losing type information
