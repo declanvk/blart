@@ -573,13 +573,7 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         let (keys, _) = self.initialized_portion();
 
-        for (child_index, key) in keys.iter().enumerate() {
-            if *key == key_fragment {
-                return Some(child_index);
-            }
-        }
-
-        None
+        memchr::memchr(key_fragment, keys)
     }
 
     /// Return the initialized portions of the keys and child pointer arrays.
@@ -633,13 +627,8 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
     }
 
     fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
-        let search_result = {
-            let (keys, _) = self.initialized_portion();
-            keys.binary_search(&key_fragment)
-        };
-
-        match search_result {
-            Ok(child_index) => {
+        match self.lookup_child_index(key_fragment) {
+            Some(child_index) => {
                 let child_ptr =
                     mem::replace(&mut self.child_pointers[child_index], MaybeUninit::uninit());
 
@@ -651,10 +640,10 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
 
                 self.header.num_children -= 1;
                 // SAFETY: This child pointer value is initialized because we got it by
-                // searching through the initialized keys and got the `Ok(index)` value.
+                // searching through the initialized keys and got the `Some(index)` value.
                 Some(unsafe { MaybeUninit::assume_init(child_ptr) })
             },
-            Err(_) => None,
+            None => None,
         }
     }
 
