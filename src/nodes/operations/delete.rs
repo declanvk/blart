@@ -81,8 +81,8 @@ pub unsafe fn delete_unchecked<V>(root: OpaqueNodePtr<V>, key: &[u8]) -> Option<
 
             // SAFETY: Since this function requires a unique pointer to the original
             // `inner_node_ptr`, we know that no other code will deallocate the pointer
-            #[allow(clippy::drop_ref)]
             unsafe {
+                #[allow(clippy::drop_ref)]
                 drop(inner_node);
                 drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
             }
@@ -95,8 +95,8 @@ pub unsafe fn delete_unchecked<V>(root: OpaqueNodePtr<V>, key: &[u8]) -> Option<
 
             // SAFETY: Since this function requires a unique pointer to the original
             // `inner_node_ptr`, we know that no other code will deallocate the pointer
-            #[allow(clippy::drop_ref)]
             unsafe {
+                #[allow(clippy::drop_ref)]
                 drop(inner_node);
                 drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
             }

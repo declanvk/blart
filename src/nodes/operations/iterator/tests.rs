@@ -27,7 +27,7 @@ fn small_tree_iterator_front_and_back() {
             NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap().1, 0)).to_opaque();
 
         for (idx, key) in keys {
-            root = unsafe { insert_unchecked(root, key, idx).unwrap() };
+            root = unsafe { insert_unchecked(root, key, idx).unwrap().new_root };
         }
 
         root
@@ -96,7 +96,7 @@ fn large_fixed_length_key_iterator_front_back() {
     let mut root = NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
-        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap() };
+        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
     }
 
     let mut trie_iter = unsafe { TrieRangeFullIter::new(root) }

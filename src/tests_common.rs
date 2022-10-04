@@ -337,3 +337,21 @@ pub fn convert_tree_to_dot_string<V: fmt::Display>(
 
     Ok(String::from_utf8(buffer).unwrap())
 }
+
+#[cfg(test)]
+pub(crate) fn setup_tree_from_entries<V>(
+    mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
+) -> OpaqueNodePtr<V> {
+    use crate::{insert_unchecked, LeafNode, NodePtr};
+
+    let (first_key, first_value) = entries_it.next().unwrap();
+
+    let mut current_root =
+        NodePtr::allocate_node_ptr(LeafNode::new(first_key, first_value)).to_opaque();
+
+    for (key, value) in entries_it {
+        current_root = unsafe { insert_unchecked(current_root, key, value).unwrap().new_root };
+    }
+
+    current_root
+}

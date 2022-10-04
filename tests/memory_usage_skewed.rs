@@ -25,7 +25,11 @@ fn test_memory_usage() {
             NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
         for (idx, key) in keys.enumerate() {
-            current_root = unsafe { insert_unchecked(current_root, key, idx + 1).unwrap() };
+            current_root = unsafe {
+                insert_unchecked(current_root, key, idx + 1)
+                    .unwrap()
+                    .new_root
+            };
         }
 
         for (value, key) in tests_common::generate_keys_skewed(KEY_LENGTH_LIMIT).enumerate() {

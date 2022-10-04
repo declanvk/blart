@@ -79,7 +79,7 @@ fn make_tree(mut iter: impl Iterator<Item = (Box<[u8]>, String)>) -> Option<Opaq
     for (key, value) in iter {
         // SAFETY: There are no other pointers to `current_root` node. There are no
         // concurrent reads or writes to the `current_root` node ongoing.
-        current_root = unsafe { insert_unchecked(current_root, key, value).unwrap() };
+        current_root = unsafe { insert_unchecked(current_root, key, value).unwrap().new_root };
     }
 
     Some(current_root)

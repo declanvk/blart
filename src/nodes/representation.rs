@@ -346,6 +346,22 @@ impl<N: Node> NodePtr<N> {
         unsafe { *Box::from_raw(node.to_ptr()) }
     }
 
+    /// Moves `new_value` into the referenced `dest`, returning the previous
+    /// `dest` value.
+    ///
+    /// Neither value is dropped.
+    ///
+    /// # Safety
+    ///  - The node the `dest` pointers points to must not get accessed (read or
+    ///    written) through any other pointers concurrent to this modification.
+    pub unsafe fn replace(dest: Self, new_value: N) -> N {
+        // SAFETY: The lifetime of the `dest` reference is restricted to this function,
+        // and the referenced node is not accessed by the safety doc on the containing
+        // function.
+        let dest = unsafe { dest.as_mut() };
+        mem::replace(dest, new_value)
+    }
+
     /// Cast node pointer back to an opaque version, losing type information
     pub fn to_opaque(self) -> OpaqueNodePtr<N::Value> {
         OpaqueNodePtr::new(self.0)

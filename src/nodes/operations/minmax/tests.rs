@@ -29,7 +29,7 @@ fn large_tree_same_length_keys_min_max() {
     let mut root = NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
-        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap() };
+        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
     }
 
     let min_leaf = unsafe { minimum_unchecked(root).unwrap() };
@@ -52,7 +52,7 @@ fn skewed_tree_min_max() {
     let mut root = NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
-        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap() };
+        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
     }
 
     let min_leaf = unsafe { minimum_unchecked(root).unwrap() };

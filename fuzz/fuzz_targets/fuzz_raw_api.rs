@@ -2,7 +2,7 @@
 
 use blart::{
     deallocate_tree, delete_unchecked, insert_unchecked, maximum_unchecked, minimum_unchecked,
-    search_unchecked, LeafNode, NodePtr, OpaqueNodePtr, TrieRangeFullIter,
+    search_unchecked, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, TrieRangeFullIter,
 };
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
@@ -34,7 +34,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 let new_key = key.clone();
                 current_root = if let Some(old_root) = current_root {
                     match unsafe { insert_unchecked(old_root, new_key, next_value) } {
-                        Ok(new_root) => {
+                        Ok(InsertResult { new_root, .. }) => {
                             let search_value =
                                 unsafe { search_unchecked(new_root, key.as_ref()).unwrap() };
                             assert_eq!(search_value.read().value, next_value);

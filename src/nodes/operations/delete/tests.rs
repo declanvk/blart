@@ -1,4 +1,4 @@
-use crate::{deallocate_tree, insert_unchecked, search_unchecked};
+use crate::{deallocate_tree, search_unchecked, tests_common::setup_tree_from_entries};
 
 use super::*;
 
@@ -153,19 +153,4 @@ fn delete_one_entry_n256_shrinks() {
     assert_eq!(current_root.node_type(), NodeType::Node48);
 
     unsafe { deallocate_tree(current_root) };
-}
-
-fn setup_tree_from_entries<V>(
-    mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
-) -> OpaqueNodePtr<V> {
-    let (first_key, first_value) = entries_it.next().unwrap();
-
-    let mut current_root =
-        NodePtr::allocate_node_ptr(LeafNode::new(first_key, first_value)).to_opaque();
-
-    for (key, value) in entries_it {
-        current_root = unsafe { insert_unchecked(current_root, key, value).unwrap() };
-    }
-
-    current_root
 }
