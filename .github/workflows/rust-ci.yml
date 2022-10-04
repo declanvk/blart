@@ -27,13 +27,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --all
+          args: --examples --tests --benches
 
       - name: Test
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all
 
   format:
     runs-on: ubuntu-latest
@@ -53,7 +52,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --all -- --check
+          args: -- --check
 
   lint:
     runs-on: ubuntu-latest

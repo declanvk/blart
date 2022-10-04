@@ -53,7 +53,7 @@ fn setup_tree_run_benches_cleanup(
     let mut root = NodePtr::allocate_node_ptr(LeafNode::new(keys[0].clone(), 0)).to_opaque();
 
     for (idx, key) in keys.iter().skip(1).cloned().enumerate() {
-        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap() };
+        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
     }
 
     {
