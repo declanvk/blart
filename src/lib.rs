@@ -10,7 +10,10 @@
     missing_docs,
     clippy::missing_safety_doc,
     unsafe_op_in_unsafe_fn,
-    deprecated_in_future
+    deprecated_in_future,
+    rustdoc::broken_intra_doc_links,
+    rustdoc::bare_urls,
+    rustdoc::invalid_codeblock_attributes
 )]
 
 //! Adaptive radix trie implementation

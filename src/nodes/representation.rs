@@ -335,7 +335,7 @@ impl<N: Node> NodePtr<N> {
     }
 
     /// Deallocate a [`Node`] object created with the
-    /// [`NodePtr::allocate_node`] function.
+    /// [`NodePtr::allocate_node_ptr`] function.
     ///
     /// # Safety
     ///
