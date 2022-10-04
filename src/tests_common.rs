@@ -1,6 +1,10 @@
 //! Helper function for writing tests
 
-use std::{collections::HashSet, iter};
+use crate::{
+    visitor::{DotPrinter, DotPrinterSettings},
+    OpaqueNodePtr,
+};
+use std::{collections::HashSet, fmt, io, iter};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a
 /// maximum value.
@@ -314,4 +318,22 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
 
     generate_key_fixed_length(level_widths)
         .map(move |key| apply_expansions_to_key(&key, &full_key_template, &sorted_expansions))
+}
+
+/// Convert the given tree into the DOT format so it can be displayed by the
+/// graphiz package.
+///
+/// # Safety
+///  - There must be no concurrent modifications to the tree while this function
+///    runs.
+pub fn convert_tree_to_dot_string<V: fmt::Display>(
+    root: OpaqueNodePtr<V>,
+    settings: DotPrinterSettings,
+) -> io::Result<String> {
+    let mut buffer = Vec::new();
+
+    // SAFETY: There are no concurrent mutation to the tree node or its children
+    unsafe { DotPrinter::print_tree(&mut buffer, &root, settings)? };
+
+    Ok(String::from_utf8(buffer).unwrap())
 }

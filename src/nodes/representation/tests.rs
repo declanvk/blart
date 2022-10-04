@@ -565,6 +565,34 @@ fn header_read_write_prefix() {
 }
 
 #[test]
+fn header_prepend_prefix() {
+    let mut h = Header::default();
+
+    assert_eq!(h.prefix_size(), 0);
+    assert_eq!(h.read_prefix(), &[]);
+
+    h.prepend_prefix(&[]);
+
+    assert_eq!(h.prefix_size(), 0);
+    assert_eq!(h.read_prefix(), &[]);
+
+    h.prepend_prefix(&[1, 2, 3]);
+
+    assert_eq!(h.prefix_size(), 3);
+    assert_eq!(h.read_prefix(), &[1, 2, 3]);
+
+    h.prepend_prefix(&[4, 5, 6]);
+
+    assert_eq!(h.prefix_size(), 6);
+    assert_eq!(h.read_prefix(), &[4, 5, 6, 1, 2, 3]);
+
+    h.extend_prefix(&[7, 8, 9]);
+
+    assert_eq!(h.prefix_size(), 9);
+    assert_eq!(h.read_prefix(), &[4, 5, 6, 1, 2, 3, 7, 8, 9]);
+}
+
+#[test]
 fn header_check_prefix() {
     let mut h = Header::empty();
 

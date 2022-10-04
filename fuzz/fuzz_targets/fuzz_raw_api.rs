@@ -1,8 +1,8 @@
 #![no_main]
 
 use blart::{
-    deallocate_tree, insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
-    LeafNode, NodePtr, OpaqueNodePtr, TrieRangeFullIter,
+    deallocate_tree, delete_unchecked, insert_unchecked, maximum_unchecked, minimum_unchecked,
+    search_unchecked, LeafNode, NodePtr, OpaqueNodePtr, TrieRangeFullIter,
 };
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
@@ -18,6 +18,10 @@ enum Action {
     },
     MinimumMaximumAndIterator,
     Deallocate,
+    Delete {
+        // the key to delete
+        key: Box<[u8]>,
+    },
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -86,6 +90,16 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     unsafe { deallocate_tree(root) };
 
                     current_root = None;
+                }
+            },
+            Action::Delete { key } => {
+                if let Some(root) = current_root {
+                    let delete_result = unsafe { delete_unchecked(root, key.as_ref()) };
+
+                    if let Some(delete_result) = delete_result {
+                        assert_eq!(delete_result.deleted_leaf.key, key);
+                        current_root = delete_result.new_root;
+                    }
                 }
             },
         }

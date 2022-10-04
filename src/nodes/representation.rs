@@ -92,6 +92,13 @@ impl Header {
         self.prefix.extend(new_bytes.iter().copied());
     }
 
+    /// Write bytes to the start of the key prefix.
+    pub fn prepend_prefix(&mut self, new_bytes: &[u8]) {
+        self.prefix
+            .splice(0..0, new_bytes.iter().copied())
+            .for_each(|_| ());
+    }
+
     /// Remove the specified number of bytes from the start of the prefix.
     ///
     /// # Panics
@@ -272,7 +279,7 @@ impl<V> OpaqueNodePtr<V> {
         // SAFETY: The pointer is properly aligned and points to a initialized instance
         // of Header that is dereferenceable. The lifetime safety requirements are
         // passed up to the caller of this function.
-        unsafe { header_ptr.as_mut() }
+        Some(unsafe { &mut *header_ptr })
     }
 }
 
