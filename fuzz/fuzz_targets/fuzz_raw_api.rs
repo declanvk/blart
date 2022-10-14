@@ -62,10 +62,8 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
             Action::MinimumMaximumAndIterator => {
                 if let Some(root) = current_root {
-                    let min_value = unsafe { minimum_unchecked(root) }
-                        .expect("A non-empty tree should have a minimum");
-                    let max_value = unsafe { maximum_unchecked(root) }
-                        .expect("A non-empty tree should have a maximum");
+                    let min_value = unsafe { minimum_unchecked(root) };
+                    let max_value = unsafe { maximum_unchecked(root) };
                     let mut iterator = unsafe { TrieRangeFullIter::new(root) }
                         .map_err(|mut it| it.next().unwrap());
                     let min_value_from_iter = iterator

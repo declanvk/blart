@@ -862,7 +862,7 @@ impl<const LIMIT: u8> TryFrom<u8> for RestrictedNodeIndex<LIMIT> {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value < LIMIT {
-            Ok(RestrictedNodeIndex(value as u8))
+            Ok(RestrictedNodeIndex(value))
         } else {
             Err(TryFromByteError(LIMIT, usize::from(value)))
         }

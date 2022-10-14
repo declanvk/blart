@@ -30,10 +30,10 @@ fn run_benchmarks(
         b.iter(|| unsafe { search_unchecked(tree_root, last_key).unwrap() })
     });
     group.bench_function("minimum", |b| {
-        b.iter(|| unsafe { minimum_unchecked(tree_root).unwrap() })
+        b.iter(|| unsafe { minimum_unchecked(tree_root) })
     });
     group.bench_function("maximum", |b| {
-        b.iter(|| unsafe { maximum_unchecked(tree_root).unwrap() })
+        b.iter(|| unsafe { maximum_unchecked(tree_root) })
     });
 
     // TODO(#3): Add more benchmarks for:
