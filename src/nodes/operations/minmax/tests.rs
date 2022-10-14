@@ -32,8 +32,8 @@ fn large_tree_same_length_keys_min_max() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
     }
 
-    let min_leaf = unsafe { minimum_unchecked(root).unwrap() };
-    let max_leaf = unsafe { maximum_unchecked(root).unwrap() };
+    let min_leaf = unsafe { minimum_unchecked(root) };
+    let max_leaf = unsafe { maximum_unchecked(root) };
 
     assert_ne!(min_leaf, max_leaf);
     let min_leaf = min_leaf.read();
@@ -55,8 +55,8 @@ fn skewed_tree_min_max() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
     }
 
-    let min_leaf = unsafe { minimum_unchecked(root).unwrap() };
-    let max_leaf = unsafe { maximum_unchecked(root).unwrap() };
+    let min_leaf = unsafe { minimum_unchecked(root) };
+    let max_leaf = unsafe { maximum_unchecked(root) };
 
     assert_ne!(min_leaf, max_leaf);
     let min_leaf = min_leaf.read();

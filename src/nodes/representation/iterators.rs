@@ -151,6 +151,13 @@ impl<V> Iterator for InnerNodeCompressedIter<V> {
     fn count(self) -> usize {
         self.len()
     }
+
+    fn last(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.next_back()
+    }
 }
 
 impl<V> DoubleEndedIterator for InnerNodeCompressedIter<V> {
@@ -293,6 +300,13 @@ impl<V> Iterator for InnerNode48Iter<V> {
 
         (0, Some(max_len))
     }
+
+    fn last(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.next_back()
+    }
 }
 
 impl<V> DoubleEndedIterator for InnerNode48Iter<V> {
@@ -433,6 +447,13 @@ impl<V> Iterator for InnerNode256Iter<V> {
 
         None
     }
+
+    fn last(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.next_back()
+    }
 }
 
 impl<V> DoubleEndedIterator for InnerNode256Iter<V> {
@@ -503,6 +524,36 @@ impl<V> Iterator for InnerNodeIter<V> {
             InnerNodeIter::InnerNode256(ref mut inner) => inner.next(),
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            InnerNodeIter::InnerNodeCompressed(ref inner) => inner.size_hint(),
+            InnerNodeIter::InnerNode48(ref inner) => inner.size_hint(),
+            InnerNodeIter::InnerNode256(ref inner) => inner.size_hint(),
+        }
+    }
+
+    fn last(self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        match self {
+            InnerNodeIter::InnerNodeCompressed(inner) => inner.last(),
+            InnerNodeIter::InnerNode48(inner) => inner.last(),
+            InnerNodeIter::InnerNode256(inner) => inner.last(),
+        }
+    }
+
+    fn count(self) -> usize
+    where
+        Self: Sized,
+    {
+        match self {
+            InnerNodeIter::InnerNodeCompressed(inner) => inner.count(),
+            InnerNodeIter::InnerNode48(inner) => inner.count(),
+            InnerNodeIter::InnerNode256(inner) => inner.count(),
+        }
+    }
 }
 
 impl<V> DoubleEndedIterator for InnerNodeIter<V> {
@@ -514,3 +565,5 @@ impl<V> DoubleEndedIterator for InnerNodeIter<V> {
         }
     }
 }
+
+impl<V> FusedIterator for InnerNodeIter<V> {}

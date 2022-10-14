@@ -479,6 +479,7 @@ pub trait InnerNode: Node {
 
     /// The type of the iterator over all children of the inner node
     type Iter: Iterator<Item = (u8, OpaqueNodePtr<<Self as Node>::Value>)>
+        + DoubleEndedIterator
         + Into<InnerNodeIter<<Self as Node>::Value>>;
 
     /// Search through this node for a child node that corresponds to the given
