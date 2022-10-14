@@ -154,3 +154,145 @@ fn delete_one_entry_n256_shrinks() {
 
     unsafe { deallocate_tree(current_root) };
 }
+
+#[test]
+fn delete_minimum_singleton_tree() {
+    let first_leaf =
+        NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+
+    let tree = first_leaf.to_opaque();
+
+    let delete_result = unsafe { delete_minimum_unchecked(tree) };
+    assert!(delete_result.new_root.is_none());
+    assert_eq!(delete_result.deleted_leaf.key.as_ref(), &[1, 2, 3, 4]);
+    assert_eq!(delete_result.deleted_leaf.value, "1234");
+}
+
+#[test]
+fn delete_minimum_entire_small_tree() {
+    const ENTRIES: &'static [(&'static [u8], char)] = &[
+        (&[1, 2, 3, 4, 5, 6], 'A'),
+        (&[1, 2, 3, 4, 5, 9], 'D'),
+        (&[1, 2, 3, 4, 7, 8], 'C'),
+        (&[2, 4, 6, 8, 10, 12], 'B'),
+    ];
+
+    let entries_it = ENTRIES
+        .iter()
+        .copied()
+        .map(|(key, value)| (Box::<[u8]>::from(&key[..]), value));
+
+    let mut current_root = setup_tree_from_entries(entries_it);
+
+    assert_eq!(current_root.node_type(), NodeType::Node4);
+
+    let d1 = unsafe { delete_minimum_unchecked(current_root) };
+    assert_eq!(d1.deleted_leaf.value, 'A');
+    assert_eq!(d1.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 6]);
+
+    let new_root = d1.new_root.unwrap();
+    assert_eq!(new_root, current_root);
+    current_root = new_root;
+
+    for (key, value) in ENTRIES.iter().copied() {
+        let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+
+        if value == 'A' {
+            assert!(search_result.is_none());
+        } else {
+            assert_eq!(search_result.unwrap().read().value, value);
+        }
+    }
+
+    let d2 = unsafe { delete_minimum_unchecked(current_root) };
+    assert_eq!(d2.deleted_leaf.value, 'D');
+    assert_eq!(d2.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 9]);
+    let new_root = d2.new_root.unwrap();
+    assert_eq!(new_root, current_root);
+    current_root = new_root;
+
+    let d3 = unsafe { delete_minimum_unchecked(current_root) };
+    assert_eq!(d3.deleted_leaf.value, 'C');
+    assert_eq!(d3.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 7, 8]);
+    let new_root = d3.new_root.unwrap();
+    assert_ne!(new_root, current_root);
+    current_root = new_root;
+    assert_eq!(current_root.node_type(), NodeType::Leaf);
+
+    let d4 = unsafe { delete_minimum_unchecked(current_root) };
+    assert_eq!(d4.deleted_leaf.value, 'B');
+    assert_eq!(d4.deleted_leaf.key.as_ref(), &[2, 4, 6, 8, 10, 12]);
+    assert!(d4.new_root.is_none());
+}
+
+#[test]
+fn delete_maximum_singleton_tree() {
+    let first_leaf =
+        NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+
+    let tree = first_leaf.to_opaque();
+
+    let delete_result = unsafe { delete_maximum_unchecked(tree) };
+    assert!(delete_result.new_root.is_none());
+    assert_eq!(delete_result.deleted_leaf.key.as_ref(), &[1, 2, 3, 4]);
+    assert_eq!(delete_result.deleted_leaf.value, "1234");
+}
+
+#[test]
+fn delete_maximum_entire_small_tree() {
+    const ENTRIES: &'static [(&'static [u8], char)] = &[
+        (&[2, 4, 6, 8, 10, 12], 'B'),
+        (&[1, 2, 3, 4, 7, 8], 'C'),
+        (&[1, 2, 3, 4, 5, 9], 'D'),
+        (&[1, 2, 3, 4, 5, 6], 'A'),
+    ];
+
+    let entries_it = ENTRIES
+        .iter()
+        .copied()
+        .map(|(key, value)| (Box::<[u8]>::from(&key[..]), value));
+
+    let mut current_root = setup_tree_from_entries(entries_it);
+
+    assert_eq!(current_root.node_type(), NodeType::Node4);
+
+    let d1 = unsafe { delete_maximum_unchecked(current_root) };
+    assert_eq!(d1.deleted_leaf.value, 'B');
+    assert_eq!(d1.deleted_leaf.key.as_ref(), &[2, 4, 6, 8, 10, 12]);
+
+    let new_root = d1.new_root.unwrap();
+    // root moved
+    assert_ne!(new_root, current_root);
+    current_root = new_root;
+
+    for (key, value) in ENTRIES.iter().copied() {
+        let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+
+        if value == 'B' {
+            assert!(search_result.is_none());
+        } else {
+            assert_eq!(search_result.unwrap().read().value, value);
+        }
+    }
+
+    let d2 = unsafe { delete_maximum_unchecked(current_root) };
+    assert_eq!(d2.deleted_leaf.value, 'C');
+    assert_eq!(d2.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 7, 8]);
+    let new_root = d2.new_root.unwrap();
+    // root moved again
+    assert_ne!(new_root, current_root);
+    current_root = new_root;
+
+    let d3 = unsafe { delete_maximum_unchecked(current_root) };
+    assert_eq!(d3.deleted_leaf.value, 'D');
+    assert_eq!(d3.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 9]);
+    let new_root = d3.new_root.unwrap();
+    assert_ne!(new_root, current_root);
+    current_root = new_root;
+    assert_eq!(current_root.node_type(), NodeType::Leaf);
+
+    let d4 = unsafe { delete_maximum_unchecked(current_root) };
+    assert_eq!(d4.deleted_leaf.value, 'A');
+    assert_eq!(d4.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 6]);
+    assert!(d4.new_root.is_none());
+}
