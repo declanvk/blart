@@ -111,7 +111,7 @@ impl<V> InnerNodeCompressedIter<V> {
         ) {
             let (keys, _) = node.initialized_portion();
             let start_key_index = match start_bound {
-                Bound::Included(min_key_byte) => match keys.binary_search(min_key_byte) {
+                Bound::Included(min_key_byte) => match iterator_search(keys, min_key_byte) {
                     // The `Ok` case is that it found the matching key byte, so we'll start
                     // iteration at that point. The `Err` case is that it did
                     // not found the key byte, but this is this is where the key byte should have
@@ -120,7 +120,7 @@ impl<V> InnerNodeCompressedIter<V> {
                     Ok(idx) | Err(idx) => idx,
                 },
                 Bound::Excluded(min_key_byte_excluded) => {
-                    match keys.binary_search(min_key_byte_excluded) {
+                    match iterator_search(keys, min_key_byte_excluded) {
                         // Same logic for `Ok` and `Err` applies as above. However, we want to
                         // exclude the index we found, so we add 1 so iteration starts at the next
                         // index. Adding 1 here could take us out of bounds of the keys, we have to
@@ -180,7 +180,7 @@ impl<V> InnerNodeCompressedIter<V> {
         ) {
             let (keys, _) = node.initialized_portion();
             let end_key_index = match end_bound {
-                Bound::Included(min_key_byte) => match keys.binary_search(min_key_byte) {
+                Bound::Included(min_key_byte) => match iterator_search(keys, min_key_byte) {
                     // The `Ok` case is the same as above, we've found the matching key byte and
                     // want to include it in iteration, so we add one (to go one past the end for
                     // the `_end` pointer).
@@ -195,7 +195,7 @@ impl<V> InnerNodeCompressedIter<V> {
                     // `Ok` and `Err` are same as above and we want to exclude the element we found.
                     // Thus, we leave the index alone since setting the `_end` pointer to an element
                     // means it will be excluded.
-                    match keys.binary_search(min_key_byte_excluded) {
+                    match iterator_search(keys, min_key_byte_excluded) {
                         Ok(idx) | Err(idx) => idx,
                     }
                 },
@@ -990,5 +990,26 @@ impl<V> DoubleEndedIterator for InnerNodeIter<V> {
 
 impl<V> FusedIterator for InnerNodeIter<V> {}
 
+#[cfg(not(kani))]
+fn iterator_search(keys: &[u8], needle: &u8) -> Result<usize, usize> {
+    keys.binary_search(needle)
+}
+
+#[cfg(kani)]
+fn iterator_search(keys: &[u8], needle: &u8) -> Result<usize, usize> {
+    for (idx, v) in keys.iter().enumerate() {
+        if v == needle {
+            return Ok(idx);
+        } else if *v > *needle {
+            return Err(idx);
+        }
+    }
+
+    Err(keys.len() - 1)
+}
+
 #[cfg(test)]
 mod tests;
+
+#[cfg(kani)]
+mod proofs;
