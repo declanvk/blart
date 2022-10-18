@@ -1,5 +1,5 @@
 use super::lookup;
-use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr};
+use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 
 /// Removes a key from the tree, returning the [`LeafNode`] corresponding to the
 /// key if the key was previously in the tree.
@@ -122,21 +122,6 @@ unsafe fn inner_delete_unchecked<V>(
     }
 }
 
-/// Return true if an [`InnerNode`] with the given [`NodeType`] and
-/// specified number of children should be shrunk.
-///
-/// # Panics
-///  - Panics if `node_type` equals [`NodeType::Leaf`]
-fn should_shrink_inner_node(node_type: NodeType, num_children: usize) -> bool {
-    match node_type {
-        NodeType::Node4 => false,
-        NodeType::Node16 => num_children <= 4,
-        NodeType::Node48 => num_children <= 16,
-        NodeType::Node256 => num_children <= 48,
-        NodeType::Leaf => panic!("cannot shrink node4"),
-    }
-}
-
 /// Remove a child node from the given inner node, return the child node
 /// pointer if it was compressed.
 ///
@@ -198,7 +183,7 @@ unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
         }
 
         Some(child_node_ptr)
-    } else if should_shrink_inner_node(N::TYPE, inner_node.header().num_children()) {
+    } else if N::TYPE.should_shrink_inner_node(inner_node.header().num_children()) {
         let new_inner_node = inner_node.shrink();
 
         let new_inner_node_ptr = NodePtr::allocate_node_ptr(new_inner_node).to_opaque();

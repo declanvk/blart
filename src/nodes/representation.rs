@@ -65,6 +65,21 @@ impl NodeType {
 
         Some(node_type)
     }
+
+    /// Return true if an [`InnerNode`] with the given [`NodeType`] and
+    /// specified number of children should be shrunk.
+    ///
+    /// # Panics
+    ///  - Panics if `node_type` equals [`NodeType::Leaf`]
+    pub fn should_shrink_inner_node(self, num_children: usize) -> bool {
+        match self {
+            NodeType::Node4 => false,
+            NodeType::Node16 => num_children <= 4,
+            NodeType::Node48 => num_children <= 16,
+            NodeType::Node256 => num_children <= 48,
+            NodeType::Leaf => panic!("cannot shrink leaf"),
+        }
+    }
 }
 
 /// The common header for all inner nodes

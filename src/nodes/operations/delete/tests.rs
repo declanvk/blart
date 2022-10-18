@@ -1,6 +1,5 @@
-use crate::{deallocate_tree, search_unchecked, tests_common::setup_tree_from_entries};
-
 use super::*;
+use crate::{deallocate_tree, search_unchecked, tests_common::setup_tree_from_entries, NodeType};
 
 #[test]
 fn delete_singleton_tree_leaf() {

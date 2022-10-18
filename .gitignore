@@ -6,3 +6,6 @@ dhat-output/
 
 # fuzzing artifacts
 default.profraw
+
+# ide
+.vscode/

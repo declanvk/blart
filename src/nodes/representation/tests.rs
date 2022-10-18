@@ -241,24 +241,6 @@ fn node4_shrink() {
 }
 
 #[test]
-fn node4_iterate() {
-    let mut n4 = InnerNode4::empty();
-    let mut l1 = LeafNode::new(vec![].into(), ());
-    let mut l2 = LeafNode::new(vec![].into(), ());
-    let mut l3 = LeafNode::new(vec![].into(), ());
-    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
-
-    n4.write_child(3, l1_ptr);
-    n4.write_child(123, l2_ptr);
-    n4.write_child(1, l3_ptr);
-
-    let pairs = unsafe { InnerNodeCompressedIter::new(&n4).collect::<Vec<_>>() };
-    assert_eq!(pairs, &[(1, l3_ptr), (3, l1_ptr), (123, l2_ptr),])
-}
-
-#[test]
 fn node16_lookup() {
     let mut n = InnerNode16::empty();
     let mut l1 = LeafNode::new(Box::new([]), ());
@@ -329,24 +311,6 @@ fn node16_shrink() {
 #[should_panic]
 fn node16_shrink_too_many_children_panic() {
     inner_node_shrink_test(InnerNode16::empty(), 5);
-}
-
-#[test]
-fn node16_iterate() {
-    let mut n = InnerNode16::empty();
-    let mut l1 = LeafNode::new(vec![].into(), ());
-    let mut l2 = LeafNode::new(vec![].into(), ());
-    let mut l3 = LeafNode::new(vec![].into(), ());
-    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
-
-    n.write_child(3, l1_ptr);
-    n.write_child(123, l2_ptr);
-    n.write_child(1, l3_ptr);
-
-    let pairs = unsafe { InnerNodeCompressedIter::new(&n).collect::<Vec<_>>() };
-    assert_eq!(pairs, &[(1, l3_ptr), (3, l1_ptr), (123, l2_ptr),])
 }
 
 #[test]
@@ -424,35 +388,6 @@ fn node48_shrink_too_many_children_panic() {
 }
 
 #[test]
-fn node48_iterate() {
-    let mut n = InnerNode48::empty();
-    let mut l1 = LeafNode::new(vec![].into(), ());
-    let mut l2 = LeafNode::new(vec![].into(), ());
-    let mut l3 = LeafNode::new(vec![].into(), ());
-    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
-
-    n.write_child(3, l1_ptr);
-    n.write_child(123, l2_ptr);
-    n.write_child(1, l3_ptr);
-
-    let pairs = unsafe { InnerNode48Iter::new(&n).collect::<Vec<_>>() };
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
-        .is_some());
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 123 && *ptr == l2_ptr)
-        .is_some());
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 1 && *ptr == l3_ptr)
-        .is_some());
-}
-
-#[test]
 fn node256_lookup() {
     let mut n = InnerNode256::empty();
     let mut l1 = LeafNode::new(Box::new([]), ());
@@ -500,35 +435,6 @@ fn node256_shrink() {
 #[should_panic]
 fn node256_shrink_too_many_children_panic() {
     inner_node_shrink_test(InnerNode256::empty(), 49);
-}
-
-#[test]
-fn node256_iterate() {
-    let mut n = InnerNode256::empty();
-    let mut l1 = LeafNode::new(vec![].into(), ());
-    let mut l2 = LeafNode::new(vec![].into(), ());
-    let mut l3 = LeafNode::new(vec![].into(), ());
-    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
-
-    n.write_child(3, l1_ptr);
-    n.write_child(123, l2_ptr);
-    n.write_child(1, l3_ptr);
-
-    let pairs = unsafe { InnerNode256Iter::new(&n) }.collect::<Vec<_>>();
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
-        .is_some());
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 123 && *ptr == l2_ptr)
-        .is_some());
-    assert!(pairs
-        .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 1 && *ptr == l3_ptr)
-        .is_some());
 }
 
 #[test]
