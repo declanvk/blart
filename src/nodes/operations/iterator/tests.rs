@@ -1,10 +1,11 @@
 use crate::{
     deallocate_tree, insert_unchecked, tests_common::generate_key_fixed_length, LeafNode, NodePtr,
-    TrieRangeFullIter,
+    TreeIterator,
 };
 
-fn map_item_to_ref<'a, V>((key_ptr, value_ptr): (*const [u8], *const V)) -> (&'a [u8], &'a V) {
-    unsafe { (key_ptr.as_ref().unwrap(), value_ptr.as_ref().unwrap()) }
+fn map_item_to_ref<'a, V>(leaf_node_ptr: NodePtr<LeafNode<V>>) -> (&'a [u8], &'a V) {
+    let (key, value) = unsafe { leaf_node_ptr.as_key_value_ref() };
+    (key.as_ref(), value)
 }
 
 #[test]
@@ -33,7 +34,7 @@ fn small_tree_iterator_front_and_back() {
         root
     };
 
-    let mut trie_iter = unsafe { TrieRangeFullIter::new(root).unwrap() };
+    let mut trie_iter = unsafe { TreeIterator::new(root) };
 
     assert_eq!(
         trie_iter.next().map(map_item_to_ref),
@@ -99,8 +100,7 @@ fn large_fixed_length_key_iterator_front_back() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
     }
 
-    let mut trie_iter = unsafe { TrieRangeFullIter::new(root) }
-        .unwrap()
+    let mut trie_iter = unsafe { TreeIterator::new(root) }
         .map(map_item_to_ref)
         .map(|(key, _)| key);
 

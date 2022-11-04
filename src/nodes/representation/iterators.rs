@@ -271,7 +271,7 @@ impl<V> InnerNodeCompressedIter<V> {
     ///
     ///  - The `offset` must be less than or equal to the remaining number of
     ///    elements in the iterator.
-    unsafe fn post_inc_start(&mut self, offset: isize) -> (*const u8, *const OpaqueNodePtr<V>) {
+    unsafe fn post_inc_start(&mut self, offset: isize) -> (*mut u8, *mut OpaqueNodePtr<V>) {
         let old_keys_start = self.keys_start.as_ptr();
         let old_child_pointers_start = self.child_pointers_start.as_ptr();
 
@@ -291,7 +291,7 @@ impl<V> InnerNodeCompressedIter<V> {
     ///
     ///  - The `offset` must be less than or equal to the remaining number of
     ///    elements in the iterator.
-    unsafe fn pre_dec_end(&mut self, offset: isize) -> (*const u8, *const OpaqueNodePtr<V>) {
+    unsafe fn pre_dec_end(&mut self, offset: isize) -> (*mut u8, *mut OpaqueNodePtr<V>) {
         // SAFETY: the caller guarantees that `offset` doesn't exceed `self.len()`,
         // which is guaranteed to not overflow an `isize`. Also, the resulting pointer
         // is in bounds of `slice`, which fulfills the other requirements for `offset`.
@@ -369,12 +369,6 @@ impl<V> DoubleEndedIterator for InnerNodeCompressedIter<V> {
 }
 
 impl<V> FusedIterator for InnerNodeCompressedIter<V> {}
-
-impl<V> From<InnerNodeCompressedIter<V>> for InnerNodeIter<V> {
-    fn from(src: InnerNodeCompressedIter<V>) -> Self {
-        InnerNodeIter::InnerNodeCompressed(src)
-    }
-}
 
 /// An iterator over all the children of a [`InnerNode48`].
 // All the `NonNull` pointers in this struct are constructed from shared
@@ -676,12 +670,6 @@ impl<V> DoubleEndedIterator for InnerNode48Iter<V> {
 
 impl<V> FusedIterator for InnerNode48Iter<V> {}
 
-impl<V> From<InnerNode48Iter<V>> for InnerNodeIter<V> {
-    fn from(src: InnerNode48Iter<V>) -> Self {
-        InnerNodeIter::InnerNode48(src)
-    }
-}
-
 /// An iterator over all the children of a [`InnerNode256`].
 // All the `NonNull` pointers in this struct are constructed from shared
 // references and must not be used to mutate.
@@ -922,77 +910,6 @@ impl<V> DoubleEndedIterator for InnerNode256Iter<V> {
 }
 
 impl<V> FusedIterator for InnerNode256Iter<V> {}
-
-impl<V> From<InnerNode256Iter<V>> for InnerNodeIter<V> {
-    fn from(src: InnerNode256Iter<V>) -> Self {
-        InnerNodeIter::InnerNode256(src)
-    }
-}
-
-/// A generic iterator that uses specific iterators for each [`NodeType`]
-/// (excluding leaves) inside.
-pub enum InnerNodeIter<V> {
-    /// An iterator over the children of an [`InnerNodeCompressed`] node.
-    InnerNodeCompressed(InnerNodeCompressedIter<V>),
-    /// An iterator over the childen of an [`InnerNode48`] node.
-    InnerNode48(InnerNode48Iter<V>),
-    /// An iterator over the childen of an [`InnerNode256`] node.
-    InnerNode256(InnerNode256Iter<V>),
-}
-
-impl<V> Iterator for InnerNodeIter<V> {
-    type Item = (u8, OpaqueNodePtr<V>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            InnerNodeIter::InnerNodeCompressed(ref mut inner) => inner.next(),
-            InnerNodeIter::InnerNode48(ref mut inner) => inner.next(),
-            InnerNodeIter::InnerNode256(ref mut inner) => inner.next(),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match self {
-            InnerNodeIter::InnerNodeCompressed(ref inner) => inner.size_hint(),
-            InnerNodeIter::InnerNode48(ref inner) => inner.size_hint(),
-            InnerNodeIter::InnerNode256(ref inner) => inner.size_hint(),
-        }
-    }
-
-    fn last(self) -> Option<Self::Item>
-    where
-        Self: Sized,
-    {
-        match self {
-            InnerNodeIter::InnerNodeCompressed(inner) => inner.last(),
-            InnerNodeIter::InnerNode48(inner) => inner.last(),
-            InnerNodeIter::InnerNode256(inner) => inner.last(),
-        }
-    }
-
-    fn count(self) -> usize
-    where
-        Self: Sized,
-    {
-        match self {
-            InnerNodeIter::InnerNodeCompressed(inner) => inner.count(),
-            InnerNodeIter::InnerNode48(inner) => inner.count(),
-            InnerNodeIter::InnerNode256(inner) => inner.count(),
-        }
-    }
-}
-
-impl<V> DoubleEndedIterator for InnerNodeIter<V> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        match self {
-            InnerNodeIter::InnerNodeCompressed(ref mut inner) => inner.next_back(),
-            InnerNodeIter::InnerNode48(ref mut inner) => inner.next_back(),
-            InnerNodeIter::InnerNode256(ref mut inner) => inner.next_back(),
-        }
-    }
-}
-
-impl<V> FusedIterator for InnerNodeIter<V> {}
 
 #[cfg(test)]
 mod tests;

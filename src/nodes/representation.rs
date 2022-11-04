@@ -1,7 +1,7 @@
 //! Trie node representation
 
 pub use self::iterators::*;
-use crate::tagged_pointer::TaggedPointer;
+use crate::{tagged_pointer::TaggedPointer, InnerNodeIter};
 use std::{
     cmp::Ordering,
     error::Error,
@@ -324,7 +324,7 @@ impl<V> fmt::Debug for ConcreteNodePtr<V> {
     }
 }
 
-/// A pointer to a Node{4,16,48,256}.
+/// A pointer to a [`Node`].
 #[repr(transparent)]
 pub struct NodePtr<N: Node>(NonNull<N>);
 
@@ -425,6 +425,38 @@ impl<N: Node> NodePtr<N> {
     /// Acquires the underlying *mut pointer.
     pub fn to_ptr(self) -> *mut N {
         self.0.as_ptr()
+    }
+}
+
+impl<V> NodePtr<LeafNode<V>> {
+    /// Returns a shared reference to the key and value of the pointed to [`LeafNode`].
+    ///
+    /// # Safety
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
+    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
+    ///    lifetime of the data. In particular, for the duration of this
+    ///    lifetime, the memory the pointer points to must not get mutated
+    ///    (except inside UnsafeCell).
+    pub unsafe fn as_key_value_ref<'a>(self) -> (&'a Box<[u8]>, &'a V) {
+        // SAFETY: Safety requirements are covered by the containing function.
+        let leaf = unsafe { self.as_ref() };
+
+        (&leaf.key, &leaf.value)
+    }
+
+    /// Returns a unique mutable reference to the key and value of the pointed to [`LeafNode`].
+    ///
+    /// # Safety
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
+    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
+    ///    lifetime of the node. In particular, for the duration of this
+    ///    lifetime, the node the pointer points to must not get accessed (read
+    ///    or written) through any other pointer.
+    pub unsafe fn as_key_value_mut<'a>(self) -> (&'a mut Box<[u8]>, &'a mut V) {
+        // SAFETY: Safety requirements are covered by the containing function.
+        let leaf = unsafe { self.as_mut() };
+
+        (&mut leaf.key, &mut leaf.value)
     }
 }
 

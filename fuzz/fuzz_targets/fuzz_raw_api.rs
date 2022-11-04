@@ -2,7 +2,7 @@
 
 use blart::{
     deallocate_tree, delete_unchecked, insert_unchecked, maximum_unchecked, minimum_unchecked,
-    search_unchecked, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, TrieRangeFullIter,
+    search_unchecked, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, TreeIterator,
 };
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
@@ -64,23 +64,22 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 if let Some(root) = current_root {
                     let min_value = unsafe { minimum_unchecked(root) };
                     let max_value = unsafe { maximum_unchecked(root) };
-                    let mut iterator = unsafe { TrieRangeFullIter::new(root) }
-                        .map_err(|mut it| it.next().unwrap());
-                    let min_value_from_iter = iterator
-                        .as_mut()
-                        .map(|it| it.next().unwrap())
-                        .unwrap_or_else(|leaf| *leaf);
-                    let max_value_from_iter = iterator
-                        .map(|mut it| it.next_back().unwrap())
-                        .unwrap_or_else(|leaf| leaf);
+                    if min_value == max_value {
+                        // The tree only has a single value, min and max check is not interesting
+                        continue;
+                    }
+
+                    let mut iterator = unsafe { TreeIterator::<_>::new(root) };
+                    let min_value_from_iter = iterator.next().unwrap();
+                    let max_value_from_iter = iterator.next_back().unwrap();
 
                     let min_value = unsafe { min_value.as_ref() };
                     let max_value = unsafe { max_value.as_ref() };
 
                     assert!(min_value.key <= max_value.key);
 
-                    assert_eq!(min_value.key.as_ref() as *const _, min_value_from_iter.0);
-                    assert_eq!(max_value.key.as_ref() as *const _, max_value_from_iter.0);
+                    assert_eq!(&min_value.key, unsafe { min_value_from_iter.as_key_value_ref() }.0);
+                    assert_eq!(&max_value.key, unsafe { max_value_from_iter.as_key_value_ref() }.0);
                 }
             },
             Action::Deallocate => {
