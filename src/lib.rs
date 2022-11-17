@@ -1,5 +1,5 @@
 // TODO(#20): Use rust stable distribution, remove usage of nightly features
-#![feature(slice_ptr_get, strict_provenance)]
+#![feature(slice_ptr_get, strict_provenance, hasher_prefixfree_extras)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,
@@ -21,11 +21,13 @@
 //!
 //! [ART paper]: https://www-db.in.tum.de/~leis/papers/ART.pdf
 
+mod collections;
 mod nodes;
 pub mod tagged_pointer;
 #[doc(hidden)]
 pub mod tests_common;
 
+pub use collections::*;
 pub use nodes::*;
 
 mod nightly_rust_apis;

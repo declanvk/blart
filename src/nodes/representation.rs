@@ -429,7 +429,8 @@ impl<N: Node> NodePtr<N> {
 }
 
 impl<V> NodePtr<LeafNode<V>> {
-    /// Returns a shared reference to the key and value of the pointed to [`LeafNode`].
+    /// Returns a shared reference to the key and value of the pointed to
+    /// [`LeafNode`].
     ///
     /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
@@ -437,6 +438,7 @@ impl<V> NodePtr<LeafNode<V>> {
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get mutated
     ///    (except inside UnsafeCell).
+    #[allow(clippy::borrowed_box)]
     pub unsafe fn as_key_value_ref<'a>(self) -> (&'a Box<[u8]>, &'a V) {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
@@ -444,7 +446,8 @@ impl<V> NodePtr<LeafNode<V>> {
         (&leaf.key, &leaf.value)
     }
 
-    /// Returns a unique mutable reference to the key and value of the pointed to [`LeafNode`].
+    /// Returns a unique mutable reference to the key and value of the pointed
+    /// to [`LeafNode`].
     ///
     /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
@@ -452,11 +455,70 @@ impl<V> NodePtr<LeafNode<V>> {
     ///    lifetime of the node. In particular, for the duration of this
     ///    lifetime, the node the pointer points to must not get accessed (read
     ///    or written) through any other pointer.
-    pub unsafe fn as_key_value_mut<'a>(self) -> (&'a mut Box<[u8]>, &'a mut V) {
+    #[allow(clippy::borrowed_box)]
+    pub unsafe fn as_key_ref_value_mut<'a>(self) -> (&'a Box<[u8]>, &'a mut V) {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_mut() };
 
         (&mut leaf.key, &mut leaf.value)
+    }
+
+    /// Returns a unique mutable reference to the key and value of the pointed
+    /// to [`LeafNode`].
+    ///
+    /// # Safety
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
+    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
+    ///    lifetime of the data. In particular, for the duration of this
+    ///    lifetime, the memory the pointer points to must not get mutated
+    ///    (except inside UnsafeCell).
+    #[allow(clippy::borrowed_box)]
+    pub unsafe fn as_key_ref<'a>(self) -> &'a Box<[u8]>
+    where
+        V: 'a,
+    {
+        // SAFETY: Safety requirements are covered by the containing function.
+        let leaf = unsafe { self.as_ref() };
+
+        &leaf.key
+    }
+
+    /// Returns a unique mutable reference to the key and value of the pointed
+    /// to [`LeafNode`].
+    ///
+    /// # Safety
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
+    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
+    ///    lifetime of the data. In particular, for the duration of this
+    ///    lifetime, the memory the pointer points to must not get mutated
+    ///    (except inside UnsafeCell).
+    pub unsafe fn as_value_ref<'a>(self) -> &'a V
+    where
+        V: 'a,
+    {
+        // SAFETY: Safety requirements are covered by the containing function.
+        let leaf = unsafe { self.as_ref() };
+
+        &leaf.value
+    }
+
+    /// Returns a unique mutable reference to the key and value of the pointed
+    /// to [`LeafNode`].
+    ///
+    /// # Safety
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
+    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
+    ///    lifetime of the node. In particular, for the duration of this
+    ///    lifetime, the node the pointer points to must not get accessed (read
+    ///    or written) through any other pointer.
+    pub unsafe fn as_value_mut<'a>(self) -> &'a mut V
+    where
+        V: 'a,
+    {
+        // SAFETY: Safety requirements are covered by the containing function.
+        let leaf = unsafe { self.as_mut() };
+
+        &mut leaf.value
     }
 }
 

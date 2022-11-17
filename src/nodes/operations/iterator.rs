@@ -172,14 +172,17 @@ impl<V> DoubleEndedIterator for InnerNodeTreeIterator<V> {
 
 impl<V> FusedIterator for InnerNodeTreeIterator<V> {}
 
-/// A generic iterator that uses specific iterators for each [`NodeType`]
-/// (excluding leaves) inside.
+/// A generic iterator that uses specific iterators for each
+/// [`NodeType`][crate::NodeType] (excluding leaves) inside.
 pub enum InnerNodeIter<V> {
-    /// An iterator over the children of an [`InnerNodeCompressed`] node.
+    /// An iterator over the children of an
+    /// [`InnerNodeCompressed`][crate::InnerNodeCompressed] node.
     InnerNodeCompressed(InnerNodeCompressedIter<V>),
-    /// An iterator over the childen of an [`InnerNode48`] node.
+    /// An iterator over the childen of an [`InnerNode48`][crate::InnerNode48]
+    /// node.
     InnerNode48(InnerNode48Iter<V>),
-    /// An iterator over the childen of an [`InnerNode256`] node.
+    /// An iterator over the childen of an [`InnerNode256`][crate::InnerNode256]
+    /// node.
     InnerNode256(InnerNode256Iter<V>),
 }
 

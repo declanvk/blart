@@ -5,6 +5,9 @@ use std::{error::Error, fmt, ops::ControlFlow};
 ///
 /// Returns either a pointer to the new tree root or an error.
 ///
+/// If the given key already exists in the tree, the old key and value will be
+/// replaced and be returned.
+///
 /// # Errors
 ///
 ///   - Returns a [`InsertPrefixError`] if the given key is a prefix of another
@@ -170,6 +173,8 @@ pub unsafe fn insert_unchecked<V>(
             let leaf_node = leaf_node_ptr.read();
 
             if leaf_node.matches_full_key(key.as_ref()) {
+                // This means that the key provided exactly matched the existing leaf key, so we
+                // will simply replace the contents of the leaf node.
                 #[allow(clippy::undropped_manually_drops)]
                 drop(leaf_node);
 

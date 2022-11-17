@@ -23,3 +23,9 @@ name = "fuzz_raw_api"
 path = "fuzz_targets/fuzz_raw_api.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_tree_map_api"
+path = "fuzz_targets/fuzz_tree_map_api.rs"
+test = false
+doc = false
