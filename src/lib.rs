@@ -1,11 +1,5 @@
-#![feature(
-    maybe_uninit_uninit_array,
-    maybe_uninit_slice,
-    nonnull_slice_from_raw_parts,
-    slice_ptr_get,
-    strict_provenance,
-    maybe_uninit_write_slice
-)]
+// TODO(#20): Use rust stable distribution, remove usage of nightly features
+#![feature(slice_ptr_get, strict_provenance)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,
@@ -33,3 +27,5 @@ pub mod tagged_pointer;
 pub mod tests_common;
 
 pub use nodes::*;
+
+mod nightly_rust_apis;

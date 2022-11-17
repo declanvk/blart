@@ -41,8 +41,12 @@ impl<V> InnerNodeCompressedIter<V> {
         //        the value is known to be initialized.
         let (keys_start, child_pointers_start) = unsafe {
             (
-                NonNull::new_unchecked(MaybeUninit::slice_as_ptr(&node.keys) as *mut _),
-                NonNull::new_unchecked(MaybeUninit::slice_as_ptr(&node.child_pointers) as *mut _),
+                NonNull::new_unchecked(crate::nightly_rust_apis::maybe_uninit_slice_as_ptr(
+                    &node.keys,
+                ) as *mut _),
+                NonNull::new_unchecked(crate::nightly_rust_apis::maybe_uninit_slice_as_ptr(
+                    &node.child_pointers,
+                ) as *mut _),
             )
         };
 
@@ -392,7 +396,7 @@ impl<V> InnerNode48Iter<V> {
         let child_pointers_ptr = {
             let child_pointers_slice = node.initialized_child_pointers();
 
-            NonNull::slice_from_raw_parts(
+            crate::nightly_rust_apis::non_null_slice_from_raw_parts(
                 NonNull::new(child_pointers_slice.as_ptr() as *mut _).unwrap(),
                 child_pointers_slice.len(),
             )

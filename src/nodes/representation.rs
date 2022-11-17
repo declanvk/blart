@@ -597,8 +597,8 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
     pub fn empty() -> Self {
         InnerNodeCompressed {
             header: Header::default(),
-            child_pointers: MaybeUninit::uninit_array(),
-            keys: MaybeUninit::uninit_array(),
+            child_pointers: crate::nightly_rust_apis::maybe_uninit_uninit_array(),
+            keys: crate::nightly_rust_apis::maybe_uninit_uninit_array(),
         }
     }
 
@@ -620,8 +620,10 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
         // be initialized
         unsafe {
             (
-                MaybeUninit::slice_assume_init_ref(&self.keys[0..self.header.num_children()]),
-                MaybeUninit::slice_assume_init_ref(
+                crate::nightly_rust_apis::maybe_uninit_slice_assume_init_ref(
+                    &self.keys[0..self.header.num_children()],
+                ),
+                crate::nightly_rust_apis::maybe_uninit_slice_assume_init_ref(
                     &self.child_pointers[0..self.header.num_children()],
                 ),
             )
@@ -702,8 +704,8 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
         );
 
         let header = self.header.clone();
-        let mut keys = MaybeUninit::<u8>::uninit_array::<NEW_SIZE>();
-        let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<NEW_SIZE>();
+        let mut keys = crate::nightly_rust_apis::maybe_uninit_uninit_array();
+        let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
 
         keys[..header.num_children()].copy_from_slice(&self.keys[..header.num_children()]);
         child_pointers[..header.num_children()]
@@ -719,7 +721,7 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
     fn grow_node48(&self) -> InnerNode48<V> {
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<48>();
+        let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
 
         let (n16_keys, _) = self.initialized_portion();
 
@@ -952,7 +954,7 @@ impl<V> InnerNode48<V> {
         InnerNode48 {
             header: Header::default(),
             child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
-            child_pointers: MaybeUninit::uninit_array(),
+            child_pointers: crate::nightly_rust_apis::maybe_uninit_uninit_array(),
         }
     }
 
@@ -961,7 +963,9 @@ impl<V> InnerNode48<V> {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
         // be initialized
         unsafe {
-            MaybeUninit::slice_assume_init_ref(&self.child_pointers[0..self.header.num_children()])
+            crate::nightly_rust_apis::maybe_uninit_slice_assume_init_ref(
+                &self.child_pointers[0..self.header.num_children()],
+            )
         }
     }
 }
@@ -1070,7 +1074,7 @@ impl<V> InnerNode for InnerNode48<V> {
 
         let header = self.header.clone();
 
-        let mut key_and_child_ptrs = MaybeUninit::<(u8, OpaqueNodePtr<V>)>::uninit_array::<16>();
+        let mut key_and_child_ptrs = crate::nightly_rust_apis::maybe_uninit_uninit_array::<16, _>();
         // SAFETY: The lifetime of this iterator is bounded to this function, and will
         // not overlap with any mutating operations on the node because it of the shared
         // reference that this function uses.
@@ -1085,7 +1089,9 @@ impl<V> InnerNode for InnerNode48<V> {
             // array because the previous iterator loops through all children of the inner
             // node.
             let init_key_and_child_ptrs = unsafe {
-                MaybeUninit::slice_assume_init_mut(&mut key_and_child_ptrs[..header.num_children()])
+                crate::nightly_rust_apis::maybe_uninit_slice_assume_init_mut(
+                    &mut key_and_child_ptrs[..header.num_children()],
+                )
             };
 
             init_key_and_child_ptrs.sort_unstable_by_key(|(key_byte, _)| *key_byte);
@@ -1093,8 +1099,8 @@ impl<V> InnerNode for InnerNode48<V> {
             init_key_and_child_ptrs
         };
 
-        let mut keys = MaybeUninit::<u8>::uninit_array::<16>();
-        let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<16>();
+        let mut keys = crate::nightly_rust_apis::maybe_uninit_uninit_array();
+        let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
 
         for (idx, (key_byte, child_ptr)) in init_key_and_child_ptrs.iter().copied().enumerate() {
             keys[idx].write(key_byte);
@@ -1207,7 +1213,7 @@ impl<V> InnerNode for InnerNode256<V> {
 
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = MaybeUninit::<OpaqueNodePtr<V>>::uninit_array::<48>();
+        let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
 
         // SAFETY: This iterator lives only for the lifetime of this function, which
         // does not mutate the `InnerNode256` (guaranteed by reference).
