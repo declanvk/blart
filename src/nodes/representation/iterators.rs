@@ -1,3 +1,5 @@
+use sptr::Strict;
+
 use super::*;
 use std::{
     iter::FusedIterator,

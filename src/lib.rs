@@ -1,5 +1,6 @@
 // TODO(#20): Use rust stable distribution, remove usage of nightly features
-#![feature(slice_ptr_get, strict_provenance, hasher_prefixfree_extras)]
+#![feature(slice_ptr_get, hasher_prefixfree_extras)]
+#![allow(unstable_name_collisions)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,
