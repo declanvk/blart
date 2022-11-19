@@ -423,12 +423,25 @@ mod tests {
             0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
         );
 
-        assert_eq!(TaggedPointer::<u128>::ALIGNMENT, 8);
-        assert_eq!(TaggedPointer::<u128>::NUM_BITS, 3);
-        assert_eq!(
-            TaggedPointer::<u128>::POINTER_MASK,
-            0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
-        );
+        // Something weird about the representation of u128 on x86 vs aarch64 platforms: 
+        // https://github.com/rust-lang/rust/issues/54341
+        if cfg!(target_arch = "x86") {
+            assert_eq!(TaggedPointer::<u128>::ALIGNMENT, 8);
+            assert_eq!(TaggedPointer::<u128>::NUM_BITS, 3);
+
+            assert_eq!(
+                TaggedPointer::<u128>::POINTER_MASK,
+                0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
+            );
+        } else {
+            assert_eq!(TaggedPointer::<u128>::ALIGNMENT, 16);
+            assert_eq!(TaggedPointer::<u128>::NUM_BITS, 4);
+
+            assert_eq!(
+                TaggedPointer::<u128>::POINTER_MASK,
+                0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11110000usize
+            );
+        }
     }
 
     #[test]

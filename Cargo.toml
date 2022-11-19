@@ -11,10 +11,12 @@ features = ["std", "rustc_1_57"]
 [dev-dependencies]
 argh = "0.1.7"
 criterion = { version = "0.3.5", features = ["html_reports"] }
-criterion-perf-events = "0.1.4"
-perfcnt = "0.7.2"
 dhat = "0.3.0"
 rustc-hash = "1.1.0"
+
+[target.'cfg(target_arch = "x86")'.dependencies]
+criterion-perf-events = "0.1.4"
+perfcnt = "0.7.2"
 
 [[bench]]
 name = "raw_apis"
