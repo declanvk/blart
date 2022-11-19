@@ -5,13 +5,22 @@ use blart::{
     },
     LeafNode, NodePtr, OpaqueNodePtr,
 };
+#[cfg(not(target_arch = "x86"))]
+use criterion::measurement::WallTime;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+#[cfg(target_arch = "x86")]
 use criterion_perf_events::Perf;
+#[cfg(target_arch = "x86")]
 use perfcnt::linux::{HardwareEventType, PerfCounterBuilderLinux};
 use std::time::Duration;
 
+#[cfg(target_arch = "x86")]
+type Measurement = Perf;
+#[cfg(not(target_arch = "x86"))]
+type Measurement = WallTime;
+
 fn run_benchmarks(
-    group: &mut BenchmarkGroup<Perf>,
+    group: &mut BenchmarkGroup<Measurement>,
     key_vec: &[Box<[u8]>],
     tree_root: OpaqueNodePtr<usize>,
 ) {
@@ -44,7 +53,7 @@ fn run_benchmarks(
 }
 
 fn setup_tree_run_benches_cleanup(
-    c: &mut Criterion<Perf>,
+    c: &mut Criterion<Measurement>,
     keys: impl Iterator<Item = Box<[u8]>>,
     group_name: &str,
 ) {
@@ -64,7 +73,7 @@ fn setup_tree_run_benches_cleanup(
     unsafe { deallocate_tree(root) };
 }
 
-pub fn raw_api_benches(c: &mut Criterion<Perf>) {
+pub fn raw_api_benches(c: &mut Criterion<Measurement>) {
     // number of keys = 256
     setup_tree_run_benches_cleanup(c, generate_keys_skewed(u8::MAX as usize), "skewed");
     // number of keys = 256
@@ -89,7 +98,8 @@ pub fn raw_api_benches(c: &mut Criterion<Perf>) {
     )
 }
 
-fn create_criterion_configuration() -> Criterion<Perf> {
+#[cfg(target_arch = "x86")]
+fn create_criterion_configuration() -> Criterion<Measurement> {
     Criterion::default()
         .with_measurement(Perf::new(PerfCounterBuilderLinux::from_hardware_event(
             // I switched to using retired instruction counts because the variability of the wall
@@ -106,6 +116,13 @@ fn create_criterion_configuration() -> Criterion<Perf> {
             // https://docs.rs/perf-event/latest/perf_event/events/index.html
             HardwareEventType::Instructions,
         )))
+        .sample_size(1000)
+        .measurement_time(Duration::new(10, 0))
+}
+
+#[cfg(not(target_arch = "x86"))]
+fn create_criterion_configuration() -> Criterion<Measurement> {
+    Criterion::default()
         .sample_size(1000)
         .measurement_time(Duration::new(10, 0))
 }
