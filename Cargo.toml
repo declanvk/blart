@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
+[dependencies]
+sptr = "0.3.2"
+
 [dependencies.tinyvec]
 version = "1.6.0"
 features = ["std", "rustc_1_57"]
@@ -14,7 +17,7 @@ criterion = { version = "0.3.5", features = ["html_reports"] }
 dhat = "0.3.0"
 rustc-hash = "1.1.0"
 
-[target.'cfg(target_arch = "x86")'.dependencies]
+[target.'cfg(target_arch = "x86")'.dev-dependencies]
 criterion-perf-events = "0.1.4"
 perfcnt = "0.7.2"
 

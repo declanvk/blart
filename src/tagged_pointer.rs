@@ -8,7 +8,9 @@
 //! pointed-to type, so that it can store several bits of information. For a
 //! type with alignment `A`, the number of available bits is `log_2(A)`.
 
-use std::{fmt, mem::align_of, num::NonZeroUsize, ptr::NonNull};
+use std::{fmt, mem::align_of, ptr::NonNull};
+
+use sptr::Strict;
 
 /// A non-null pointer type which carries several bits of metadata.
 #[repr(transparent)]
@@ -16,6 +18,13 @@ pub struct TaggedPointer<P>(NonNull<P>);
 
 impl<P> TaggedPointer<P> {
     /// The ABI-required minimum alignment of the `P` type.
+    ///
+    /// The maximum alignment of a rust type is 2^29 according to the
+    /// [reference][align-reference]. On 32-bit and 64-bit platforms that means
+    /// that it is impossible for the POINTER_MASK to be zero, there must be at
+    /// least 3 bit present.
+    ///
+    /// [align-reference]: https://doc.rust-lang.org/reference/type-layout.html#the-alignment-modifiers
     pub const ALIGNMENT: usize = align_of::<P>();
     /// A mask for data-carrying bits of the pointer.
     pub const DATA_MASK: usize = !Self::POINTER_MASK;
@@ -63,12 +72,12 @@ impl<P> TaggedPointer<P> {
         // assumes that null is always a zero value.
         let unchecked_ptr = unsafe { NonNull::new_unchecked(pointer) };
 
-        let ptr_addr = unchecked_ptr.addr();
+        let ptr_addr = unchecked_ptr.as_ptr().addr();
 
         // Double-check that there are no existing bits stored in the data-carrying
         // positions
         assert_eq!(
-            ptr_addr.get() & Self::DATA_MASK,
+            ptr_addr & Self::DATA_MASK,
             0,
             "this pointer was not aligned"
         );
@@ -98,18 +107,14 @@ impl<P> TaggedPointer<P> {
     /// This pointer is guaranteed to be non-null.
     pub fn to_ptr(self) -> *mut P {
         self.0
-            .map_addr(|ptr_addr| {
-                // SAFETY: The result is guaranteed to be non-zero because this tagged pointer
-                // was created with the same non-zero value.
-                unsafe { NonZeroUsize::new_unchecked(ptr_addr.get() & Self::POINTER_MASK) }
-            })
             .as_ptr()
+            .map_addr(|ptr_addr| ptr_addr & Self::POINTER_MASK)
     }
 
     /// Consume this tagged pointer and produce the data it carries.
     pub fn to_data(self) -> usize {
-        let ptr_addr = self.0.addr();
-        ptr_addr.get() & Self::DATA_MASK
+        let ptr_addr = self.0.as_ptr().addr();
+        ptr_addr & Self::DATA_MASK
     }
 
     /// Update the data this tagged pointer carries to a new value.
@@ -125,15 +130,18 @@ impl<P> TaggedPointer<P> {
         );
         let data = data & Self::DATA_MASK;
 
-        self.0 = self.0.map_addr(|ptr_addr| {
-            let new_addr = (ptr_addr.get() & Self::POINTER_MASK) | data;
-
-            // clear the data bits and then write the new data
-            // SAFETY: This value will always be non-zero because the upper bits (from
-            // POINTER_MASK) will always be non-zero. This a property of the type and its
-            // construction.
-            unsafe { NonZeroUsize::new_unchecked(new_addr) }
+        let ptr_with_new_data = self.0.as_ptr().map_addr(|ptr_addr| {
+            (ptr_addr & Self::POINTER_MASK) | data
         });
+
+        // The `ptr_with_new_data` is guaranteed to be non-null because it's pointer
+        // address was derived from a non-null pointer using operations that would not
+        // have zeroed out the address.
+        //
+        // The bit-and operation combining the original pointer address (non-null)
+        // combined with the POINTER_MASK would not have produced a zero value because
+        // the POINTER_MASK value must have the high bits set.
+        self.0 = unsafe { NonNull::new_unchecked(ptr_with_new_data) };
     }
 
     /// Casts to a [`TaggedPointer`] of another type.
@@ -423,7 +431,7 @@ mod tests {
             0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
         );
 
-        // Something weird about the representation of u128 on x86 vs aarch64 platforms: 
+        // Something weird about the representation of u128 on x86 vs aarch64 platforms:
         // https://github.com/rust-lang/rust/issues/54341
         if cfg!(target_arch = "x86") {
             assert_eq!(TaggedPointer::<u128>::ALIGNMENT, 8);

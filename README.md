@@ -4,6 +4,18 @@
 
 - [Documentation for the `main` branch](https://declanvk.github.io/blart/)
 
+## Testing
+
+### Miri
+
+Currently we're using some specific crates (`sptr` and in the future back to `core::ptr::*`) to ensure that we're compatible with [Strict Provenance][sp-issue]. The following `MIRIFLAGS` setup should enable checking to make sure that we're compatible.
+
+```bash
+MIRIFLAGS="-Zmiri-strict-provenance -Zmiri-symbolic-alignment-check" cargo miri test
+```
+
+I think this is useful because we're doing some pointer times with our tagged pointers implementation, mutating the contents of the pointer to store bits of data.
+
 ## Fuzzing
 
 To run the fuzzer I use the command:
@@ -58,3 +70,5 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
+
+[sp-issue]: https://github.com/rust-lang/rust/issues/95228
