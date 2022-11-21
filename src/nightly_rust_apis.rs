@@ -99,3 +99,21 @@ pub fn non_null_slice_from_raw_parts<T>(data: NonNull<T>, len: usize) -> NonNull
     // SAFETY: `data` is a `NonNull` pointer which is necessarily non-null
     unsafe { NonNull::<[T]>::new_unchecked(slice_from_raw_parts_mut(data.as_ptr(), len)) }
 }
+
+/// Returns a raw pointer to an element, without doing bounds checking.
+///
+/// Calling this method with an out-of-bounds index or when `data` is not
+/// dereferenceable is *[undefined behavior]* even if the resulting pointer is
+/// not used.
+///
+/// **This is a unstable API copied from the Rust standard library, tracking
+/// issue is [#74265][issue-74265]**
+///
+/// [issue-74265]: https://github.com/rust-lang/rust/issues/74265
+/// [undefined behavior]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
+pub unsafe fn non_null_get_unchecked_mut<T>(data: NonNull<[T]>, index: usize) -> NonNull<T> {
+    // SAFETY: the caller ensures that `self` is dereferenceable and `index`
+    // in-bounds. As a consequence, the resulting pointer cannot be null.
+
+    unsafe { NonNull::new_unchecked(data.as_ptr().cast::<T>().add(index)) }
+}

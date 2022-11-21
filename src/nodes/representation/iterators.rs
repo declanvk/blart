@@ -568,10 +568,12 @@ impl<V> Iterator for InnerNode48Iter<V> {
                 //        `initialized_child_pointers`, which returns the initialized portion of
                 //        the `child_pointers` array.
                 let child_pointer = unsafe {
-                    self.child_pointers_ptr
-                        .get_unchecked_mut(usize::from(u8::from(next_index)))
-                        .as_ptr()
-                        .read()
+                    crate::nightly_rust_apis::non_null_get_unchecked_mut(
+                        self.child_pointers_ptr,
+                        usize::from(u8::from(next_index)),
+                    )
+                    .as_ptr()
+                    .read()
                 };
 
                 // SAFETY:
@@ -642,10 +644,12 @@ impl<V> DoubleEndedIterator for InnerNode48Iter<V> {
                 //        `initialized_child_pointers`, which returns the initialized portion of
                 //        the `child_pointers` array.
                 let child_pointer = unsafe {
-                    self.child_pointers_ptr
-                        .get_unchecked_mut(usize::from(u8::from(next_index)))
-                        .as_ptr()
-                        .read()
+                    crate::nightly_rust_apis::non_null_get_unchecked_mut(
+                        self.child_pointers_ptr,
+                        usize::from(u8::from(next_index)),
+                    )
+                    .as_ptr()
+                    .read()
                 };
 
                 // SAFETY:
