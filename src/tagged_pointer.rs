@@ -130,9 +130,10 @@ impl<P> TaggedPointer<P> {
         );
         let data = data & Self::DATA_MASK;
 
-        let ptr_with_new_data = self.0.as_ptr().map_addr(|ptr_addr| {
-            (ptr_addr & Self::POINTER_MASK) | data
-        });
+        let ptr_with_new_data = self
+            .0
+            .as_ptr()
+            .map_addr(|ptr_addr| (ptr_addr & Self::POINTER_MASK) | data);
 
         // The `ptr_with_new_data` is guaranteed to be non-null because it's pointer
         // address was derived from a non-null pointer using operations that would not
@@ -431,10 +432,15 @@ mod tests {
             0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
         );
 
-        // Something weird about the representation of u128 on x86 vs aarch64 platforms:
+        // Something weird about the representation of u128 on intel architectures:
         // https://github.com/rust-lang/rust/issues/54341
-        if cfg!(target_arch = "x86") {
-            assert_eq!(TaggedPointer::<u128>::ALIGNMENT, 8);
+        if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+            assert_eq!(
+                TaggedPointer::<u128>::ALIGNMENT,
+                8,
+                "Target architecture [{}]",
+                std::env::consts::ARCH
+            );
             assert_eq!(TaggedPointer::<u128>::NUM_BITS, 3);
 
             assert_eq!(
@@ -442,7 +448,12 @@ mod tests {
                 0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
             );
         } else {
-            assert_eq!(TaggedPointer::<u128>::ALIGNMENT, 16);
+            assert_eq!(
+                TaggedPointer::<u128>::ALIGNMENT,
+                16,
+                "Target architecture [{}]",
+                std::env::consts::ARCH
+            );
             assert_eq!(TaggedPointer::<u128>::NUM_BITS, 4);
 
             assert_eq!(
