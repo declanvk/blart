@@ -501,7 +501,7 @@ impl<V> FromIterator<(Box<[u8]>, V)> for TreeMap<V> {
 
 impl<V: Hash> Hash for TreeMap<V> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_length_prefix(self.num_entries);
+        crate::nightly_rust_apis::hasher_write_length_prefix(state, self.num_entries);
         for elt in self {
             elt.hash(state);
         }

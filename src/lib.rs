@@ -1,5 +1,3 @@
-// TODO(#20): Use rust stable distribution, remove usage of nightly features
-#![feature(hasher_prefixfree_extras)]
 #![allow(unstable_name_collisions)]
 #![deny(
     missing_docs,
