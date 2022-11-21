@@ -18,7 +18,9 @@
 /// issue is [#63569][issue-63569]**
 ///
 /// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
-pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(slice: &[std::mem::MaybeUninit<T>]) -> &[T] {
+pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
+    slice: &[std::mem::MaybeUninit<T>],
+) -> &[T] {
     #[cfg(feature = "nightly")]
     {
         // SAFETY: Covered by condition of containing function
@@ -78,7 +80,9 @@ pub fn maybe_uninit_uninit_array<const N: usize, T>() -> [std::mem::MaybeUninit<
 /// issue is [#63569][issue-63569]**
 ///
 /// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
-pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(slice: &mut [std::mem::MaybeUninit<T>]) -> &mut [T] {
+pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
+    slice: &mut [std::mem::MaybeUninit<T>],
+) -> &mut [T] {
     #[cfg(feature = "nightly")]
     {
         // SAFETY: Covered by condition of containing function
@@ -124,7 +128,10 @@ pub fn maybe_uninit_slice_as_ptr<T>(this: &[std::mem::MaybeUninit<T>]) -> *const
 /// issue is [#71941][issue-71941]**
 ///
 /// [issue-71941]: https://github.com/rust-lang/rust/issues/71941
-pub fn non_null_slice_from_raw_parts<T>(data: std::ptr::NonNull<T>, len: usize) -> std::ptr::NonNull<[T]> {
+pub fn non_null_slice_from_raw_parts<T>(
+    data: std::ptr::NonNull<T>,
+    len: usize,
+) -> std::ptr::NonNull<[T]> {
     #[cfg(feature = "nightly")]
     {
         std::ptr::NonNull::slice_from_raw_parts(data, len)
@@ -133,7 +140,12 @@ pub fn non_null_slice_from_raw_parts<T>(data: std::ptr::NonNull<T>, len: usize) 
     #[cfg(not(feature = "nightly"))]
     {
         // SAFETY: `data` is a `NonNull` pointer which is necessarily non-null
-        unsafe { std::ptr::NonNull::<[T]>::new_unchecked(std::ptr::slice_from_raw_parts_mut(data.as_ptr(), len)) }
+        unsafe {
+            std::ptr::NonNull::<[T]>::new_unchecked(std::ptr::slice_from_raw_parts_mut(
+                data.as_ptr(),
+                len,
+            ))
+        }
     }
 }
 
@@ -148,7 +160,10 @@ pub fn non_null_slice_from_raw_parts<T>(data: std::ptr::NonNull<T>, len: usize) 
 ///
 /// [issue-74265]: https://github.com/rust-lang/rust/issues/74265
 /// [undefined behavior]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
-pub unsafe fn non_null_get_unchecked_mut<T>(data: std::ptr::NonNull<[T]>, index: usize) -> std::ptr::NonNull<T> {
+pub unsafe fn non_null_get_unchecked_mut<T>(
+    data: std::ptr::NonNull<[T]>,
+    index: usize,
+) -> std::ptr::NonNull<T> {
     #[cfg(feature = "nightly")]
     {
         // SAFETY: Covered by condition of containing function
