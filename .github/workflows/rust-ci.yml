@@ -15,7 +15,6 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        # 1.62.0 is the MSRV for the crate
         rust: [nightly, beta, stable, ${{env.CRATE_MINIMUM_SUPPORTED_RUST_VERSION}}]
 
     runs-on: ubuntu-latest
