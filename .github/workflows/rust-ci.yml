@@ -14,8 +14,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        # 1.62.0 is the MSRV for the crate
-        rust: ['nightly', 'beta', 'stable', '1.62.0']
+        # 1.65.0 is the MSRV for the crate
+        rust: ['nightly', 'beta', 'stable', '1.65.0']
 
     runs-on: ubuntu-latest
     steps:
