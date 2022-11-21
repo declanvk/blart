@@ -1,11 +1,12 @@
-use sptr::Strict;
-
 use super::*;
 use std::{
     iter::FusedIterator,
     mem,
     ops::{Bound, Range, RangeBounds},
 };
+
+#[cfg(not(feature = "nightly"))]
+use sptr::Strict;
 
 /// An iterator all the children of an [`InnerNodeCompressed`].
 ///

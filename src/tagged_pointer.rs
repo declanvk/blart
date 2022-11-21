@@ -10,6 +10,7 @@
 
 use std::{fmt, mem::align_of, ptr::NonNull};
 
+#[cfg(not(feature = "nightly"))]
 use sptr::Strict;
 
 /// A non-null pointer type which carries several bits of metadata.

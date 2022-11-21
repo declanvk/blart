@@ -1,7 +1,8 @@
-use sptr::Strict;
-
 use super::*;
 use std::mem;
+
+#[cfg(not(feature = "nightly"))]
+use sptr::Strict;
 
 #[test]
 fn opaque_node_ptr_is_correct() {

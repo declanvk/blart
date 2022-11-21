@@ -11,6 +11,9 @@ sptr = "0.3.2"
 version = "1.6.0"
 features = ["std", "rustc_1_57"]
 
+[features]
+nightly = []
+
 [dev-dependencies]
 argh = "0.1.7"
 criterion = { version = "0.3.5", features = ["html_reports"] }
