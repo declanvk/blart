@@ -697,15 +697,76 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
     }
 
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        let (keys, _) = self.initialized_portion();
+        const SIMD_LANES: usize = 16;
 
-        for (child_index, key) in keys.iter().enumerate() {
-            if *key == key_fragment {
-                return Some(child_index);
+        #[inline]
+        fn linear_lookup_child_index(keys: &[u8], key_fragment: u8) -> Option<usize> {
+            for (child_index, key) in keys.iter().enumerate() {
+                if *key == key_fragment {
+                    return Some(child_index);
+                }
+            }
+
+            None
+        }
+
+        /// Use SIMD instructions to perform faster lookup operation
+        ///
+        /// # Panics
+        ///
+        /// The length of the `keys` array must be greater than or equal to the
+        /// number of lanes in the chosen SIMD vector size, or else the function panics.
+        #[inline]
+        #[cfg(feature = "nightly")]
+        fn simd_lookup_child_index(keys: &[u8], key_fragment: u8) -> Option<usize> {
+            use std::simd::{SimdPartialEq, ToBitMask};
+
+            type SIMD = std::simd::Simd<u8, SIMD_LANES>;
+
+            assert!(keys.len() >= SIMD::LANES);
+
+            let mut remaining_keys = keys;
+            let needle = SIMD::splat(key_fragment);
+            let mut num_loops: usize = 0;
+
+            loop {
+                let (haystack, rest) = &remaining_keys.split_at(SIMD::LANES);
+                remaining_keys = rest;
+
+                let haystack = SIMD::from_slice(haystack);
+                let mask = needle.simd_eq(haystack);
+
+                if mask.any() {
+                    let offset = mask.to_bitmask().trailing_zeros();
+
+                    return Some(usize::try_from(offset).unwrap() + num_loops * SIMD::LANES);
+                } else {
+                    // not found, keep searching.
+
+                    if remaining_keys.len() < SIMD::LANES {
+                        return linear_lookup_child_index(remaining_keys, key_fragment);
+                    }
+
+                    num_loops += 1;
+                }
             }
         }
 
-        None
+        #[inline]
+        #[cfg(not(feature = "nightly"))]
+        fn simd_lookup_child_index(keys: &[u8], key_fragment: u8) -> Option<usize> {
+            linear_lookup_child_index(keys, key_fragment)
+        }
+
+        let (keys, _) = self.initialized_portion();
+
+        if self.header.num_children() >= SIMD_LANES {
+            // PANIC SAFETY: The length of the keys array is equal to the number of children
+            // and is checked to be greater than the number of lanes.
+            simd_lookup_child_index(keys, key_fragment)
+        } else {
+            linear_lookup_child_index(keys, key_fragment)
+        }
     }
 
     /// Return the initialized portions of the keys and child pointer arrays.
