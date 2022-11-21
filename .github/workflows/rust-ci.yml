@@ -14,11 +14,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        rust:
-          - nightly
-          - beta
-          - stable
-          - 1.62.0 # MSRV for the crate
+        # 1.65.0 is the MSRV for the crate
+        rust: ['nightly', 'beta', 'stable', '1.65.0']
 
     runs-on: ubuntu-latest
     steps:
@@ -31,19 +28,19 @@ jobs:
           toolchain: ${{matrix.rust}}
 
       - name: Build
-        if: ${{ matrix.rust != "nightly" }}
+        if: matrix.rust != 'nightly'
         run: cargo build --all-targets
 
       - name: Build with 'nightly' feature
-        if: ${{ matrix.rust == "nightly" }}
+        if: matrix.rust == 'nightly'
         run: cargo build --all-targets --features nightly
 
       - name: Test
-        if: ${{ matrix.rust != "nightly" }}
+        if: matrix.rust != 'nightly'
         run: cargo test
 
       - name: Test with 'nightly' feature
-        if: ${{ matrix.rust == "nightly" }}
+        if: matrix.rust == 'nightly'
         run: cargo test --features nightly
 
   format:
