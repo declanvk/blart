@@ -1,13 +1,12 @@
 #![cfg_attr(
     feature = "nightly",
     feature(
-        maybe_uninit_uninit_array,
+        hasher_prefixfree_extras,
         maybe_uninit_slice,
+        maybe_uninit_uninit_array,
         nonnull_slice_from_raw_parts,
         slice_ptr_get,
         strict_provenance,
-        maybe_uninit_write_slice,
-        hasher_prefixfree_extras
     )
 )]
 #![allow(unstable_name_collisions)]
