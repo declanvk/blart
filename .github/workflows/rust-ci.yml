@@ -11,64 +11,79 @@ env:
 
 jobs:
   test:
+    strategy:
+      fail-fast: true
+      matrix:
+        rust:
+          - nightly
+          - beta
+          - stable
+          - 1.62.0 # MSRV for the crate
+
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
+          toolchain: ${{matrix.rust}}
 
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --examples --tests --benches
+        if: ${{ matrix.rust != "nightly" }}
+        run: cargo build --all-targets
+
+      - name: Build with 'nightly' feature
+        if: ${{ matrix.rust == "nightly" }}
+        run: cargo build --all-targets --features nightly
 
       - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+        if: ${{ matrix.rust != "nightly" }}
+        run: cargo test
+
+      - name: Test with 'nightly' feature
+        if: ${{ matrix.rust == "nightly" }}
+        run: cargo test --features nightly
 
   format:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
           components: rustfmt
 
       - name: Check format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+        run: cargo fmt -- --check
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
           components: clippy
 
       - name: Lint
-        uses: actions-rs/clippy-check@v1
+        run: cargo clippy --all-features
+
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          components: miri
+
+      - name: Run miri tests
+        run: cargo miri test
