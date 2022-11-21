@@ -8,14 +8,15 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CRATE_MINIMUM_SUPPORTED_RUST_VERSION: 1.62.0
+  CRATE_MINIMUM_SUPPORTED_RUST_VERSION: '1.62.0'
 
 jobs:
   test:
     strategy:
       fail-fast: true
       matrix:
-        rust: [nightly, beta, stable, ${{env.CRATE_MINIMUM_SUPPORTED_RUST_VERSION}}]
+        # 1.62.0 is the MSRV for the crate
+        rust: ['nightly', 'beta', 'stable', '${{env.CRATE_MINIMUM_SUPPORTED_RUST_VERSION}}']
 
     runs-on: ubuntu-latest
     steps:
@@ -32,15 +33,15 @@ jobs:
         run: cargo build --all-targets
 
       - name: Build with 'nightly' feature
-        if: ${{ matrix.rust == "nightly" }}
+        if: matrix.rust == "nightly"
         run: cargo build --all-targets --features nightly
 
       - name: Test
-        if: ${{ matrix.rust != "nightly" }}
+        if: matrix.rust != "nightly"
         run: cargo test
 
       - name: Test with 'nightly' feature
-        if: ${{ matrix.rust == "nightly" }}
+        if: matrix.rust == "nightly"
         run: cargo test --features nightly
 
   format:
