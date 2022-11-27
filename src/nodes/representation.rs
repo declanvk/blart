@@ -644,6 +644,14 @@ pub trait InnerNode: Node {
     /// function must enforce that the lifetime of the iterator does not overlap
     /// with any mutating operations on the node.
     unsafe fn iter(&self) -> Self::Iter;
+
+    /// Split the inner node at the given key-byte, returning a new
+    /// [`InnerNode`] of the same type that contains all children including and
+    /// after the given key fragment. The original inner node has those children
+    /// removed.
+    ///
+    /// The header key prefix is duplicated to the new split-off node.
+    fn split_at(&mut self, key_fragment: u8) -> Self;
 }
 
 /// Node type that has a compact representation for key bytes and children
@@ -834,6 +842,32 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
             child_pointers,
         }
     }
+
+    fn split_at(&mut self, split_key_fragment: u8) -> Self {
+        let split_index = {
+            let (keys, _) = self.initialized_portion();
+            keys.partition_point(|key_fragment| *key_fragment < split_key_fragment)
+        };
+
+        // Create new split node with a copy of the key prefix
+        let mut split_node = Self::empty();
+        split_node.header.prefix = self.header.prefix.clone();
+
+        let split_num_children = self.header.num_children() - split_index;
+
+        // move the keys and child_pointers from the split point over to the new node
+        split_node.keys[..split_num_children]
+            .copy_from_slice(&self.keys[split_index..self.header.num_children()]);
+        split_node.child_pointers[..split_num_children]
+            .copy_from_slice(&self.child_pointers[split_index..self.header.num_children()]);
+
+        // update number of children on both sides of the split
+        split_node.header.num_children = u16::try_from(split_num_children)
+            .expect("this number should be derived from something that fit in a u16");
+        self.header.num_children -= split_node.header.num_children;
+
+        split_node
+    }
 }
 
 /// Node that references between 2 and 4 children
@@ -883,6 +917,10 @@ impl<V> InnerNode for InnerNode4<V> {
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
     }
+
+    fn split_at(&mut self, key_fragment: u8) -> Self {
+        InnerNodeCompressed::split_at(self, key_fragment)
+    }
 }
 
 /// Node that references between 5 and 16 children
@@ -931,6 +969,10 @@ impl<V> InnerNode for InnerNode16<V> {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
+    }
+
+    fn split_at(&mut self, key_fragment: u8) -> Self {
+        InnerNodeCompressed::split_at(self, key_fragment)
     }
 }
 
@@ -1121,7 +1163,10 @@ impl<V> InnerNode for InnerNode48<V> {
             // Take all child indices that are greater than the index we're removing, and
             // subtract one so that they remain valid
             for other_restrict_index in &mut self.child_indices {
-                if let Some(Ordering::Less) = restricted_index.partial_cmp(other_restrict_index) {
+                if matches!(
+                    restricted_index.partial_cmp(other_restrict_index),
+                    Some(Ordering::Less)
+                ) {
                     // PANIC SAFETY: This will not underflow, because it is guaranteed to be
                     // greater than at least 1 other index. This will not panic in the
                     // `try_from` because the new value is derived from an existing restricted
@@ -1220,6 +1265,80 @@ impl<V> InnerNode for InnerNode48<V> {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNode48Iter::new(self) }
+    }
+
+    fn split_at(&mut self, key_fragment: u8) -> Self {
+        let split_index = usize::from(key_fragment);
+        let (keep_child_indices, split_child_indices) =
+            self.child_indices.split_at_mut(split_index);
+
+        // Create new split node with a copy of the key prefix
+        let mut split_node = Self::empty();
+        split_node.header.prefix = self.header.prefix.clone();
+
+        // Move the split off child pointers to the second half of the new node
+        split_node.child_indices[split_index..].copy_from_slice(split_child_indices);
+
+        // clear the contents of the original second half and count the number of filled
+        // child nodes
+        //
+        // This step also compact the child pointers that belong to the split node into
+        // the start of the `split_node.child_pointers` array
+        let mut split_node_num_children = 0u16;
+        for (original_child_index, new_child_index) in split_child_indices
+            .iter_mut()
+            .zip(&mut split_node.child_indices[split_index..])
+        {
+            if *original_child_index != RestrictedNodeIndex::<48>::EMPTY {
+                // Copy the child pointer from the original node to the new split node
+                let new_child_index_value = usize::from(split_node_num_children);
+                split_node.child_pointers[new_child_index_value] =
+                    self.child_pointers[usize::from(u8::from(*original_child_index))];
+
+                // Clear out original child index and replace new child index with updated value
+                *original_child_index = RestrictedNodeIndex::<48>::EMPTY;
+                // PANIC SAFETY: The value of `keep_child_index_value` is limited to the range
+                // 0..(max number of children present in InnerNode48), so this conversion will
+                // not panic
+                *new_child_index =
+                    RestrictedNodeIndex::<48>::try_from(new_child_index_value).unwrap();
+
+                // PANIC SAFETY: This will not overflow because the number of children cannot
+                // exceed 256, which is less than u16::MAX
+                split_node_num_children += 1;
+            }
+        }
+
+        split_node.header.num_children = split_node_num_children;
+
+        // Now we need to compact the original array of child pointers and update the
+        // `keep_child_indices` list. We need a new child pointers array so we don't
+        // overwrite the existing one
+        let mut new_keep_child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
+        let mut keep_node_num_children = 0u16;
+        for keep_child_index in keep_child_indices {
+            if *keep_child_index != RestrictedNodeIndex::<48>::EMPTY {
+                let keep_child_index_value = usize::from(keep_node_num_children);
+                // Move the child pointer from currently location to start of new child pointers
+                // array and update child index
+                new_keep_child_pointers[keep_child_index_value] =
+                    self.child_pointers[usize::from(u8::from(*keep_child_index))];
+                // PANIC SAFETY: The value of `keep_child_index_value` is limited to the range
+                // 0..(max number of children present in InnerNode48), so this conversion will
+                // not panic
+                *keep_child_index =
+                    RestrictedNodeIndex::<48>::try_from(keep_child_index_value).unwrap();
+
+                // PANIC SAFETY: This will not overflow because the number of children cannot
+                // exceed 256, which is less than u16::MAX
+                keep_node_num_children += 1;
+            }
+        }
+
+        self.child_pointers = new_keep_child_pointers;
+        self.header.num_children = keep_node_num_children;
+
+        split_node
     }
 }
 
@@ -1341,6 +1460,36 @@ impl<V> InnerNode for InnerNode256<V> {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNode256Iter::new(self) }
+    }
+
+    fn split_at(&mut self, key_fragment: u8) -> Self {
+        let split_index = usize::from(key_fragment);
+        let (_, split_child_pointers) = self.child_pointers.split_at_mut(split_index);
+
+        // Create new split node with a copy of the key prefix
+        let mut split_node = Self::empty();
+        split_node.header.prefix = self.header.prefix.clone();
+
+        // Move the split off child pointers to the second half of the new node
+        split_node.child_pointers[split_index..].copy_from_slice(split_child_pointers);
+
+        // clear the contents of the original second half and count the number of filled
+        // child nodes
+        let mut split_child_pointer_count = 0u16;
+        for child_pointer in split_child_pointers {
+            if child_pointer.is_some() {
+                // PANIC SAFETY: This will not overflow because the number of children cannot
+                // exceed 256, which is less than u16::MAX
+                split_child_pointer_count += 1;
+                *child_pointer = None;
+            }
+        }
+
+        // Update the number of children in each split node
+        self.header.num_children -= split_child_pointer_count;
+        split_node.header.num_children = split_child_pointer_count;
+
+        split_node
     }
 }
 

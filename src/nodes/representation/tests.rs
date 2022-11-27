@@ -173,6 +173,47 @@ fn inner_node_shrink_test(mut node: impl InnerNode<Value = ()>, num_children: us
     }
 }
 
+fn inner_node_split_at_on_test_keys_moved(
+    mut node: impl InnerNode<Value = ()>,
+    children_key_fragments: &[u8],
+    split_key_fragment: u8,
+) {
+    assert!(children_key_fragments.len() < usize::from(u8::MAX));
+    let total_num_children = children_key_fragments.len();
+    // this ensures that the vector is never resized and the mutable references
+    // aren't invalid pointers later on (not that we're using the pointers at all)
+    let mut leaves = Vec::with_capacity(total_num_children);
+
+    for key_fragment in children_key_fragments {
+        leaves.push(LeafNode::new(vec![].into(), ()));
+        let last_leaf = NodePtr::from(leaves.last_mut().unwrap()).to_opaque();
+        node.write_child(*key_fragment, last_leaf);
+    }
+
+    let split_node = node.split_at(split_key_fragment);
+
+    assert_eq!(node.header().prefix, split_node.header().prefix);
+
+    for (idx, key_fragment) in children_key_fragments.iter().copied().enumerate() {
+        let leaf_pointer = NodePtr::from(&mut leaves[idx]).to_opaque();
+        if key_fragment < split_key_fragment {
+            assert_eq!(node.lookup_child(key_fragment), Some(leaf_pointer));
+            assert_eq!(split_node.lookup_child(key_fragment), None);
+        } else {
+            assert_eq!(node.lookup_child(key_fragment), None);
+            assert_eq!(split_node.lookup_child(key_fragment), Some(leaf_pointer));
+        }
+    }
+
+    let split_idx = children_key_fragments.partition_point(|x| *x < split_key_fragment);
+
+    assert_eq!(node.header().num_children(), split_idx);
+    assert_eq!(
+        split_node.header().num_children(),
+        total_num_children - split_idx
+    );
+}
+
 #[test]
 fn node4_lookup() {
     let mut n = InnerNode4::empty();
@@ -241,6 +282,22 @@ fn node4_shrink() {
     let n4 = InnerNode4::<()>::empty();
 
     n4.shrink();
+}
+
+#[test]
+fn node4_split_at_on_existing_key() {
+    inner_node_split_at_on_test_keys_moved(InnerNode4::<()>::empty(), &[1, 3, 82, 123], 82);
+}
+
+#[test]
+fn node4_split_at_on_non_existent_key() {
+    inner_node_split_at_on_test_keys_moved(InnerNode4::<()>::empty(), &[1, 3, 82, 123], 66);
+}
+
+#[test]
+fn node4_split_at_both_empty_ends() {
+    inner_node_split_at_on_test_keys_moved(InnerNode4::<()>::empty(), &[1, 3, 82, 123], 0);
+    inner_node_split_at_on_test_keys_moved(InnerNode4::<()>::empty(), &[1, 3, 82, 123], 244);
 }
 
 #[test]
@@ -314,6 +371,38 @@ fn node16_shrink() {
 #[should_panic]
 fn node16_shrink_too_many_children_panic() {
     inner_node_shrink_test(InnerNode16::empty(), 5);
+}
+
+#[test]
+fn node16_split_at_on_existing_key() {
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode16::<()>::empty(),
+        &[1, 3, 17, 29, 42, 82, 89, 123, 137, 201],
+        82,
+    );
+}
+
+#[test]
+fn node16_split_at_on_non_existent_key() {
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode16::<()>::empty(),
+        &[1, 3, 17, 29, 42, 82, 89, 123, 137, 201],
+        66,
+    );
+}
+
+#[test]
+fn node16_split_at_both_empty_ends() {
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode16::<()>::empty(),
+        &[1, 3, 17, 29, 42, 82, 89, 123, 137, 201],
+        0,
+    );
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode16::<()>::empty(),
+        &[1, 3, 17, 29, 42, 82, 89, 123, 137, 201],
+        244,
+    );
 }
 
 #[test]
@@ -391,6 +480,25 @@ fn node48_shrink_too_many_children_panic() {
 }
 
 #[test]
+fn node48_split_at_on_existing_key() {
+    let keys = (0..=47u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
+    inner_node_split_at_on_test_keys_moved(InnerNode48::<()>::empty(), keys.as_ref(), 34);
+}
+
+#[test]
+fn node48_split_at_on_non_existent_key() {
+    let keys = (0..=47u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
+    inner_node_split_at_on_test_keys_moved(InnerNode48::<()>::empty(), keys.as_ref(), 35);
+}
+
+#[test]
+fn node48_split_at_both_empty_ends() {
+    let keys = (0..=47u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
+    inner_node_split_at_on_test_keys_moved(InnerNode48::<()>::empty(), keys.as_ref(), 0);
+    inner_node_split_at_on_test_keys_moved(InnerNode48::<()>::empty(), keys.as_ref(), 47);
+}
+
+#[test]
 fn node256_lookup() {
     let mut n = InnerNode256::empty();
     let mut l1 = LeafNode::new(Box::new([]), ());
@@ -438,6 +546,25 @@ fn node256_shrink() {
 #[should_panic]
 fn node256_shrink_too_many_children_panic() {
     inner_node_shrink_test(InnerNode256::empty(), 49);
+}
+
+#[test]
+fn node256_split_at_on_existing_key() {
+    let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
+    inner_node_split_at_on_test_keys_moved(InnerNode256::<()>::empty(), keys.as_ref(), 82);
+}
+
+#[test]
+fn node256_split_at_on_non_existent_key() {
+    let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
+    inner_node_split_at_on_test_keys_moved(InnerNode256::<()>::empty(), keys.as_ref(), 65);
+}
+
+#[test]
+fn node256_split_at_both_empty_ends() {
+    let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
+    inner_node_split_at_on_test_keys_moved(InnerNode256::<()>::empty(), keys.as_ref(), 0);
+    inner_node_split_at_on_test_keys_moved(InnerNode256::<()>::empty(), keys.as_ref(), 255);
 }
 
 #[test]
