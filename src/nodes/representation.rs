@@ -329,7 +329,7 @@ impl<V> fmt::Debug for ConcreteNodePtr<V> {
 pub struct NodePtr<N: Node>(NonNull<N>);
 
 impl<N: Node> NodePtr<N> {
-    /// Create a safe pointer to a Node_.
+    /// Create a safe pointer to a [`Node`].
     ///
     /// # Safety
     ///

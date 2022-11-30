@@ -7,14 +7,14 @@ use std::{
     io::{self, Write},
 };
 
-/// Settings which custom the output of the [`DotPrinter`] visitor.
+/// Settings which customize the output of the [`DotPrinter`] visitor.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DotPrinterSettings {
     /// Add node address to output in graphs
     pub display_node_address: bool,
 }
 
-/// A visitor the the radix trie that will print the tree in "dot" notation.
+/// A visitor of the radix trie that will print the tree in "dot" notation.
 ///
 /// See ['DOT Language | Graphviz'](https://graphviz.org/doc/info/lang.html) for
 /// information about syntax and example of the language.

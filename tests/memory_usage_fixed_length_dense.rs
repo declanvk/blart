@@ -45,7 +45,11 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_bytes, 0);
 
         dhat::assert_eq!(stats.max_blocks, 398);
-        dhat::assert_eq!(stats.max_bytes, 17024);
+        if cfg!(any(miri, feature = "nightly")) {
+            dhat::assert_eq!(stats.max_bytes, 18088);
+        } else {
+            dhat::assert_eq!(stats.max_bytes, 17024);
+        }
 
         let num_keys = KEY_LEVEL_WIDTH
             .iter()
