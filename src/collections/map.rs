@@ -298,17 +298,16 @@ impl<V> TreeMap<V> {
     ///
     /// In other words, remove all pairs (k, v) for which f(&k, &mut v) returns
     /// false. The elements are visited in ascending key order.
-    pub fn retain<F>(&mut self, _f: F)
+    pub fn retain<F>(&mut self, f: F)
     where
         F: FnMut(&[u8], &mut V) -> bool,
     {
-        // Special care needs to be taken to be panic-safe for the closure
-        todo!()
+        self.drain_filter(f).for_each(|_| ());
     }
 
     /// Moves all elements from other into self, leaving other empty.
-    pub fn append(&mut self, _other: &mut TreeMap<V>) {
-        todo!()
+    pub fn append(&mut self, other: &mut TreeMap<V>) {
+        self.extend(other.drain_filter(|_, _| true))
     }
 
     /// Constructs a double-ended iterator over a sub-range of elements in the
@@ -345,11 +344,12 @@ impl<V> TreeMap<V> {
 
     /// Splits the collection into two at the given key. Returns everything
     /// after the given key, including the key.
-    pub fn split_off<K>(&mut self, _k: K) -> TreeMap<V>
+    pub fn split_off<K>(&mut self, split_key: K) -> TreeMap<V>
     where
         K: AsRef<[u8]>,
     {
-        todo!()
+        let split_key = split_key.as_ref();
+        self.drain_filter(|key, _| split_key <= key).collect()
     }
 
     /// Creates an iterator that visits all elements (key-value pairs) in

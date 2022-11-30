@@ -57,6 +57,15 @@ macro_rules! impl_ref_mut_iterator {
         {
             self.next_back()
         }
+
+        #[cfg(feature = "nightly")]
+        fn is_sorted(self) -> bool
+        where
+            Self: Sized,
+            Self::Item: PartialOrd,
+        {
+            true
+        }
     };
 }
 
@@ -271,6 +280,52 @@ impl_ref_mut_iterator!(ValuesMut<'m, V>, &'m mut V);
 /// [`range`]: TreeMap::range
 pub struct Range<'a, V>(PhantomData<&'a V>);
 
+impl<'a, V> Iterator for Range<'a, V> {
+    type Item = (&'a [u8], &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+
+    fn last(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.next_back()
+    }
+
+    fn min(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+        Self::Item: Ord,
+    {
+        self.next()
+    }
+
+    fn max(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+        Self::Item: Ord,
+    {
+        self.next_back()
+    }
+
+    #[cfg(feature = "nightly")]
+    fn is_sorted(self) -> bool
+    where
+        Self: Sized,
+        Self::Item: PartialOrd,
+    {
+        true
+    }
+}
+
+impl<'a, V> DoubleEndedIterator for Range<'a, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
 /// A mutable iterator over a sub-range of entries in a `TreeMap`.
 ///
 /// This `struct` is created by the [`range_mut`] method on [`TreeMap`]. See
@@ -279,11 +334,103 @@ pub struct Range<'a, V>(PhantomData<&'a V>);
 /// [`range_mut`]: TreeMap::range_mut
 pub struct RangeMut<'a, V>(PhantomData<&'a mut V>);
 
+impl<'a, V> Iterator for RangeMut<'a, V> {
+    type Item = (&'a [u8], &'a mut V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+
+    fn last(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.next_back()
+    }
+
+    fn min(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+        Self::Item: Ord,
+    {
+        self.next()
+    }
+
+    fn max(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+        Self::Item: Ord,
+    {
+        self.next_back()
+    }
+
+    #[cfg(feature = "nightly")]
+    fn is_sorted(self) -> bool
+    where
+        Self: Sized,
+        Self::Item: PartialOrd,
+    {
+        true
+    }
+}
+
+impl<'a, V> DoubleEndedIterator for RangeMut<'a, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
 /// An iterator produced by calling [`drain_filter`] on [`TreeMap`]. See its
 /// documentation for more.
 ///
 /// [`drain_filter`]: TreeMap::range_mut
 pub struct DrainFilter<V>(PhantomData<V>);
+
+impl<V> Iterator for DrainFilter<V> {
+    type Item = (Box<[u8]>, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+
+    fn last(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.next_back()
+    }
+
+    fn min(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+        Self::Item: Ord,
+    {
+        self.next()
+    }
+
+    fn max(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+        Self::Item: Ord,
+    {
+        self.next_back()
+    }
+
+    #[cfg(feature = "nightly")]
+    fn is_sorted(self) -> bool
+    where
+        Self: Sized,
+        Self::Item: PartialOrd,
+    {
+        true
+    }
+}
+
+impl<V> DoubleEndedIterator for DrainFilter<V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
 
 /// An owning iterator over the keys of a `TreeMap`.
 ///

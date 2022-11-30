@@ -179,10 +179,10 @@ impl Header {
 #[repr(align(8))]
 struct OpaqueValue;
 
-/// An opaque pointer to a Node{4,16,48,256}.
+/// An opaque pointer to a [`Node`].
 ///
 /// Could be any one of the NodeTypes, need to perform check on the runtime type
-/// and then cast to a `NodeRef`.
+/// and then cast to a [`NodePtr`].
 #[repr(transparent)]
 pub struct OpaqueNodePtr<V>(TaggedPointer<OpaqueValue>, PhantomData<V>);
 
@@ -674,6 +674,18 @@ pub trait InnerNode: Node {
     ///
     /// The header key prefix is duplicated to the new split-off node.
     fn split_at(&mut self, key_fragment: u8) -> Self;
+
+    /// This function will count the number of children before and after the
+    /// split point.
+    ///
+    /// Similar to the [`split_at`] function, the first count is the number of
+    /// children which have a key fragment less than the given one.
+    /// The second count is the number of children which has a key fragment
+    /// greater than or equal to the given one.
+    ///
+    /// The sum of the first and second integers must be equal to
+    /// the total number of children (`self.header().num_children()`).
+    fn num_children_after_split(&self, key_fragment: u8) -> (usize, usize);
 }
 
 /// Node type that has a compact representation for key bytes and children
@@ -890,6 +902,15 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
 
         split_node
     }
+
+    fn num_children_after_split(&self, split_key_fragment: u8) -> (usize, usize) {
+        let split_index = {
+            let (keys, _) = self.initialized_portion();
+            keys.partition_point(|key_fragment| *key_fragment < split_key_fragment)
+        };
+
+        (split_index, self.header.num_children() - split_index)
+    }
 }
 
 /// Node that references between 2 and 4 children
@@ -942,6 +963,10 @@ impl<V> InnerNode for InnerNode4<V> {
 
     fn split_at(&mut self, key_fragment: u8) -> Self {
         InnerNodeCompressed::split_at(self, key_fragment)
+    }
+
+    fn num_children_after_split(&self, key_fragment: u8) -> (usize, usize) {
+        InnerNodeCompressed::num_children_after_split(self, key_fragment)
     }
 }
 
@@ -996,6 +1021,10 @@ impl<V> InnerNode for InnerNode16<V> {
     fn split_at(&mut self, key_fragment: u8) -> Self {
         InnerNodeCompressed::split_at(self, key_fragment)
     }
+
+    fn num_children_after_split(&self, key_fragment: u8) -> (usize, usize) {
+        InnerNodeCompressed::num_children_after_split(self, key_fragment)
+    }
 }
 
 /// A restricted index only valid from 0 to LIMIT - 1.
@@ -1006,6 +1035,11 @@ pub struct RestrictedNodeIndex<const LIMIT: u8>(u8);
 impl<const LIMIT: u8> RestrictedNodeIndex<LIMIT> {
     /// A placeholder index value that indicates that the index is not occupied
     pub const EMPTY: Self = RestrictedNodeIndex(LIMIT);
+
+    /// Return true if the given index is not the empty sentinel value
+    pub fn is_not_empty(self) -> bool {
+        self != Self::EMPTY
+    }
 }
 
 impl<const LIMIT: u8> From<RestrictedNodeIndex<LIMIT>> for u8 {
@@ -1142,7 +1176,7 @@ impl<V> InnerNode for InnerNode48<V> {
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
         let index = &self.child_indices[usize::from(key_fragment)];
         let child_pointers = self.initialized_child_pointers();
-        if *index != RestrictedNodeIndex::EMPTY {
+        if index.is_not_empty() {
             Some(child_pointers[usize::from(*index)])
         } else {
             None
@@ -1168,7 +1202,7 @@ impl<V> InnerNode for InnerNode48<V> {
 
     fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
         let restricted_index = self.child_indices[usize::from(key_fragment)];
-        if restricted_index != RestrictedNodeIndex::EMPTY {
+        if restricted_index.is_not_empty() {
             // Replace child pointer with unitialized value, even though it may possibly be
             // overwritten by the compaction step
             let child_ptr = mem::replace(
@@ -1311,7 +1345,7 @@ impl<V> InnerNode for InnerNode48<V> {
             .iter_mut()
             .zip(&mut split_node.child_indices[split_index..])
         {
-            if *original_child_index != RestrictedNodeIndex::<48>::EMPTY {
+            if original_child_index.is_not_empty() {
                 // Copy the child pointer from the original node to the new split node
                 let new_child_index_value = usize::from(split_node_num_children);
                 split_node.child_pointers[new_child_index_value] =
@@ -1339,7 +1373,7 @@ impl<V> InnerNode for InnerNode48<V> {
         let mut new_keep_child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
         let mut keep_node_num_children = 0u16;
         for keep_child_index in keep_child_indices {
-            if *keep_child_index != RestrictedNodeIndex::<48>::EMPTY {
+            if keep_child_index.is_not_empty() {
                 let keep_child_index_value = usize::from(keep_node_num_children);
                 // Move the child pointer from currently location to start of new child pointers
                 // array and update child index
@@ -1361,6 +1395,22 @@ impl<V> InnerNode for InnerNode48<V> {
         self.header.num_children = keep_node_num_children;
 
         split_node
+    }
+
+    fn num_children_after_split(&self, key_fragment: u8) -> (usize, usize) {
+        let split_index = usize::from(key_fragment);
+        let (_, split_child_indices) = self.child_indices.split_at(split_index);
+
+        let split_num_children = split_child_indices
+            .iter()
+            .copied()
+            .filter(|index| index.is_not_empty())
+            .count();
+
+        (
+            self.header.num_children() - split_num_children,
+            split_num_children,
+        )
     }
 }
 
@@ -1512,6 +1562,22 @@ impl<V> InnerNode for InnerNode256<V> {
         split_node.header.num_children = split_child_pointer_count;
 
         split_node
+    }
+
+    fn num_children_after_split(&self, key_fragment: u8) -> (usize, usize) {
+        let split_index = usize::from(key_fragment);
+        let (_, split_child_pointers) = self.child_pointers.split_at(split_index);
+
+        let split_num_children = split_child_pointers
+            .iter()
+            .copied()
+            .filter(Option::is_some)
+            .count();
+
+        (
+            self.header.num_children() - split_num_children,
+            split_num_children,
+        )
     }
 }
 

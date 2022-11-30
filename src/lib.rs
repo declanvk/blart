@@ -2,6 +2,7 @@
     feature = "nightly",
     feature(
         hasher_prefixfree_extras,
+        is_sorted,
         maybe_uninit_slice,
         maybe_uninit_uninit_array,
         nonnull_slice_from_raw_parts,
