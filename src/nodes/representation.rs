@@ -6,8 +6,10 @@ use std::{
     cmp::Ordering,
     error::Error,
     fmt,
+    hash::Hash,
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
+    ops::Range,
     ptr::{self, NonNull},
 };
 use tinyvec::TinyVec;
@@ -78,6 +80,20 @@ impl NodeType {
             NodeType::Node48 => num_children <= 16,
             NodeType::Node256 => num_children <= 48,
             NodeType::Leaf => panic!("cannot shrink leaf"),
+        }
+    }
+
+    /// Return the range of number of children that each node type accepts.
+    pub const fn capacity_range(self) -> Range<usize> {
+        match self {
+            NodeType::Node4 => Range { start: 1, end: 5 },
+            NodeType::Node16 => Range { start: 5, end: 17 },
+            NodeType::Node48 => Range { start: 17, end: 49 },
+            NodeType::Node256 => Range {
+                start: 49,
+                end: 256,
+            },
+            NodeType::Leaf => Range { start: 0, end: 0 },
         }
     }
 }
@@ -195,6 +211,12 @@ impl<V> Eq for OpaqueNodePtr<V> {}
 impl<V> PartialEq for OpaqueNodePtr<V> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
+    }
+}
+
+impl<V> Hash for OpaqueNodePtr<V> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
 }
 

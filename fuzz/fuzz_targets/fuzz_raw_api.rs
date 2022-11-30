@@ -2,7 +2,7 @@
 
 use blart::{
     deallocate_tree, delete_unchecked, insert_unchecked, maximum_unchecked, minimum_unchecked,
-    search_unchecked, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, TreeIterator,
+    search_unchecked, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, TreeIterator, visitor::WellFormedChecker,
 };
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
@@ -22,6 +22,7 @@ enum Action {
         // the key to delete
         key: Box<[u8]>,
     },
+    WellFormedCheck,
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -99,6 +100,11 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     }
                 }
             },
+            Action::WellFormedCheck => {
+                if let Some(root) = current_root {
+                    let _ = unsafe { WellFormedChecker::check_tree(&root) }.expect("tree should be well-formed");
+                }
+            }
         }
     }
 

@@ -1,12 +1,14 @@
 //! Utilities for inspecting the trie structure.
 
 mod pretty_printer;
+mod well_formed;
 
 use crate::{
     ConcreteNodePtr, InnerNode16, InnerNode256, InnerNode256Iter, InnerNode4, InnerNode48,
     InnerNode48Iter, InnerNodeCompressedIter, LeafNode, Node, NodePtr, OpaqueNodePtr,
 };
 pub use pretty_printer::*;
+pub use well_formed::*;
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.
