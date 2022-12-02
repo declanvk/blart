@@ -732,6 +732,49 @@ mod tests {
     }
 
     #[test]
+    fn tree_into_iterator_removes_values_before_drop() {
+        // This struct will panic on drop if the flag inside is true
+        #[derive(Debug, PartialEq)]
+        struct DropBomb(bool);
+
+        impl Default for DropBomb {
+            fn default() -> Self {
+                DropBomb(true)
+            }
+        }
+
+        impl DropBomb {
+            fn defuse(&mut self) {
+                self.0 = false;
+            }
+        }
+
+        impl Drop for DropBomb {
+            fn drop(&mut self) {
+                if self.0 {
+                    panic!("DropBomb was not disarmed!")
+                }
+            }
+        }
+
+        let mut map = TreeMap::new();
+
+        map.try_insert(Box::from(&b"0000"[..]), DropBomb::default())
+            .unwrap();
+
+        // Drop the tree and collect values into a vector (should not drop the key or
+        // value)
+        let mut entries = map.into_iter().collect::<Vec<_>>();
+
+        assert_eq!(entries[0].0, Box::from(&b"0000"[..]));
+
+        // Must defuse bomb before drop in Vector
+        entries.iter_mut().for_each(|(_, bomb)| {
+            bomb.defuse();
+        })
+    }
+
+    #[test]
     fn tree_check_eq_with_reflexive() {
         let map_a = build_tree_map([
             b"0000", b"0001", b"0002", b"0003", b"0004", b"0005", b"0010", b"0011", b"0012",

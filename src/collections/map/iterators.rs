@@ -69,10 +69,10 @@ macro_rules! impl_ref_mut_iterator {
     };
 }
 
-/// An iterator over the entries of a [`TreeMap`] producing shared references to
+/// An iterator over the entries of a `TreeMap` producing shared references to
 /// the key and value.
 ///
-/// This `struct` is created by the [`iter`] method on [`TreeMap`]. See its
+/// This `struct` is created by the [`iter`] method on `TreeMap`. See its
 /// documentation for more.
 ///
 /// [`iter`]: TreeMap::iter
@@ -114,7 +114,7 @@ impl_ref_mut_iterator!(Iter<'m, V>, (&'m [u8], &'m V) ; items_are_sorted);
 /// An iterator over the entries of a `TreeMap` producing shared reference to
 /// the key and mutable reference to the value.
 ///
-/// This `struct` is created by the [`iter_mut`] method on [`TreeMap`]. See its
+/// This `struct` is created by the [`iter_mut`] method on `TreeMap`. See its
 /// documentation for more.
 ///
 /// [`iter_mut`]: TreeMap::iter_mut
@@ -153,9 +153,9 @@ impl<'m, V> IterMut<'m, V> {
 
 impl_ref_mut_iterator!(IterMut<'m, V>, (&'m [u8], &'m mut V) ; items_are_sorted);
 
-/// An iterator over the keys of a [`TreeMap`].
+/// An iterator over the keys of a `TreeMap`.
 ///
-/// This `struct` is created by the [`keys`] method on [`TreeMap`]. See its
+/// This `struct` is created by the [`keys`] method on `TreeMap`. See its
 /// documentation for more.
 ///
 /// [`keys`]: TreeMap::keys
@@ -194,9 +194,9 @@ impl<'m, V> Keys<'m, V> {
 
 impl_ref_mut_iterator!(Keys<'m, V>, &'m [u8] ; items_are_sorted);
 
-/// An iterator that produces references to the values of a [`TreeMap`].
+/// An iterator that produces references to the values of a `TreeMap`.
 ///
-/// This `struct` is created by the [`values`] method on [`TreeMap`]. See its
+/// This `struct` is created by the [`values`] method on `TreeMap`. See its
 /// documentation for more.
 ///
 /// [`values`]: TreeMap::values
@@ -233,9 +233,9 @@ impl<'m, V> Values<'m, V> {
 
 impl_ref_mut_iterator!(Values<'m, V>, &'m V);
 
-/// An iterator that produces mutable references to the values of a [`TreeMap`].
+/// An iterator that produces mutable references to the values of a `TreeMap`.
 ///
-/// This `struct` is created by the [`values_mut`] method on [`TreeMap`]. See
+/// This `struct` is created by the [`values_mut`] method on `TreeMap`. See
 /// its documentation for more.
 ///
 /// [`values_mut`]: TreeMap::values_mut
@@ -274,7 +274,7 @@ impl_ref_mut_iterator!(ValuesMut<'m, V>, &'m mut V);
 
 /// An iterator over a sub-range of entries in a `TreeMap`.
 ///
-/// This `struct` is created by the [`range`] method on [`TreeMap`]. See its
+/// This `struct` is created by the [`range`] method on `TreeMap`. See its
 /// documentation for more.
 ///
 /// [`range`]: TreeMap::range
@@ -328,7 +328,7 @@ impl<'a, V> DoubleEndedIterator for Range<'a, V> {
 
 /// A mutable iterator over a sub-range of entries in a `TreeMap`.
 ///
-/// This `struct` is created by the [`range_mut`] method on [`TreeMap`]. See
+/// This `struct` is created by the [`range_mut`] method on `TreeMap`. See
 /// its documentation for more.
 ///
 /// [`range_mut`]: TreeMap::range_mut
@@ -380,7 +380,7 @@ impl<'a, V> DoubleEndedIterator for RangeMut<'a, V> {
     }
 }
 
-/// An iterator produced by calling [`drain_filter`] on [`TreeMap`]. See its
+/// An iterator produced by calling [`drain_filter`] on `TreeMap`. See its
 /// documentation for more.
 ///
 /// [`drain_filter`]: TreeMap::range_mut
@@ -434,7 +434,7 @@ impl<V> DoubleEndedIterator for DrainFilter<V> {
 
 /// An owning iterator over the keys of a `TreeMap`.
 ///
-/// This `struct` is created by the [`into_keys`] method on [`TreeMap`].
+/// This `struct` is created by the [`into_keys`] method on `TreeMap`.
 /// See its documentation for more.
 ///
 /// [`into_keys`]: TreeMap::into_keys
@@ -462,7 +462,7 @@ impl<V> DoubleEndedIterator for IntoKeys<V> {
 
 /// An owning iterator over the values of a `TreeMap`.
 ///
-/// This `struct` is created by the [`into_values`] method on [`TreeMap`].
+/// This `struct` is created by the [`into_values`] method on `TreeMap`.
 /// See its documentation for more.
 ///
 /// [`into_values`]: TreeMap::into_values
@@ -490,7 +490,7 @@ impl<V> DoubleEndedIterator for IntoValues<V> {
 
 /// An owning iterator over the entries of a `TreeMap`.
 ///
-/// This `struct` is created by the [`into_iter`] method on [`TreeMap`]
+/// This `struct` is created by the [`into_iter`] method on `TreeMap`
 /// (provided by the [`IntoIterator`] trait). See its documentation for more.
 ///
 /// [`into_iter`]: IntoIterator::into_iter

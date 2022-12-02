@@ -678,10 +678,10 @@ pub trait InnerNode: Node {
     /// This function will count the number of children before and after the
     /// split point.
     ///
-    /// Similar to the [`split_at`] function, the first count is the number of
-    /// children which have a key fragment less than the given one.
-    /// The second count is the number of children which has a key fragment
-    /// greater than or equal to the given one.
+    /// Similar to the [`split_at`][Self::split_at] function, the first count is
+    /// the number of children which have a key fragment less than the given
+    /// one. The second count is the number of children which has a key
+    /// fragment greater than or equal to the given one.
     ///
     /// The sum of the first and second integers must be equal to
     /// the total number of children (`self.header().num_children()`).
