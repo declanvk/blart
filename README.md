@@ -43,12 +43,12 @@ cargo +nightly fuzz coverage fuzz_raw_api && cargo cov -- show fuzz/target/"$TAR
 
 To run the benchmarks, install [`cargo-criterion`](https://github.com/bheisler/cargo-criterion), then run:
 
-```
+```bash
 cargo criterion --history-id "$(git rev-parse --short HEAD)-0"
 ```
 
 If you get a "Permission denied" error, update perf_event_paranoid:
-```
+```bash
 sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
 ```
 For further details please take a look at the following [link](https://superuser.com/questions/980632/run-perf-without-root-rights).

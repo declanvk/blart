@@ -1,5 +1,6 @@
-use super::lookup;
-use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{
+    nodes::operations::lookup, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
+};
 
 /// Removes a key from the tree, returning the [`LeafNode`] corresponding to the
 /// key if the key was previously in the tree.
@@ -104,8 +105,7 @@ unsafe fn inner_delete_unchecked<V>(
             // search_for_node_to_delete should maintain this invariant
             panic!(
                 "This should be impossible, to have missing parent node and present grandparent \
-                 node [{:?}]",
-                granparent_node_ptr
+                 node [{granparent_node_ptr:?}]",
             );
         },
         (Some(parent_node_ptr), grandparent_node_ptr) => unsafe {

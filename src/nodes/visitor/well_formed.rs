@@ -106,9 +106,9 @@ impl<V> fmt::Display for MalformedTreeError<V> {
             } => {
                 write!(
                     f,
-                    "Found a loop in the tree containing the node [{:?}]. First observed that \
-                     node at [{:?}], then later observed the same node at [{:?}]",
-                    node_ptr, first_observed, later_observed
+                    "Found a loop in the tree containing the node [{node_ptr:?}]. First observed \
+                     that node at [{first_observed:?}], then later observed the same node at \
+                     [{later_observed:?}]",
                 )
             },
             MalformedTreeError::WrongChildrenCount {
@@ -118,13 +118,10 @@ impl<V> fmt::Display for MalformedTreeError<V> {
             } => {
                 write!(
                     f,
-                    "Found an inner node of type [{:?}] at location [{:?}] that had the wrong \
-                     number of children! Expected children in range [{:?}], but found [{}] \
-                     children",
-                    inner_node_type,
-                    key_prefix,
+                    "Found an inner node of type [{inner_node_type:?}] at location \
+                     [{key_prefix:?}] that had the wrong number of children! Expected children in \
+                     range [{:?}], but found [{num_children}] children",
                     inner_node_type.capacity_range(),
-                    num_children
                 )
             },
             MalformedTreeError::PrefixMismatch {
@@ -134,8 +131,8 @@ impl<V> fmt::Display for MalformedTreeError<V> {
                 write!(
                     f,
                     "Found a leaf that had a mismatched key from the expected prefix! Expected \
-                     the leaf key to start with [{:?}], but the leaf key was [{:?}]",
-                    expected_prefix, entire_key
+                     the leaf key to start with [{expected_prefix:?}], but the leaf key was \
+                     [{entire_key:?}]",
                 )
             },
         }

@@ -1,12 +1,14 @@
-use super::*;
 use std::{
     iter::FusedIterator,
     mem,
     ops::{Bound, Range, RangeBounds},
+    ptr::NonNull,
 };
 
 #[cfg(not(feature = "nightly"))]
 use sptr::Strict;
+
+use crate::{InnerNode256, InnerNode48, InnerNodeCompressed, OpaqueNodePtr, RestrictedNodeIndex};
 
 /// An iterator all the children of an [`InnerNodeCompressed`].
 ///

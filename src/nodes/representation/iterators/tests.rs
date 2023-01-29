@@ -1,3 +1,5 @@
+use crate::{InnerNode, InnerNode16, InnerNode4, LeafNode, NodePtr};
+
 use super::*;
 
 fn node4_fixture() -> (InnerNode4<()>, [LeafNode<()>; 4], [OpaqueNodePtr<()>; 4]) {
