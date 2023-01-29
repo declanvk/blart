@@ -25,13 +25,9 @@ fn opaque_node_ptr_is_correct() {
 #[test]
 #[cfg(target_pointer_width = "64")]
 fn node_sizes() {
-    let expected_header_size = if cfg!(any(miri, feature = "nightly")) {
-        40
-    } else {
-        32
-    };
+    const EXPECTED_HEADER_SIZE: usize = 40;
 
-    assert_eq!(mem::size_of::<Header>(), expected_header_size);
+    assert_eq!(mem::size_of::<Header>(), EXPECTED_HEADER_SIZE);
     // key map: 4 * (1 byte) = 4 bytes
     // child map: 4 * (8 bytes (on 64-bit platform)) = 32
     //
@@ -39,24 +35,24 @@ fn node_sizes() {
     // an 8 byte boundary.
     assert_eq!(
         mem::size_of::<InnerNode4<usize>>(),
-        expected_header_size + 40
+        EXPECTED_HEADER_SIZE + 40
     );
     // key map: 16 * (1 byte) = 16 bytes
     // child map: 16 * (8 bytes (on 64-bit platform)) = 128
     assert_eq!(
         mem::size_of::<InnerNode16<usize>>(),
-        expected_header_size + 144
+        EXPECTED_HEADER_SIZE + 144
     );
     // key map: 256 * (1 byte) = 256 bytes
     // child map: 48 * (8 bytes (on 64-bit platform)) = 384
     assert_eq!(
         mem::size_of::<InnerNode48<usize>>(),
-        expected_header_size + 640
+        EXPECTED_HEADER_SIZE + 640
     );
     // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
     assert_eq!(
         mem::size_of::<InnerNode256<usize>>(),
-        expected_header_size + 2048
+        EXPECTED_HEADER_SIZE + 2048
     );
 
     // Assert that pointer is expected size and has non-null optimization

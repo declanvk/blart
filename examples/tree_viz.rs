@@ -127,7 +127,7 @@ impl TreeShape {
     ) -> impl Iterator<Item = (Box<[u8]>, String)> {
         BufReader::new(text_file).lines().map(|line| {
             let line = line.expect("unable to read line");
-            let entry_components = line.split(",").collect::<Vec<_>>();
+            let entry_components = line.split(',').collect::<Vec<_>>();
 
             let key = entry_components[..entry_components.len() - 1]
                 .iter()

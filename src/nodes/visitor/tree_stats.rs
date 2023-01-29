@@ -173,11 +173,7 @@ mod tests {
                 leaf_count: 16,
                 empty_capacity: 30,
                 total_key_bytes: 64,
-                total_inner_node_bytes: if cfg!(any(miri, feature = "nightly")) {
-                    1200
-                } else {
-                    1080
-                }
+                total_inner_node_bytes: 1200
             }
         );
 
@@ -186,13 +182,8 @@ mod tests {
 
     #[test]
     fn full_tree_stats_fixed_length_tree() {
-        #[cfg(not(any(miri, feature = "nightly")))]
-        const GENERATE_KEYS_CONFIG: [u8; 2] = [255, 3];
-        #[cfg(any(miri, feature = "nightly"))]
-        const GENERATE_KEYS_CONFIG: [u8; 2] = [15, 3];
-
         let root = crate::tests_common::setup_tree_from_entries(
-            crate::tests_common::generate_key_fixed_length(GENERATE_KEYS_CONFIG)
+            crate::tests_common::generate_key_fixed_length([15, 3])
                 .enumerate()
                 .map(|(a, b)| (b, a)),
         );
@@ -200,28 +191,15 @@ mod tests {
 
         assert_eq!(
             stats,
-            if cfg!(any(miri, feature = "nightly")) {
-                TreeStats {
-                    node4_count: 16,
-                    node16_count: 1,
-                    node48_count: 0,
-                    node256_count: 0,
-                    leaf_count: 64,
-                    empty_capacity: 0,
-                    total_key_bytes: 128,
-                    total_inner_node_bytes: 1464,
-                }
-            } else {
-                TreeStats {
-                    node4_count: 256,
-                    node16_count: 0,
-                    node48_count: 0,
-                    node256_count: 1,
-                    leaf_count: 1024,
-                    empty_capacity: 0,
-                    total_key_bytes: 2048,
-                    total_inner_node_bytes: 20512,
-                }
+            TreeStats {
+                node4_count: 16,
+                node16_count: 1,
+                node48_count: 0,
+                node256_count: 0,
+                leaf_count: 64,
+                empty_capacity: 0,
+                total_key_bytes: 128,
+                total_inner_node_bytes: 1464,
             }
         );
 
