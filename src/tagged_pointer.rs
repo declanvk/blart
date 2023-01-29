@@ -350,17 +350,17 @@ mod tests {
 
     #[test]
     fn set_data_different_alignments() {
-        let mut p1 = TaggedPointer::new(Box::into_raw(Box::new(()))).unwrap();
+        let mut p1 = TaggedPointer::new(Box::into_raw(Box::new(false))).unwrap();
         let mut p2 = TaggedPointer::new(Box::into_raw(Box::new(2u8))).unwrap();
         let mut p3 = TaggedPointer::new(Box::into_raw(Box::new(3u16))).unwrap();
         let mut p4 = TaggedPointer::new(Box::into_raw(Box::new(4u32))).unwrap();
         let mut p5 = TaggedPointer::new(Box::into_raw(Box::new(5u64))).unwrap();
 
         assert_eq!(p1.to_data(), 0);
-        assert_eq!(unsafe { *p1.to_ptr() }, ());
+        assert!(unsafe { !*p1.to_ptr() });
         p1.set_data(0);
         assert_eq!(p1.to_data(), 0);
-        assert_eq!(unsafe { *p1.to_ptr() }, ());
+        assert!(unsafe { !*p1.to_ptr() });
 
         assert_eq!(p2.to_data(), 0);
         assert_eq!(unsafe { *p2.to_ptr() }, 2);
@@ -402,35 +402,35 @@ mod tests {
         assert_eq!(TaggedPointer::<()>::NUM_BITS, 0);
         assert_eq!(
             TaggedPointer::<()>::POINTER_MASK,
-            0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111usize
+            0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_usize
         );
 
         assert_eq!(TaggedPointer::<u8>::ALIGNMENT, 1);
         assert_eq!(TaggedPointer::<u8>::NUM_BITS, 0);
         assert_eq!(
             TaggedPointer::<u8>::POINTER_MASK,
-            0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111usize
+            0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_usize
         );
 
         assert_eq!(TaggedPointer::<u16>::ALIGNMENT, 2);
         assert_eq!(TaggedPointer::<u16>::NUM_BITS, 1);
         assert_eq!(
             TaggedPointer::<u16>::POINTER_MASK,
-            0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111110usize
+            0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1110_usize
         );
 
         assert_eq!(TaggedPointer::<u32>::ALIGNMENT, 4);
         assert_eq!(TaggedPointer::<u32>::NUM_BITS, 2);
         assert_eq!(
             TaggedPointer::<u32>::POINTER_MASK,
-            0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111100usize
+            0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1100_usize
         );
 
         assert_eq!(TaggedPointer::<u64>::ALIGNMENT, 8);
         assert_eq!(TaggedPointer::<u64>::NUM_BITS, 3);
         assert_eq!(
             TaggedPointer::<u64>::POINTER_MASK,
-            0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
+            0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
         );
 
         // Something weird about the representation of u128 on intel architectures:
@@ -446,7 +446,7 @@ mod tests {
 
             assert_eq!(
                 TaggedPointer::<u128>::POINTER_MASK,
-                0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111000usize
+                0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
             );
         } else {
             assert_eq!(
@@ -459,7 +459,7 @@ mod tests {
 
             assert_eq!(
                 TaggedPointer::<u128>::POINTER_MASK,
-                0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11110000usize
+                0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
             );
         }
     }

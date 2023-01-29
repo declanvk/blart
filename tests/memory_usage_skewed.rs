@@ -52,9 +52,8 @@ fn test_memory_usage() {
         let mean_bytes_per_key = (stats.max_bytes as f64) / (KEY_LENGTH_LIMIT as f64);
 
         eprintln!(
-            "Inserting {} keys, this comes to [{} mean blocks per key] and [{} mean bytes per \
-             key].",
-            KEY_LENGTH_LIMIT, mean_blocks_per_key, mean_bytes_per_key
+            "Inserting {KEY_LENGTH_LIMIT} keys, this comes to [{mean_blocks_per_key} mean blocks \
+             per key] and [{mean_bytes_per_key} mean bytes per key].",
         )
     });
 }

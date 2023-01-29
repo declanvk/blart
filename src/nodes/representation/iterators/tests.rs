@@ -92,20 +92,16 @@ fn node48_iterate() {
     let pairs = unsafe { InnerNode48Iter::new(&node).collect::<Vec<_>>() };
     assert!(pairs
         .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
-        .is_some());
+        .any(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr));
     assert!(pairs
         .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 255 && *ptr == l2_ptr)
-        .is_some());
+        .any(|(key_fragment, ptr)| *key_fragment == 255 && *ptr == l2_ptr));
     assert!(pairs
         .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 0u8 && *ptr == l3_ptr)
-        .is_some());
+        .any(|(key_fragment, ptr)| *key_fragment == 0u8 && *ptr == l3_ptr));
     assert!(pairs
         .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 85 && *ptr == l4_ptr)
-        .is_some());
+        .any(|(key_fragment, ptr)| *key_fragment == 85 && *ptr == l4_ptr));
 }
 
 fn node256_fixture() -> (InnerNode256<()>, [LeafNode<()>; 4], [OpaqueNodePtr<()>; 4]) {
@@ -134,20 +130,16 @@ fn node256_iterate() {
     let pairs = unsafe { InnerNode256Iter::new(&node).collect::<Vec<_>>() };
     assert!(pairs
         .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr)
-        .is_some());
+        .any(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr));
     assert!(pairs
         .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 255 && *ptr == l2_ptr)
-        .is_some());
+        .any(|(key_fragment, ptr)| *key_fragment == 255 && *ptr == l2_ptr));
     assert!(pairs
         .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 0u8 && *ptr == l3_ptr)
-        .is_some());
+        .any(|(key_fragment, ptr)| *key_fragment == 0u8 && *ptr == l3_ptr));
     assert!(pairs
         .iter()
-        .find(|(key_fragment, ptr)| *key_fragment == 85 && *ptr == l4_ptr)
-        .is_some());
+        .any(|(key_fragment, ptr)| *key_fragment == 85 && *ptr == l4_ptr));
 }
 
 macro_rules! node_range_test_cases {
@@ -188,7 +180,7 @@ macro_rules! node_range_test_cases {
                 [(0u8, l3_ptr)]
             },
             {
-                255..=0;
+                (Bound::Included(255), Bound::Included(0));
                 []
             },
             {

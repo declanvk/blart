@@ -21,7 +21,7 @@ fn delete_singleton_tree_leaf() {
 
 #[test]
 fn delete_entire_small_tree() {
-    const ENTRIES: &'static [(&'static [u8], char)] = &[
+    const ENTRIES: &[(&[u8], char)] = &[
         (&[1, 2, 3, 4, 5, 6], 'A'),
         (&[2, 4, 6, 8, 10, 12], 'B'),
         (&[1, 2, 3, 4, 7, 8], 'C'),
@@ -31,7 +31,7 @@ fn delete_entire_small_tree() {
     let entries_it = ENTRIES
         .iter()
         .copied()
-        .map(|(key, value)| (Box::<[u8]>::from(&key[..]), value));
+        .map(|(key, value)| (Box::<[u8]>::from(key), value));
 
     let mut current_root = setup_tree_from_entries(entries_it);
 
@@ -49,7 +49,7 @@ fn delete_entire_small_tree() {
     current_root = new_root;
 
     for (key, value) in ENTRIES.iter().copied() {
-        let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+        let search_result = unsafe { search_unchecked(current_root, key) };
 
         if value == 'C' {
             assert!(search_result.is_none());
@@ -81,7 +81,7 @@ fn delete_entire_small_tree() {
 
 #[test]
 fn delete_one_entry_n16_remains() {
-    const ENTRIES: &'static [(&'static [u8], char)] = &[
+    const ENTRIES: &[(&[u8], char)] = &[
         (&[1, 2, 3, 5, 5, 6], 'A'),
         (&[1, 2, 3, 6, 10, 12], 'B'),
         (&[1, 2, 3, 7, 7, 8], 'C'),
@@ -96,7 +96,7 @@ fn delete_one_entry_n16_remains() {
     let entries_it = ENTRIES
         .iter()
         .copied()
-        .map(|(key, value)| (Box::<[u8]>::from(&key[..]), value));
+        .map(|(key, value)| (Box::<[u8]>::from(key), value));
 
     let mut current_root = setup_tree_from_entries(entries_it);
 
@@ -169,7 +169,7 @@ fn delete_minimum_singleton_tree() {
 
 #[test]
 fn delete_minimum_entire_small_tree() {
-    const ENTRIES: &'static [(&'static [u8], char)] = &[
+    const ENTRIES: &[(&[u8], char)] = &[
         (&[1, 2, 3, 4, 5, 6], 'A'),
         (&[1, 2, 3, 4, 5, 9], 'D'),
         (&[1, 2, 3, 4, 7, 8], 'C'),
@@ -179,7 +179,7 @@ fn delete_minimum_entire_small_tree() {
     let entries_it = ENTRIES
         .iter()
         .copied()
-        .map(|(key, value)| (Box::<[u8]>::from(&key[..]), value));
+        .map(|(key, value)| (Box::<[u8]>::from(key), value));
 
     let mut current_root = setup_tree_from_entries(entries_it);
 
@@ -194,7 +194,7 @@ fn delete_minimum_entire_small_tree() {
     current_root = new_root;
 
     for (key, value) in ENTRIES.iter().copied() {
-        let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+        let search_result = unsafe { search_unchecked(current_root, key) };
 
         if value == 'A' {
             assert!(search_result.is_none());
@@ -239,7 +239,7 @@ fn delete_maximum_singleton_tree() {
 
 #[test]
 fn delete_maximum_entire_small_tree() {
-    const ENTRIES: &'static [(&'static [u8], char)] = &[
+    const ENTRIES: &[(&[u8], char)] = &[
         (&[2, 4, 6, 8, 10, 12], 'B'),
         (&[1, 2, 3, 4, 7, 8], 'C'),
         (&[1, 2, 3, 4, 5, 9], 'D'),
@@ -249,7 +249,7 @@ fn delete_maximum_entire_small_tree() {
     let entries_it = ENTRIES
         .iter()
         .copied()
-        .map(|(key, value)| (Box::<[u8]>::from(&key[..]), value));
+        .map(|(key, value)| (Box::<[u8]>::from(key), value));
 
     let mut current_root = setup_tree_from_entries(entries_it);
 
@@ -265,7 +265,7 @@ fn delete_maximum_entire_small_tree() {
     current_root = new_root;
 
     for (key, value) in ENTRIES.iter().copied() {
-        let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+        let search_result = unsafe { search_unchecked(current_root, key) };
 
         if value == 'B' {
             assert!(search_result.is_none());

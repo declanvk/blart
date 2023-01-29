@@ -31,7 +31,7 @@ pub fn generate_dhat_output_filename(test_filename: &str) -> PathBuf {
         hasher.finish()
     };
 
-    output_path.push(format!("heap-{:x}.json", test_filename_hash));
+    output_path.push(format!("heap-{test_filename_hash:x}.json"));
 
     output_path
 }

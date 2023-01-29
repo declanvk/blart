@@ -617,7 +617,7 @@ mod tests {
         let map = TreeMap::<()>::new();
 
         assert_eq!(map.get(b"123456789"), None);
-        let k = b"123456789".into_iter().copied().collect::<Vec<_>>();
+        let k = b"123456789".to_vec();
         assert_eq!(map.get(k), None);
         assert_eq!(map.get([1u8, 2, 3, 4, 5, 6, 7, 8, 9]), None);
     }
@@ -636,7 +636,7 @@ mod tests {
                 assert_eq!(map.len(), index + 1);
 
                 for other_key in keys.iter().skip(index + 1) {
-                    assert!(map.get(other_key).is_none(), "{:?} {:?}", map, other_key);
+                    assert!(map.get(other_key).is_none(), "{map:?} {other_key:?}");
                 }
 
                 assert_eq!(*map.get(key).unwrap(), index);
@@ -729,8 +729,7 @@ mod tests {
 
         for (key, value) in &mut map {
             let key = String::from_utf8(key.into()).unwrap();
-            let key_number_value =
-                usize::from_str_radix(key.trim_start_matches("0"), 10).unwrap_or(0);
+            let key_number_value = key.trim_start_matches('0').parse::<usize>().unwrap_or(0);
 
             if key_number_value == *value {
                 *value = 999;

@@ -177,7 +177,7 @@ fn insert_split_prefix_at_implicit_byte() {
     }
 
     for (value, key) in KEYS.iter().map(|k| &k[..]).enumerate() {
-        let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+        let search_result = unsafe { search_unchecked(current_root, key) };
 
         assert_eq!(search_result.unwrap().read().value, value);
     }
@@ -235,7 +235,7 @@ fn insert_fails_existing_key_prefixed() {
 
 #[test]
 fn insert_existing_key_overwrite() {
-    const ENTRIES: &'static [(&'static [u8], char)] = &[
+    const ENTRIES: &[(&[u8], char)] = &[
         (&[1, 2, 3, 4, 5, 6], 'A'),
         (&[2, 4, 6, 8, 10, 12], 'B'),
         (&[1, 2, 3, 4, 7, 8], 'C'),
@@ -245,7 +245,7 @@ fn insert_existing_key_overwrite() {
     let entries_it = ENTRIES
         .iter()
         .copied()
-        .map(|(key, value)| (Box::<[u8]>::from(&key[..]), value));
+        .map(|(key, value)| (Box::<[u8]>::from(key), value));
 
     let current_root = setup_tree_from_entries(entries_it);
 
