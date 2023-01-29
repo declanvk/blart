@@ -3,12 +3,14 @@
 
 use crate::{
     deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked,
-    insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked, DeleteResult,
-    InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr,
+    insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
+    visitor::TreeStatsCollector, DeleteResult, InsertPrefixError, InsertResult, LeafNode, NodePtr,
+    OpaqueNodePtr,
 };
 use std::{
     fmt::Debug,
     hash::Hash,
+    mem::ManuallyDrop,
     ops::{Index, RangeBounds},
 };
 
@@ -32,6 +34,35 @@ impl<V> TreeMap<V> {
             num_entries: 0,
             root: None,
         }
+    }
+
+    /// Convert tree into a pointer to pointer to the root node.
+    ///
+    /// If there are no elements in the tree, then returns `None`.
+    pub fn into_raw(self) -> Option<OpaqueNodePtr<V>> {
+        let drop_prevent = ManuallyDrop::new(self);
+
+        drop_prevent.root
+    }
+
+    /// Constructs a tree from a pointer to the root node.
+    ///
+    /// If `None` is passed, it constructs an empty tree.
+    ///
+    /// # Safety
+    ///
+    /// TODO
+    pub unsafe fn from_raw(root: Option<OpaqueNodePtr<V>>) -> Self {
+        let num_entries = if let Some(root) = root {
+            // SAFETY: TODO
+            let stats = unsafe { TreeStatsCollector::collect(root) };
+
+            stats.leaf_count
+        } else {
+            0
+        };
+
+        TreeMap { num_entries, root }
     }
 
     /// Clear the map, removing all elements.

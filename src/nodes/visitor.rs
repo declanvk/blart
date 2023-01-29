@@ -1,6 +1,7 @@
 //! Utilities for inspecting the trie structure.
 
 mod pretty_printer;
+mod tree_stats;
 mod well_formed;
 
 use crate::{
@@ -8,6 +9,7 @@ use crate::{
     InnerNode48Iter, InnerNodeCompressedIter, LeafNode, Node, NodePtr, OpaqueNodePtr,
 };
 pub use pretty_printer::*;
+pub use tree_stats::*;
 pub use well_formed::*;
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
