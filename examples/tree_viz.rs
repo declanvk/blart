@@ -1,8 +1,7 @@
 use argh::FromArgs;
 use blart::{
-    deallocate_tree, insert_unchecked,
     visitor::{DotPrinter, DotPrinterSettings},
-    LeafNode, NodePtr, OpaqueNodePtr,
+    TreeMap,
 };
 use std::{
     error::Error,
@@ -15,7 +14,7 @@ use std::{
 };
 
 #[derive(FromArgs)]
-/// Reach new heights.
+/// TREES
 struct TreeToDotArgs {
     /// input to read keys from an external file
     #[argh(option)]
@@ -39,9 +38,9 @@ struct TreeToDotArgs {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: TreeToDotArgs = argh::from_env();
 
-    let tree = if let Some(tree) = make_tree(args.shape.generate_keys(args.size, args.input_file)) {
-        tree
-    } else {
+    let tree = TreeMap::from_iter(args.shape.generate_keys(args.size, args.input_file));
+
+    if tree.is_empty() {
         return Err(Box::new(EmptyTreeError));
     };
 
@@ -51,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut buffer = BufWriter::new(handle);
 
-        write_tree(&mut buffer, &tree)?;
+        write_tree(&mut buffer, tree)?;
     } else {
         let file = OpenOptions::new()
             .read(true)
@@ -61,41 +60,29 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut buffer = BufWriter::new(file);
 
-        write_tree(&mut buffer, &tree)?;
+        write_tree(&mut buffer, tree)?;
     }
-
-    // SAFETY: The `tree` pointer is the only pointer to the underlying node. There
-    // will be no dangling nodes from this.
-    unsafe { deallocate_tree(tree) };
 
     Ok(())
 }
 
-fn make_tree(mut iter: impl Iterator<Item = (Box<[u8]>, String)>) -> Option<OpaqueNodePtr<String>> {
-    let (first_key, first_value) = iter.next()?;
-    let mut current_root =
-        NodePtr::allocate_node_ptr(LeafNode::new(first_key, first_value)).to_opaque();
+fn write_tree(output: &mut dyn Write, tree: TreeMap<String>) -> Result<(), Box<dyn Error>> {
+    let root = tree.into_raw();
 
-    for (key, value) in iter {
-        // SAFETY: There are no other pointers to `current_root` node. There are no
-        // concurrent reads or writes to the `current_root` node ongoing.
-        current_root = unsafe { insert_unchecked(current_root, key, value).unwrap().new_root };
-    }
-
-    Some(current_root)
-}
-
-fn write_tree(output: &mut dyn Write, tree: &OpaqueNodePtr<String>) -> Result<(), Box<dyn Error>> {
     // SAFETY: There are no concurrent mutation to the tree node or its children
     unsafe {
         DotPrinter::print_tree(
             output,
-            &tree,
+            &root.unwrap(),
             DotPrinterSettings {
                 display_node_address: false,
             },
         )?
     };
+
+    // SAFETY: This tree was converted to raw pointer and back immediately. No other
+    // access
+    let _tree = unsafe { TreeMap::from_raw(root) };
 
     Ok(())
 }
