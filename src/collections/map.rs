@@ -51,10 +51,14 @@ impl<V> TreeMap<V> {
     ///
     /// # Safety
     ///
-    /// TODO
+    /// The pointer passed to this function must not be used in a second call to
+    /// `from_raw`, otherwise multiple safety issues could occur.
+    ///
+    /// Similarly, no other function can mutate the content of the tree under
+    /// `root` while this function executes.
     pub unsafe fn from_raw(root: Option<OpaqueNodePtr<V>>) -> Self {
         let num_entries = if let Some(root) = root {
-            // SAFETY: TODO
+            // SAFETY: The safety requirements on this function cover this call
             let stats = unsafe { TreeStatsCollector::collect(root) };
 
             stats.leaf_count
