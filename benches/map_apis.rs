@@ -1,28 +1,20 @@
 use blart::{
-    deallocate_tree, insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
     tests_common::{
         generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
     },
-    LeafNode, NodePtr, OpaqueNodePtr,
+    TreeMap,
 };
-#[cfg(not(target_arch = "x86"))]
-use criterion::measurement::WallTime;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
-#[cfg(target_arch = "x86")]
-use criterion_perf_events::Perf;
-#[cfg(target_arch = "x86")]
-use perfcnt::linux::{HardwareEventType, PerfCounterBuilderLinux};
-use std::time::Duration;
 
-#[cfg(target_arch = "x86")]
-type Measurement = Perf;
-#[cfg(not(target_arch = "x86"))]
-type Measurement = WallTime;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+type Measurement = criterion_perf_events::Perf;
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+type Measurement = criterion::measurement::WallTime;
 
 fn run_benchmarks(
     group: &mut BenchmarkGroup<Measurement>,
     key_vec: &[Box<[u8]>],
-    tree_root: OpaqueNodePtr<usize>,
+    map: &TreeMap<usize>,
 ) {
     let (first_key, middle_key, last_key) = (
         key_vec[0].as_ref(),
@@ -30,20 +22,14 @@ fn run_benchmarks(
         key_vec[key_vec.len() - 1].as_ref(),
     );
     group.bench_function("search/first_key", |b| {
-        b.iter(|| unsafe { search_unchecked(tree_root, first_key).unwrap() })
+        b.iter(|| map.get(first_key).unwrap())
     });
     group.bench_function("search/middle_key", |b| {
-        b.iter(|| unsafe { search_unchecked(tree_root, middle_key).unwrap() })
+        b.iter(|| map.get(middle_key).unwrap())
     });
-    group.bench_function("search/last_key", |b| {
-        b.iter(|| unsafe { search_unchecked(tree_root, last_key).unwrap() })
-    });
-    group.bench_function("minimum", |b| {
-        b.iter(|| unsafe { minimum_unchecked(tree_root) })
-    });
-    group.bench_function("maximum", |b| {
-        b.iter(|| unsafe { maximum_unchecked(tree_root) })
-    });
+    group.bench_function("search/last_key", |b| b.iter(|| map.get(last_key).unwrap()));
+    group.bench_function("minimum", |b| b.iter(|| map.first_key_value().unwrap()));
+    group.bench_function("maximum", |b| b.iter(|| map.last_key_value().unwrap()));
 
     // TODO(#3): Add more benchmarks for:
     //   - insert new keys into:
@@ -59,18 +45,16 @@ fn setup_tree_run_benches_cleanup(
 ) {
     let keys: Vec<_> = keys.collect();
 
-    let mut root = NodePtr::allocate_node_ptr(LeafNode::new(keys[0].clone(), 0)).to_opaque();
-
-    for (idx, key) in keys.iter().skip(1).cloned().enumerate() {
-        root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
-    }
+    let tree: TreeMap<usize> = keys
+        .iter()
+        .enumerate()
+        .map(|(idx, key)| (key.clone(), idx))
+        .collect();
 
     {
         let mut group = c.benchmark_group(group_name);
-        run_benchmarks(&mut group, keys.as_ref(), root);
+        run_benchmarks(&mut group, keys.as_ref(), &tree);
     }
-
-    unsafe { deallocate_tree(root) };
 }
 
 pub fn raw_api_benches(c: &mut Criterion<Measurement>) {
@@ -98,33 +82,38 @@ pub fn raw_api_benches(c: &mut Criterion<Measurement>) {
     )
 }
 
-#[cfg(target_arch = "x86")]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn create_criterion_configuration() -> Criterion<Measurement> {
-    Criterion::default()
-        .with_measurement(Perf::new(PerfCounterBuilderLinux::from_hardware_event(
-            // I switched to using retired instruction counts because the variability of the wall
-            // time measurement was too high. I was regularly seeing +/-3-5% differences in the
-            // measured time, even with up to 5000 samples and duration around 30 seconds. I also
-            // tried measuring CPU cycles, which had a similar issue. This level of variability was
+    use perfcnt::linux::{HardwareEventType, PerfCounterBuilderLinux};
+
+    Criterion::default().with_measurement(criterion_perf_events::Perf::new(
+        PerfCounterBuilderLinux::from_hardware_event(
+            // I switched to using retired instruction counts because the variability of the
+            // wall time measurement was too high. I was regularly seeing
+            // +/-3-5% differences in the measured time, even with up to 5000
+            // samples and duration around 30 seconds. I also tried measuring
+            // CPU cycles, which had a similar issue. This level of variability was
             // too much to still be able to measure small differences in optimization outcomes.
             //
-            // However, this library is likely to have major optimization issues with regards to it
-            // memory usage/layout/etc, and only using the retired instruction count will miss
-            // parts of this.
+            // However, this library is likely to have major optimization issues with regards
+            // to it memory usage/layout/etc, and only using the retired
+            // instruction count will miss parts of this.
             //
             // Should consider making simple benchmarking tool using
             // https://docs.rs/perf-event/latest/perf_event/events/index.html
+            //
+            // Also note, using this `Measurement` writes output in "cycles" even though it
+            // actually is counting retired instructions. The formatter is just
+            // hardcoded to use "cycles".
+            // https://github.com/jbreitbart/criterion-perf-events/blob/bcde187ccc5ca183a433d71525efb1e2b5ae9a83/src/lib.rs#L127
             HardwareEventType::Instructions,
-        )))
-        .sample_size(1000)
-        .measurement_time(Duration::new(10, 0))
+        ),
+    ))
 }
 
-#[cfg(not(target_arch = "x86"))]
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
 fn create_criterion_configuration() -> Criterion<Measurement> {
     Criterion::default()
-        .sample_size(1000)
-        .measurement_time(Duration::new(10, 0))
 }
 
 criterion_group! {
