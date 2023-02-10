@@ -94,7 +94,7 @@ impl<V> TreeMap<V> {
     /// // SAFETY: The tree root came from previous `into_raw` call
     /// let map2 = unsafe { TreeMap::from_raw(root) };
     ///
-    /// assert_eq!(*map2.get(&[1, 2, 3]).unwrap(), 'a');
+    /// assert_eq!(map2[&[1, 2, 3]], 'a');
     /// ```
     pub unsafe fn from_raw(root: Option<OpaqueNodePtr<V>>) -> Self {
         let num_entries = if let Some(root) = root {
@@ -204,10 +204,10 @@ impl<V> TreeMap<V> {
     /// let mut map = TreeMap::<char>::new();
     ///
     /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-    /// assert_eq!(*map.get(&[1, 2, 3]).unwrap(), 'a');
+    /// assert_eq!(map[&[1, 2, 3]], 'a');
     ///
     /// *map.get_mut(&[1, 2, 3]).unwrap() = 'b';
-    /// assert_eq!(*map.get(&[1, 2, 3]).unwrap(), 'b');
+    /// assert_eq!(map[&[1, 2, 3]], 'b');
     /// ```
     ///
     /// While an element from the tree is mutably referenced, no other operation
@@ -224,7 +224,7 @@ impl<V> TreeMap<V> {
     /// let value = map.get_mut(&[1, 2, 3]).unwrap();
     /// assert_eq!(*value, 'a');
     ///
-    /// assert_eq!(*map.get(&[1, 2, 3]).unwrap(), 'a');
+    /// assert_eq!(*map[&[1, 2, 3]], 'a');
     ///
     /// *value = 'b';
     /// drop(value);
@@ -440,6 +440,8 @@ impl<V> TreeMap<V> {
     ///
     /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
     /// map.try_insert(Box::new([2, 3, 4]), 'b').unwrap();
+    /// // This function call errors because the key is a prefix of the existing key
+    /// assert!(map.try_insert(Box::new([2, 3, 4, 5]), 'b').is_err());
     ///
     /// assert_eq!(map.len(), 2);
     /// ```
@@ -554,6 +556,33 @@ impl<V> TreeMap<V> {
     }
 
     /// Moves all elements from other into self, leaving other empty.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,should_panic
+    /// use blart::TreeMap;
+    ///
+    /// let mut a = TreeMap::new();
+    /// a.try_insert(Box::from([1]), "a").unwrap();
+    /// a.try_insert(Box::from([2]), "b").unwrap();
+    /// a.try_insert(Box::from([3]), "c").unwrap(); // Note: Key (3) also present in b.
+    ///
+    /// let mut b = TreeMap::new();
+    /// b.try_insert(Box::from([3]), "d").unwrap(); // Note: Key (3) also present in a.
+    /// b.try_insert(Box::from([4]), "e").unwrap();
+    /// b.try_insert(Box::from([5]), "f").unwrap();
+    ///
+    /// a.append(&mut b);
+    ///
+    /// assert_eq!(a.len(), 5);
+    /// assert_eq!(b.len(), 0);
+    ///
+    /// assert_eq!(a[&[1]], "a");
+    /// assert_eq!(a[&[2]], "b");
+    /// assert_eq!(a[&[3]], "d"); // Note: "c" has been overwritten.
+    /// assert_eq!(a[&[4]], "e");
+    /// assert_eq!(a[&[5]], "f");
+    /// ```
     pub fn append(&mut self, other: &mut TreeMap<V>) {
         self.extend(other.drain_filter(|_, _| true))
     }
@@ -566,6 +595,23 @@ impl<V> TreeMap<V> {
     /// (exclusive). The range may also be entered as `(Bound<T>, Bound<T>)`, so
     /// for example `range((Excluded(4), Included(10)))` will yield a
     /// left-exclusive, right-inclusive range from 4 to 10.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,should_panic
+    /// use blart::TreeMap;
+    /// use std::ops::Bound::Included;
+    ///
+    /// let mut map = TreeMap::new();
+    /// map.try_insert(Box::from([3]), "a").unwrap();
+    /// map.try_insert(Box::from([5]), "b").unwrap();
+    /// map.try_insert(Box::from([8]), "c").unwrap();
+    ///
+    /// for (key, &value) in map.range((Included([4]), Included([8]))) {
+    ///     println!("{key:?}: {value}");
+    /// }
+    /// assert_eq!(map.range([4]..).next(), Some(([5].as_ref(), &"b")));
+    /// ```
     pub fn range<R, K>(&self, _range: R) -> iterators::Range<V>
     where
         K: AsRef<[u8]>,
@@ -582,6 +628,34 @@ impl<V> TreeMap<V> {
     /// (exclusive). The range may also be entered as `(Bound<T>, Bound<T>)`, so
     /// for example `range_mut((Excluded(4), Included(10)))` will yield a
     /// left-exclusive, right-inclusive range from 4 to 10.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,should_panic
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<i32> = [("Alice", 0), ("Bob", 0), ("Carol", 0), ("Cheryl", 0)]
+    ///     .into_iter()
+    ///     .map(|(key, value)| (Box::from(key.as_bytes()), value))
+    ///     .collect();
+    ///
+    /// for (name, balance) in map.range_mut("B".as_bytes().."Cheryl".as_bytes()) {
+    ///     *balance += 100;
+    ///
+    ///     if name.starts_with(b"C") {
+    ///         *balance *= 2;
+    ///     }
+    /// }
+    ///
+    /// for (name, balance) in &map {
+    ///     println!("{name:?} => {balance}");
+    /// }
+    ///
+    /// assert_eq!(map[b"Alice"], 0);
+    /// assert_eq!(map[b"Bob"], 100);
+    /// assert_eq!(map[b"Carol"], 200);
+    /// assert_eq!(map[b"Cheryl"], 200);
+    /// ```
     pub fn range_mut<R, K>(&mut self, _range: R) -> iterators::RangeMut<V>
     where
         K: AsRef<[u8]>,
@@ -592,6 +666,31 @@ impl<V> TreeMap<V> {
 
     /// Splits the collection into two at the given key. Returns everything
     /// after the given key, including the key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,should_panic
+    /// use blart::TreeMap;
+    ///
+    /// let mut a = TreeMap::new();
+    /// a.try_insert(Box::from([1]), "a").unwrap();
+    /// a.try_insert(Box::from([2]), "b").unwrap();
+    /// a.try_insert(Box::from([3]), "c").unwrap();
+    /// a.try_insert(Box::from([17]), "d").unwrap();
+    /// a.try_insert(Box::from([41]), "e").unwrap();
+    ///
+    /// let b = a.split_off(&[3]);
+    ///
+    /// assert_eq!(a.len(), 2);
+    /// assert_eq!(b.len(), 3);
+    ///
+    /// assert_eq!(a[&[1]], "a");
+    /// assert_eq!(a[&[2]], "b");
+    ///
+    /// assert_eq!(b[&[3]], "c");
+    /// assert_eq!(b[&[17]], "d");
+    /// assert_eq!(b[&[41]], "e");
+    /// ```
     pub fn split_off<K>(&mut self, split_key: K) -> TreeMap<V>
     where
         K: AsRef<[u8]>,
@@ -619,6 +718,18 @@ impl<V> TreeMap<V> {
     /// It is unspecified how many more elements will be subjected to the
     /// closure if a panic occurs in the closure, or a panic occurs while
     /// dropping an element, or if the DrainFilter value is leaked.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,should_panic
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<u8> = (0..8).map(|x| (Box::from([x]), x)).collect();
+    /// let evens: TreeMap<_> = map.drain_filter(|k, _v| k[0] % 2 == 0).collect();
+    /// let odds = map;
+    /// assert_eq!(evens.keys().map(|k| k[0]).collect::<Vec<_>>(), [0, 2, 4, 6]);
+    /// assert_eq!(odds.keys().map(|k| k[0]).collect::<Vec<_>>(), [1, 3, 5, 7]);
+    /// ```
     pub fn drain_filter<F>(&mut self, _pred: F) -> iterators::DrainFilter<V>
     where
         F: FnMut(&[u8], &mut V) -> bool,
@@ -720,11 +831,11 @@ impl<V> TreeMap<V> {
     ///     value.make_ascii_uppercase();
     /// }
     ///
-    /// assert_eq!(map.get(&[0]).unwrap(), &'D');
-    /// assert_eq!(map.get(&[1]).unwrap(), &'C');
-    /// assert_eq!(map.get(&[2]).unwrap(), &'B');
-    /// assert_eq!(map.get(&[3]).unwrap(), &'A');
-    /// assert_eq!(map.get(&[4]).unwrap(), &'Z');
+    /// assert_eq!(map[&[0]], 'D');
+    /// assert_eq!(map[&[1]], 'C');
+    /// assert_eq!(map[&[2]], 'B');
+    /// assert_eq!(map[&[3]], 'A');
+    /// assert_eq!(map[&[4]], 'Z');
     /// ```
     pub fn iter_mut(&mut self) -> iterators::IterMut<'_, V> {
         iterators::IterMut::new(self)
@@ -796,11 +907,11 @@ impl<V> TreeMap<V> {
     ///     value.make_ascii_uppercase();
     /// }
     ///
-    /// assert_eq!(map.get(&[0]).unwrap(), &'D');
-    /// assert_eq!(map.get(&[1]).unwrap(), &'C');
-    /// assert_eq!(map.get(&[2]).unwrap(), &'B');
-    /// assert_eq!(map.get(&[3]).unwrap(), &'A');
-    /// assert_eq!(map.get(&[4]).unwrap(), &'Z');
+    /// assert_eq!(map[&[0]], 'D');
+    /// assert_eq!(map[&[1]], 'C');
+    /// assert_eq!(map[&[2]], 'B');
+    /// assert_eq!(map[&[3]], 'A');
+    /// assert_eq!(map[&[4]], 'Z');
     /// ```
     pub fn values_mut(&mut self) -> iterators::ValuesMut<'_, V> {
         iterators::ValuesMut::new(self)
