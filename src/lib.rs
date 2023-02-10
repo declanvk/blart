@@ -32,13 +32,14 @@
 //!
 //! [ART paper]: https://www-db.in.tum.de/~leis/papers/ART.pdf
 
+mod bytes;
 mod collections;
+mod nightly_rust_apis;
 mod nodes;
 pub mod tagged_pointer;
 #[doc(hidden)]
 pub mod tests_common;
 
+pub use bytes::*;
 pub use collections::*;
 pub use nodes::*;
-
-mod nightly_rust_apis;
