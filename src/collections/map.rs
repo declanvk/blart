@@ -29,6 +29,16 @@ impl<V> TreeMap<V> {
     /// Create a new, empty [`TreeMap`].
     ///
     /// This function will not pre-allocate anything.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let map = TreeMap::<()>::new();
+    /// assert_eq!(map, TreeMap::new());
+    /// assert!(map.is_empty());
+    /// ```
     pub fn new() -> Self {
         TreeMap {
             num_entries: 0,
@@ -39,6 +49,20 @@ impl<V> TreeMap<V> {
     /// Convert tree into a pointer to pointer to the root node.
     ///
     /// If there are no elements in the tree, then returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::{TreeMap, deallocate_tree};
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    ///
+    /// let root = map.into_raw().unwrap();
+    ///
+    /// // SAFETY: No other operation are access or mutating tree while dealloc happens
+    /// unsafe { deallocate_tree(root) }
+    /// ```
     pub fn into_raw(self) -> Option<OpaqueNodePtr<V>> {
         let drop_prevent = ManuallyDrop::new(self);
 
@@ -56,6 +80,22 @@ impl<V> TreeMap<V> {
     ///
     /// Similarly, no other function can mutate the content of the tree under
     /// `root` while this function executes.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    ///
+    /// let root = map.into_raw();
+    /// // SAFETY: The tree root came from previous `into_raw` call
+    /// let map2 = unsafe { TreeMap::from_raw(root) };
+    ///
+    /// assert_eq!(*map2.get(&[1, 2, 3]).unwrap(), 'a');
+    /// ```
     pub unsafe fn from_raw(root: Option<OpaqueNodePtr<V>>) -> Self {
         let num_entries = if let Some(root) = root {
             // SAFETY: The safety requirements on this function cover this call
@@ -70,6 +110,21 @@ impl<V> TreeMap<V> {
     }
 
     /// Clear the map, removing all elements.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    ///
+    /// map.clear();
+    /// assert!(map.is_empty());
+    /// assert!(map.get(&[1, 2, 3]).is_none());
+    /// ```
     pub fn clear(&mut self) {
         if let Some(root) = self.root {
             // SAFETY: Since we have a mutable reference to the map, we know that there are
@@ -85,6 +140,17 @@ impl<V> TreeMap<V> {
     }
 
     /// Returns a reference to the value corresponding to the key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(*map.get(&[1, 2, 3]).unwrap(), 'a');
+    /// ```
     pub fn get<K>(&self, k: K) -> Option<&V>
     where
         K: AsRef<[u8]>,
@@ -93,6 +159,17 @@ impl<V> TreeMap<V> {
     }
 
     /// Returns the key-value pair corresponding to the supplied key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.get_key_value(&[1, 2, 3]).unwrap(), ([1, 2, 3].as_ref(), &'a'));
+    /// ```
     pub fn get_key_value<K>(&self, k: K) -> Option<(&[u8], &V)>
     where
         K: AsRef<[u8]>,
@@ -178,6 +255,18 @@ impl<V> TreeMap<V> {
     }
 
     /// Returns true if the map contains a value for the specified key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    ///
+    /// assert!(map.contains_key(&[1, 2, 3]));
+    /// ```
     pub fn contains_key<K>(&self, k: K) -> bool
     where
         K: AsRef<[u8]>,
@@ -191,6 +280,18 @@ impl<V> TreeMap<V> {
     /// minimum key in the map.
     ///
     /// If the tree is empty, returns None.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    ///
+    /// assert_eq!(map.first_key_value().unwrap(), ([1, 2, 3].as_ref(), &'a'));
+    /// ```
     pub fn first_key_value(&self) -> Option<(&[u8], &V)> {
         if let Some(root) = self.root {
             // SAFETY: Since we have an immutable reference to the `TreeMap` object, that
@@ -215,6 +316,18 @@ impl<V> TreeMap<V> {
     /// element is the minimum key that was in the map.
     ///
     /// If the tree is empty, returns None.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    ///
+    /// assert_eq!(map.pop_first().unwrap(), (Box::from([1, 2, 3]), 'a'));
+    /// ```
     pub fn pop_first(&mut self) -> Option<(Box<[u8]>, V)> {
         if let Some(root) = self.root {
             // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
@@ -238,6 +351,19 @@ impl<V> TreeMap<V> {
     /// maximum key in the map.
     ///
     /// If the tree is empty, returns None.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// map.try_insert(Box::new([2, 3, 4]), 'b').unwrap();
+    ///
+    /// assert_eq!(map.last_key_value().unwrap(), ([2, 3, 4].as_ref(), &'b'));
+    /// ```
     pub fn last_key_value(&self) -> Option<(&[u8], &V)> {
         if let Some(root) = self.root {
             // SAFETY: Since we have an immutable reference to the `TreeMap` object, that
@@ -262,6 +388,19 @@ impl<V> TreeMap<V> {
     /// is the maximum key that was in the map.
     ///
     /// If the tree is empty, returns None.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// map.try_insert(Box::new([2, 3, 4]), 'b').unwrap();
+    ///
+    /// assert_eq!(map.pop_last().unwrap(), (Box::from([2, 3, 4]), 'b'));
+    /// ```
     pub fn pop_last(&mut self) -> Option<(Box<[u8]>, V)> {
         if let Some(root) = self.root {
             // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
@@ -291,6 +430,19 @@ impl<V> TreeMap<V> {
     /// # Errors
     ///  - If the map has an existing key, such that the new key is a prefix of
     ///    the existing key or vice versa, then it returns an error.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// map.try_insert(Box::new([2, 3, 4]), 'b').unwrap();
+    ///
+    /// assert_eq!(map.len(), 2);
+    /// ```
     pub fn try_insert(&mut self, key: Box<[u8]>, value: V) -> Result<Option<V>, InsertPrefixError> {
         if let Some(root) = self.root {
             // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
@@ -325,6 +477,19 @@ impl<V> TreeMap<V> {
 
     /// Removes a key from the map, returning the stored key and value if the
     /// key was previously in the map.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// map.try_insert(Box::new([2, 3, 4]), 'b').unwrap();
+    ///
+    /// assert_eq!(map.remove_entry(&[2, 3, 4]).unwrap(), (Box::from([2, 3, 4]), 'b'))
+    /// ```
     pub fn remove_entry<K>(&mut self, k: K) -> Option<(Box<[u8]>, V)>
     where
         K: AsRef<[u8]>,
@@ -356,6 +521,20 @@ impl<V> TreeMap<V> {
 
     /// Removes a key from the map, returning the value at the key if the key
     /// was previously in the map.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// map.try_insert(Box::new([2, 3, 4]), 'b').unwrap();
+    ///
+    /// assert_eq!(map.remove(&[2, 3, 4]).unwrap(), 'b');
+    /// assert_eq!(map.remove(&[2, 3, 4]), None);
+    /// ```
     pub fn remove<K>(&mut self, k: K) -> Option<V>
     where
         K: AsRef<[u8]>,
@@ -449,6 +628,26 @@ impl<V> TreeMap<V> {
 
     /// Creates a consuming iterator visiting all the keys, in sorted order. The
     /// map cannot be used after calling this. The iterator element type is `K`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let map: TreeMap<char> = ['d', 'c', 'b', 'a', 'z'].into_iter()
+    ///     .enumerate()
+    ///     .map(|(idx, value)| (Box::from([u8::try_from(idx).unwrap()]), value))
+    ///     .collect();
+    ///
+    /// let mut iter = map.into_keys();
+    ///
+    /// assert_eq!(iter.next().unwrap(), Box::from([0]));
+    /// assert_eq!(iter.next().unwrap(), Box::from([1]));
+    /// assert_eq!(iter.next().unwrap(), Box::from([2]));
+    /// assert_eq!(iter.next().unwrap(), Box::from([3]));
+    /// assert_eq!(iter.next().unwrap(), Box::from([4]));
+    /// assert_eq!(iter.next(), None);
+    /// ```
     pub fn into_keys(self) -> iterators::IntoKeys<V> {
         iterators::IntoKeys::new(self)
     }
@@ -456,41 +655,185 @@ impl<V> TreeMap<V> {
     /// Creates a consuming iterator visiting all the values, in order by key.
     /// The map cannot be used after calling this. The iterator element type is
     /// `V`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let map: TreeMap<char> = ['d', 'c', 'b', 'a', 'z'].into_iter()
+    ///     .enumerate()
+    ///     .map(|(idx, value)| (Box::from([u8::try_from(idx).unwrap()]), value))
+    ///     .collect();
+    ///
+    /// let mut iter = map.into_values();
+    ///
+    /// assert_eq!(iter.next().unwrap(), 'd');
+    /// assert_eq!(iter.next().unwrap(), 'c');
+    /// assert_eq!(iter.next().unwrap(), 'b');
+    /// assert_eq!(iter.next().unwrap(), 'a');
+    /// assert_eq!(iter.next().unwrap(), 'z');
+    /// assert_eq!(iter.next(), None);
+    /// ```
     pub fn into_values(self) -> iterators::IntoValues<V> {
         iterators::IntoValues::new(self)
     }
 
     /// Gets an iterator over the entries of the map, sorted by key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let map: TreeMap<char> = ['d', 'c', 'b', 'a', 'z'].into_iter()
+    ///     .enumerate()
+    ///     .map(|(idx, value)| (Box::from([u8::try_from(idx).unwrap()]), value))
+    ///     .collect();
+    ///
+    /// let mut iter = map.iter();
+    ///
+    /// assert_eq!(iter.next().unwrap(), ([0].as_ref(), &'d'));
+    /// assert_eq!(iter.next().unwrap(), ([1].as_ref(), &'c'));
+    /// assert_eq!(iter.next().unwrap(), ([2].as_ref(), &'b'));
+    /// assert_eq!(iter.next().unwrap(), ([3].as_ref(), &'a'));
+    /// assert_eq!(iter.next().unwrap(), ([4].as_ref(), &'z'));
+    /// assert_eq!(iter.next(), None);
+    /// ```
     pub fn iter(&self) -> iterators::Iter<'_, V> {
         iterators::Iter::new(self)
     }
 
     /// Gets a mutable iterator over the entries of the map, sorted by key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<char> = ['d', 'c', 'b', 'a', 'z'].into_iter()
+    ///     .enumerate()
+    ///     .map(|(idx, value)| (Box::from([u8::try_from(idx).unwrap()]), value))
+    ///     .collect();
+    ///
+    /// for (_key, value) in map.iter_mut() {
+    ///     value.make_ascii_uppercase();
+    /// }
+    ///
+    /// assert_eq!(map.get(&[0]).unwrap(), &'D');
+    /// assert_eq!(map.get(&[1]).unwrap(), &'C');
+    /// assert_eq!(map.get(&[2]).unwrap(), &'B');
+    /// assert_eq!(map.get(&[3]).unwrap(), &'A');
+    /// assert_eq!(map.get(&[4]).unwrap(), &'Z');
+    /// ```
     pub fn iter_mut(&mut self) -> iterators::IterMut<'_, V> {
         iterators::IterMut::new(self)
     }
 
     /// Gets an iterator over the keys of the map, in sorted order.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let map: TreeMap<char> = ['d', 'c', 'b', 'a', 'z'].into_iter()
+    ///     .enumerate()
+    ///     .map(|(idx, value)| (Box::from([u8::try_from(idx).unwrap()]), value))
+    ///     .collect();
+    ///
+    /// let mut iter = map.keys();
+    ///
+    /// assert_eq!(iter.next().unwrap(), [0].as_ref());
+    /// assert_eq!(iter.next().unwrap(), [1].as_ref());
+    /// assert_eq!(iter.next().unwrap(), [2].as_ref());
+    /// assert_eq!(iter.next().unwrap(), [3].as_ref());
+    /// assert_eq!(iter.next().unwrap(), [4].as_ref());
+    /// assert_eq!(iter.next(), None);
+    /// ```
     pub fn keys(&self) -> iterators::Keys<'_, V> {
         iterators::Keys::new(self)
     }
 
     /// Gets an iterator over the values of the map, in order by key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let map: TreeMap<char> = ['d', 'c', 'b', 'a', 'z'].into_iter()
+    ///     .enumerate()
+    ///     .map(|(idx, value)| (Box::from([u8::try_from(idx).unwrap()]), value))
+    ///     .collect();
+    ///
+    /// let mut iter = map.values();
+    ///
+    /// assert_eq!(iter.next().unwrap(), &'d');
+    /// assert_eq!(iter.next().unwrap(), &'c');
+    /// assert_eq!(iter.next().unwrap(), &'b');
+    /// assert_eq!(iter.next().unwrap(), &'a');
+    /// assert_eq!(iter.next().unwrap(), &'z');
+    /// assert_eq!(iter.next(), None);
+    /// ```
     pub fn values(&self) -> iterators::Values<'_, V> {
         iterators::Values::new(self)
     }
 
     /// Gets a mutable iterator over the values of the map, in order by key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<char> = ['d', 'c', 'b', 'a', 'z'].into_iter()
+    ///     .enumerate()
+    ///     .map(|(idx, value)| (Box::from([u8::try_from(idx).unwrap()]), value))
+    ///     .collect();
+    ///
+    /// for value in map.values_mut() {
+    ///     value.make_ascii_uppercase();
+    /// }
+    ///
+    /// assert_eq!(map.get(&[0]).unwrap(), &'D');
+    /// assert_eq!(map.get(&[1]).unwrap(), &'C');
+    /// assert_eq!(map.get(&[2]).unwrap(), &'B');
+    /// assert_eq!(map.get(&[3]).unwrap(), &'A');
+    /// assert_eq!(map.get(&[4]).unwrap(), &'Z');
+    /// ```
     pub fn values_mut(&mut self) -> iterators::ValuesMut<'_, V> {
         iterators::ValuesMut::new(self)
     }
 
     /// Returns the number of elements in the map.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let map: TreeMap<char> = ['d', 'c', 'b', 'a', 'z'].into_iter()
+    ///     .enumerate()
+    ///     .map(|(idx, value)| (Box::from([u8::try_from(idx).unwrap()]), value))
+    ///     .collect();
+    ///
+    /// assert_eq!(map.len(), 5);
+    /// ```
     pub fn len(&self) -> usize {
         self.num_entries
     }
 
     /// Returns `true` if the map contains no elements.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let map = TreeMap::<()>::new();
+    /// assert!(map.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.num_entries == 0
     }

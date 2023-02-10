@@ -15,7 +15,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Build Documentation
-        run: cargo doc --workspace --no-deps --all-features
+        run: cargo +nightly doc --all-features --no-deps --workspace --document-private-items
 
       - name: Prepare to publish
         run: ./scripts/prep_documentation.sh

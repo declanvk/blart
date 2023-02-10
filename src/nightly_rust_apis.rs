@@ -10,9 +10,8 @@
 /// Calling this when the content is not yet fully initialized causes
 /// undefined behavior.
 ///
-/// See [`assume_init_ref`] for more details and examples.
-///
-/// [`assume_init_ref`]: MaybeUninit::assume_init_ref
+/// See [`assume_init_ref`][std::mem::MaybeUninit::assume_init_ref] for more
+/// details and examples.
 ///
 /// **This is a unstable API copied from the Rust standard library, tracking
 /// issue is [#63569][issue-63569]**
@@ -72,9 +71,8 @@ pub fn maybe_uninit_uninit_array<const N: usize, T>() -> [std::mem::MaybeUninit<
 /// Calling this when the content is not yet fully initialized causes
 /// undefined behavior.
 ///
-/// See [`assume_init_mut`] for more details and examples.
-///
-/// [`assume_init_mut`]: MaybeUninit::assume_init_mut
+/// See [`assume_init_mut`][std::mem::MaybeUninit::assume_init_mut] for more
+/// details and examples.
 ///
 /// **This is a unstable API copied from the Rust standard library, tracking
 /// issue is [#63569][issue-63569]**
@@ -193,7 +191,8 @@ pub unsafe fn non_null_get_unchecked_mut<T>(
 ///
 /// This method is only for providing domain separation.  If you want to
 /// hash a `usize` that represents part of the *data*, then it's important
-/// that you pass it to [`Hasher::write_usize`] instead of to this method.
+/// that you pass it to [`Hasher::write_usize`][std::hash::Hasher::write_usize]
+/// instead of to this method.
 ///
 /// # Note to Implementers
 ///
