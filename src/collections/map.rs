@@ -118,7 +118,41 @@ impl<V> TreeMap<V> {
     }
 
     /// Returns a mutable reference to the value corresponding to the key.
-    pub fn get_mut<K>(&self, k: K) -> Option<&mut V>
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(*map.get(&[1, 2, 3]).unwrap(), 'a');
+    ///
+    /// *map.get_mut(&[1, 2, 3]).unwrap() = 'b';
+    /// assert_eq!(*map.get(&[1, 2, 3]).unwrap(), 'b');
+    /// ```
+    ///
+    /// While an element from the tree is mutably referenced, no other operation
+    /// on the tree can happen.
+    ///
+    /// ```rust,compile_fail
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    ///
+    ///
+    /// let value = map.get_mut(&[1, 2, 3]).unwrap();
+    /// assert_eq!(*value, 'a');
+    ///
+    /// assert_eq!(*map.get(&[1, 2, 3]).unwrap(), 'a');
+    ///
+    /// *value = 'b';
+    /// drop(value);
+    /// ```
+    pub fn get_mut<K>(&mut self, k: K) -> Option<&mut V>
     where
         K: AsRef<[u8]>,
     {
