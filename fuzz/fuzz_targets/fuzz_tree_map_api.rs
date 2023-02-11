@@ -26,7 +26,7 @@ enum Action {
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
-    let mut tree = TreeMap::<u32>::new();
+    let mut tree = TreeMap::<_, u32>::new();
     let mut next_key = 0;
 
     for action in actions {

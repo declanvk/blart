@@ -1,6 +1,6 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    NodeType, OpaqueNodePtr,
+    AsBytes, NodeType, OpaqueNodePtr,
 };
 use std::mem;
 
@@ -16,10 +16,42 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn collect<V>(root: OpaqueNodePtr<V>) -> TreeStats {
+    pub unsafe fn collect<K, V>(root: OpaqueNodePtr<K, V>) -> TreeStats
+    where
+        K: AsBytes,
+    {
         let mut collector = TreeStatsCollector;
 
         root.visit_with(&mut collector)
+    }
+
+    /// Iterate through the given tree and return the number of leaf nodes.
+    ///
+    /// # Safety
+    ///  - For the duration of this function, the given node and all its
+    ///    children nodes must not get mutated.
+    pub unsafe fn count_leaf_nodes<K, V>(root: OpaqueNodePtr<K, V>) -> usize {
+        struct LeafNodeCounter;
+
+        impl<K, V> Visitor<K, V> for LeafNodeCounter {
+            type Output = usize;
+
+            fn default_output(&self) -> Self::Output {
+                0
+            }
+
+            fn combine_output(&self, o1: Self::Output, o2: Self::Output) -> Self::Output {
+                o1 + o2
+            }
+
+            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V>) -> Self::Output {
+                1
+            }
+        }
+
+        let mut counter = LeafNodeCounter;
+
+        root.visit_with(&mut counter)
     }
 }
 
@@ -69,7 +101,10 @@ impl TreeStats {
     }
 }
 
-impl<V> Visitor<V> for TreeStatsCollector {
+impl<K, V> Visitor<K, V> for TreeStatsCollector
+where
+    K: AsBytes,
+{
     type Output = TreeStats;
 
     fn default_output(&self) -> Self::Output {
@@ -89,7 +124,7 @@ impl<V> Visitor<V> for TreeStatsCollector {
         }
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<V>) -> Self::Output {
+    fn visit_node4(&mut self, t: &crate::InnerNode4<K, V>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node4_count += 1;
         output.empty_capacity += NodeType::Node4.upper_capacity() - t.header.num_children();
@@ -102,7 +137,7 @@ impl<V> Visitor<V> for TreeStatsCollector {
         output
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<V>) -> Self::Output {
+    fn visit_node16(&mut self, t: &crate::InnerNode16<K, V>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node16_count += 1;
         output.empty_capacity += NodeType::Node16.upper_capacity() - t.header.num_children();
@@ -115,7 +150,7 @@ impl<V> Visitor<V> for TreeStatsCollector {
         output
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<V>) -> Self::Output {
+    fn visit_node48(&mut self, t: &crate::InnerNode48<K, V>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node48_count += 1;
         output.empty_capacity += NodeType::Node48.upper_capacity() - t.header.num_children();
@@ -128,7 +163,7 @@ impl<V> Visitor<V> for TreeStatsCollector {
         output
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<V>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node256_count += 1;
         output.empty_capacity += NodeType::Node256.upper_capacity() - t.header.num_children();
@@ -141,10 +176,10 @@ impl<V> Visitor<V> for TreeStatsCollector {
         output
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<V>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V>) -> Self::Output {
         let mut output = TreeStats::default();
         output.leaf_count += 1;
-        output.total_key_bytes += t.key.len();
+        output.total_key_bytes += t.key.as_bytes().len();
         output
     }
 }

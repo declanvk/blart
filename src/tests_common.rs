@@ -326,8 +326,8 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
 /// # Safety
 ///  - There must be no concurrent modifications to the tree while this function
 ///    runs.
-pub fn convert_tree_to_dot_string<V: fmt::Display>(
-    root: OpaqueNodePtr<V>,
+pub fn convert_tree_to_dot_string<K: fmt::Debug, V: fmt::Debug>(
+    root: OpaqueNodePtr<K, V>,
     settings: DotPrinterSettings,
 ) -> io::Result<String> {
     let mut buffer = Vec::new();
@@ -341,7 +341,7 @@ pub fn convert_tree_to_dot_string<V: fmt::Display>(
 #[cfg(test)]
 pub(crate) fn setup_tree_from_entries<V>(
     mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
-) -> OpaqueNodePtr<V> {
+) -> OpaqueNodePtr<Box<[u8]>, V> {
     use crate::{insert_unchecked, LeafNode, NodePtr};
 
     let (first_key, first_value) = entries_it.next().unwrap();

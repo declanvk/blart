@@ -2,7 +2,8 @@
 
 use blart::{
     deallocate_tree, delete_unchecked, insert_unchecked, maximum_unchecked, minimum_unchecked,
-    search_unchecked, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, TreeIterator, visitor::WellFormedChecker,
+    search_unchecked, visitor::WellFormedChecker, InsertResult, LeafNode, NodePtr, OpaqueNodePtr,
+    TreeIterator,
 };
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
@@ -26,7 +27,7 @@ enum Action {
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
-    let mut current_root: Option<OpaqueNodePtr<usize>> = None;
+    let mut current_root: Option<OpaqueNodePtr<Box<[u8]>, usize>> = None;
     let mut next_value: usize = 0;
 
     for action in actions {
@@ -70,7 +71,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                         continue;
                     }
 
-                    let mut iterator = unsafe { TreeIterator::<_>::new(root) };
+                    let mut iterator = unsafe { TreeIterator::<_, _>::new(root) };
                     let min_value_from_iter = iterator.next().unwrap();
                     let max_value_from_iter = iterator.next_back().unwrap();
 
@@ -79,8 +80,14 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
 
                     assert!(min_value.key <= max_value.key);
 
-                    assert_eq!(&min_value.key, unsafe { min_value_from_iter.as_key_value_ref() }.0);
-                    assert_eq!(&max_value.key, unsafe { max_value_from_iter.as_key_value_ref() }.0);
+                    assert_eq!(
+                        &min_value.key,
+                        unsafe { min_value_from_iter.as_key_value_ref() }.0
+                    );
+                    assert_eq!(
+                        &max_value.key,
+                        unsafe { max_value_from_iter.as_key_value_ref() }.0
+                    );
                 }
             },
             Action::Deallocate => {
@@ -102,9 +109,10 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
             Action::WellFormedCheck => {
                 if let Some(root) = current_root {
-                    let _ = unsafe { WellFormedChecker::check_tree(&root) }.expect("tree should be well-formed");
+                    let _ = unsafe { WellFormedChecker::check_tree(&root) }
+                        .expect("tree should be well-formed");
                 }
-            }
+            },
         }
     }
 

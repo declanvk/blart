@@ -6,20 +6,20 @@ use sptr::Strict;
 
 #[test]
 fn opaque_node_ptr_is_correct() {
-    let mut n4 = InnerNode4::<usize>::empty();
-    let mut n16 = InnerNode16::<usize>::empty();
-    let mut n48 = InnerNode48::<usize>::empty();
-    let mut n256 = InnerNode256::<usize>::empty();
+    let mut n4 = InnerNode4::<Box<[u8]>, usize>::empty();
+    let mut n16 = InnerNode16::<Box<[u8]>, usize>::empty();
+    let mut n48 = InnerNode48::<Box<[u8]>, usize>::empty();
+    let mut n256 = InnerNode256::<Box<[u8]>, usize>::empty();
 
     let n4_ptr = NodePtr::from(&mut n4).to_opaque();
     let n16_ptr = NodePtr::from(&mut n16).to_opaque();
     let n48_ptr = NodePtr::from(&mut n48).to_opaque();
     let n256_ptr = NodePtr::from(&mut n256).to_opaque();
 
-    assert!(n4_ptr.is::<InnerNode4<usize>>());
-    assert!(n16_ptr.is::<InnerNode16<usize>>());
-    assert!(n48_ptr.is::<InnerNode48<usize>>());
-    assert!(n256_ptr.is::<InnerNode256<usize>>());
+    assert!(n4_ptr.is::<InnerNode4<Box<[u8]>, usize>>());
+    assert!(n16_ptr.is::<InnerNode16<Box<[u8]>, usize>>());
+    assert!(n48_ptr.is::<InnerNode48<Box<[u8]>, usize>>());
+    assert!(n256_ptr.is::<InnerNode256<Box<[u8]>, usize>>());
 }
 
 #[test]
@@ -34,71 +34,71 @@ fn node_sizes() {
     // 4 bytes of padding are inserted after the `keys` field to align the field to
     // an 8 byte boundary.
     assert_eq!(
-        mem::size_of::<InnerNode4<usize>>(),
+        mem::size_of::<InnerNode4<Box<[u8]>, usize>>(),
         EXPECTED_HEADER_SIZE + 40
     );
     // key map: 16 * (1 byte) = 16 bytes
     // child map: 16 * (8 bytes (on 64-bit platform)) = 128
     assert_eq!(
-        mem::size_of::<InnerNode16<usize>>(),
+        mem::size_of::<InnerNode16<Box<[u8]>, usize>>(),
         EXPECTED_HEADER_SIZE + 144
     );
     // key map: 256 * (1 byte) = 256 bytes
     // child map: 48 * (8 bytes (on 64-bit platform)) = 384
     assert_eq!(
-        mem::size_of::<InnerNode48<usize>>(),
+        mem::size_of::<InnerNode48<Box<[u8]>, usize>>(),
         EXPECTED_HEADER_SIZE + 640
     );
     // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
     assert_eq!(
-        mem::size_of::<InnerNode256<usize>>(),
+        mem::size_of::<InnerNode256<Box<[u8]>, usize>>(),
         EXPECTED_HEADER_SIZE + 2048
     );
 
     // Assert that pointer is expected size and has non-null optimization
-    assert_eq!(mem::size_of::<Option<OpaqueNodePtr<()>>>(), 8);
-    assert_eq!(mem::size_of::<OpaqueNodePtr<()>>(), 8);
+    assert_eq!(mem::size_of::<Option<OpaqueNodePtr<Box<[u8]>, ()>>>(), 8);
+    assert_eq!(mem::size_of::<OpaqueNodePtr<Box<[u8]>, ()>>(), 8);
 }
 
 #[test]
 fn node_alignment() {
-    assert_eq!(mem::align_of::<InnerNode4<u8>>(), 8);
-    assert_eq!(mem::align_of::<InnerNode16<u8>>(), 8);
-    assert_eq!(mem::align_of::<InnerNode48<u8>>(), 8);
-    assert_eq!(mem::align_of::<InnerNode256<u8>>(), 8);
-    assert_eq!(mem::align_of::<LeafNode<u8>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode4<Box<[u8]>, u8>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode16<Box<[u8]>, u8>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode48<Box<[u8]>, u8>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode256<Box<[u8]>, u8>>(), 8);
+    assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8>>(), 8);
     assert_eq!(mem::align_of::<Header>(), 8);
 
     assert_eq!(
-        mem::align_of::<InnerNode4<u8>>(),
+        mem::align_of::<InnerNode4<Box<[u8]>, u8>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<InnerNode16<u8>>(),
+        mem::align_of::<InnerNode16<Box<[u8]>, u8>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<InnerNode48<u8>>(),
+        mem::align_of::<InnerNode48<Box<[u8]>, u8>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<InnerNode256<u8>>(),
+        mem::align_of::<InnerNode256<Box<[u8]>, u8>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<LeafNode<u8>>(),
+        mem::align_of::<LeafNode<Box<[u8]>, u8>>(),
         mem::align_of::<OpaqueValue>()
     );
 
-    let n4 = InnerNode4::<()>::empty();
-    let n16 = InnerNode4::<()>::empty();
-    let n48 = InnerNode4::<()>::empty();
-    let n256 = InnerNode4::<()>::empty();
+    let n4 = InnerNode4::<Box<[u8]>, ()>::empty();
+    let n16 = InnerNode4::<Box<[u8]>, ()>::empty();
+    let n48 = InnerNode4::<Box<[u8]>, ()>::empty();
+    let n256 = InnerNode4::<Box<[u8]>, ()>::empty();
 
-    let n4_ptr = (&n4 as *const InnerNode4<()>).addr();
-    let n16_ptr = (&n16 as *const InnerNode4<()>).addr();
-    let n48_ptr = (&n48 as *const InnerNode4<()>).addr();
-    let n256_ptr = (&n256 as *const InnerNode4<()>).addr();
+    let n4_ptr = (&n4 as *const InnerNode4<Box<[u8]>, ()>).addr();
+    let n16_ptr = (&n16 as *const InnerNode4<Box<[u8]>, ()>).addr();
+    let n48_ptr = (&n48 as *const InnerNode4<Box<[u8]>, ()>).addr();
+    let n256_ptr = (&n256 as *const InnerNode4<Box<[u8]>, ()>).addr();
 
     // Ensure that there are 3 bits of unused space in the node pointer because of
     // the alignment.
@@ -108,7 +108,10 @@ fn node_alignment() {
     assert!(n256_ptr.trailing_zeros() >= 3);
 }
 
-fn inner_node_write_child_test(mut node: impl InnerNode<Value = ()>, num_children: usize) {
+fn inner_node_write_child_test(
+    mut node: impl InnerNode<Key = Box<[u8]>, Value = ()>,
+    num_children: usize,
+) {
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
 
     assert!(!node.is_full());
@@ -132,7 +135,10 @@ fn inner_node_write_child_test(mut node: impl InnerNode<Value = ()>, num_childre
     assert!(node.is_full());
 }
 
-fn inner_node_remove_child_test(mut node: impl InnerNode<Value = ()>, num_children: usize) {
+fn inner_node_remove_child_test(
+    mut node: impl InnerNode<Key = Box<[u8]>, Value = ()>,
+    num_children: usize,
+) {
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
 
     assert!(!node.is_full());
@@ -165,7 +171,10 @@ fn inner_node_remove_child_test(mut node: impl InnerNode<Value = ()>, num_childr
     assert!(!node.is_full());
 }
 
-fn inner_node_shrink_test(mut node: impl InnerNode<Value = ()>, num_children: usize) {
+fn inner_node_shrink_test(
+    mut node: impl InnerNode<Key = Box<[u8]>, Value = ()>,
+    num_children: usize,
+) {
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
 
     let leaf_pointers = leaves
@@ -188,7 +197,7 @@ fn inner_node_shrink_test(mut node: impl InnerNode<Value = ()>, num_children: us
 }
 
 fn inner_node_split_at_on_test_keys_moved(
-    mut node: impl InnerNode<Value = ()>,
+    mut node: impl InnerNode<Key = Box<[u8]>, Value = ()>,
     children_key_fragments: &[u8],
     split_key_fragment: u8,
 ) {
@@ -230,7 +239,7 @@ fn inner_node_split_at_on_test_keys_moved(
 
 #[test]
 fn node4_lookup() {
-    let mut n = InnerNode4::empty();
+    let mut n = InnerNode4::<Box<[u8]>, ()>::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -270,7 +279,7 @@ fn node4_write_child_full_panic() {
 
 #[test]
 fn node4_grow() {
-    let mut n4 = InnerNode4::empty();
+    let mut n4 = InnerNode4::<Box<[u8]>, ()>::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -293,33 +302,49 @@ fn node4_grow() {
 #[test]
 #[should_panic]
 fn node4_shrink() {
-    let n4 = InnerNode4::<()>::empty();
+    let n4 = InnerNode4::<Box<[u8]>, ()>::empty();
 
     n4.shrink();
 }
 
 #[test]
 fn node4_split_at_on_existing_key() {
-    inner_node_split_at_on_test_keys_moved(InnerNode4::<()>::empty(), &[1, 3, 82, 123], 82);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode4::<Box<[u8]>, ()>::empty(),
+        &[1, 3, 82, 123],
+        82,
+    );
 }
 
 #[test]
 fn node4_split_at_on_non_existent_key() {
-    inner_node_split_at_on_test_keys_moved(InnerNode4::<()>::empty(), &[1, 3, 82, 123], 66);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode4::<Box<[u8]>, ()>::empty(),
+        &[1, 3, 82, 123],
+        66,
+    );
 }
 
 #[test]
 fn node4_split_at_both_empty_ends() {
-    inner_node_split_at_on_test_keys_moved(InnerNode4::<()>::empty(), &[1, 3, 82, 123], 0);
-    inner_node_split_at_on_test_keys_moved(InnerNode4::<()>::empty(), &[1, 3, 82, 123], 244);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode4::<Box<[u8]>, ()>::empty(),
+        &[1, 3, 82, 123],
+        0,
+    );
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode4::<Box<[u8]>, ()>::empty(),
+        &[1, 3, 82, 123],
+        244,
+    );
 }
 
 #[test]
 fn node16_lookup() {
-    let mut n = InnerNode16::empty();
-    let mut l1 = LeafNode::new(Box::new([]), ());
-    let mut l2 = LeafNode::new(Box::new([]), ());
-    let mut l3 = LeafNode::new(Box::new([]), ());
+    let mut n = InnerNode16::<Box<[u8]>, ()>::empty();
+    let mut l1 = LeafNode::new(Box::from([]), ());
+    let mut l2 = LeafNode::new(Box::from([]), ());
+    let mut l3 = LeafNode::new(Box::from([]), ());
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -356,7 +381,7 @@ fn node16_write_child_full_panic() {
 
 #[test]
 fn node16_grow() {
-    let mut n16 = InnerNode16::empty();
+    let mut n16 = InnerNode16::<Box<[u8]>, ()>::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -390,7 +415,7 @@ fn node16_shrink_too_many_children_panic() {
 #[test]
 fn node16_split_at_on_existing_key() {
     inner_node_split_at_on_test_keys_moved(
-        InnerNode16::<()>::empty(),
+        InnerNode16::<Box<[u8]>, ()>::empty(),
         &[1, 3, 17, 29, 42, 82, 89, 123, 137, 201],
         82,
     );
@@ -399,7 +424,7 @@ fn node16_split_at_on_existing_key() {
 #[test]
 fn node16_split_at_on_non_existent_key() {
     inner_node_split_at_on_test_keys_moved(
-        InnerNode16::<()>::empty(),
+        InnerNode16::<Box<[u8]>, ()>::empty(),
         &[1, 3, 17, 29, 42, 82, 89, 123, 137, 201],
         66,
     );
@@ -408,12 +433,12 @@ fn node16_split_at_on_non_existent_key() {
 #[test]
 fn node16_split_at_both_empty_ends() {
     inner_node_split_at_on_test_keys_moved(
-        InnerNode16::<()>::empty(),
+        InnerNode16::<Box<[u8]>, ()>::empty(),
         &[1, 3, 17, 29, 42, 82, 89, 123, 137, 201],
         0,
     );
     inner_node_split_at_on_test_keys_moved(
-        InnerNode16::<()>::empty(),
+        InnerNode16::<Box<[u8]>, ()>::empty(),
         &[1, 3, 17, 29, 42, 82, 89, 123, 137, 201],
         244,
     );
@@ -421,10 +446,10 @@ fn node16_split_at_both_empty_ends() {
 
 #[test]
 fn node48_lookup() {
-    let mut n = InnerNode48::empty();
-    let mut l1 = LeafNode::new(Box::new([]), ());
-    let mut l2 = LeafNode::new(Box::new([]), ());
-    let mut l3 = LeafNode::new(Box::new([]), ());
+    let mut n = InnerNode48::<Box<[u8]>, ()>::empty();
+    let mut l1 = LeafNode::new(Box::from([]), ());
+    let mut l2 = LeafNode::new(Box::from([]), ());
+    let mut l3 = LeafNode::new(Box::from([]), ());
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -462,7 +487,7 @@ fn node48_write_child_full_panic() {
 
 #[test]
 fn node48_grow() {
-    let mut n48 = InnerNode48::empty();
+    let mut n48 = InnerNode48::<Box<[u8]>, ()>::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -496,28 +521,40 @@ fn node48_shrink_too_many_children_panic() {
 #[test]
 fn node48_split_at_on_existing_key() {
     let keys = (0..=47u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
-    inner_node_split_at_on_test_keys_moved(InnerNode48::<()>::empty(), keys.as_ref(), 34);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode48::<Box<[u8]>, ()>::empty(),
+        keys.as_ref(),
+        34,
+    );
 }
 
 #[test]
 fn node48_split_at_on_non_existent_key() {
     let keys = (0..=47u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
-    inner_node_split_at_on_test_keys_moved(InnerNode48::<()>::empty(), keys.as_ref(), 35);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode48::<Box<[u8]>, ()>::empty(),
+        keys.as_ref(),
+        35,
+    );
 }
 
 #[test]
 fn node48_split_at_both_empty_ends() {
     let keys = (0..=47u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
-    inner_node_split_at_on_test_keys_moved(InnerNode48::<()>::empty(), keys.as_ref(), 0);
-    inner_node_split_at_on_test_keys_moved(InnerNode48::<()>::empty(), keys.as_ref(), 47);
+    inner_node_split_at_on_test_keys_moved(InnerNode48::<Box<[u8]>, ()>::empty(), keys.as_ref(), 0);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode48::<Box<[u8]>, ()>::empty(),
+        keys.as_ref(),
+        47,
+    );
 }
 
 #[test]
 fn node256_lookup() {
-    let mut n = InnerNode256::empty();
-    let mut l1 = LeafNode::new(Box::new([]), ());
-    let mut l2 = LeafNode::new(Box::new([]), ());
-    let mut l3 = LeafNode::new(Box::new([]), ());
+    let mut n = InnerNode256::<Box<[u8]>, ()>::empty();
+    let mut l1 = LeafNode::new(Box::from([]), ());
+    let mut l2 = LeafNode::new(Box::from([]), ());
+    let mut l3 = LeafNode::new(Box::from([]), ());
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -546,7 +583,7 @@ fn node256_remove_child() {
 #[test]
 #[should_panic]
 fn node256_grow() {
-    let n = InnerNode256::<()>::empty();
+    let n = InnerNode256::<Box<[u8]>, ()>::empty();
 
     n.grow();
 }
@@ -565,20 +602,36 @@ fn node256_shrink_too_many_children_panic() {
 #[test]
 fn node256_split_at_on_existing_key() {
     let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
-    inner_node_split_at_on_test_keys_moved(InnerNode256::<()>::empty(), keys.as_ref(), 82);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode256::<Box<[u8]>, ()>::empty(),
+        keys.as_ref(),
+        82,
+    );
 }
 
 #[test]
 fn node256_split_at_on_non_existent_key() {
     let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
-    inner_node_split_at_on_test_keys_moved(InnerNode256::<()>::empty(), keys.as_ref(), 65);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode256::<Box<[u8]>, ()>::empty(),
+        keys.as_ref(),
+        65,
+    );
 }
 
 #[test]
 fn node256_split_at_both_empty_ends() {
     let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
-    inner_node_split_at_on_test_keys_moved(InnerNode256::<()>::empty(), keys.as_ref(), 0);
-    inner_node_split_at_on_test_keys_moved(InnerNode256::<()>::empty(), keys.as_ref(), 255);
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode256::<Box<[u8]>, ()>::empty(),
+        keys.as_ref(),
+        0,
+    );
+    inner_node_split_at_on_test_keys_moved(
+        InnerNode256::<Box<[u8]>, ()>::empty(),
+        keys.as_ref(),
+        255,
+    );
 }
 
 #[test]

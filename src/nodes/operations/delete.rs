@@ -1,5 +1,8 @@
+use std::borrow::Borrow;
+
 use crate::{
-    nodes::operations::lookup, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
+    nodes::operations::lookup, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr,
+    OpaqueNodePtr,
 };
 
 /// Removes a key from the tree, returning the [`LeafNode`] corresponding to the
@@ -12,7 +15,14 @@ use crate::{
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn delete_unchecked<V>(root: OpaqueNodePtr<V>, key: &[u8]) -> Option<DeleteResult<V>> {
+pub unsafe fn delete_unchecked<Q, K, V>(
+    root: OpaqueNodePtr<K, V>,
+    key: &Q,
+) -> Option<DeleteResult<K, V>>
+where
+    K: Borrow<Q> + AsBytes,
+    Q: AsBytes + ?Sized,
+{
     // SAFETY: Requirements covered by containing function
     unsafe {
         let delete_search_result = search_for_node_to_delete(root, key)?;
@@ -36,7 +46,7 @@ pub unsafe fn delete_unchecked<V>(root: OpaqueNodePtr<V>, key: &[u8]) -> Option<
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn delete_minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> DeleteResult<V> {
+pub unsafe fn delete_minimum_unchecked<K, V>(root: OpaqueNodePtr<K, V>) -> DeleteResult<K, V> {
     // SAFETY: Requirements covered by containing function
     unsafe {
         let delete_search_result = find_minimum_to_delete(root);
@@ -60,7 +70,7 @@ pub unsafe fn delete_minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> DeleteResul
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn delete_maximum_unchecked<V>(root: OpaqueNodePtr<V>) -> DeleteResult<V> {
+pub unsafe fn delete_maximum_unchecked<K, V>(root: OpaqueNodePtr<K, V>) -> DeleteResult<K, V> {
     // SAFETY: Requirements covered by containing function
     unsafe {
         let delete_search_result = find_maximum_to_delete(root);
@@ -79,14 +89,14 @@ pub unsafe fn delete_maximum_unchecked<V>(root: OpaqueNodePtr<V>) -> DeleteResul
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-unsafe fn inner_delete_unchecked<V>(
-    root: OpaqueNodePtr<V>,
+unsafe fn inner_delete_unchecked<K, V>(
+    root: OpaqueNodePtr<K, V>,
     DeleteSearchResult {
         grandparent_node_ptr,
         parent_node_ptr,
         leaf_node_ptr,
-    }: DeleteSearchResult<V>,
-) -> DeleteResult<V> {
+    }: DeleteSearchResult<K, V>,
+) -> DeleteResult<K, V> {
     match (parent_node_ptr, grandparent_node_ptr) {
         (None, None) => {
             // The leaf node was also the root node
@@ -138,7 +148,7 @@ unsafe fn inner_delete_unchecked<V>(
 unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
     inner_node_ptr: NodePtr<N>,
     key_fragment: u8,
-) -> Option<OpaqueNodePtr<N::Value>> {
+) -> Option<OpaqueNodePtr<N::Key, N::Value>> {
     // SAFETY: The `inner_node` reference is scoped to this function and dropped
     // before cases where the inner node is deallocated. It is a unique reference,
     // by the safety requirements of the containing function.
@@ -214,12 +224,12 @@ unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
 ///    have any other mutable references.
 ///  - `leaf_node_ptr` must be a unique pointer to the node and not have any
 ///    other mutable references.
-unsafe fn inner_delete_non_root_unchecked<V>(
-    leaf_node_ptr: NodePtr<LeafNode<V>>,
-    (parent_key_byte, parent_node_ptr): (u8, OpaqueNodePtr<V>),
-    grandparent_node_ptr: Option<(u8, OpaqueNodePtr<V>)>,
-    original_root: OpaqueNodePtr<V>,
-) -> DeleteResult<V> {
+unsafe fn inner_delete_non_root_unchecked<K, V>(
+    leaf_node_ptr: NodePtr<LeafNode<K, V>>,
+    (parent_key_byte, parent_node_ptr): (u8, OpaqueNodePtr<K, V>),
+    grandparent_node_ptr: Option<(u8, OpaqueNodePtr<K, V>)>,
+    original_root: OpaqueNodePtr<K, V>,
+) -> DeleteResult<K, V> {
     let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
         ConcreteNodePtr::Node4(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
@@ -297,33 +307,33 @@ unsafe fn inner_delete_non_root_unchecked<V>(
 
 /// The results of a successful delete operation
 #[derive(Debug)]
-pub struct DeleteResult<V> {
+pub struct DeleteResult<K, V> {
     /// The new root node for the tree, after the delete has been applied.
     ///
     /// If `None`, that means the tree is now empty.
-    pub new_root: Option<OpaqueNodePtr<V>>,
+    pub new_root: Option<OpaqueNodePtr<K, V>>,
     /// The leaf node that was successfully deleted.
-    pub deleted_leaf: LeafNode<V>,
+    pub deleted_leaf: LeafNode<K, V>,
 }
 
-struct DeleteSearchResult<V> {
+struct DeleteSearchResult<K, V> {
     /// The grandparent node of the leaf that will be deleted and the key byte
     /// that was used to continue search.
     ///
     /// If there is no grandparent, this value is `None`.
-    grandparent_node_ptr: Option<(u8, OpaqueNodePtr<V>)>,
+    grandparent_node_ptr: Option<(u8, OpaqueNodePtr<K, V>)>,
 
     /// The parent node of the leaf that will be deleted and the key byte that
     /// was used to continue search.
     ///
     /// If the leaf node to delete is also the root, then this value is `None`.
     /// If the grandparent node is present, this value also must be present.
-    parent_node_ptr: Option<(u8, OpaqueNodePtr<V>)>,
+    parent_node_ptr: Option<(u8, OpaqueNodePtr<K, V>)>,
     /// The node to delete.
-    leaf_node_ptr: NodePtr<LeafNode<V>>,
+    leaf_node_ptr: NodePtr<LeafNode<K, V>>,
 }
 
-impl<V> std::fmt::Debug for DeleteSearchResult<V> {
+impl<K, V> std::fmt::Debug for DeleteSearchResult<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeleteSearchResult")
             .field("grandparent_node", &self.grandparent_node_ptr)
@@ -344,10 +354,14 @@ impl<V> std::fmt::Debug for DeleteSearchResult<V> {
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-unsafe fn search_for_node_to_delete<V>(
-    root: OpaqueNodePtr<V>,
-    key: &[u8],
-) -> Option<DeleteSearchResult<V>> {
+unsafe fn search_for_node_to_delete<Q, K, V>(
+    root: OpaqueNodePtr<K, V>,
+    key: &Q,
+) -> Option<DeleteSearchResult<K, V>>
+where
+    K: Borrow<Q> + AsBytes,
+    Q: AsBytes + ?Sized,
+{
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;
@@ -398,7 +412,7 @@ unsafe fn search_for_node_to_delete<V>(
         );
 
         // This should not panic because the current_depth will be greater than zero
-        let last_key_byte = key[current_depth - 1];
+        let last_key_byte = key.as_bytes()[current_depth - 1];
 
         current_grandparent = current_parent;
         current_parent = Some((last_key_byte, current_node));
@@ -414,11 +428,11 @@ unsafe fn search_for_node_to_delete<V>(
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-unsafe fn find_minimum_to_delete<V>(root: OpaqueNodePtr<V>) -> DeleteSearchResult<V> {
+unsafe fn find_minimum_to_delete<K, V>(root: OpaqueNodePtr<K, V>) -> DeleteSearchResult<K, V> {
     unsafe fn get_next_node<N: InnerNode>(
         inner_node: NodePtr<N>,
         current_depth: &mut usize,
-    ) -> (u8, OpaqueNodePtr<N::Value>) {
+    ) -> (u8, OpaqueNodePtr<N::Key, N::Value>) {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
         // enforced the "no concurrent reads or writes" requirement on the
@@ -490,11 +504,11 @@ unsafe fn find_minimum_to_delete<V>(root: OpaqueNodePtr<V>) -> DeleteSearchResul
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-unsafe fn find_maximum_to_delete<V>(root: OpaqueNodePtr<V>) -> DeleteSearchResult<V> {
+unsafe fn find_maximum_to_delete<K, V>(root: OpaqueNodePtr<K, V>) -> DeleteSearchResult<K, V> {
     unsafe fn get_next_node<N: InnerNode>(
         inner_node: NodePtr<N>,
         current_depth: &mut usize,
-    ) -> (u8, OpaqueNodePtr<N::Value>) {
+    ) -> (u8, OpaqueNodePtr<N::Key, N::Value>) {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
         // enforced the "no concurrent reads or writes" requirement on the

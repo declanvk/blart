@@ -3,17 +3,19 @@ use crate::{deallocate_tree, search_unchecked, tests_common::setup_tree_from_ent
 
 #[test]
 fn delete_singleton_tree_leaf() {
-    let first_leaf =
-        NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _>::new(
+        Box::from([1, 2, 3, 4]),
+        "1234".to_string(),
+    ));
 
     let tree = first_leaf.to_opaque();
 
-    assert!(unsafe { delete_unchecked(tree, &[1, 2, 3, 5]).is_none() });
-    assert!(unsafe { delete_unchecked(tree, &[1, 2, 3]).is_none() });
-    assert!(unsafe { delete_unchecked(tree, &[]).is_none() });
-    assert!(unsafe { delete_unchecked(tree, &[1, 2, 3, 4, 5, 6]).is_none() });
+    assert!(unsafe { delete_unchecked(tree, [1, 2, 3, 5].as_ref()).is_none() });
+    assert!(unsafe { delete_unchecked(tree, [1, 2, 3].as_ref()).is_none() });
+    assert!(unsafe { delete_unchecked(tree, [].as_ref()).is_none() });
+    assert!(unsafe { delete_unchecked(tree, [1, 2, 3, 4, 5, 6].as_ref()).is_none() });
 
-    let delete_result = unsafe { delete_unchecked(tree, &[1, 2, 3, 4]).unwrap() };
+    let delete_result = unsafe { delete_unchecked(tree, [1, 2, 3, 4].as_ref()).unwrap() };
     assert!(delete_result.new_root.is_none());
     assert_eq!(delete_result.deleted_leaf.key.as_ref(), &[1, 2, 3, 4]);
     assert_eq!(delete_result.deleted_leaf.value, "1234");
@@ -37,11 +39,11 @@ fn delete_entire_small_tree() {
 
     assert_eq!(current_root.node_type(), NodeType::Node4);
 
-    assert!(unsafe { delete_unchecked(current_root, &[1, 2, 3, 4, 5, 6, 7]).is_none() });
-    assert!(unsafe { delete_unchecked(current_root, &[1, 2, 3, 4, 5, 7]).is_none() });
-    assert!(unsafe { delete_unchecked(current_root, &[1, 2, 55, 4, 5, 6]).is_none() });
+    assert!(unsafe { delete_unchecked(current_root, [1, 2, 3, 4, 5, 6, 7].as_ref()).is_none() });
+    assert!(unsafe { delete_unchecked(current_root, [1, 2, 3, 4, 5, 7].as_ref()).is_none() });
+    assert!(unsafe { delete_unchecked(current_root, [1, 2, 55, 4, 5, 6].as_ref()).is_none() });
 
-    let d1 = unsafe { delete_unchecked(current_root, &[1, 2, 3, 4, 7, 8]).unwrap() };
+    let d1 = unsafe { delete_unchecked(current_root, [1, 2, 3, 4, 7, 8].as_ref()).unwrap() };
     assert_eq!(d1.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 7, 8]);
     assert_eq!(d1.deleted_leaf.value, 'C');
     let new_root = d1.new_root.unwrap();
@@ -58,14 +60,14 @@ fn delete_entire_small_tree() {
         }
     }
 
-    let d2 = unsafe { delete_unchecked(current_root, &[1, 2, 3, 4, 5, 9]).unwrap() };
+    let d2 = unsafe { delete_unchecked(current_root, [1, 2, 3, 4, 5, 9].as_ref()).unwrap() };
     assert_eq!(d2.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 9]);
     assert_eq!(d2.deleted_leaf.value, 'D');
     let new_root = d2.new_root.unwrap();
     assert_eq!(new_root, current_root);
     current_root = new_root;
 
-    let d3 = unsafe { delete_unchecked(current_root, &[2, 4, 6, 8, 10, 12]).unwrap() };
+    let d3 = unsafe { delete_unchecked(current_root, [2, 4, 6, 8, 10, 12].as_ref()).unwrap() };
     assert_eq!(d3.deleted_leaf.key.as_ref(), &[2, 4, 6, 8, 10, 12]);
     assert_eq!(d3.deleted_leaf.value, 'B');
     let new_root = d3.new_root.unwrap();
@@ -73,7 +75,7 @@ fn delete_entire_small_tree() {
     current_root = new_root;
     assert_eq!(current_root.node_type(), NodeType::Leaf);
 
-    let d4 = unsafe { delete_unchecked(current_root, &[1, 2, 3, 4, 5, 6]).unwrap() };
+    let d4 = unsafe { delete_unchecked(current_root, [1, 2, 3, 4, 5, 6].as_ref()).unwrap() };
     assert_eq!(d4.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 6]);
     assert_eq!(d4.deleted_leaf.value, 'A');
     assert!(d4.new_root.is_none());
@@ -102,7 +104,7 @@ fn delete_one_entry_n16_remains() {
 
     assert_eq!(current_root.node_type(), NodeType::Node16);
 
-    let delete = unsafe { delete_unchecked(current_root, &[1, 2, 3, 9, 5, 6]).unwrap() };
+    let delete = unsafe { delete_unchecked(current_root, [1, 2, 3, 9, 5, 6].as_ref()).unwrap() };
 
     assert_eq!(delete.new_root.unwrap(), current_root);
     assert_eq!(delete.deleted_leaf.value, 'E');
@@ -122,7 +124,7 @@ fn delete_one_entry_n48_shrinks() {
 
     assert_eq!(current_root.node_type(), NodeType::Node48);
 
-    let delete = unsafe { delete_unchecked(current_root, &[1, 2, 3, 9, 5, 6]).unwrap() };
+    let delete = unsafe { delete_unchecked(current_root, [1, 2, 3, 9, 5, 6].as_ref()).unwrap() };
 
     assert_ne!(delete.new_root.unwrap(), current_root);
     assert_eq!(delete.deleted_leaf.value, 9);
@@ -142,7 +144,7 @@ fn delete_one_entry_n256_shrinks() {
 
     assert_eq!(current_root.node_type(), NodeType::Node256);
 
-    let delete = unsafe { delete_unchecked(current_root, &[1, 2, 3, 24, 5, 6]).unwrap() };
+    let delete = unsafe { delete_unchecked(current_root, [1, 2, 3, 24, 5, 6].as_ref()).unwrap() };
 
     assert_ne!(delete.new_root.unwrap(), current_root);
     assert_eq!(delete.deleted_leaf.value, 24);
@@ -156,8 +158,10 @@ fn delete_one_entry_n256_shrinks() {
 
 #[test]
 fn delete_minimum_singleton_tree() {
-    let first_leaf =
-        NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _>::new(
+        Box::from([1, 2, 3, 4]),
+        "1234".to_string(),
+    ));
 
     let tree = first_leaf.to_opaque();
 
@@ -226,8 +230,10 @@ fn delete_minimum_entire_small_tree() {
 
 #[test]
 fn delete_maximum_singleton_tree() {
-    let first_leaf =
-        NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _>::new(
+        Box::from([1, 2, 3, 4]),
+        "1234".to_string(),
+    ));
 
     let tree = first_leaf.to_opaque();
 

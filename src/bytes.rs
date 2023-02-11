@@ -15,7 +15,7 @@ use std::{
 /// Any type implementing `AsBytes` can be decomposed into bytes.
 ///
 /// The primary purpose of this trait is to allow different types to be used as
-/// keys on the [`TreeMap`][blart::map::TreeMap] and `TreeSet` types.
+/// keys on the [`TreeMap`][crate::map::TreeMap] and `TreeSet` types.
 pub trait AsBytes {
     /// View the current value as a byte array.
     fn as_bytes(&self) -> &[u8];
@@ -86,6 +86,8 @@ as_bytes_for_integer_like_types!(
     i64,
     u128,
     i128,
+    usize,
+    isize,
     char,
     bool,
     NonZeroU8,
@@ -515,13 +517,7 @@ mod tests {
             b"hello world"
         );
         assert_eq!(
-            <Box<[u8]> as AsBytes>::as_bytes(
-                &b"hello world"
-                    .into_iter()
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice()
-            ),
+            <Box<[u8]> as AsBytes>::as_bytes(&b"hello world".to_vec().into_boxed_slice()),
             b"hello world"
         );
         assert_eq!(

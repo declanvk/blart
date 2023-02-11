@@ -3,7 +3,7 @@ use crate::{
     InnerNode, NodeType, OpaqueNodePtr,
 };
 use std::{
-    fmt::Display,
+    fmt::Debug,
     io::{self, Write},
 };
 
@@ -30,11 +30,15 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn print_tree<V: Display>(
+    pub unsafe fn print_tree<K, V>(
         output: O,
-        tree: &OpaqueNodePtr<V>,
+        tree: &OpaqueNodePtr<K, V>,
         settings: DotPrinterSettings,
-    ) -> io::Result<()> {
+    ) -> io::Result<()>
+    where
+        K: Debug,
+        V: Debug,
+    {
         let mut visitor = DotPrinter {
             output,
             next_id: 0,
@@ -61,10 +65,12 @@ impl<O: Write> DotPrinter<O> {
         new_id
     }
 
-    fn write_inner_node<T: Display, N: InnerNode<Value = T>>(
-        &mut self,
-        inner_node: &N,
-    ) -> io::Result<usize> {
+    fn write_inner_node<K, T, N>(&mut self, inner_node: &N) -> io::Result<usize>
+    where
+        K: Debug,
+        T: Debug,
+        N: InnerNode<Key = K, Value = T>,
+    {
         let header = inner_node.header();
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
@@ -116,7 +122,12 @@ impl<O: Write> DotPrinter<O> {
     }
 }
 
-impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
+impl<K, T, O> Visitor<K, T> for DotPrinter<O>
+where
+    K: Debug,
+    T: Debug,
+    O: Write,
+{
     type Output = io::Result<usize>;
 
     fn default_output(&self) -> Self::Output {
@@ -127,23 +138,23 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         unimplemented!("this visitor should never combine outputs")
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<T>) -> Self::Output {
+    fn visit_node4(&mut self, t: &crate::InnerNode4<K, T>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<T>) -> Self::Output {
+    fn visit_node16(&mut self, t: &crate::InnerNode16<K, T>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<T>) -> Self::Output {
+    fn visit_node48(&mut self, t: &crate::InnerNode48<K, T>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<T>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<T>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T>) -> Self::Output {
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;
@@ -151,7 +162,7 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         if self.settings.display_node_address {
             writeln!(
                 self.output,
-                "{{<h0> {:p}}} | {{{:?}}} | {{{:?}}} | {{{}}}}}\"]",
+                "{{<h0> {:p}}} | {{{:?}}} | {{{:?}}} | {{{:?}}}}}\"]",
                 t as *const _,
                 NodeType::Leaf,
                 t.key,
@@ -160,7 +171,7 @@ impl<T: Display, O: Write> Visitor<T> for DotPrinter<O> {
         } else {
             writeln!(
                 self.output,
-                "{{<h0> {:?}}} | {{{:?}}} | {{{}}}}}\"]",
+                "{{<h0> {:?}}} | {{{:?}}} | {{{:?}}}}}\"]",
                 NodeType::Leaf,
                 t.key,
                 t.value

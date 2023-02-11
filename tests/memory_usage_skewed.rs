@@ -33,7 +33,7 @@ fn test_memory_usage() {
         }
 
         for (value, key) in tests_common::generate_keys_skewed(KEY_LENGTH_LIMIT).enumerate() {
-            let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+            let search_result = unsafe { search_unchecked(current_root, &key) };
 
             assert_eq!(search_result.unwrap().read().value, value);
         }

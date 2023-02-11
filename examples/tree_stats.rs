@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn collect_and_output_stats(tree: TreeMap<()>) -> Result<(), Box<dyn Error>> {
+fn collect_and_output_stats(tree: TreeMap<Box<[u8]>, ()>) -> Result<(), Box<dyn Error>> {
     let root = tree.into_raw();
 
     // SAFETY: There are no concurrent mutation to the tree node or its children
@@ -60,28 +60,36 @@ fn collect_and_output_stats(tree: TreeMap<()>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn read_key_values_from_text_file(text_file: File, delimiter: Option<String>) -> TreeMap<()> {
-    BufReader::new(text_file)
-        .lines()
-        .map(|line| {
-            let line = line.expect("unable to read line");
-            let key_content = if let Some(delimiter) = &delimiter {
-                line.split(delimiter)
-                    .next()
-                    .expect("unable to get first element after split")
-                    .into()
-            } else {
-                line
-            };
+fn read_key_values_from_text_file(
+    text_file: File,
+    delimiter: Option<String>,
+) -> TreeMap<Box<[u8]>, ()> {
+    let iter = BufReader::new(text_file).lines().map(|line| {
+        let line = line.expect("unable to read line");
+        let key_content = if let Some(delimiter) = &delimiter {
+            line.split(delimiter)
+                .next()
+                .expect("unable to get first element after split")
+                .into()
+        } else {
+            line
+        };
 
-            let key = CString::new(key_content)
-                .unwrap()
-                .into_bytes_with_nul()
-                .into_boxed_slice();
+        let key = CString::new(key_content)
+            .unwrap()
+            .into_bytes_with_nul()
+            .into_boxed_slice();
 
-            (key, ())
-        })
-        .collect()
+        (key, ())
+    });
+
+    let mut tree = TreeMap::new();
+
+    for (key, value) in iter {
+        let _ = tree.try_insert(key, value).unwrap();
+    }
+
+    tree
 }
 
 #[derive(Debug)]

@@ -46,7 +46,7 @@ fn test_memory_usage() {
         for (value, key) in
             tests_common::generate_key_with_prefix(KEY_LEVEL_WIDTH, PREFIX_EXPANSIONS).enumerate()
         {
-            let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+            let search_result = unsafe { search_unchecked(current_root, &key) };
 
             assert_eq!(search_result.unwrap().read().value, value);
         }

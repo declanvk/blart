@@ -14,20 +14,22 @@ type Measurement = criterion::measurement::WallTime;
 fn run_benchmarks(
     group: &mut BenchmarkGroup<Measurement>,
     key_vec: &[Box<[u8]>],
-    map: &TreeMap<usize>,
+    map: &TreeMap<Box<[u8]>, usize>,
 ) {
     let (first_key, middle_key, last_key) = (
-        key_vec[0].as_ref(),
-        key_vec[key_vec.len() / 2].as_ref(),
-        key_vec[key_vec.len() - 1].as_ref(),
+        Box::from(key_vec[0].as_ref()),
+        Box::from(key_vec[key_vec.len() / 2].as_ref()),
+        Box::from(key_vec[key_vec.len() - 1].as_ref()),
     );
     group.bench_function("search/first_key", |b| {
-        b.iter(|| map.get(first_key).unwrap())
+        b.iter(|| map.get(&first_key).unwrap())
     });
     group.bench_function("search/middle_key", |b| {
-        b.iter(|| map.get(middle_key).unwrap())
+        b.iter(|| map.get(&middle_key).unwrap())
     });
-    group.bench_function("search/last_key", |b| b.iter(|| map.get(last_key).unwrap()));
+    group.bench_function("search/last_key", |b| {
+        b.iter(|| map.get(&last_key).unwrap())
+    });
     group.bench_function("minimum", |b| b.iter(|| map.first_key_value().unwrap()));
     group.bench_function("maximum", |b| b.iter(|| map.last_key_value().unwrap()));
 
@@ -45,11 +47,11 @@ fn setup_tree_run_benches_cleanup(
 ) {
     let keys: Vec<_> = keys.collect();
 
-    let tree: TreeMap<usize> = keys
-        .iter()
-        .enumerate()
-        .map(|(idx, key)| (key.clone(), idx))
-        .collect();
+    let mut tree = TreeMap::new();
+
+    for (idx, key) in keys.iter().enumerate() {
+        let _ = tree.try_insert(key.clone(), idx).unwrap();
+    }
 
     {
         let mut group = c.benchmark_group(group_name);

@@ -1,6 +1,6 @@
 use crate::{
     nodes::visitor::{Visitable, Visitor},
-    InnerNode, NodeType, OpaqueNodePtr,
+    AsBytes, InnerNode, NodeType, OpaqueNodePtr,
 };
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -30,11 +30,11 @@ impl<const LEN: usize> PartialEq<[u8; LEN]> for KeyPrefix {
 
 /// An issue with the well-formed-ness of the tree. See the documentation on
 /// [`WellFormedChecker`] for more context.
-pub enum MalformedTreeError<V> {
+pub enum MalformedTreeError<K, V> {
     /// A loop was observed between nodes
     LoopFound {
         /// The node that was observed more than once while traversing the tree
-        node_ptr: OpaqueNodePtr<V>,
+        node_ptr: OpaqueNodePtr<K, V>,
         /// The key prefix when the node was first observed
         first_observed: KeyPrefix,
         /// The key prefix when the node was observed a second time
@@ -57,11 +57,14 @@ pub enum MalformedTreeError<V> {
         /// The expected key prefix
         expected_prefix: KeyPrefix,
         /// The entire key
-        entire_key: Box<[u8]>,
+        entire_key: K,
     },
 }
 
-impl<V> fmt::Debug for MalformedTreeError<V> {
+impl<K, V> fmt::Debug for MalformedTreeError<K, V>
+where
+    K: AsBytes,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::LoopFound {
@@ -90,13 +93,16 @@ impl<V> fmt::Debug for MalformedTreeError<V> {
             } => f
                 .debug_struct("PrefixMismatch")
                 .field("expected_prefix", expected_prefix)
-                .field("entire_key", entire_key)
+                .field("entire_key", &entire_key.as_bytes() as &dyn fmt::Debug)
                 .finish(),
         }
     }
 }
 
-impl<V> fmt::Display for MalformedTreeError<V> {
+impl<K, V> fmt::Display for MalformedTreeError<K, V>
+where
+    K: AsBytes,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MalformedTreeError::LoopFound {
@@ -131,15 +137,18 @@ impl<V> fmt::Display for MalformedTreeError<V> {
                 write!(
                     f,
                     "Found a leaf that had a mismatched key from the expected prefix! Expected \
-                     the leaf key to start with [{expected_prefix:?}], but the leaf key was \
-                     [{entire_key:?}]",
+                     the leaf key to start with [{expected_prefix:?}], but the leaf key was [{:?}]",
+                    entire_key.as_bytes()
                 )
             },
         }
     }
 }
 
-impl<V> Clone for MalformedTreeError<V> {
+impl<K, V> Clone for MalformedTreeError<K, V>
+where
+    K: Clone,
+{
     fn clone(&self) -> Self {
         match self {
             Self::LoopFound {
@@ -171,7 +180,10 @@ impl<V> Clone for MalformedTreeError<V> {
     }
 }
 
-impl<V> PartialEq for MalformedTreeError<V> {
+impl<K, V> PartialEq for MalformedTreeError<K, V>
+where
+    K: Eq,
+{
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
@@ -221,9 +233,9 @@ impl<V> PartialEq for MalformedTreeError<V> {
     }
 }
 
-impl<V> Eq for MalformedTreeError<V> {}
+impl<K, V> Eq for MalformedTreeError<K, V> where K: Eq {}
 
-impl<V> Error for MalformedTreeError<V> {}
+impl<K, V> Error for MalformedTreeError<K, V> where K: AsBytes {}
 
 /// A visitor of the radix tree which checks that the tree is well-formed.
 ///
@@ -242,19 +254,24 @@ impl<V> Error for MalformedTreeError<V> {}
 /// "well-formed" (by the definition given above) if the checker returns
 /// `Ok(())`.
 #[derive(Debug)]
-pub struct WellFormedChecker<V> {
+pub struct WellFormedChecker<K, V> {
     current_key_prefix: Vec<u8>,
-    seen_nodes: HashMap<OpaqueNodePtr<V>, KeyPrefix>,
+    seen_nodes: HashMap<OpaqueNodePtr<K, V>, KeyPrefix>,
 }
 
-impl<V> WellFormedChecker<V> {
+impl<K, V> WellFormedChecker<K, V>
+where
+    K: AsBytes + Clone,
+{
     /// Traverse the given tree and check that it is well-formed. Returns the
     /// number of nodes in the tree.
     ///
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn check_tree(tree: &OpaqueNodePtr<V>) -> Result<usize, MalformedTreeError<V>> {
+    pub unsafe fn check_tree(
+        tree: &OpaqueNodePtr<K, V>,
+    ) -> Result<usize, MalformedTreeError<K, V>> {
         let mut visitor = WellFormedChecker {
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
@@ -266,10 +283,10 @@ impl<V> WellFormedChecker<V> {
         tree.visit_with(&mut visitor)
     }
 
-    fn visit_inner_node<N: InnerNode<Value = V>>(
-        &mut self,
-        inner_node: &N,
-    ) -> Result<usize, MalformedTreeError<V>> {
+    fn visit_inner_node<N>(&mut self, inner_node: &N) -> Result<usize, MalformedTreeError<K, V>>
+    where
+        N: InnerNode<Key = K, Value = V>,
+    {
         let original_key_prefix_len = self.current_key_prefix.len();
 
         // update running key prefix with inner node partial prefix
@@ -330,8 +347,11 @@ impl<V> WellFormedChecker<V> {
     }
 }
 
-impl<V> Visitor<V> for WellFormedChecker<V> {
-    type Output = Result<usize, MalformedTreeError<V>>;
+impl<K, V> Visitor<K, V> for WellFormedChecker<K, V>
+where
+    K: Clone + AsBytes,
+{
+    type Output = Result<usize, MalformedTreeError<K, V>>;
 
     fn default_output(&self) -> Self::Output {
         // Chose zero so that any places that call `default_output` don't influce the
@@ -343,24 +363,24 @@ impl<V> Visitor<V> for WellFormedChecker<V> {
         Ok(o1? + o2?)
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<V>) -> Self::Output {
+    fn visit_node4(&mut self, t: &crate::InnerNode4<K, V>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<V>) -> Self::Output {
+    fn visit_node16(&mut self, t: &crate::InnerNode16<K, V>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<V>) -> Self::Output {
+    fn visit_node48(&mut self, t: &crate::InnerNode48<K, V>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<V>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<V>) -> Self::Output {
-        if !t.key.starts_with(&self.current_key_prefix) {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V>) -> Self::Output {
+        if !t.key.as_bytes().starts_with(&self.current_key_prefix) {
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::PrefixMismatch {
                 expected_prefix: current_key_prefix,
@@ -405,9 +425,9 @@ mod tests {
         // have to allocate in this one because miri didn't like us using `&mut _` to
         // make loops
 
-        let l1: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let l2: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let l3: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
 
         let l1_ptr = NodePtr::allocate_node_ptr(l1);
         let l2_ptr = NodePtr::allocate_node_ptr(l2);
@@ -477,10 +497,10 @@ mod tests {
 
     #[test]
     fn check_tree_with_wrong_child_count() {
-        let mut l1: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let mut l2: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let mut l3: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
-        let mut l4: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 4]), 124784);
+        let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 4]), 124784);
 
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -529,10 +549,11 @@ mod tests {
 
     #[test]
     fn check_tree_with_mismatched_key_prefix() {
-        let mut l1: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let mut l2: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let mut l3: LeafNode<i32> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
-        let mut l4: LeafNode<i32> = LeafNode::new(Box::new([255, 255, 255, 255, 255, 255]), 124784);
+        let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let mut l4: LeafNode<Box<[u8]>, i32> =
+            LeafNode::new(Box::new([255, 255, 255, 255, 255, 255]), 124784);
 
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();

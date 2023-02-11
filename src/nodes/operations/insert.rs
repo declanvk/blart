@@ -1,4 +1,4 @@
-use crate::{ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr};
 use std::{error::Error, fmt, ops::ControlFlow};
 
 /// Insert the given key-value pair into the tree.
@@ -10,9 +10,9 @@ use std::{error::Error, fmt, ops::ControlFlow};
 ///
 /// # Errors
 ///
-///   - Returns a [`InsertPrefixError`] if the given key is a prefix of another
-///     key that exists in the trie. Or if the given key is prefixed by an
-///     existing key in the trie.
+///   - Returns a [`InsertPrefixError<K>`] if the given key is a prefix of
+///     another key that exists in the trie. Or if the given key is prefixed by
+///     an existing key in the trie.
 ///
 /// # Safety
 ///
@@ -21,26 +21,36 @@ use std::{error::Error, fmt, ops::ControlFlow};
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn insert_unchecked<V>(
-    root: OpaqueNodePtr<V>,
-    key: Box<[u8]>,
+pub unsafe fn insert_unchecked<K, V>(
+    root: OpaqueNodePtr<K, V>,
+    key: K,
     value: V,
-) -> Result<InsertResult<V>, InsertPrefixError> {
-    fn write_new_child_in_existing_node<V>(
-        inner_node_ptr: OpaqueNodePtr<V>,
-        new_leaf_node: LeafNode<V>,
+) -> Result<InsertResult<K, V>, InsertPrefixError>
+where
+    K: AsBytes,
+{
+    fn write_new_child_in_existing_node<K, V>(
+        inner_node_ptr: OpaqueNodePtr<K, V>,
+        new_leaf_node: LeafNode<K, V>,
         key_bytes_used: usize,
-    ) -> OpaqueNodePtr<V> {
-        fn write_new_child_in_existing_inner_node<V, N: InnerNode<Value = V>>(
+    ) -> OpaqueNodePtr<K, V>
+    where
+        K: AsBytes,
+    {
+        fn write_new_child_in_existing_inner_node<K, V, N>(
             inner_node_ptr: NodePtr<N>,
-            new_leaf_node: LeafNode<V>,
+            new_leaf_node: LeafNode<K, V>,
             key_bytes_used: usize,
-        ) -> OpaqueNodePtr<V> {
+        ) -> OpaqueNodePtr<K, V>
+        where
+            N: InnerNode<Key = K, Value = V>,
+            K: AsBytes,
+        {
             // SAFETY: The `inner_node` reference lasts only for the duration of this
             // function, and the node will not be read or written via any other source
             // because of the safety requirements on `insert_unchecked`.
             let inner_node = unsafe { inner_node_ptr.as_mut() };
-            let new_leaf_key_byte = new_leaf_node.key[key_bytes_used];
+            let new_leaf_key_byte = new_leaf_node.key.as_bytes()[key_bytes_used];
             let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node).to_opaque();
             if inner_node.is_full() {
                 // we will create a new node of the next larger type and copy all the
@@ -88,16 +98,18 @@ pub unsafe fn insert_unchecked<V>(
     }
 
     /// Write a new child node to an inner node at the specified key byte.
-    fn parent_write_child<V>(
-        parent_inner_node: OpaqueNodePtr<V>,
+    fn parent_write_child<K, V>(
+        parent_inner_node: OpaqueNodePtr<K, V>,
         key_byte: u8,
-        new_child: OpaqueNodePtr<V>,
+        new_child: OpaqueNodePtr<K, V>,
     ) {
-        fn write_inner_node<V, N: InnerNode<Value = V>>(
+        fn write_inner_node<K, V, N>(
             parent_inner_node: NodePtr<N>,
             key_byte: u8,
-            new_child: OpaqueNodePtr<V>,
-        ) {
+            new_child: OpaqueNodePtr<K, V>,
+        ) where
+            N: InnerNode<Key = K, Value = V>,
+        {
             // SAFETY: The lifetime produced from this is bounded to this scope and does not
             // escape. Further, no other code mutates the node referenced, which is further
             // enforced the "no concurrent reads or writes" requirement on the
@@ -123,7 +135,7 @@ pub unsafe fn insert_unchecked<V>(
         parent_ptr_and_child_key_byte,
         insert_type,
         mut key_bytes_used,
-    } = unsafe { search_for_insert_point(root, key.as_ref())? };
+    } = unsafe { search_for_insert_point(root, &key)? };
 
     let new_inner_node = match insert_type {
         InsertSearchResultType::MismatchPrefix {
@@ -140,14 +152,16 @@ pub unsafe fn insert_unchecked<V>(
             // prefix, implying that the header is present.
             let header = unsafe { mismatched_inner_node_ptr.header_mut().unwrap() };
 
-            if (key_bytes_used + matched_prefix_size) >= key.len() {
+            if (key_bytes_used + matched_prefix_size) >= key.as_bytes().len() {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key
 
-                return Err(InsertPrefixError(key));
+                return Err(InsertPrefixError {
+                    byte_repr: key.as_bytes().into(),
+                });
             }
 
-            let new_leaf_key_byte = key[key_bytes_used + matched_prefix_size];
+            let new_leaf_key_byte = key.as_bytes()[key_bytes_used + matched_prefix_size];
 
             let new_leaf_pointer =
                 NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque();
@@ -172,7 +186,7 @@ pub unsafe fn insert_unchecked<V>(
         InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
             let leaf_node = leaf_node_ptr.read();
 
-            if leaf_node.matches_full_key(key.as_ref()) {
+            if leaf_node.matches_full_key(&key) {
                 // This means that the key provided exactly matched the existing leaf key, so we
                 // will simply replace the contents of the leaf node.
                 #[allow(clippy::undropped_manually_drops)]
@@ -192,27 +206,34 @@ pub unsafe fn insert_unchecked<V>(
             }
 
             let mut new_n4 = InnerNode4::empty();
-            let prefix_size = leaf_node.key[key_bytes_used..]
+            let prefix_size = leaf_node.key.as_bytes()[key_bytes_used..]
                 .iter()
-                .zip(key[key_bytes_used..].iter())
+                .zip(key.as_bytes()[key_bytes_used..].iter())
                 .take_while(|(k1, k2)| k1 == k2)
                 .count();
             new_n4
                 .header
-                .extend_prefix(&key[key_bytes_used..(key_bytes_used + prefix_size)]);
+                .extend_prefix(&key.as_bytes()[key_bytes_used..(key_bytes_used + prefix_size)]);
             key_bytes_used += prefix_size;
 
-            if key_bytes_used >= key.len() || key_bytes_used >= leaf_node.key.len() {
+            if key_bytes_used >= key.as_bytes().len()
+                || key_bytes_used >= leaf_node.key.as_bytes().len()
+            {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key OR an existing key is a prefix of it
 
-                return Err(InsertPrefixError(key));
+                return Err(InsertPrefixError {
+                    byte_repr: key.as_bytes().into(),
+                });
             }
 
-            let new_leaf_key_byte = key[key_bytes_used];
+            let new_leaf_key_byte = key.as_bytes()[key_bytes_used];
             let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
 
-            new_n4.write_child(leaf_node.key[key_bytes_used], leaf_node_ptr.to_opaque());
+            new_n4.write_child(
+                leaf_node.key.as_bytes()[key_bytes_used],
+                leaf_node_ptr.to_opaque(),
+            );
             new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
 
             NodePtr::allocate_node_ptr(new_n4).to_opaque()
@@ -251,20 +272,28 @@ pub unsafe fn insert_unchecked<V>(
 
 /// The results of a successful tree insert
 #[derive(Debug)]
-pub struct InsertResult<V> {
+pub struct InsertResult<K, V> {
     /// The existing leaf referenced by the insert key, if present
-    pub existing_leaf: Option<LeafNode<V>>,
+    pub existing_leaf: Option<LeafNode<K, V>>,
     /// The new tree root after the successful insert
-    pub new_root: OpaqueNodePtr<V>,
+    pub new_root: OpaqueNodePtr<K, V>,
 }
 
 /// Attempted to insert a key which was a prefix of an existing key in
 /// the tree.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InsertPrefixError(
+#[derive(Clone, PartialEq, Eq)]
+pub struct InsertPrefixError {
     /// The key that was the input to the [`insert_unchecked`] operation
-    pub Box<[u8]>,
-);
+    pub byte_repr: Box<[u8]>,
+}
+
+impl fmt::Debug for InsertPrefixError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InsertPrefixError")
+            .field("byte_repr", &self.byte_repr)
+            .finish()
+    }
+}
 
 impl fmt::Display for InsertPrefixError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -272,7 +301,7 @@ impl fmt::Display for InsertPrefixError {
             f,
             "Attempted to insert a key [{:?}] which is either a prefix of an existing key or an \
              existing key is a prefix of the new key.",
-            self.0
+            self.byte_repr
         )
     }
 }
@@ -284,22 +313,22 @@ impl Error for InsertPrefixError {}
 ///
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
-pub struct InsertSearchResult<V> {
+pub struct InsertSearchResult<K, V> {
     /// The parent node pointer and key byte that points to the main node
     /// insert point.
     ///
     /// In the case that the root node is the main insert point, this will
     /// have a `None` value.
-    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<V>, u8)>,
+    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
     /// The type of operation that needs to be performed to insert the key
-    pub insert_type: InsertSearchResultType<V>,
+    pub insert_type: InsertSearchResultType<K, V>,
     /// The number of bytes that were read from the key to find the insert
     /// point.
     pub key_bytes_used: usize,
 }
 
 /// The type of insert
-pub enum InsertSearchResultType<V> {
+pub enum InsertSearchResultType<K, V> {
     /// An insert where an inner node had a differing prefix from the key.
     ///
     /// This insert type will create a new inner node with the portion of
@@ -308,7 +337,7 @@ pub enum InsertSearchResultType<V> {
         /// The number of key bytes that did match for the mismatched prefix
         matched_prefix_size: usize,
         /// A pointer to the inner node which had a mismatched prefix
-        mismatched_inner_node_ptr: OpaqueNodePtr<V>,
+        mismatched_inner_node_ptr: OpaqueNodePtr<K, V>,
     },
     /// An insert where the node to be added matched all the way up to a
     /// leaf node.
@@ -317,7 +346,7 @@ pub enum InsertSearchResultType<V> {
     /// existing leaf and the new leaf as children to that node.
     SplitLeaf {
         /// A pointer to the leaf node that will be split
-        leaf_node_ptr: NodePtr<LeafNode<V>>,
+        leaf_node_ptr: NodePtr<LeafNode<K, V>>,
     },
     /// An insert where the search terminated at an existing inner node that
     /// did not have a child with the key byte.
@@ -327,11 +356,11 @@ pub enum InsertSearchResultType<V> {
     IntoExisting {
         /// A pointer to the existing inner node which will be updated to
         /// contain the new child leaf node
-        inner_node_ptr: OpaqueNodePtr<V>,
+        inner_node_ptr: OpaqueNodePtr<K, V>,
     },
 }
 
-impl<V> fmt::Debug for InsertSearchResultType<V> {
+impl<K, V> fmt::Debug for InsertSearchResultType<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MismatchPrefix {
@@ -364,22 +393,29 @@ impl<V> fmt::Debug for InsertSearchResultType<V> {
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn search_for_insert_point<V>(
-    root: OpaqueNodePtr<V>,
-    key: &[u8],
-) -> Result<InsertSearchResult<V>, InsertPrefixError> {
-    fn test_prefix_identify_insert<V, N: InnerNode<Value = V>>(
+pub unsafe fn search_for_insert_point<K, V>(
+    root: OpaqueNodePtr<K, V>,
+    key: &K,
+) -> Result<InsertSearchResult<K, V>, InsertPrefixError>
+where
+    K: AsBytes,
+{
+    fn test_prefix_identify_insert<K, V, N>(
         inner_ptr: NodePtr<N>,
-        key: &[u8],
+        key: &K,
         current_depth: &mut usize,
-    ) -> Result<ControlFlow<usize, Option<OpaqueNodePtr<V>>>, InsertPrefixError> {
+    ) -> Result<ControlFlow<usize, Option<OpaqueNodePtr<K, V>>>, InsertPrefixError>
+    where
+        N: InnerNode<Key = K, Value = V>,
+        K: AsBytes,
+    {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
         // enforced the "no concurrent reads or writes" requirement on the
         // `search_unchecked` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
         let header = inner_node.header();
-        let matched_prefix_size = header.match_prefix(&key[*current_depth..]);
+        let matched_prefix_size = header.match_prefix(&key.as_bytes()[*current_depth..]);
         if matched_prefix_size != header.prefix_size() {
             return Ok(ControlFlow::Break(matched_prefix_size));
         }
@@ -387,13 +423,15 @@ pub unsafe fn search_for_insert_point<V>(
         // Since the prefix matched, advance the depth by the size of the prefix
         *current_depth += matched_prefix_size;
 
-        let next_key_fragment = if *current_depth < key.len() {
-            key[*current_depth]
+        let next_key_fragment = if *current_depth < key.as_bytes().len() {
+            key.as_bytes()[*current_depth]
         } else {
             // then the key has insufficient bytes to be unique. It must be
             // a prefix of an existing key
 
-            return Err(InsertPrefixError(Box::from(key)));
+            return Err(InsertPrefixError {
+                byte_repr: key.as_bytes().into(),
+            });
         };
 
         Ok(ControlFlow::Continue(
@@ -432,7 +470,7 @@ pub unsafe fn search_for_insert_point<V>(
             ControlFlow::Continue(next_child_node) => {
                 match next_child_node {
                     Some(next_child_node) => {
-                        current_parent = Some((current_node, key[current_depth]));
+                        current_parent = Some((current_node, key.as_bytes()[current_depth]));
                         current_node = next_child_node;
                         // Increment by a single byte
                         current_depth += 1;

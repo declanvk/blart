@@ -14,8 +14,8 @@ use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 ///    tree:
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
-pub unsafe fn minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> NodePtr<LeafNode<V>> {
-    fn get_next_node<N: InnerNode>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Value> {
+pub unsafe fn minimum_unchecked<K, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
+    fn get_next_node<N: InnerNode>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Key, N::Value> {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
         // enforced the "no concurrent reads or writes" requirement on the
@@ -60,8 +60,11 @@ pub unsafe fn minimum_unchecked<V>(root: OpaqueNodePtr<V>) -> NodePtr<LeafNode<V
 ///    tree:
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
-pub unsafe fn maximum_unchecked<V>(root: OpaqueNodePtr<V>) -> NodePtr<LeafNode<V>> {
-    fn get_next_node<N: InnerNode>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Value> {
+pub unsafe fn maximum_unchecked<K, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
+    fn get_next_node<N>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Key, N::Value>
+    where
+        N: InnerNode,
+    {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
         // enforced the "no concurrent reads or writes" requirement on the

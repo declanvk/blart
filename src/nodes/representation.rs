@@ -1,8 +1,9 @@
 //! Trie node representation
 
 pub use self::iterators::*;
-use crate::{tagged_pointer::TaggedPointer, InnerNodeIter};
+use crate::{tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
 use std::{
+    borrow::Borrow,
     cmp::Ordering,
     error::Error,
     fmt,
@@ -184,43 +185,43 @@ struct OpaqueValue;
 /// Could be any one of the NodeTypes, need to perform check on the runtime type
 /// and then cast to a [`NodePtr`].
 #[repr(transparent)]
-pub struct OpaqueNodePtr<V>(TaggedPointer<OpaqueValue>, PhantomData<V>);
+pub struct OpaqueNodePtr<K, V>(TaggedPointer<OpaqueValue>, PhantomData<(K, V)>);
 
-impl<V> Copy for OpaqueNodePtr<V> {}
+impl<K, V> Copy for OpaqueNodePtr<K, V> {}
 
-impl<V> Clone for OpaqueNodePtr<V> {
+impl<K, V> Clone for OpaqueNodePtr<K, V> {
     fn clone(&self) -> Self {
         Self(self.0, PhantomData)
     }
 }
 
-impl<V> fmt::Debug for OpaqueNodePtr<V> {
+impl<K, V> fmt::Debug for OpaqueNodePtr<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("OpaqueNodePtr").field(&self.0).finish()
     }
 }
 
-impl<V> fmt::Pointer for OpaqueNodePtr<V> {
+impl<K, V> fmt::Pointer for OpaqueNodePtr<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.0, f)
     }
 }
 
-impl<V> Eq for OpaqueNodePtr<V> {}
+impl<K, V> Eq for OpaqueNodePtr<K, V> {}
 
-impl<V> PartialEq for OpaqueNodePtr<V> {
+impl<K, V> PartialEq for OpaqueNodePtr<K, V> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl<V> Hash for OpaqueNodePtr<V> {
+impl<K, V> Hash for OpaqueNodePtr<K, V> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
 
-impl<V> OpaqueNodePtr<V> {
+impl<K, V> OpaqueNodePtr<K, V> {
     /// Construct a new opaque node pointer from an existing non-null node
     /// pointer.
     pub fn new<N>(pointer: NonNull<N>) -> Self
@@ -252,22 +253,22 @@ impl<V> OpaqueNodePtr<V> {
 
     /// Cast this opaque pointer type an enum that contains a pointer to the
     /// concrete node type.
-    pub fn to_node_ptr(self) -> ConcreteNodePtr<V> {
+    pub fn to_node_ptr(self) -> ConcreteNodePtr<K, V> {
         match self.node_type() {
             NodeType::Node4 => {
-                ConcreteNodePtr::Node4(NodePtr(self.0.cast::<InnerNode4<V>>().unwrap().into()))
+                ConcreteNodePtr::Node4(NodePtr(self.0.cast::<InnerNode4<K, V>>().unwrap().into()))
             },
             NodeType::Node16 => {
-                ConcreteNodePtr::Node16(NodePtr(self.0.cast::<InnerNode16<V>>().unwrap().into()))
+                ConcreteNodePtr::Node16(NodePtr(self.0.cast::<InnerNode16<K, V>>().unwrap().into()))
             },
             NodeType::Node48 => {
-                ConcreteNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<V>>().unwrap().into()))
+                ConcreteNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<K, V>>().unwrap().into()))
             },
-            NodeType::Node256 => {
-                ConcreteNodePtr::Node256(NodePtr(self.0.cast::<InnerNode256<V>>().unwrap().into()))
-            },
+            NodeType::Node256 => ConcreteNodePtr::Node256(NodePtr(
+                self.0.cast::<InnerNode256<K, V>>().unwrap().into(),
+            )),
             NodeType::Leaf => {
-                ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<V>>().unwrap().into()))
+                ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<K, V>>().unwrap().into()))
             },
         }
     }
@@ -289,22 +290,22 @@ impl<V> OpaqueNodePtr<V> {
     pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header> {
         let header_ptr = match self.node_type() {
             NodeType::Node4 => {
-                let node_ptr = self.0.cast::<InnerNode4<V>>().unwrap().to_ptr();
+                let node_ptr = self.0.cast::<InnerNode4<K, V>>().unwrap().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
             NodeType::Node16 => {
-                let node_ptr = self.0.cast::<InnerNode16<V>>().unwrap().to_ptr();
+                let node_ptr = self.0.cast::<InnerNode16<K, V>>().unwrap().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
             NodeType::Node48 => {
-                let node_ptr = self.0.cast::<InnerNode48<V>>().unwrap().to_ptr();
+                let node_ptr = self.0.cast::<InnerNode48<K, V>>().unwrap().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
             NodeType::Node256 => {
-                let node_ptr = self.0.cast::<InnerNode256<V>>().unwrap().to_ptr();
+                let node_ptr = self.0.cast::<InnerNode256<K, V>>().unwrap().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
@@ -321,20 +322,20 @@ impl<V> OpaqueNodePtr<V> {
 }
 
 /// An enum that encapsulates pointers to every type of Node
-pub enum ConcreteNodePtr<V> {
+pub enum ConcreteNodePtr<K, V> {
     /// Node that references between 2 and 4 children
-    Node4(NodePtr<InnerNode4<V>>),
+    Node4(NodePtr<InnerNode4<K, V>>),
     /// Node that references between 5 and 16 children
-    Node16(NodePtr<InnerNode16<V>>),
+    Node16(NodePtr<InnerNode16<K, V>>),
     /// Node that references between 17 and 49 children
-    Node48(NodePtr<InnerNode48<V>>),
+    Node48(NodePtr<InnerNode48<K, V>>),
     /// Node that references between 49 and 256 children
-    Node256(NodePtr<InnerNode256<V>>),
+    Node256(NodePtr<InnerNode256<K, V>>),
     /// Node that contains a single value
-    LeafNode(NodePtr<LeafNode<V>>),
+    LeafNode(NodePtr<LeafNode<K, V>>),
 }
 
-impl<V> fmt::Debug for ConcreteNodePtr<V> {
+impl<K, V> fmt::Debug for ConcreteNodePtr<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
@@ -400,7 +401,7 @@ impl<N: Node> NodePtr<N> {
     }
 
     /// Cast node pointer back to an opaque version, losing type information
-    pub fn to_opaque(self) -> OpaqueNodePtr<N::Value> {
+    pub fn to_opaque(self) -> OpaqueNodePtr<N::Key, N::Value> {
         OpaqueNodePtr::new(self.0)
     }
 
@@ -450,7 +451,7 @@ impl<N: Node> NodePtr<N> {
     }
 }
 
-impl<V> NodePtr<LeafNode<V>> {
+impl<K, V> NodePtr<LeafNode<K, V>> {
     /// Returns a shared reference to the key and value of the pointed to
     /// [`LeafNode`].
     ///
@@ -460,8 +461,7 @@ impl<V> NodePtr<LeafNode<V>> {
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get mutated
     ///    (except inside UnsafeCell).
-    #[allow(clippy::borrowed_box)]
-    pub unsafe fn as_key_value_ref<'a>(self) -> (&'a Box<[u8]>, &'a V) {
+    pub unsafe fn as_key_value_ref<'a>(self) -> (&'a K, &'a V) {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
 
@@ -477,8 +477,7 @@ impl<V> NodePtr<LeafNode<V>> {
     ///    lifetime of the node. In particular, for the duration of this
     ///    lifetime, the node the pointer points to must not get accessed (read
     ///    or written) through any other pointer.
-    #[allow(clippy::borrowed_box)]
-    pub unsafe fn as_key_ref_value_mut<'a>(self) -> (&'a Box<[u8]>, &'a mut V) {
+    pub unsafe fn as_key_ref_value_mut<'a>(self) -> (&'a K, &'a mut V) {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_mut() };
 
@@ -494,8 +493,7 @@ impl<V> NodePtr<LeafNode<V>> {
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get mutated
     ///    (except inside UnsafeCell).
-    #[allow(clippy::borrowed_box)]
-    pub unsafe fn as_key_ref<'a>(self) -> &'a Box<[u8]>
+    pub unsafe fn as_key_ref<'a>(self) -> &'a K
     where
         V: 'a,
     {
@@ -516,6 +514,7 @@ impl<V> NodePtr<LeafNode<V>> {
     ///    (except inside UnsafeCell).
     pub unsafe fn as_value_ref<'a>(self) -> &'a V
     where
+        K: 'a,
         V: 'a,
     {
         // SAFETY: Safety requirements are covered by the containing function.
@@ -535,6 +534,7 @@ impl<V> NodePtr<LeafNode<V>> {
     ///    or written) through any other pointer.
     pub unsafe fn as_value_mut<'a>(self) -> &'a mut V
     where
+        K: 'a,
         V: 'a,
     {
         // SAFETY: Safety requirements are covered by the containing function.
@@ -584,17 +584,20 @@ pub(crate) mod private {
     /// implemented outside of the crate.
     pub trait Sealed {}
 
-    impl<V> Sealed for super::InnerNode4<V> {}
-    impl<V> Sealed for super::InnerNode16<V> {}
-    impl<V> Sealed for super::InnerNode48<V> {}
-    impl<V> Sealed for super::InnerNode256<V> {}
-    impl<V> Sealed for super::LeafNode<V> {}
+    impl<K, V> Sealed for super::InnerNode4<K, V> {}
+    impl<K, V> Sealed for super::InnerNode16<K, V> {}
+    impl<K, V> Sealed for super::InnerNode48<K, V> {}
+    impl<K, V> Sealed for super::InnerNode256<K, V> {}
+    impl<K, V> Sealed for super::LeafNode<K, V> {}
 }
 
 /// All nodes which contain a runtime tag that validates their type.
 pub trait Node: private::Sealed {
     /// The runtime type of the node.
     const TYPE: NodeType;
+
+    /// The key type carried by the leafe nodes
+    type Key;
 
     /// The value type carried by the leaf nodes
     type Value;
@@ -603,19 +606,26 @@ pub trait Node: private::Sealed {
 /// Common methods implemented by all inner node.
 pub trait InnerNode: Node {
     /// The type of the next larger node type.
-    type GrownNode: InnerNode<Value = <Self as Node>::Value>;
+    type GrownNode: InnerNode<Key = <Self as Node>::Key, Value = <Self as Node>::Value>;
 
     /// The type of the next smaller node type.
-    type ShrunkNode: InnerNode<Value = <Self as Node>::Value>;
+    type ShrunkNode: InnerNode<Key = <Self as Node>::Key, Value = <Self as Node>::Value>;
 
     /// The type of the iterator over all children of the inner node
-    type Iter: Iterator<Item = (u8, OpaqueNodePtr<<Self as Node>::Value>)>
-        + DoubleEndedIterator
-        + Into<InnerNodeIter<<Self as Node>::Value>>;
+    type Iter: Iterator<
+            Item = (
+                u8,
+                OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+            ),
+        > + DoubleEndedIterator
+        + Into<InnerNodeIter<<Self as Node>::Key, <Self as Node>::Value>>;
 
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>>;
+    fn lookup_child(
+        &self,
+        key_fragment: u8,
+    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>>;
 
     /// Write a child pointer with key fragment to this inner node.
     ///
@@ -625,13 +635,20 @@ pub trait InnerNode: Node {
     /// # Panics
     ///
     /// Panics when the node is full.
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<Self::Value>);
+    fn write_child(
+        &mut self,
+        key_fragment: u8,
+        child_pointer: OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    );
 
     /// Attempt to remove a child pointer at the key fragment from this inner
     /// node.
     ///
     /// If the key fragment does not exist in this node, return `None`.
-    fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>>;
+    fn remove_child(
+        &mut self,
+        key_fragment: u8,
+    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>>;
 
     /// Grow this node into the next larger class, copying over children and
     /// prefix information.
@@ -690,7 +707,7 @@ pub trait InnerNode: Node {
 
 /// Node type that has a compact representation for key bytes and children
 /// pointers.
-pub struct InnerNodeCompressed<V, const SIZE: usize> {
+pub struct InnerNodeCompressed<K, V, const SIZE: usize> {
     /// The common node fields.
     pub header: Header,
     /// An array that contains single key bytes in the same index as the
@@ -703,10 +720,10 @@ pub struct InnerNodeCompressed<V, const SIZE: usize> {
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; SIZE],
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V>>; SIZE],
 }
 
-impl<V, const SIZE: usize> Clone for InnerNodeCompressed<V, SIZE> {
+impl<K, V, const SIZE: usize> Clone for InnerNodeCompressed<K, V, SIZE> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -716,7 +733,7 @@ impl<V, const SIZE: usize> Clone for InnerNodeCompressed<V, SIZE> {
     }
 }
 
-impl<V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<V, SIZE> {
+impl<K, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, SIZE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (keys, child_pointers) = self.initialized_portion();
         f.debug_struct("InnerNodeBlock")
@@ -728,7 +745,7 @@ impl<V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<V, SIZE> {
     }
 }
 
-impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
+impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     /// Create an empty [`InnerNodeCompressed`] with the given [`NodeType`].
     pub fn empty() -> Self {
         InnerNodeCompressed {
@@ -751,7 +768,7 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
     }
 
     /// Return the initialized portions of the keys and child pointer arrays.
-    pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<V>]) {
+    pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<K, V>]) {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
         // be initialized
         unsafe {
@@ -766,7 +783,7 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
         }
     }
 
-    fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
+    fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>> {
         let child_index = self.lookup_child_index(key_fragment)?;
         // SAFETY: The value at `child_index` is guaranteed to be initialized because
         // the `lookup_child_index` function will only search in the initialized portion
@@ -774,7 +791,7 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
         Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) })
     }
 
-    fn write_child_inner(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+    fn write_child_inner(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>) {
         let (keys, _) = self.initialized_portion();
         let num_children = self.header.num_children();
         match keys.binary_search(&key_fragment) {
@@ -802,7 +819,7 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
         }
     }
 
-    fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
+    fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>> {
         let search_result = {
             let (keys, _) = self.initialized_portion();
             keys.binary_search(&key_fragment)
@@ -828,7 +845,7 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
         }
     }
 
-    fn change_block_size<const NEW_SIZE: usize>(&self) -> InnerNodeCompressed<V, NEW_SIZE> {
+    fn change_block_size<const NEW_SIZE: usize>(&self) -> InnerNodeCompressed<K, V, NEW_SIZE> {
         assert!(
             self.header.num_children() <= NEW_SIZE,
             "Cannot change InnerNodeCompressed<{}> to size {} when it has more than {} children. \
@@ -854,7 +871,7 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
         }
     }
 
-    fn grow_node48(&self) -> InnerNode48<V> {
+    fn grow_node48(&self) -> InnerNode48<K, V> {
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
         let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
@@ -914,28 +931,32 @@ impl<V, const SIZE: usize> InnerNodeCompressed<V, SIZE> {
 }
 
 /// Node that references between 2 and 4 children
-pub type InnerNode4<V> = InnerNodeCompressed<V, 4>;
+pub type InnerNode4<K, V> = InnerNodeCompressed<K, V, 4>;
 
-impl<V> Node for InnerNode4<V> {
+impl<K, V> Node for InnerNode4<K, V> {
+    type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node4;
 }
 
-impl<V> InnerNode for InnerNode4<V> {
-    type GrownNode = InnerNode16<Self::Value>;
-    type Iter = InnerNodeCompressedIter<Self::Value>;
-    type ShrunkNode = InnerNode4<Self::Value>;
+impl<K, V> InnerNode for InnerNode4<K, V> {
+    type GrownNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
+    type Iter = InnerNodeCompressedIter<<Self as Node>::Key, <Self as Node>::Value>;
+    type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
 
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
+    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>> {
         Self::lookup_child_inner(self, key_fragment)
     }
 
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>) {
         Self::write_child_inner(self, key_fragment, child_pointer)
     }
 
-    fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
+    fn remove_child(
+        &mut self,
+        key_fragment: u8,
+    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         Self::remove_child_inner(self, key_fragment)
     }
 
@@ -971,28 +992,32 @@ impl<V> InnerNode for InnerNode4<V> {
 }
 
 /// Node that references between 5 and 16 children
-pub type InnerNode16<V> = InnerNodeCompressed<V, 16>;
+pub type InnerNode16<K, V> = InnerNodeCompressed<K, V, 16>;
 
-impl<V> Node for InnerNode16<V> {
+impl<K, V> Node for InnerNode16<K, V> {
+    type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node16;
 }
 
-impl<V> InnerNode for InnerNode16<V> {
-    type GrownNode = InnerNode48<Self::Value>;
-    type Iter = InnerNodeCompressedIter<Self::Value>;
-    type ShrunkNode = InnerNode4<Self::Value>;
+impl<K, V> InnerNode for InnerNode16<K, V> {
+    type GrownNode = InnerNode48<<Self as Node>::Key, <Self as Node>::Value>;
+    type Iter = InnerNodeCompressedIter<<Self as Node>::Key, <Self as Node>::Value>;
+    type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
 
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<V>> {
+    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>> {
         Self::lookup_child_inner(self, key_fragment)
     }
 
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<V>) {
+    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>) {
         Self::write_child_inner(self, key_fragment, child_pointer)
     }
 
-    fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
+    fn remove_child(
+        &mut self,
+        key_fragment: u8,
+    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         Self::remove_child_inner(self, key_fragment)
     }
 
@@ -1106,7 +1131,7 @@ impl fmt::Display for TryFromByteError {
 impl Error for TryFromByteError {}
 
 /// Node that references between 17 and 49 children
-pub struct InnerNode48<V> {
+pub struct InnerNode48<K, V> {
     /// The common node fields.
     pub header: Header,
     /// An array that maps key bytes (as the index) to the index value in the
@@ -1117,10 +1142,10 @@ pub struct InnerNode48<V> {
     pub child_indices: [RestrictedNodeIndex<48>; 256],
     /// For each element in this array, it is assumed to be initialized if there
     /// is a index in the `child_indices` array that points to it
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<V>>; 48],
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V>>; 48],
 }
 
-impl<V> fmt::Debug for InnerNode48<V> {
+impl<K, V> fmt::Debug for InnerNode48<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode48")
             .field("header", &self.header)
@@ -1130,7 +1155,7 @@ impl<V> fmt::Debug for InnerNode48<V> {
     }
 }
 
-impl<V> Clone for InnerNode48<V> {
+impl<K, V> Clone for InnerNode48<K, V> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -1140,7 +1165,7 @@ impl<V> Clone for InnerNode48<V> {
     }
 }
 
-impl<V> InnerNode48<V> {
+impl<K, V> InnerNode48<K, V> {
     /// Create an empty `Node48`.
     pub fn empty() -> Self {
         InnerNode48 {
@@ -1151,7 +1176,7 @@ impl<V> InnerNode48<V> {
     }
 
     /// Return the initialized portions of the child pointer array.
-    pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<V>] {
+    pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<K, V>] {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
         // be initialized
         unsafe {
@@ -1162,18 +1187,22 @@ impl<V> InnerNode48<V> {
     }
 }
 
-impl<V> Node for InnerNode48<V> {
+impl<K, V> Node for InnerNode48<K, V> {
+    type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node48;
 }
 
-impl<V> InnerNode for InnerNode48<V> {
-    type GrownNode = InnerNode256<Self::Value>;
-    type Iter = InnerNode48Iter<Self::Value>;
-    type ShrunkNode = InnerNode16<Self::Value>;
+impl<K, V> InnerNode for InnerNode48<K, V> {
+    type GrownNode = InnerNode256<<Self as Node>::Key, <Self as Node>::Value>;
+    type Iter = InnerNode48Iter<<Self as Node>::Key, <Self as Node>::Value>;
+    type ShrunkNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
 
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
+    fn lookup_child(
+        &self,
+        key_fragment: u8,
+    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         let index = &self.child_indices[usize::from(key_fragment)];
         let child_pointers = self.initialized_child_pointers();
         if index.is_not_empty() {
@@ -1183,7 +1212,11 @@ impl<V> InnerNode for InnerNode48<V> {
         }
     }
 
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<Self::Value>) {
+    fn write_child(
+        &mut self,
+        key_fragment: u8,
+        child_pointer: OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
         let key_fragment_idx = usize::from(key_fragment);
         let child_index = if self.child_indices[key_fragment_idx] == RestrictedNodeIndex::EMPTY {
             let child_index = self.header.num_children();
@@ -1200,7 +1233,10 @@ impl<V> InnerNode for InnerNode48<V> {
         self.child_pointers[child_index].write(child_pointer);
     }
 
-    fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
+    fn remove_child(
+        &mut self,
+        key_fragment: u8,
+    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         let restricted_index = self.child_indices[usize::from(key_fragment)];
         if restricted_index.is_not_empty() {
             // Replace child pointer with unitialized value, even though it may possibly be
@@ -1415,14 +1451,14 @@ impl<V> InnerNode for InnerNode48<V> {
 }
 
 /// Node that references between 49 and 256 children
-pub struct InnerNode256<V> {
+pub struct InnerNode256<K, V> {
     /// The common node fields.
     pub header: Header,
     /// An array that directly maps a key byte (as index) to a child node.
-    pub child_pointers: [Option<OpaqueNodePtr<V>>; 256],
+    pub child_pointers: [Option<OpaqueNodePtr<K, V>>; 256],
 }
 
-impl<V> fmt::Debug for InnerNode256<V> {
+impl<K, V> fmt::Debug for InnerNode256<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode256")
             .field("header", &self.header)
@@ -1431,7 +1467,7 @@ impl<V> fmt::Debug for InnerNode256<V> {
     }
 }
 
-impl<V> Clone for InnerNode256<V> {
+impl<K, V> Clone for InnerNode256<K, V> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -1440,7 +1476,7 @@ impl<V> Clone for InnerNode256<V> {
     }
 }
 
-impl<V> InnerNode256<V> {
+impl<K, V> InnerNode256<K, V> {
     /// Create an empty `InnerNode256`.
     pub fn empty() -> Self {
         InnerNode256 {
@@ -1450,22 +1486,30 @@ impl<V> InnerNode256<V> {
     }
 }
 
-impl<V> Node for InnerNode256<V> {
+impl<K, V> Node for InnerNode256<K, V> {
+    type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node256;
 }
 
-impl<V> InnerNode for InnerNode256<V> {
+impl<K, V> InnerNode for InnerNode256<K, V> {
     type GrownNode = Self;
-    type Iter = InnerNode256Iter<V>;
-    type ShrunkNode = InnerNode48<V>;
+    type Iter = InnerNode256Iter<K, V>;
+    type ShrunkNode = InnerNode48<K, V>;
 
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
+    fn lookup_child(
+        &self,
+        key_fragment: u8,
+    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         self.child_pointers[usize::from(key_fragment)]
     }
 
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<Self::Value>) {
+    fn write_child(
+        &mut self,
+        key_fragment: u8,
+        child_pointer: OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
         let key_fragment_idx = usize::from(key_fragment);
         let existing_pointer = self.child_pointers[key_fragment_idx];
         self.child_pointers[key_fragment_idx] = Some(child_pointer);
@@ -1474,7 +1518,10 @@ impl<V> InnerNode for InnerNode256<V> {
         }
     }
 
-    fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<Self::Value>> {
+    fn remove_child(
+        &mut self,
+        key_fragment: u8,
+    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         let removed_child = self.child_pointers[usize::from(key_fragment)].take();
 
         if removed_child.is_some() {
@@ -1583,26 +1630,32 @@ impl<V> InnerNode for InnerNode256<V> {
 
 /// Node that contains a single leaf value.
 #[derive(Debug, Clone)]
-pub struct LeafNode<V> {
+#[repr(align(8))]
+pub struct LeafNode<K, V> {
     /// The leaf value.
     pub value: V,
     /// The full key that the `value` was stored with.
-    pub key: Box<[u8]>,
+    pub key: K,
 }
 
-impl<V> LeafNode<V> {
+impl<K, V> LeafNode<K, V> {
     /// Create a new leaf node with the given value.
-    pub fn new(key: Box<[u8]>, value: V) -> Self {
+    pub fn new(key: K, value: V) -> Self {
         LeafNode { value, key }
     }
 
     /// Check that the provided full key is the same one as the stored key.
-    pub fn matches_full_key(&self, possible_key: &[u8]) -> bool {
-        self.key.as_ref().eq(possible_key)
+    pub fn matches_full_key<Q>(&self, possible_key: &Q) -> bool
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        self.key.borrow().as_bytes().eq(possible_key.as_bytes())
     }
 }
 
-impl<V> Node for LeafNode<V> {
+impl<K, V> Node for LeafNode<K, V> {
+    type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Leaf;

@@ -350,11 +350,18 @@ mod tests {
 
     #[test]
     fn set_data_different_alignments() {
+        let mut p0 = TaggedPointer::new(Box::into_raw(Box::<[u8; 0]>::new([]))).unwrap();
         let mut p1 = TaggedPointer::new(Box::into_raw(Box::new(false))).unwrap();
         let mut p2 = TaggedPointer::new(Box::into_raw(Box::new(2u8))).unwrap();
         let mut p3 = TaggedPointer::new(Box::into_raw(Box::new(3u16))).unwrap();
         let mut p4 = TaggedPointer::new(Box::into_raw(Box::new(4u32))).unwrap();
         let mut p5 = TaggedPointer::new(Box::into_raw(Box::new(5u64))).unwrap();
+
+        assert_eq!(p0.to_data(), 0);
+        assert_eq!(unsafe { *p0.to_ptr() }.len(), 0);
+        p0.set_data(0);
+        assert_eq!(unsafe { *p0.to_ptr() }.len(), 0);
+        assert_eq!(p0.to_data(), 0);
 
         assert_eq!(p1.to_data(), 0);
         assert!(unsafe { !*p1.to_ptr() });

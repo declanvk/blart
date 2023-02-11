@@ -1,4 +1,6 @@
-use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use std::borrow::Borrow;
+
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -7,10 +9,14 @@ use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-pub unsafe fn search_unchecked<V>(
-    root: OpaqueNodePtr<V>,
-    key: &[u8],
-) -> Option<NodePtr<LeafNode<V>>> {
+pub unsafe fn search_unchecked<Q, K, V>(
+    root: OpaqueNodePtr<K, V>,
+    key: &Q,
+) -> Option<NodePtr<LeafNode<K, V>>>
+where
+    K: Borrow<Q> + AsBytes,
+    Q: AsBytes + ?Sized,
+{
     let mut current_node = root;
     let mut current_depth = 0;
 
@@ -61,18 +67,23 @@ pub unsafe fn search_unchecked<V>(
 ///
 ///  - No other access or mutation to the `inner_ptr` Node can happen while this
 ///    function runs.
-pub(crate) unsafe fn check_prefix_lookup_child<V, N: InnerNode<Value = V>>(
+pub(crate) unsafe fn check_prefix_lookup_child<Q, K, V, N>(
     inner_ptr: NodePtr<N>,
-    key: &[u8],
+    key: &Q,
     current_depth: &mut usize,
-) -> Option<OpaqueNodePtr<V>> {
+) -> Option<OpaqueNodePtr<K, V>>
+where
+    N: InnerNode<Key = K, Value = V>,
+    K: Borrow<Q> + AsBytes,
+    Q: AsBytes + ?Sized,
+{
     // SAFETY: The lifetime produced from this is bounded to this scope and does not
     // escape. Further, no other code mutates the node referenced, which is further
     // enforced the "no concurrent reads or writes" requirement on the
     // `search_unchecked` function.
     let inner_node = unsafe { inner_ptr.as_ref() };
     let header = inner_node.header();
-    let matched_prefix_size = header.match_prefix(&key[*current_depth..]);
+    let matched_prefix_size = header.match_prefix(&key.as_bytes()[*current_depth..]);
     if matched_prefix_size != header.prefix_size() {
         return None;
     }
@@ -80,8 +91,8 @@ pub(crate) unsafe fn check_prefix_lookup_child<V, N: InnerNode<Value = V>>(
     // Since the prefix matched, advance the depth by the size of the prefix
     *current_depth += matched_prefix_size;
 
-    let next_key_fragment = if *current_depth < key.len() {
-        key[*current_depth]
+    let next_key_fragment = if *current_depth < key.as_bytes().len() {
+        key.as_bytes()[*current_depth]
     } else {
         // the key has insufficient bytes, it is a prefix of an existing key. Thus, the
         // key must not exist in the tree by the requirements of the insert function

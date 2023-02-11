@@ -3,9 +3,9 @@ use crate::{
     TreeIterator,
 };
 
-fn map_item_to_ref<'a, V>(leaf_node_ptr: NodePtr<LeafNode<V>>) -> (&'a [u8], &'a V) {
+fn map_item_to_ref<'a, K, V>(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> (&'a K, &'a V) {
     let (key, value) = unsafe { leaf_node_ptr.as_key_value_ref() };
-    (key.as_ref(), value)
+    (key, value)
 }
 
 #[test]
@@ -38,19 +38,19 @@ fn small_tree_iterator_front_and_back() {
 
     assert_eq!(
         trie_iter.next().map(map_item_to_ref),
-        Some((&[6, 193, 187][..], &8))
+        Some((&[6, 193, 187].into(), &8))
     );
     assert_eq!(
         trie_iter.next().map(map_item_to_ref),
-        Some((&[30, 159, 204][..], &1))
+        Some((&[30, 159, 204].into(), &1))
     );
     assert_eq!(
         trie_iter.next_back().map(map_item_to_ref),
-        Some((&[220, 78, 94][..], &5))
+        Some((&[220, 78, 94].into(), &5))
     );
     assert_eq!(
         trie_iter.next_back().map(map_item_to_ref),
-        Some((&[173, 226, 147][..], &7))
+        Some((&[173, 226, 147].into(), &7))
     );
 
     let rest = trie_iter.map(map_item_to_ref).collect::<Vec<_>>();
@@ -58,11 +58,11 @@ fn small_tree_iterator_front_and_back() {
     assert_eq!(
         rest,
         vec![
-            (&[52, 231, 124][..], &6),
-            (&[58, 7, 66][..], &3),
-            (&[70, 30, 139][..], &4),
-            (&[92, 39, 116][..], &2),
-            (&[114, 159, 30][..], &0),
+            (&[52, 231, 124].into(), &6),
+            (&[58, 7, 66].into(), &3),
+            (&[70, 30, 139].into(), &4),
+            (&[92, 39, 116].into(), &2),
+            (&[114, 159, 30].into(), &0),
         ]
     );
 
@@ -119,15 +119,15 @@ fn large_fixed_length_key_iterator_front_back() {
     assert_eq!(first_remaining_half.len(), TEST_PARAMS.half_len);
     assert_eq!(last_remaining_half.len(), TEST_PARAMS.half_len);
 
-    assert_eq!(first_remaining_half[0], &[0, 0, 0][..]);
+    assert_eq!(first_remaining_half[0], &[0, 0, 0].into());
     assert_eq!(
         first_remaining_half[first_remaining_half.len() - 1],
-        &TEST_PARAMS.first_half_last[..]
+        &TEST_PARAMS.first_half_last.into()
     );
-    assert_eq!(last_remaining_half[0], &[255, 255, 255][..]);
+    assert_eq!(last_remaining_half[0], &[255, 255, 255].into());
     assert_eq!(
         last_remaining_half[last_remaining_half.len() - 1],
-        &TEST_PARAMS.last_half_last[..]
+        &TEST_PARAMS.last_half_last.into()
     );
 
     unsafe { deallocate_tree(root) }

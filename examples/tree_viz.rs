@@ -38,7 +38,11 @@ struct TreeToDotArgs {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: TreeToDotArgs = argh::from_env();
 
-    let tree = TreeMap::from_iter(args.shape.generate_keys(args.size, args.input_file));
+    let mut tree = TreeMap::new();
+
+    for (key, value) in args.shape.generate_keys(args.size, args.input_file) {
+        let _ = tree.try_insert(key, value).unwrap();
+    }
 
     if tree.is_empty() {
         return Err(Box::new(EmptyTreeError));
@@ -66,7 +70,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn write_tree(output: &mut dyn Write, tree: TreeMap<String>) -> Result<(), Box<dyn Error>> {
+fn write_tree(
+    output: &mut dyn Write,
+    tree: TreeMap<Box<[u8]>, String>,
+) -> Result<(), Box<dyn Error>> {
     let root = tree.into_raw();
 
     // SAFETY: There are no concurrent mutation to the tree node or its children

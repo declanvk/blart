@@ -2,7 +2,11 @@ use crate::{InnerNode, InnerNode16, InnerNode4, LeafNode, NodePtr};
 
 use super::*;
 
-fn node4_fixture() -> (InnerNode4<()>, [LeafNode<()>; 4], [OpaqueNodePtr<()>; 4]) {
+fn node4_fixture() -> (
+    InnerNode4<Box<[u8]>, ()>,
+    [LeafNode<Box<[u8]>, ()>; 4],
+    [OpaqueNodePtr<Box<[u8]>, ()>; 4],
+) {
     let mut n4 = InnerNode4::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
@@ -36,7 +40,11 @@ fn node4_iterate() {
     );
 }
 
-fn node16_fixture() -> (InnerNode16<()>, [LeafNode<()>; 4], [OpaqueNodePtr<()>; 4]) {
+fn node16_fixture() -> (
+    InnerNode16<Box<[u8]>, ()>,
+    [LeafNode<Box<[u8]>, ()>; 4],
+    [OpaqueNodePtr<Box<[u8]>, ()>; 4],
+) {
     let mut n4 = InnerNode16::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
@@ -66,7 +74,11 @@ fn node16_iterate() {
     )
 }
 
-fn node48_fixture() -> (InnerNode48<()>, [LeafNode<()>; 4], [OpaqueNodePtr<()>; 4]) {
+fn node48_fixture() -> (
+    InnerNode48<Box<[u8]>, ()>,
+    [LeafNode<Box<[u8]>, ()>; 4],
+    [OpaqueNodePtr<Box<[u8]>, ()>; 4],
+) {
     let mut n4 = InnerNode48::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
@@ -104,7 +116,11 @@ fn node48_iterate() {
         .any(|(key_fragment, ptr)| *key_fragment == 85 && *ptr == l4_ptr));
 }
 
-fn node256_fixture() -> (InnerNode256<()>, [LeafNode<()>; 4], [OpaqueNodePtr<()>; 4]) {
+fn node256_fixture() -> (
+    InnerNode256<Box<[u8]>, ()>,
+    [LeafNode<Box<[u8]>, ()>; 4],
+    [OpaqueNodePtr<Box<[u8]>, ()>; 4],
+) {
     let mut n4 = InnerNode256::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
@@ -226,20 +242,20 @@ macro_rules! node_range_test_cases {
 
 #[test]
 fn node4_iter_ranges() {
-    node_range_test_cases!(node4_fixture; InnerNodeCompressedIter<()>);
+    node_range_test_cases!(node4_fixture; InnerNodeCompressedIter<Box<[u8]>, ()>);
 }
 
 #[test]
 fn node16_iter_ranges() {
-    node_range_test_cases!(node16_fixture; InnerNodeCompressedIter<()>);
+    node_range_test_cases!(node16_fixture; InnerNodeCompressedIter<Box<[u8]>, ()>);
 }
 
 #[test]
 fn node48_iter_ranges() {
-    node_range_test_cases!(node48_fixture; InnerNode48Iter<()>);
+    node_range_test_cases!(node48_fixture; InnerNode48Iter<Box<[u8]>, ()>);
 }
 
 #[test]
 fn node256_iter_ranges() {
-    node_range_test_cases!(node256_fixture; InnerNode256Iter<()>);
+    node_range_test_cases!(node256_fixture; InnerNode256Iter<Box<[u8]>, ()>);
 }

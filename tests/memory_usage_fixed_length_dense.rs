@@ -32,7 +32,7 @@ fn test_memory_usage() {
         }
 
         for (value, key) in tests_common::generate_key_fixed_length(KEY_LEVEL_WIDTH).enumerate() {
-            let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+            let search_result = unsafe { search_unchecked(current_root, &key) };
 
             assert_eq!(search_result.unwrap().read().value, value);
         }

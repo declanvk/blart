@@ -7,18 +7,18 @@ use crate::{
 #[test]
 fn insert_to_small_trees() {
     let first_leaf =
-        NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+        NodePtr::allocate_node_ptr(LeafNode::new(Box::from([1, 2, 3, 4]), "1234".to_string()));
 
     let mut tree = first_leaf.to_opaque();
     tree = unsafe {
-        insert_unchecked(tree, Box::new([1, 2, 5, 6]), "1256".to_string())
+        insert_unchecked(tree, Box::from([1, 2, 5, 6]), "1256".to_string())
             .unwrap()
             .new_root
     };
 
     assert_eq!(tree.node_type(), NodeType::Node4);
 
-    let new_root = tree.cast::<InnerNode4<String>>().unwrap();
+    let new_root = tree.cast::<InnerNode4<Box<[u8]>, String>>().unwrap();
 
     {
         let root = new_root.read();
@@ -30,7 +30,7 @@ fn insert_to_small_trees() {
     }
     assert_eq!(
         unsafe {
-            &search_unchecked(new_root.to_opaque(), &[1, 2, 5, 6])
+            &search_unchecked(new_root.to_opaque(), [1, 2, 5, 6].as_ref())
                 .unwrap()
                 .read()
                 .value
@@ -39,15 +39,15 @@ fn insert_to_small_trees() {
     );
     assert_eq!(
         unsafe {
-            &search_unchecked(new_root.to_opaque(), &[1, 2, 3, 4])
+            &search_unchecked(new_root.to_opaque(), [1, 2, 3, 4].as_ref())
                 .unwrap()
                 .read()
                 .value
         },
         "1234"
     );
-    assert!(unsafe { search_unchecked(new_root.to_opaque(), &[1, 2, 5, 7]).is_none() });
-    assert!(unsafe { search_unchecked(new_root.to_opaque(), &[1, 2, 3, 5]).is_none() });
+    assert!(unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 5, 7].as_ref()).is_none() });
+    assert!(unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 3, 5].as_ref()).is_none() });
 
     unsafe { deallocate_tree(new_root.to_opaque()) };
 }
@@ -73,7 +73,7 @@ fn insert_into_left_skewed_tree_deallocate() {
     }
 
     for (value, key) in generate_keys_skewed(KEY_LENGTH_LIMIT).enumerate() {
-        let search_result = unsafe { search_unchecked(current_root, key.as_ref()) };
+        let search_result = unsafe { search_unchecked(current_root, &key) };
 
         assert_eq!(search_result.unwrap().read().value, value);
     }
@@ -83,27 +83,39 @@ fn insert_into_left_skewed_tree_deallocate() {
 
 #[test]
 fn insert_prefix_key_errors() {
-    let first_leaf =
-        NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()));
+    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _>::new(
+        Box::from([1, 2, 3, 4]),
+        "1234".to_string(),
+    ));
 
     let tree = first_leaf.to_opaque();
-    let result = unsafe { insert_unchecked(tree, Box::new([1, 2]), "12".to_string()) };
+    let result = unsafe { insert_unchecked(tree, Box::from([1, 2]), "12".to_string()) };
 
-    assert_eq!(result.unwrap_err(), InsertPrefixError(Box::new([1, 2])));
+    assert_eq!(
+        result.unwrap_err(),
+        InsertPrefixError {
+            byte_repr: Box::from([1, 2])
+        }
+    );
 
     unsafe { deallocate_tree(tree) }
 }
 
 #[test]
 fn insert_prefix_key_with_existing_prefix_errors() {
-    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2]), "12".to_string()));
+    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _>::new(
+        Box::from([1, 2]),
+        "12".to_string(),
+    ));
 
     let tree = first_leaf.to_opaque();
-    let result = unsafe { insert_unchecked(tree, Box::new([1, 2, 3, 4]), "1234".to_string()) };
+    let result = unsafe { insert_unchecked(tree, Box::from([1, 2, 3, 4]), "1234".to_string()) };
 
     assert_eq!(
         result.unwrap_err(),
-        InsertPrefixError(Box::new([1, 2, 3, 4]))
+        InsertPrefixError {
+            byte_repr: Box::from([1, 2, 3, 4])
+        }
     );
 
     unsafe { deallocate_tree(tree) }
@@ -111,27 +123,27 @@ fn insert_prefix_key_with_existing_prefix_errors() {
 
 #[test]
 fn insert_key_with_long_prefix_then_split() {
-    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::new(
-        Box::new([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]),
+    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _>::new(
+        Box::from([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]),
         0,
     ));
 
     let mut tree = first_leaf.to_opaque();
     tree = unsafe {
-        insert_unchecked(tree, Box::new([1, 1, 1, 1, 1, 1, 1, 1, 1, 255]), 1)
+        insert_unchecked(tree, Box::from([1, 1, 1, 1, 1, 1, 1, 1, 1, 255]), 1)
             .unwrap()
             .new_root
     };
 
     tree = unsafe {
-        insert_unchecked(tree, Box::new([1, 1, 255]), 2)
+        insert_unchecked(tree, Box::from([1, 1, 255]), 2)
             .unwrap()
             .new_root
     };
 
     assert_eq!(
         unsafe {
-            search_unchecked(tree, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255])
+            search_unchecked(tree, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255].as_ref())
                 .unwrap()
                 .read()
                 .value
@@ -140,7 +152,7 @@ fn insert_key_with_long_prefix_then_split() {
     );
     assert_eq!(
         unsafe {
-            search_unchecked(tree, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 255])
+            search_unchecked(tree, [1, 1, 1, 1, 1, 1, 1, 1, 1, 255].as_ref())
                 .unwrap()
                 .read()
                 .value
@@ -148,7 +160,12 @@ fn insert_key_with_long_prefix_then_split() {
         1
     );
     assert_eq!(
-        unsafe { search_unchecked(tree, &[1, 1, 255]).unwrap().read().value },
+        unsafe {
+            search_unchecked(tree, [1, 1, 255].as_ref())
+                .unwrap()
+                .read()
+                .value
+        },
         2
     );
 
@@ -203,7 +220,9 @@ fn insert_fails_new_key_prefix_of_existing_entry() {
         insert_result.expect_err("expected insert call to fail because key was prefix");
     assert_eq!(
         insert_err,
-        InsertPrefixError(Box::<[u8]>::from(&[5, 6, 7, 8][..]))
+        InsertPrefixError {
+            byte_repr: Box::<[u8]>::from(&[5, 6, 7, 8][..])
+        }
     );
 
     unsafe { deallocate_tree(current_root) };
@@ -227,7 +246,9 @@ fn insert_fails_existing_key_prefixed() {
         insert_result.expect_err("expected insert call to fail because existing key was prefix");
     assert_eq!(
         insert_err,
-        InsertPrefixError(Box::<[u8]>::from(&[5, 6, 7, 8, 9, 10][..]))
+        InsertPrefixError {
+            byte_repr: Box::<[u8]>::from(&[5, 6, 7, 8, 9, 10][..])
+        }
     );
 
     unsafe { deallocate_tree(current_root) };
@@ -249,24 +270,26 @@ fn insert_existing_key_overwrite() {
 
     let current_root = setup_tree_from_entries(entries_it);
 
-    unsafe fn get_value<V: Copy>(n: NodePtr<LeafNode<V>>) -> V {
+    unsafe fn get_value<K, V: Copy>(n: NodePtr<LeafNode<K, V>>) -> V {
         unsafe { n.as_ref().value }
     }
 
     assert_eq!(
-        unsafe { get_value(search_unchecked(current_root, &[1, 2, 3, 4, 5, 6]).unwrap()) },
+        unsafe { get_value(search_unchecked(current_root, [1, 2, 3, 4, 5, 6].as_ref()).unwrap()) },
         'A'
     );
     assert_eq!(
-        unsafe { get_value(search_unchecked(current_root, &[2, 4, 6, 8, 10, 12]).unwrap()) },
+        unsafe {
+            get_value(search_unchecked(current_root, [2, 4, 6, 8, 10, 12].as_ref()).unwrap())
+        },
         'B'
     );
     assert_eq!(
-        unsafe { get_value(search_unchecked(current_root, &[1, 2, 3, 4, 7, 8]).unwrap()) },
+        unsafe { get_value(search_unchecked(current_root, [1, 2, 3, 4, 7, 8].as_ref()).unwrap()) },
         'C'
     );
     assert_eq!(
-        unsafe { get_value(search_unchecked(current_root, &[1, 2, 3, 4, 5, 9]).unwrap()) },
+        unsafe { get_value(search_unchecked(current_root, [1, 2, 3, 4, 5, 9].as_ref()).unwrap()) },
         'D'
     );
 
@@ -315,19 +338,21 @@ fn insert_existing_key_overwrite() {
     assert_eq!(insert_result.existing_leaf.unwrap().value, 'A');
 
     assert_eq!(
-        unsafe { get_value(search_unchecked(current_root, &[1, 2, 3, 4, 5, 6]).unwrap()) },
+        unsafe { get_value(search_unchecked(current_root, [1, 2, 3, 4, 5, 6].as_ref()).unwrap()) },
         'Z'
     );
     assert_eq!(
-        unsafe { get_value(search_unchecked(current_root, &[2, 4, 6, 8, 10, 12]).unwrap()) },
+        unsafe {
+            get_value(search_unchecked(current_root, [2, 4, 6, 8, 10, 12].as_ref()).unwrap())
+        },
         'Y'
     );
     assert_eq!(
-        unsafe { get_value(search_unchecked(current_root, &[1, 2, 3, 4, 7, 8]).unwrap()) },
+        unsafe { get_value(search_unchecked(current_root, [1, 2, 3, 4, 7, 8].as_ref()).unwrap()) },
         'X'
     );
     assert_eq!(
-        unsafe { get_value(search_unchecked(current_root, &[1, 2, 3, 4, 5, 9]).unwrap()) },
+        unsafe { get_value(search_unchecked(current_root, [1, 2, 3, 4, 5, 9].as_ref()).unwrap()) },
         'W'
     );
 
