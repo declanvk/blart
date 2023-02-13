@@ -179,7 +179,7 @@ where
     fn visit_leaf(&mut self, t: &crate::LeafNode<K, V>) -> Self::Output {
         let mut output = TreeStats::default();
         output.leaf_count += 1;
-        output.total_key_bytes += t.key.as_bytes().len();
+        output.total_key_bytes += t.key_ref().as_bytes().len();
         output
     }
 }

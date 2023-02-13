@@ -246,7 +246,7 @@ impl<K, V> TreeMap<K, V> {
             // pointer because of the existing mutable reference on the `TreeMap`.
             let leaf_node_ref = unsafe { search_result.as_mut() };
 
-            Some(&mut leaf_node_ref.value)
+            Some(leaf_node_ref.value_mut())
         } else {
             None
         }
@@ -305,7 +305,7 @@ impl<K, V> TreeMap<K, V> {
             // immutable references at this time (no mutable references to the `TreeMap`).
             let leaf_node_ref = unsafe { minimum.as_ref() };
 
-            Some((&leaf_node_ref.key, &leaf_node_ref.value))
+            Some(leaf_node_ref.entry_ref())
         } else {
             None
         }
@@ -340,7 +340,7 @@ impl<K, V> TreeMap<K, V> {
 
             self.root = new_root;
             self.num_entries -= 1;
-            Some((deleted_leaf.key, deleted_leaf.value))
+            Some(deleted_leaf.into_entry())
         } else {
             None
         }
@@ -377,7 +377,7 @@ impl<K, V> TreeMap<K, V> {
             // immutable references at this time (no mutable references to the `TreeMap`).
             let leaf_node_ref = unsafe { maximum.as_ref() };
 
-            Some((&leaf_node_ref.key, &leaf_node_ref.value))
+            Some(leaf_node_ref.entry_ref())
         } else {
             None
         }
@@ -413,7 +413,7 @@ impl<K, V> TreeMap<K, V> {
 
             self.root = new_root;
             self.num_entries -= 1;
-            Some((deleted_leaf.key, deleted_leaf.value))
+            Some(deleted_leaf.into_entry())
         } else {
             None
         }
@@ -508,7 +508,7 @@ impl<K, V> TreeMap<K, V> {
                     .expect("should not overflow a usize");
             }
 
-            Ok(existing_leaf.map(|leaf| leaf.value))
+            Ok(existing_leaf.map(|leaf| leaf.into_entry().1))
         } else {
             self.root = Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque());
 
@@ -556,7 +556,7 @@ impl<K, V> TreeMap<K, V> {
                 .expect("should not underflow, inc/dec should be paired");
 
             self.root = new_root;
-            Some((deleted_leaf.key, deleted_leaf.value))
+            Some(deleted_leaf.into_entry())
         } else {
             None
         }
@@ -1490,7 +1490,7 @@ mod tests {
         let mut tree = TreeMap::<Box<[u8]>, u8>::new();
 
         // check the normal state, a tree should never have any existing entries
-        assert!(tree.len() == 0 && tree.is_empty());
+        assert!(tree.is_empty());
 
         // regular insert
         assert_eq!(tree.try_insert(Box::new([1]), 0), Ok(None));

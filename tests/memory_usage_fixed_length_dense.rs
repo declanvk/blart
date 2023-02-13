@@ -34,7 +34,7 @@ fn test_memory_usage() {
         for (value, key) in tests_common::generate_key_fixed_length(KEY_LEVEL_WIDTH).enumerate() {
             let search_result = unsafe { search_unchecked(current_root, &key) };
 
-            assert_eq!(search_result.unwrap().read().value, value);
+            assert_eq!(search_result.unwrap().read().value_ref(), &value);
         }
 
         unsafe { deallocate_tree(current_root) };
@@ -44,8 +44,8 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_blocks, 0);
         dhat::assert_eq!(stats.curr_bytes, 0);
 
-        dhat::assert_eq!(stats.max_blocks, 398);
-        dhat::assert_eq!(stats.max_bytes, 18088);
+        dhat::assert_eq!(stats.max_blocks, 662);
+        dhat::assert_eq!(stats.max_bytes, 20200);
 
         let num_keys = KEY_LEVEL_WIDTH
             .iter()

@@ -17,8 +17,8 @@ fn delete_singleton_tree_leaf() {
 
     let delete_result = unsafe { delete_unchecked(tree, [1, 2, 3, 4].as_ref()).unwrap() };
     assert!(delete_result.new_root.is_none());
-    assert_eq!(delete_result.deleted_leaf.key.as_ref(), &[1, 2, 3, 4]);
-    assert_eq!(delete_result.deleted_leaf.value, "1234");
+    assert_eq!(delete_result.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4]);
+    assert_eq!(delete_result.deleted_leaf.value_ref(), &"1234");
 }
 
 #[test]
@@ -44,8 +44,8 @@ fn delete_entire_small_tree() {
     assert!(unsafe { delete_unchecked(current_root, [1, 2, 55, 4, 5, 6].as_ref()).is_none() });
 
     let d1 = unsafe { delete_unchecked(current_root, [1, 2, 3, 4, 7, 8].as_ref()).unwrap() };
-    assert_eq!(d1.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 7, 8]);
-    assert_eq!(d1.deleted_leaf.value, 'C');
+    assert_eq!(d1.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 7, 8]);
+    assert_eq!(d1.deleted_leaf.value_ref(), &'C');
     let new_root = d1.new_root.unwrap();
     assert_eq!(new_root, current_root);
     current_root = new_root;
@@ -56,28 +56,28 @@ fn delete_entire_small_tree() {
         if value == 'C' {
             assert!(search_result.is_none());
         } else {
-            assert_eq!(search_result.unwrap().read().value, value);
+            assert_eq!(search_result.unwrap().read().value_ref(), &value);
         }
     }
 
     let d2 = unsafe { delete_unchecked(current_root, [1, 2, 3, 4, 5, 9].as_ref()).unwrap() };
-    assert_eq!(d2.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 9]);
-    assert_eq!(d2.deleted_leaf.value, 'D');
+    assert_eq!(d2.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 9]);
+    assert_eq!(d2.deleted_leaf.value_ref(), &'D');
     let new_root = d2.new_root.unwrap();
     assert_eq!(new_root, current_root);
     current_root = new_root;
 
     let d3 = unsafe { delete_unchecked(current_root, [2, 4, 6, 8, 10, 12].as_ref()).unwrap() };
-    assert_eq!(d3.deleted_leaf.key.as_ref(), &[2, 4, 6, 8, 10, 12]);
-    assert_eq!(d3.deleted_leaf.value, 'B');
+    assert_eq!(d3.deleted_leaf.key_ref().as_ref(), &[2, 4, 6, 8, 10, 12]);
+    assert_eq!(d3.deleted_leaf.value_ref(), &'B');
     let new_root = d3.new_root.unwrap();
     assert_ne!(new_root, current_root);
     current_root = new_root;
     assert_eq!(current_root.node_type(), NodeType::Leaf);
 
     let d4 = unsafe { delete_unchecked(current_root, [1, 2, 3, 4, 5, 6].as_ref()).unwrap() };
-    assert_eq!(d4.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 6]);
-    assert_eq!(d4.deleted_leaf.value, 'A');
+    assert_eq!(d4.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 6]);
+    assert_eq!(d4.deleted_leaf.value_ref(), &'A');
     assert!(d4.new_root.is_none());
 }
 
@@ -107,8 +107,8 @@ fn delete_one_entry_n16_remains() {
     let delete = unsafe { delete_unchecked(current_root, [1, 2, 3, 9, 5, 6].as_ref()).unwrap() };
 
     assert_eq!(delete.new_root.unwrap(), current_root);
-    assert_eq!(delete.deleted_leaf.value, 'E');
-    assert_eq!(delete.deleted_leaf.key.as_ref(), &[1, 2, 3, 9, 5, 6]);
+    assert_eq!(delete.deleted_leaf.value_ref(), &'E');
+    assert_eq!(delete.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 9, 5, 6]);
 
     current_root = delete.new_root.unwrap();
     assert_eq!(current_root.node_type(), NodeType::Node16);
@@ -127,8 +127,8 @@ fn delete_one_entry_n48_shrinks() {
     let delete = unsafe { delete_unchecked(current_root, [1, 2, 3, 9, 5, 6].as_ref()).unwrap() };
 
     assert_ne!(delete.new_root.unwrap(), current_root);
-    assert_eq!(delete.deleted_leaf.value, 9);
-    assert_eq!(delete.deleted_leaf.key.as_ref(), &[1, 2, 3, 9, 5, 6]);
+    assert_eq!(delete.deleted_leaf.value_ref(), &9);
+    assert_eq!(delete.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 9, 5, 6]);
 
     current_root = delete.new_root.unwrap();
     assert_eq!(current_root.node_type(), NodeType::Node16);
@@ -147,8 +147,8 @@ fn delete_one_entry_n256_shrinks() {
     let delete = unsafe { delete_unchecked(current_root, [1, 2, 3, 24, 5, 6].as_ref()).unwrap() };
 
     assert_ne!(delete.new_root.unwrap(), current_root);
-    assert_eq!(delete.deleted_leaf.value, 24);
-    assert_eq!(delete.deleted_leaf.key.as_ref(), &[1, 2, 3, 24, 5, 6]);
+    assert_eq!(delete.deleted_leaf.value_ref(), &24);
+    assert_eq!(delete.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 24, 5, 6]);
 
     current_root = delete.new_root.unwrap();
     assert_eq!(current_root.node_type(), NodeType::Node48);
@@ -167,8 +167,8 @@ fn delete_minimum_singleton_tree() {
 
     let delete_result = unsafe { delete_minimum_unchecked(tree) };
     assert!(delete_result.new_root.is_none());
-    assert_eq!(delete_result.deleted_leaf.key.as_ref(), &[1, 2, 3, 4]);
-    assert_eq!(delete_result.deleted_leaf.value, "1234");
+    assert_eq!(delete_result.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4]);
+    assert_eq!(delete_result.deleted_leaf.value_ref(), &"1234");
 }
 
 #[test]
@@ -190,8 +190,8 @@ fn delete_minimum_entire_small_tree() {
     assert_eq!(current_root.node_type(), NodeType::Node4);
 
     let d1 = unsafe { delete_minimum_unchecked(current_root) };
-    assert_eq!(d1.deleted_leaf.value, 'A');
-    assert_eq!(d1.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 6]);
+    assert_eq!(d1.deleted_leaf.value_ref(), &'A');
+    assert_eq!(d1.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 6]);
 
     let new_root = d1.new_root.unwrap();
     assert_eq!(new_root, current_root);
@@ -203,28 +203,28 @@ fn delete_minimum_entire_small_tree() {
         if value == 'A' {
             assert!(search_result.is_none());
         } else {
-            assert_eq!(search_result.unwrap().read().value, value);
+            assert_eq!(search_result.unwrap().read().value_ref(), &value);
         }
     }
 
     let d2 = unsafe { delete_minimum_unchecked(current_root) };
-    assert_eq!(d2.deleted_leaf.value, 'D');
-    assert_eq!(d2.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 9]);
+    assert_eq!(d2.deleted_leaf.value_ref(), &'D');
+    assert_eq!(d2.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 9]);
     let new_root = d2.new_root.unwrap();
     assert_eq!(new_root, current_root);
     current_root = new_root;
 
     let d3 = unsafe { delete_minimum_unchecked(current_root) };
-    assert_eq!(d3.deleted_leaf.value, 'C');
-    assert_eq!(d3.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 7, 8]);
+    assert_eq!(d3.deleted_leaf.value_ref(), &'C');
+    assert_eq!(d3.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 7, 8]);
     let new_root = d3.new_root.unwrap();
     assert_ne!(new_root, current_root);
     current_root = new_root;
     assert_eq!(current_root.node_type(), NodeType::Leaf);
 
     let d4 = unsafe { delete_minimum_unchecked(current_root) };
-    assert_eq!(d4.deleted_leaf.value, 'B');
-    assert_eq!(d4.deleted_leaf.key.as_ref(), &[2, 4, 6, 8, 10, 12]);
+    assert_eq!(d4.deleted_leaf.value_ref(), &'B');
+    assert_eq!(d4.deleted_leaf.key_ref().as_ref(), &[2, 4, 6, 8, 10, 12]);
     assert!(d4.new_root.is_none());
 }
 
@@ -239,8 +239,8 @@ fn delete_maximum_singleton_tree() {
 
     let delete_result = unsafe { delete_maximum_unchecked(tree) };
     assert!(delete_result.new_root.is_none());
-    assert_eq!(delete_result.deleted_leaf.key.as_ref(), &[1, 2, 3, 4]);
-    assert_eq!(delete_result.deleted_leaf.value, "1234");
+    assert_eq!(delete_result.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4]);
+    assert_eq!(delete_result.deleted_leaf.value_ref(), &"1234");
 }
 
 #[test]
@@ -262,8 +262,8 @@ fn delete_maximum_entire_small_tree() {
     assert_eq!(current_root.node_type(), NodeType::Node4);
 
     let d1 = unsafe { delete_maximum_unchecked(current_root) };
-    assert_eq!(d1.deleted_leaf.value, 'B');
-    assert_eq!(d1.deleted_leaf.key.as_ref(), &[2, 4, 6, 8, 10, 12]);
+    assert_eq!(d1.deleted_leaf.value_ref(), &'B');
+    assert_eq!(d1.deleted_leaf.key_ref().as_ref(), &[2, 4, 6, 8, 10, 12]);
 
     let new_root = d1.new_root.unwrap();
     // root moved
@@ -276,28 +276,28 @@ fn delete_maximum_entire_small_tree() {
         if value == 'B' {
             assert!(search_result.is_none());
         } else {
-            assert_eq!(search_result.unwrap().read().value, value);
+            assert_eq!(search_result.unwrap().read().value_ref(), &value);
         }
     }
 
     let d2 = unsafe { delete_maximum_unchecked(current_root) };
-    assert_eq!(d2.deleted_leaf.value, 'C');
-    assert_eq!(d2.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 7, 8]);
+    assert_eq!(d2.deleted_leaf.value_ref(), &'C');
+    assert_eq!(d2.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 7, 8]);
     let new_root = d2.new_root.unwrap();
     // root moved again
     assert_ne!(new_root, current_root);
     current_root = new_root;
 
     let d3 = unsafe { delete_maximum_unchecked(current_root) };
-    assert_eq!(d3.deleted_leaf.value, 'D');
-    assert_eq!(d3.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 9]);
+    assert_eq!(d3.deleted_leaf.value_ref(), &'D');
+    assert_eq!(d3.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 9]);
     let new_root = d3.new_root.unwrap();
     assert_ne!(new_root, current_root);
     current_root = new_root;
     assert_eq!(current_root.node_type(), NodeType::Leaf);
 
     let d4 = unsafe { delete_maximum_unchecked(current_root) };
-    assert_eq!(d4.deleted_leaf.value, 'A');
-    assert_eq!(d4.deleted_leaf.key.as_ref(), &[1, 2, 3, 4, 5, 6]);
+    assert_eq!(d4.deleted_leaf.value_ref(), &'A');
+    assert_eq!(d4.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 6]);
     assert!(d4.new_root.is_none());
 }

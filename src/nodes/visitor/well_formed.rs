@@ -380,11 +380,11 @@ where
     }
 
     fn visit_leaf(&mut self, t: &crate::LeafNode<K, V>) -> Self::Output {
-        if !t.key.as_bytes().starts_with(&self.current_key_prefix) {
+        if !t.key_ref().as_bytes().starts_with(&self.current_key_prefix) {
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::PrefixMismatch {
                 expected_prefix: current_key_prefix,
-                entire_key: t.key.clone(),
+                entire_key: t.key_ref().clone(),
             });
         }
 

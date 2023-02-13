@@ -35,7 +35,7 @@ fn test_memory_usage() {
         for (value, key) in tests_common::generate_keys_skewed(KEY_LENGTH_LIMIT).enumerate() {
             let search_result = unsafe { search_unchecked(current_root, &key) };
 
-            assert_eq!(search_result.unwrap().read().value, value);
+            assert_eq!(search_result.unwrap().read().value_ref(), &value);
         }
 
         unsafe { deallocate_tree(current_root) };
@@ -45,8 +45,8 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_blocks, 0);
         dhat::assert_eq!(stats.curr_bytes, 0);
 
-        dhat::assert_eq!(stats.max_blocks, 511);
-        dhat::assert_eq!(stats.max_bytes, 27202);
+        dhat::assert_eq!(stats.max_blocks, 766);
+        dhat::assert_eq!(stats.max_bytes, 29242);
 
         let mean_blocks_per_key = (stats.max_blocks as f64) / (KEY_LENGTH_LIMIT as f64);
         let mean_bytes_per_key = (stats.max_bytes as f64) / (KEY_LENGTH_LIMIT as f64);

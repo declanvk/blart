@@ -39,7 +39,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                         Ok(InsertResult { new_root, .. }) => {
                             let search_value =
                                 unsafe { search_unchecked(new_root, key.as_ref()).unwrap() };
-                            assert_eq!(search_value.read().value, next_value);
+                            assert_eq!(search_value.read().value_ref(), &next_value);
 
                             Some(new_root)
                         },
@@ -58,7 +58,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     let search_result = unsafe { search_unchecked(root, key.as_ref()) };
                     if let Some(leaf) = search_result {
                         let leaf = leaf.read();
-                        assert!(leaf.value < next_value);
+                        assert!(leaf.value_ref() < &next_value);
                     }
                 }
             },
@@ -78,14 +78,14 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     let min_value = unsafe { min_value.as_ref() };
                     let max_value = unsafe { max_value.as_ref() };
 
-                    assert!(min_value.key <= max_value.key);
+                    assert!(min_value.key_ref() <= max_value.key_ref());
 
                     assert_eq!(
-                        &min_value.key,
+                        min_value.key_ref(),
                         unsafe { min_value_from_iter.as_key_value_ref() }.0
                     );
                     assert_eq!(
-                        &max_value.key,
+                        max_value.key_ref(),
                         unsafe { max_value_from_iter.as_key_value_ref() }.0
                     );
                 }
@@ -102,7 +102,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     let delete_result = unsafe { delete_unchecked(root, key.as_ref()) };
 
                     if let Some(delete_result) = delete_result {
-                        assert_eq!(delete_result.deleted_leaf.key, key);
+                        assert_eq!(delete_result.deleted_leaf.key_ref(), &key);
                         current_root = delete_result.new_root;
                     }
                 }

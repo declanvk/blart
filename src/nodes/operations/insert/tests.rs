@@ -33,18 +33,18 @@ fn insert_to_small_trees() {
             &search_unchecked(new_root.to_opaque(), [1, 2, 5, 6].as_ref())
                 .unwrap()
                 .read()
-                .value
+                .value_ref()
         },
-        "1256"
+        &"1256"
     );
     assert_eq!(
         unsafe {
             &search_unchecked(new_root.to_opaque(), [1, 2, 3, 4].as_ref())
                 .unwrap()
                 .read()
-                .value
+                .value_ref()
         },
-        "1234"
+        &"1234"
     );
     assert!(unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 5, 7].as_ref()).is_none() });
     assert!(unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 3, 5].as_ref()).is_none() });
@@ -75,7 +75,7 @@ fn insert_into_left_skewed_tree_deallocate() {
     for (value, key) in generate_keys_skewed(KEY_LENGTH_LIMIT).enumerate() {
         let search_result = unsafe { search_unchecked(current_root, &key) };
 
-        assert_eq!(search_result.unwrap().read().value, value);
+        assert_eq!(*search_result.unwrap().read().value_ref(), value);
     }
 
     unsafe { deallocate_tree(current_root) };
@@ -146,27 +146,27 @@ fn insert_key_with_long_prefix_then_split() {
             search_unchecked(tree, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255].as_ref())
                 .unwrap()
                 .read()
-                .value
+                .value_ref()
         },
-        0
+        &0
     );
     assert_eq!(
         unsafe {
             search_unchecked(tree, [1, 1, 1, 1, 1, 1, 1, 1, 1, 255].as_ref())
                 .unwrap()
                 .read()
-                .value
+                .value_ref()
         },
-        1
+        &1
     );
     assert_eq!(
         unsafe {
             search_unchecked(tree, [1, 1, 255].as_ref())
                 .unwrap()
                 .read()
-                .value
+                .value_ref()
         },
-        2
+        &2
     );
 
     unsafe { deallocate_tree(tree) }
@@ -196,7 +196,7 @@ fn insert_split_prefix_at_implicit_byte() {
     for (value, key) in KEYS.iter().map(|k| &k[..]).enumerate() {
         let search_result = unsafe { search_unchecked(current_root, key) };
 
-        assert_eq!(search_result.unwrap().read().value, value);
+        assert_eq!(search_result.unwrap().read().value_ref(), &value);
     }
 
     unsafe { deallocate_tree(current_root) };
@@ -271,7 +271,7 @@ fn insert_existing_key_overwrite() {
     let current_root = setup_tree_from_entries(entries_it);
 
     unsafe fn get_value<K, V: Copy>(n: NodePtr<LeafNode<K, V>>) -> V {
-        unsafe { n.as_ref().value }
+        unsafe { *n.as_ref().value_ref() }
     }
 
     assert_eq!(
@@ -302,7 +302,7 @@ fn insert_existing_key_overwrite() {
         .unwrap()
     };
     assert_eq!(insert_result.new_root, current_root);
-    assert_eq!(insert_result.existing_leaf.unwrap().value, 'D');
+    assert_eq!(insert_result.existing_leaf.unwrap().value_ref(), &'D');
 
     let insert_result = unsafe {
         insert_unchecked(
@@ -313,7 +313,7 @@ fn insert_existing_key_overwrite() {
         .unwrap()
     };
     assert_eq!(insert_result.new_root, current_root);
-    assert_eq!(insert_result.existing_leaf.unwrap().value, 'C');
+    assert_eq!(insert_result.existing_leaf.unwrap().value_ref(), &'C');
 
     let insert_result = unsafe {
         insert_unchecked(
@@ -324,7 +324,7 @@ fn insert_existing_key_overwrite() {
         .unwrap()
     };
     assert_eq!(insert_result.new_root, current_root);
-    assert_eq!(insert_result.existing_leaf.unwrap().value, 'B');
+    assert_eq!(insert_result.existing_leaf.unwrap().value_ref(), &'B');
 
     let insert_result = unsafe {
         insert_unchecked(
@@ -335,7 +335,7 @@ fn insert_existing_key_overwrite() {
         .unwrap()
     };
     assert_eq!(insert_result.new_root, current_root);
-    assert_eq!(insert_result.existing_leaf.unwrap().value, 'A');
+    assert_eq!(insert_result.existing_leaf.unwrap().value_ref(), &'A');
 
     assert_eq!(
         unsafe { get_value(search_unchecked(current_root, [1, 2, 3, 4, 5, 6].as_ref()).unwrap()) },

@@ -38,9 +38,9 @@ fn large_tree_same_length_keys_min_max() {
     assert_ne!(min_leaf, max_leaf);
     let min_leaf = min_leaf.read();
     let max_leaf = max_leaf.read();
-    assert!(min_leaf.key < max_leaf.key);
-    assert_eq!(min_leaf.key.as_ref(), &[u8::MIN, u8::MIN, u8::MIN]);
-    assert_eq!(max_leaf.key.as_ref(), &[u8::MAX, u8::MAX, u8::MAX]);
+    assert!(min_leaf.key_ref() < max_leaf.key_ref());
+    assert_eq!(min_leaf.key_ref().as_ref(), &[u8::MIN, u8::MIN, u8::MIN]);
+    assert_eq!(max_leaf.key_ref().as_ref(), &[u8::MAX, u8::MAX, u8::MAX]);
 
     unsafe { deallocate_tree(root) }
 }
@@ -61,9 +61,9 @@ fn skewed_tree_min_max() {
     assert_ne!(min_leaf, max_leaf);
     let min_leaf = min_leaf.read();
     let max_leaf = max_leaf.read();
-    assert!(min_leaf.key < max_leaf.key);
+    assert!(min_leaf.key_ref() < max_leaf.key_ref());
     assert_eq!(
-        min_leaf.key.as_ref(),
+        min_leaf.key_ref().as_ref(),
         &[
             u8::MIN,
             u8::MIN,
@@ -79,7 +79,7 @@ fn skewed_tree_min_max() {
             u8::MAX
         ]
     );
-    assert_eq!(max_leaf.key.as_ref(), &[u8::MAX]);
+    assert_eq!(max_leaf.key_ref().as_ref(), &[u8::MAX]);
 
     unsafe { deallocate_tree(root) }
 }

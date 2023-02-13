@@ -165,16 +165,16 @@ where
                 "{{<h0> {:p}}} | {{{:?}}} | {{{:?}}} | {{{:?}}}}}\"]",
                 t as *const _,
                 NodeType::Leaf,
-                t.key,
-                t.value
+                t.key_ref(),
+                t.value_ref()
             )?;
         } else {
             writeln!(
                 self.output,
                 "{{<h0> {:?}}} | {{{:?}}} | {{{:?}}}}}\"]",
                 NodeType::Leaf,
-                t.key,
-                t.value
+                t.key_ref(),
+                t.value_ref()
             )?;
         }
 

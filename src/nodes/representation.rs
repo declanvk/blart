@@ -465,7 +465,7 @@ impl<K, V> NodePtr<LeafNode<K, V>> {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
 
-        (&leaf.key, &leaf.value)
+        (leaf.key_ref(), leaf.value_ref())
     }
 
     /// Returns a unique mutable reference to the key and value of the pointed
@@ -481,7 +481,8 @@ impl<K, V> NodePtr<LeafNode<K, V>> {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_mut() };
 
-        (&mut leaf.key, &mut leaf.value)
+        let (key, value) = leaf.entry_mut();
+        (key, value)
     }
 
     /// Returns a unique mutable reference to the key and value of the pointed
@@ -500,7 +501,7 @@ impl<K, V> NodePtr<LeafNode<K, V>> {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
 
-        &leaf.key
+        leaf.key_ref()
     }
 
     /// Returns a unique mutable reference to the key and value of the pointed
@@ -520,7 +521,7 @@ impl<K, V> NodePtr<LeafNode<K, V>> {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
 
-        &leaf.value
+        leaf.value_ref()
     }
 
     /// Returns a unique mutable reference to the key and value of the pointed
@@ -540,7 +541,7 @@ impl<K, V> NodePtr<LeafNode<K, V>> {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_mut() };
 
-        &mut leaf.value
+        leaf.value_mut()
     }
 }
 
@@ -1631,17 +1632,67 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
 /// Node that contains a single leaf value.
 #[derive(Debug, Clone)]
 #[repr(align(8))]
-pub struct LeafNode<K, V> {
+pub struct LeafNode<K, V>(Box<LeafNodeInner<K, V>>);
+
+/// This type is the actual container for the key and value values.
+///
+/// The reason that there is a `Box` indirection between the `LeafNode` and the
+/// key and value is so that the alignment of either generic type (`K` or `V`)
+/// will not affect the overall alignment of the `LeafNode` type.
+///
+/// The alignment must remain a constant 8 because the pointer tagging
+/// operations we use between the `OpaqueNodePtr` and the `NodePtr` types
+/// require putting bits of information inside the unused bits of the pointer.
+/// If the alignment of the `LeafNode` is too small we can no longer guarantee
+/// that the bits can be moved in or out.
+///
+/// IDEA: Make the tagged pointer type use a fixed number of bits (via a const
+/// generic) and then check all `cast` calls so that the output type has
+/// sufficient number of bits to hold that amount.
+#[derive(Debug, Clone)]
+struct LeafNodeInner<K, V> {
     /// The leaf value.
-    pub value: V,
+    value: V,
     /// The full key that the `value` was stored with.
-    pub key: K,
+    key: K,
 }
 
 impl<K, V> LeafNode<K, V> {
     /// Create a new leaf node with the given value.
     pub fn new(key: K, value: V) -> Self {
-        LeafNode { value, key }
+        LeafNode(Box::new(LeafNodeInner { value, key }))
+    }
+
+    /// Returns a shared reference to the key contained by this leaf node
+    pub fn key_ref(&self) -> &K {
+        &self.0.key
+    }
+
+    /// Returns a shared reference to the value contained by this leaf node
+    pub fn value_ref(&self) -> &V {
+        &self.0.value
+    }
+
+    /// Returns a mutable reference to the value contained by this leaf node
+    pub fn value_mut(&mut self) -> &mut V {
+        &mut self.0.value
+    }
+
+    /// Return shared references to the key and value contained by this leaf
+    /// node
+    pub fn entry_ref(&self) -> (&K, &V) {
+        (&self.0.key, &self.0.value)
+    }
+
+    /// Return mutable references to the key and value contained by this leaf
+    /// node
+    pub fn entry_mut(&mut self) -> (&mut K, &mut V) {
+        (&mut self.0.key, &mut self.0.value)
+    }
+
+    /// Consume the leaf node and return a tuple of the key and value
+    pub fn into_entry(self) -> (K, V) {
+        (self.0.key, self.0.value)
     }
 
     /// Check that the provided full key is the same one as the stored key.
@@ -1650,7 +1701,7 @@ impl<K, V> LeafNode<K, V> {
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
     {
-        self.key.borrow().as_bytes().eq(possible_key.as_bytes())
+        self.0.key.borrow().as_bytes().eq(possible_key.as_bytes())
     }
 }
 

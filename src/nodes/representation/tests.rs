@@ -4,6 +4,45 @@ use std::mem;
 #[cfg(not(feature = "nightly"))]
 use sptr::Strict;
 
+// To fix this test we need to make the alignment of the `LeafNode` type
+// invariant to the alignment of the key (`K`) and value (`V`) types it
+// contains.
+//
+// Unfortunately the likely method for this seems to be allocating the key and
+// value to be in a separate location leaf node :(
+#[test]
+fn leaf_node_alignment() {
+    let mut p0 = TaggedPointer::new(Box::into_raw(Box::new(LeafNode::<[u8; 0], _>::new(
+        [],
+        0u8,
+    ))))
+    .unwrap()
+    .cast::<OpaqueValue>()
+    .unwrap();
+    p0.set_data(<LeafNode<[u8; 0], u8> as Node>::TYPE as usize);
+
+    #[repr(align(64))]
+    struct LargeAlignment;
+
+    let mut p1 = TaggedPointer::new(Box::into_raw(Box::new(LeafNode::new(LargeAlignment, 0u8))))
+        .unwrap()
+        .cast::<OpaqueValue>()
+        .unwrap();
+    p1.set_data(<LeafNode<LargeAlignment, u8> as Node>::TYPE as usize);
+
+    let mut p2 = TaggedPointer::new(Box::into_raw(Box::new(LeafNode::new(0u8, LargeAlignment))))
+        .unwrap()
+        .cast::<OpaqueValue>()
+        .unwrap();
+    p2.set_data(<LeafNode<u8, LargeAlignment> as Node>::TYPE as usize);
+
+    unsafe {
+        drop(Box::from_raw(p0.to_ptr()));
+        drop(Box::from_raw(p1.to_ptr()));
+        drop(Box::from_raw(p2.to_ptr()));
+    }
+}
+
 #[test]
 fn opaque_node_ptr_is_correct() {
     let mut n4 = InnerNode4::<Box<[u8]>, usize>::empty();

@@ -50,7 +50,7 @@ where
             // function, and the node will not be read or written via any other source
             // because of the safety requirements on `insert_unchecked`.
             let inner_node = unsafe { inner_node_ptr.as_mut() };
-            let new_leaf_key_byte = new_leaf_node.key.as_bytes()[key_bytes_used];
+            let new_leaf_key_byte = new_leaf_node.key_ref().as_bytes()[key_bytes_used];
             let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node).to_opaque();
             if inner_node.is_full() {
                 // we will create a new node of the next larger type and copy all the
@@ -206,7 +206,7 @@ where
             }
 
             let mut new_n4 = InnerNode4::empty();
-            let prefix_size = leaf_node.key.as_bytes()[key_bytes_used..]
+            let prefix_size = leaf_node.key_ref().as_bytes()[key_bytes_used..]
                 .iter()
                 .zip(key.as_bytes()[key_bytes_used..].iter())
                 .take_while(|(k1, k2)| k1 == k2)
@@ -217,7 +217,7 @@ where
             key_bytes_used += prefix_size;
 
             if key_bytes_used >= key.as_bytes().len()
-                || key_bytes_used >= leaf_node.key.as_bytes().len()
+                || key_bytes_used >= leaf_node.key_ref().as_bytes().len()
             {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key OR an existing key is a prefix of it
@@ -231,7 +231,7 @@ where
             let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
 
             new_n4.write_child(
-                leaf_node.key.as_bytes()[key_bytes_used],
+                leaf_node.key_ref().as_bytes()[key_bytes_used],
                 leaf_node_ptr.to_opaque(),
             );
             new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());

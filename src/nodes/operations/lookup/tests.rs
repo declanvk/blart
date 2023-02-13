@@ -28,8 +28,8 @@ fn lookup_on_non_copy_leaf() {
         let l1_search = search_unchecked(root, [1, 2, 3].as_ref()).unwrap();
         let l2_search = search_unchecked(root, [1, 2, 4].as_ref()).unwrap();
 
-        assert_eq!(l1_search.read().value, "Hello world my name is");
-        assert_eq!(l2_search.read().value, "geregog");
+        assert_eq!(l1_search.read().value_ref(), "Hello world my name is");
+        assert_eq!(l2_search.read().value_ref(), "geregog");
     }
 }
 
@@ -45,8 +45,8 @@ fn lookup_on_leaf() {
             search_unchecked(leaf_ptr, [1, 2, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123
+                .value_ref(),
+            &123
         );
         assert!(search_unchecked(leaf_ptr, [0, 0, 0].as_ref()).is_none())
     }
@@ -83,29 +83,29 @@ fn lookup_on_full_node4() {
             search_unchecked(root, [1, 2, 1].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            121
+                .value_ref(),
+            &121
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 2].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            122
+                .value_ref(),
+            &122
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123
+                .value_ref(),
+            &123
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124
+                .value_ref(),
+            &124
         );
 
         assert!(search_unchecked(root, [].as_ref()).is_none());
@@ -176,29 +176,29 @@ fn lookup_on_node16() {
             search_unchecked(root, [1, 2, 1].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            121
+                .value_ref(),
+            &121
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 2].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            122
+                .value_ref(),
+            &122
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123
+                .value_ref(),
+            &123
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124
+                .value_ref(),
+            &124
         );
 
         assert!(search_unchecked(root, [].as_ref()).is_none());
@@ -239,29 +239,29 @@ fn lookup_on_node48() {
             search_unchecked(root, [1, 2, 1].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            121
+                .value_ref(),
+            &121
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 2].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            122
+                .value_ref(),
+            &122
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123
+                .value_ref(),
+            &123
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124
+                .value_ref(),
+            &124
         );
 
         assert!(search_unchecked(root, [].as_ref()).is_none());
@@ -302,29 +302,29 @@ fn lookup_on_node256() {
             search_unchecked(root, [1, 2, 1].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            121
+                .value_ref(),
+            &121
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 2].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            122
+                .value_ref(),
+            &122
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123
+                .value_ref(),
+            &123
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124
+                .value_ref(),
+            &124
         );
 
         assert!(search_unchecked(root, [].as_ref()).is_none());
@@ -405,29 +405,29 @@ fn lookup_on_n16_n4_layer_tree() {
             search_unchecked(root, [1, 2, 3, 5, 6, 1].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123561
+                .value_ref(),
+            &123561
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 3, 5, 6, 2].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123562
+                .value_ref(),
+            &123562
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4, 7, 8, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124783
+                .value_ref(),
+            &124783
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4, 7, 8, 4].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124784
+                .value_ref(),
+            &124784
         );
 
         assert!(search_unchecked(root, [1, 2, 3].as_ref()).is_none());
@@ -488,29 +488,29 @@ fn lookup_on_n48_n4_layer_tree() {
             search_unchecked(root, [1, 2, 3, 5, 6, 1].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123561
+                .value_ref(),
+            &123561
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 3, 5, 6, 2].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123562
+                .value_ref(),
+            &123562
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4, 7, 8, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124783
+                .value_ref(),
+            &124783
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4, 7, 8, 4].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124784
+                .value_ref(),
+            &124784
         );
 
         assert!(search_unchecked(root, [1, 2, 3].as_ref()).is_none());
@@ -571,29 +571,29 @@ fn lookup_on_n256_n4_layer_tree() {
             search_unchecked(root, [1, 2, 3, 5, 6, 1].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123561
+                .value_ref(),
+            &123561
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 3, 5, 6, 2].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123562
+                .value_ref(),
+            &123562
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4, 7, 8, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124783
+                .value_ref(),
+            &124783
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4, 7, 8, 4].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124784
+                .value_ref(),
+            &124784
         );
 
         assert!(search_unchecked(root, [1, 2, 3].as_ref()).is_none());
@@ -654,29 +654,29 @@ fn lookup_on_n4_n4_layer_tree() {
             search_unchecked(root, [1, 2, 3, 5, 6, 1].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123561
+                .value_ref(),
+            &123561
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 3, 5, 6, 2].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            123562
+                .value_ref(),
+            &123562
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4, 7, 8, 3].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124783
+                .value_ref(),
+            &124783
         );
         assert_eq!(
             search_unchecked(root, [1, 2, 4, 7, 8, 4].as_ref())
                 .unwrap()
                 .read()
-                .value,
-            124784
+                .value_ref(),
+            &124784
         );
 
         assert!(search_unchecked(root, [1, 2, 3].as_ref()).is_none());
