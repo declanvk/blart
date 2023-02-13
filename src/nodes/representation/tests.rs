@@ -4,42 +4,46 @@ use std::mem;
 #[cfg(not(feature = "nightly"))]
 use sptr::Strict;
 
-// To fix this test we need to make the alignment of the `LeafNode` type
-// invariant to the alignment of the key (`K`) and value (`V`) types it
-// contains.
-//
-// Unfortunately the likely method for this seems to be allocating the key and
-// value to be in a separate location leaf node :(
+// This test is important because it verifies that we can transform a tagged
+// pointer to a type with large and small alignment and back without issues.
 #[test]
 fn leaf_node_alignment() {
-    let mut p0 = TaggedPointer::new(Box::into_raw(Box::new(LeafNode::<[u8; 0], _>::new(
-        [],
-        0u8,
-    ))))
+    let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _>, 3>::new(Box::into_raw(Box::new(
+        LeafNode::new([], 3u8),
+    )))
     .unwrap()
-    .cast::<OpaqueValue>()
-    .unwrap();
-    p0.set_data(<LeafNode<[u8; 0], u8> as Node>::TYPE as usize);
+    .cast::<OpaqueValue>();
+    p0.set_data(0b001);
 
     #[repr(align(64))]
     struct LargeAlignment;
 
-    let mut p1 = TaggedPointer::new(Box::into_raw(Box::new(LeafNode::new(LargeAlignment, 0u8))))
-        .unwrap()
-        .cast::<OpaqueValue>()
-        .unwrap();
-    p1.set_data(<LeafNode<LargeAlignment, u8> as Node>::TYPE as usize);
+    let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _>, 3>::new(Box::into_raw(Box::new(
+        LeafNode::new(LargeAlignment, 2u16),
+    )))
+    .unwrap()
+    .cast::<OpaqueValue>();
+    p1.set_data(0b011);
 
-    let mut p2 = TaggedPointer::new(Box::into_raw(Box::new(LeafNode::new(0u8, LargeAlignment))))
-        .unwrap()
-        .cast::<OpaqueValue>()
-        .unwrap();
-    p2.set_data(<LeafNode<u8, LargeAlignment> as Node>::TYPE as usize);
+    let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment>, 3>::new(Box::into_raw(Box::new(
+        LeafNode::new(1u64, LargeAlignment),
+    )))
+    .unwrap()
+    .cast::<OpaqueValue>();
+    p2.set_data(0b111);
 
     unsafe {
-        drop(Box::from_raw(p0.to_ptr()));
-        drop(Box::from_raw(p1.to_ptr()));
-        drop(Box::from_raw(p2.to_ptr()));
+        // These tests apparently leak memory in Miri's POV unless we explicitly cast
+        // them back to the original type when we deallocate. The `.cast` calls
+        // are required, even though the tests pass under normal execution otherwise (I
+        // guess normal test execution doesn't care about leaked memory?)
+        drop(Box::from_raw(p0.cast::<LeafNode<[u8; 0], u8>>().to_ptr()));
+        drop(Box::from_raw(
+            p1.cast::<LeafNode<LargeAlignment, u16>>().to_ptr(),
+        ));
+        drop(Box::from_raw(
+            p2.cast::<LeafNode<u64, LargeAlignment>>().to_ptr(),
+        ));
     }
 }
 

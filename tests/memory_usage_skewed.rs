@@ -45,8 +45,8 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_blocks, 0);
         dhat::assert_eq!(stats.curr_bytes, 0);
 
-        dhat::assert_eq!(stats.max_blocks, 766);
-        dhat::assert_eq!(stats.max_bytes, 29242);
+        dhat::assert_eq!(stats.max_blocks, 511);
+        dhat::assert_eq!(stats.max_bytes, 27202);
 
         let mean_blocks_per_key = (stats.max_blocks as f64) / (KEY_LENGTH_LIMIT as f64);
         let mean_bytes_per_key = (stats.max_bytes as f64) / (KEY_LENGTH_LIMIT as f64);

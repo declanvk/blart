@@ -176,6 +176,9 @@ impl Header {
     }
 }
 
+/// A placeholder type that has the required amount of alignment.
+///
+/// An alignment of 8 gives us 3 unused bits in any pointer to this type.
 #[derive(Debug)]
 #[repr(align(8))]
 struct OpaqueValue;
@@ -185,7 +188,7 @@ struct OpaqueValue;
 /// Could be any one of the NodeTypes, need to perform check on the runtime type
 /// and then cast to a [`NodePtr`].
 #[repr(transparent)]
-pub struct OpaqueNodePtr<K, V>(TaggedPointer<OpaqueValue>, PhantomData<(K, V)>);
+pub struct OpaqueNodePtr<K, V>(TaggedPointer<OpaqueValue, 3>, PhantomData<(K, V)>);
 
 impl<K, V> Copy for OpaqueNodePtr<K, V> {}
 
@@ -228,7 +231,7 @@ impl<K, V> OpaqueNodePtr<K, V> {
     where
         N: Node<Value = V>,
     {
-        let mut tagged_ptr = TaggedPointer::from(pointer).cast::<OpaqueValue>().unwrap();
+        let mut tagged_ptr = TaggedPointer::from(pointer).cast::<OpaqueValue>();
         tagged_ptr.set_data(N::TYPE as usize);
 
         OpaqueNodePtr(tagged_ptr, PhantomData)
@@ -245,7 +248,7 @@ impl<K, V> OpaqueNodePtr<K, V> {
     /// node type.
     pub fn cast<N: Node>(self) -> Option<NodePtr<N>> {
         if self.is::<N>() {
-            Some(NodePtr(self.0.cast::<N>().unwrap().into()))
+            Some(NodePtr(self.0.cast::<N>().into()))
         } else {
             None
         }
@@ -256,19 +259,19 @@ impl<K, V> OpaqueNodePtr<K, V> {
     pub fn to_node_ptr(self) -> ConcreteNodePtr<K, V> {
         match self.node_type() {
             NodeType::Node4 => {
-                ConcreteNodePtr::Node4(NodePtr(self.0.cast::<InnerNode4<K, V>>().unwrap().into()))
+                ConcreteNodePtr::Node4(NodePtr(self.0.cast::<InnerNode4<K, V>>().into()))
             },
             NodeType::Node16 => {
-                ConcreteNodePtr::Node16(NodePtr(self.0.cast::<InnerNode16<K, V>>().unwrap().into()))
+                ConcreteNodePtr::Node16(NodePtr(self.0.cast::<InnerNode16<K, V>>().into()))
             },
             NodeType::Node48 => {
-                ConcreteNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<K, V>>().unwrap().into()))
+                ConcreteNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<K, V>>().into()))
             },
-            NodeType::Node256 => ConcreteNodePtr::Node256(NodePtr(
-                self.0.cast::<InnerNode256<K, V>>().unwrap().into(),
-            )),
+            NodeType::Node256 => {
+                ConcreteNodePtr::Node256(NodePtr(self.0.cast::<InnerNode256<K, V>>().into()))
+            },
             NodeType::Leaf => {
-                ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<K, V>>().unwrap().into()))
+                ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<K, V>>().into()))
             },
         }
     }
@@ -292,22 +295,22 @@ impl<K, V> OpaqueNodePtr<K, V> {
     pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header> {
         let header_ptr = match self.node_type() {
             NodeType::Node4 => {
-                let node_ptr = self.0.cast::<InnerNode4<K, V>>().unwrap().to_ptr();
+                let node_ptr = self.0.cast::<InnerNode4<K, V>>().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
             NodeType::Node16 => {
-                let node_ptr = self.0.cast::<InnerNode16<K, V>>().unwrap().to_ptr();
+                let node_ptr = self.0.cast::<InnerNode16<K, V>>().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
             NodeType::Node48 => {
-                let node_ptr = self.0.cast::<InnerNode48<K, V>>().unwrap().to_ptr();
+                let node_ptr = self.0.cast::<InnerNode48<K, V>>().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
             NodeType::Node256 => {
-                let node_ptr = self.0.cast::<InnerNode256<K, V>>().unwrap().to_ptr();
+                let node_ptr = self.0.cast::<InnerNode256<K, V>>().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
@@ -1634,25 +1637,7 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
 /// Node that contains a single leaf value.
 #[derive(Debug, Clone)]
 #[repr(align(8))]
-pub struct LeafNode<K, V>(Box<LeafNodeInner<K, V>>);
-
-/// This type is the actual container for the key and value values.
-///
-/// The reason that there is a `Box` indirection between the `LeafNode` and the
-/// key and value is so that the alignment of either generic type (`K` or `V`)
-/// will not affect the overall alignment of the `LeafNode` type.
-///
-/// The alignment must remain a constant 8 because the pointer tagging
-/// operations we use between the `OpaqueNodePtr` and the `NodePtr` types
-/// require putting bits of information inside the unused bits of the pointer.
-/// If the alignment of the `LeafNode` is too small we can no longer guarantee
-/// that the bits can be moved in or out.
-///
-/// IDEA: Make the tagged pointer type use a fixed number of bits (via a const
-/// generic) and then check all `cast` calls so that the output type has
-/// sufficient number of bits to hold that amount.
-#[derive(Debug, Clone)]
-struct LeafNodeInner<K, V> {
+pub struct LeafNode<K, V> {
     /// The leaf value.
     value: V,
     /// The full key that the `value` was stored with.
@@ -1662,39 +1647,39 @@ struct LeafNodeInner<K, V> {
 impl<K, V> LeafNode<K, V> {
     /// Create a new leaf node with the given value.
     pub fn new(key: K, value: V) -> Self {
-        LeafNode(Box::new(LeafNodeInner { value, key }))
+        LeafNode { value, key }
     }
 
     /// Returns a shared reference to the key contained by this leaf node
     pub fn key_ref(&self) -> &K {
-        &self.0.key
+        &self.key
     }
 
     /// Returns a shared reference to the value contained by this leaf node
     pub fn value_ref(&self) -> &V {
-        &self.0.value
+        &self.value
     }
 
     /// Returns a mutable reference to the value contained by this leaf node
     pub fn value_mut(&mut self) -> &mut V {
-        &mut self.0.value
+        &mut self.value
     }
 
     /// Return shared references to the key and value contained by this leaf
     /// node
     pub fn entry_ref(&self) -> (&K, &V) {
-        (&self.0.key, &self.0.value)
+        (&self.key, &self.value)
     }
 
     /// Return mutable references to the key and value contained by this leaf
     /// node
     pub fn entry_mut(&mut self) -> (&mut K, &mut V) {
-        (&mut self.0.key, &mut self.0.value)
+        (&mut self.key, &mut self.value)
     }
 
     /// Consume the leaf node and return a tuple of the key and value
     pub fn into_entry(self) -> (K, V) {
-        (self.0.key, self.0.value)
+        (self.key, self.value)
     }
 
     /// Check that the provided full key is the same one as the stored key.
@@ -1703,7 +1688,7 @@ impl<K, V> LeafNode<K, V> {
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
     {
-        self.0.key.borrow().as_bytes().eq(possible_key.as_bytes())
+        self.key.borrow().as_bytes().eq(possible_key.as_bytes())
     }
 }
 

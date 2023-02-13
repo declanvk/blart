@@ -14,23 +14,118 @@ use std::{fmt, mem::align_of, ptr::NonNull};
 use sptr::Strict;
 
 /// A non-null pointer type which carries several bits of metadata.
+///
+/// The `MIN_BITS` constant is used to ensure that any type that is used with
+/// this pointer will have sufficient alignment to carry the specified number of
+/// bits. As a result, we can cast safely because we know that the
+/// const-evaluation process & type-checking will ensure that the number of bits
+/// is sufficient.
+///
+/// # Examples
+///
+/// Here is an example of successfully tagging a pointer and retrieving the
+/// data:
+///
+/// ```rust
+/// use blart::tagged_pointer::TaggedPointer;
+///
+/// let pointee = "Hello world!";
+/// let pointer = Box::into_raw(Box::new(pointee));
+/// let tag_data = 0b101usize;
+///
+/// let mut tagged_pointer = TaggedPointer::<&str, 3>::new_with_data(pointer, tag_data).unwrap();
+///
+/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
+/// assert_eq!(tagged_pointer.to_data(), 0b101);
+///
+/// tagged_pointer.set_data(0b010);
+///
+/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
+/// assert_eq!(tagged_pointer.to_data(), 0b010);
+///
+/// // Collecting the data into `Box` to safely drop it
+/// unsafe {
+///     drop(Box::from_raw(tagged_pointer.to_ptr()));
+/// }
+/// ```
+///
+/// Here is an example of tagging a pointer, then casting it to a different type
+/// and retrieving the same data:
+///
+/// ```rust
+/// use blart::tagged_pointer::TaggedPointer;
+///
+/// let pointee = u64::MAX;
+/// let pointer = Box::into_raw(Box::new(pointee));
+/// let tag_data = 0b010usize;
+///
+/// let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, tag_data).unwrap();
+///
+/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);
+/// assert_eq!(tagged_pointer.to_data(), 0b010);
+///
+/// tagged_pointer.set_data(0b101);
+///
+/// let new_tagged_pointer = tagged_pointer.cast::<i64>();
+///
+/// assert_eq!(unsafe { *new_tagged_pointer.to_ptr() }, -1);
+/// assert_eq!(new_tagged_pointer.to_data(), 0b101);
+///
+/// unsafe {
+///     drop(Box::from_raw(tagged_pointer.to_ptr()));
+/// }
+/// ```
+#[cfg_attr(
+    not(miri),
+    doc = "",
+    doc = "Here is an example of a cast that fails to compile because the result type",
+    doc = "has insufficient alignment:",
+    doc = "",
+    doc = "```rust,compile_fail",
+    doc = "use blart::tagged_pointer::TaggedPointer;",
+    doc = "",
+    doc = "let pointee = u64::MAX;",
+    doc = "let pointer = Box::into_raw(Box::new(pointee));",
+    doc = "let tag_data = 0b010usize;",
+    doc = "",
+    doc = "let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, \
+           tag_data).unwrap();",
+    doc = "",
+    doc = "assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);",
+    doc = "assert_eq!(tagged_pointer.to_data(), 0b010);",
+    doc = "",
+    doc = "tagged_pointer.set_data(0b101);",
+    doc = "",
+    doc = "// This cast to `i32` causes the compilation failure",
+    doc = "let new_tagged_pointer = tagged_pointer.cast::<i32>();",
+    doc = "```"
+)]
 #[repr(transparent)]
-pub struct TaggedPointer<P>(NonNull<P>);
+pub struct TaggedPointer<P, const MIN_BITS: u32>(NonNull<P>);
 
-impl<P> TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// The ABI-required minimum alignment of the `P` type.
     ///
     /// The maximum alignment of a rust type is 2^29 according to the
     /// [reference][align-reference]. On 32-bit and 64-bit platforms that means
-    /// that it is impossible for the POINTER_MASK to be zero, there must be at
-    /// least 3 bit present.
+    /// that it is impossible for the `POINTER_MASK` to be zero, there must be
+    /// at least 3 bit present.
     ///
     /// [align-reference]: https://doc.rust-lang.org/reference/type-layout.html#the-alignment-modifiers
     pub const ALIGNMENT: usize = align_of::<P>();
     /// A mask for data-carrying bits of the pointer.
     pub const DATA_MASK: usize = !Self::POINTER_MASK;
     /// Number of available bits of storage in the pointer.
-    pub const NUM_BITS: u32 = Self::ALIGNMENT.trailing_zeros();
+    pub const NUM_BITS: u32 = {
+        let num_bits = Self::ALIGNMENT.trailing_zeros();
+
+        assert!(
+            num_bits >= MIN_BITS,
+            "need the alignment of the pointed to type to have sufficient bits"
+        );
+
+        num_bits
+    };
     /// A mask for the non-data-carrying bits of the pointer.
     pub const POINTER_MASK: usize = usize::MAX << Self::NUM_BITS;
 
@@ -47,7 +142,7 @@ impl<P> TaggedPointer<P> {
     // The API can take a raw pointer here because it does not derefence the pointer in the body of
     // the function.
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn new(pointer: *mut P) -> Option<TaggedPointer<P>> {
+    pub fn new(pointer: *mut P) -> Option<TaggedPointer<P, MIN_BITS>> {
         if pointer.is_null() {
             return None;
         }
@@ -67,7 +162,7 @@ impl<P> TaggedPointer<P> {
     /// # Safety
     ///
     ///  - The `pointer` value must not be null.
-    pub unsafe fn new_unchecked(pointer: *mut P) -> TaggedPointer<P> {
+    pub unsafe fn new_unchecked(pointer: *mut P) -> TaggedPointer<P, MIN_BITS> {
         // SAFETY: The non-zero safety requirement is defered to the caller of this
         // function, who must provide a non-null (non-zero) pointer. This
         // assumes that null is always a zero value.
@@ -96,7 +191,7 @@ impl<P> TaggedPointer<P> {
     ///
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
-    pub fn new_with_data(pointer: *mut P, data: usize) -> Option<TaggedPointer<P>> {
+    pub fn new_with_data(pointer: *mut P, data: usize) -> Option<TaggedPointer<P, MIN_BITS>> {
         let mut tagged_ptr = TaggedPointer::new(pointer)?;
         tagged_ptr.set_data(data);
         Some(tagged_ptr)
@@ -156,16 +251,7 @@ impl<P> TaggedPointer<P> {
     ///  - This function will error if the alignment of the new type does not
     ///    equal the alignment of the existing type. This is because the number
     ///    of data-carrying bits could be different.
-    pub fn cast<Q>(self) -> Result<TaggedPointer<Q>, AlignmentCastError> {
-        // TODO: Consider allowing casts from smaller to larger alignment, as the number
-        // of data-bits could expand.
-        if Self::NUM_BITS != TaggedPointer::<Q>::NUM_BITS {
-            return Err(AlignmentCastError {
-                input_alignment: Self::ALIGNMENT,
-                output_alignment: TaggedPointer::<Q>::ALIGNMENT,
-            });
-        }
-
+    pub fn cast<Q>(self) -> TaggedPointer<Q, MIN_BITS> {
         let data = self.to_data();
         let raw_ptr = self.to_ptr();
         let cast_raw_ptr = raw_ptr.cast::<Q>();
@@ -176,11 +262,11 @@ impl<P> TaggedPointer<P> {
 
         new_tagged.set_data(data);
 
-        Ok(new_tagged)
+        new_tagged
     }
 }
 
-impl<P> From<NonNull<P>> for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> From<NonNull<P>> for TaggedPointer<P, MIN_BITS> {
     fn from(pointer: NonNull<P>) -> Self {
         // SAFETY: The pointer produced from the `NonNull::as_ptr` function is
         // guaranteed to be non-null.
@@ -188,15 +274,15 @@ impl<P> From<NonNull<P>> for TaggedPointer<P> {
     }
 }
 
-impl<P> From<TaggedPointer<P>> for NonNull<P> {
-    fn from(pointer: TaggedPointer<P>) -> Self {
+impl<P, const MIN_BITS: u32> From<TaggedPointer<P, MIN_BITS>> for NonNull<P> {
+    fn from(pointer: TaggedPointer<P, MIN_BITS>) -> Self {
         // SAFETY: The pointer produced by the `TaggedPointer::to_ptr` is guaranteed to
         // be non-null.
         unsafe { NonNull::new_unchecked(pointer.to_ptr()) }
     }
 }
 
-impl<P> From<&mut P> for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> From<&mut P> for TaggedPointer<P, MIN_BITS> {
     fn from(reference: &mut P) -> Self {
         // Safety: The pointer is guaranteed to be non-null because it is derived from a
         // reference.
@@ -207,41 +293,41 @@ impl<P> From<&mut P> for TaggedPointer<P> {
     }
 }
 
-impl<P> std::hash::Hash for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> std::hash::Hash for TaggedPointer<P, MIN_BITS> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
 
-impl<P> Ord for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> Ord for TaggedPointer<P, MIN_BITS> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.0.cmp(&other.0)
     }
 }
 
-impl<P> PartialOrd for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> PartialOrd for TaggedPointer<P, MIN_BITS> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.0.partial_cmp(&other.0)
     }
 }
 
-impl<P> Eq for TaggedPointer<P> {}
+impl<P, const MIN_BITS: u32> Eq for TaggedPointer<P, MIN_BITS> {}
 
-impl<P> PartialEq for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> PartialEq for TaggedPointer<P, MIN_BITS> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl<P> Clone for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> Clone for TaggedPointer<P, MIN_BITS> {
     fn clone(&self) -> Self {
         Self(self.0)
     }
 }
 
-impl<P> Copy for TaggedPointer<P> {}
+impl<P, const MIN_BITS: u32> Copy for TaggedPointer<P, MIN_BITS> {}
 
-impl<P> fmt::Debug for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> fmt::Debug for TaggedPointer<P, MIN_BITS> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TaggedPointer")
             .field("pointer", &self.to_ptr())
@@ -250,7 +336,7 @@ impl<P> fmt::Debug for TaggedPointer<P> {
     }
 }
 
-impl<P> fmt::Pointer for TaggedPointer<P> {
+impl<P, const MIN_BITS: u32> fmt::Pointer for TaggedPointer<P, MIN_BITS> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.to_ptr(), f)
     }
@@ -288,7 +374,7 @@ mod tests {
     fn create_pointer_set_and_retrieve_data() {
         let raw_pointer = Box::into_raw(Box::new(10));
 
-        let mut p = TaggedPointer::new(raw_pointer).unwrap();
+        let mut p = TaggedPointer::<_, 2>::new(raw_pointer).unwrap();
         assert_eq!(p.to_data(), 0);
 
         p.set_data(1);
@@ -306,7 +392,7 @@ mod tests {
     fn create_pointer_with_data_and_retrieve_data() {
         let raw_pointer = Box::into_raw(Box::new(30));
 
-        let mut p = TaggedPointer::new_with_data(raw_pointer, 3).unwrap();
+        let mut p = TaggedPointer::<_, 2>::new_with_data(raw_pointer, 3).unwrap();
         assert_eq!(p.to_data(), 3);
         assert_eq!(unsafe { *p.to_ptr() }, 30);
 
@@ -317,45 +403,54 @@ mod tests {
         unsafe { Box::from_raw(p.to_ptr()) };
     }
 
-    fn set_data_beyond_capacity<P>(mut val: P, too_large_data: usize) {
-        let raw_ptr = &mut val as *mut _;
-        let mut p = TaggedPointer::new(raw_ptr).unwrap();
-
-        p.set_data(too_large_data);
-    }
-
     #[test]
     #[should_panic]
     fn set_data_beyond_capacity_u8() {
-        set_data_beyond_capacity(0u8, 0b1);
+        let mut val = 0u8;
+        let raw_ptr = &mut val as *mut _;
+        let mut p = TaggedPointer::<_, 0>::new(raw_ptr).unwrap();
+
+        p.set_data(0b1);
     }
 
     #[test]
     #[should_panic]
     fn set_data_beyond_capacity_u16() {
-        set_data_beyond_capacity(0u16, 0b11);
+        let mut val = 0u16;
+        let raw_ptr = &mut val as *mut _;
+        let mut p = TaggedPointer::<_, 1>::new(raw_ptr).unwrap();
+
+        p.set_data(0b11);
     }
 
     #[test]
     #[should_panic]
     fn set_data_beyond_capacity_u32() {
-        set_data_beyond_capacity(0u32, 0b111);
+        let mut val = 0u32;
+        let raw_ptr = &mut val as *mut _;
+        let mut p = TaggedPointer::<_, 2>::new(raw_ptr).unwrap();
+
+        p.set_data(0b111);
     }
 
     #[test]
     #[should_panic]
     fn set_data_beyond_capacity_u64() {
-        set_data_beyond_capacity(0u64, 0b1111);
+        let mut val = 0u64;
+        let raw_ptr = &mut val as *mut _;
+        let mut p = TaggedPointer::<_, 3>::new(raw_ptr).unwrap();
+
+        p.set_data(0b1111);
     }
 
     #[test]
     fn set_data_different_alignments() {
-        let mut p0 = TaggedPointer::new(Box::into_raw(Box::<[u8; 0]>::new([]))).unwrap();
-        let mut p1 = TaggedPointer::new(Box::into_raw(Box::new(false))).unwrap();
-        let mut p2 = TaggedPointer::new(Box::into_raw(Box::new(2u8))).unwrap();
-        let mut p3 = TaggedPointer::new(Box::into_raw(Box::new(3u16))).unwrap();
-        let mut p4 = TaggedPointer::new(Box::into_raw(Box::new(4u32))).unwrap();
-        let mut p5 = TaggedPointer::new(Box::into_raw(Box::new(5u64))).unwrap();
+        let mut p0 = TaggedPointer::<_, 0>::new(Box::into_raw(Box::<[u8; 0]>::new([]))).unwrap();
+        let mut p1 = TaggedPointer::<_, 0>::new(Box::into_raw(Box::new(false))).unwrap();
+        let mut p2 = TaggedPointer::<_, 0>::new(Box::into_raw(Box::new(2u8))).unwrap();
+        let mut p3 = TaggedPointer::<_, 1>::new(Box::into_raw(Box::new(3u16))).unwrap();
+        let mut p4 = TaggedPointer::<_, 2>::new(Box::into_raw(Box::new(4u32))).unwrap();
+        let mut p5 = TaggedPointer::<_, 3>::new(Box::into_raw(Box::new(5u64))).unwrap();
 
         assert_eq!(p0.to_data(), 0);
         assert_eq!(unsafe { *p0.to_ptr() }.len(), 0);
@@ -405,38 +500,38 @@ mod tests {
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn test_alignment_bits_and_mask_values() {
-        assert_eq!(TaggedPointer::<()>::ALIGNMENT, 1);
-        assert_eq!(TaggedPointer::<()>::NUM_BITS, 0);
+        assert_eq!(TaggedPointer::<(), 0>::ALIGNMENT, 1);
+        assert_eq!(TaggedPointer::<(), 0>::NUM_BITS, 0);
         assert_eq!(
-            TaggedPointer::<()>::POINTER_MASK,
+            TaggedPointer::<(), 0>::POINTER_MASK,
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_usize
         );
 
-        assert_eq!(TaggedPointer::<u8>::ALIGNMENT, 1);
-        assert_eq!(TaggedPointer::<u8>::NUM_BITS, 0);
+        assert_eq!(TaggedPointer::<u8, 0>::ALIGNMENT, 1);
+        assert_eq!(TaggedPointer::<u8, 0>::NUM_BITS, 0);
         assert_eq!(
-            TaggedPointer::<u8>::POINTER_MASK,
+            TaggedPointer::<u8, 0>::POINTER_MASK,
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_usize
         );
 
-        assert_eq!(TaggedPointer::<u16>::ALIGNMENT, 2);
-        assert_eq!(TaggedPointer::<u16>::NUM_BITS, 1);
+        assert_eq!(TaggedPointer::<u16, 1>::ALIGNMENT, 2);
+        assert_eq!(TaggedPointer::<u16, 1>::NUM_BITS, 1);
         assert_eq!(
-            TaggedPointer::<u16>::POINTER_MASK,
+            TaggedPointer::<u16, 1>::POINTER_MASK,
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1110_usize
         );
 
-        assert_eq!(TaggedPointer::<u32>::ALIGNMENT, 4);
-        assert_eq!(TaggedPointer::<u32>::NUM_BITS, 2);
+        assert_eq!(TaggedPointer::<u32, 2>::ALIGNMENT, 4);
+        assert_eq!(TaggedPointer::<u32, 2>::NUM_BITS, 2);
         assert_eq!(
-            TaggedPointer::<u32>::POINTER_MASK,
+            TaggedPointer::<u32, 2>::POINTER_MASK,
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1100_usize
         );
 
-        assert_eq!(TaggedPointer::<u64>::ALIGNMENT, 8);
-        assert_eq!(TaggedPointer::<u64>::NUM_BITS, 3);
+        assert_eq!(TaggedPointer::<u64, 3>::ALIGNMENT, 8);
+        assert_eq!(TaggedPointer::<u64, 3>::NUM_BITS, 3);
         assert_eq!(
-            TaggedPointer::<u64>::POINTER_MASK,
+            TaggedPointer::<u64, 3>::POINTER_MASK,
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
         );
 
@@ -444,28 +539,28 @@ mod tests {
         // https://github.com/rust-lang/rust/issues/54341
         if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
             assert_eq!(
-                TaggedPointer::<u128>::ALIGNMENT,
+                TaggedPointer::<u128, 3>::ALIGNMENT,
                 8,
                 "Target architecture [{}]",
                 std::env::consts::ARCH
             );
-            assert_eq!(TaggedPointer::<u128>::NUM_BITS, 3);
+            assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 3);
 
             assert_eq!(
-                TaggedPointer::<u128>::POINTER_MASK,
+                TaggedPointer::<u128, 3>::POINTER_MASK,
                 0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
             );
         } else {
             assert_eq!(
-                TaggedPointer::<u128>::ALIGNMENT,
+                TaggedPointer::<u128, 3>::ALIGNMENT,
                 16,
                 "Target architecture [{}]",
                 std::env::consts::ARCH
             );
-            assert_eq!(TaggedPointer::<u128>::NUM_BITS, 4);
+            assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 4);
 
             assert_eq!(
-                TaggedPointer::<u128>::POINTER_MASK,
+                TaggedPointer::<u128, 3>::POINTER_MASK,
                 0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
             );
         }
@@ -473,23 +568,17 @@ mod tests {
 
     #[test]
     fn cast_checks_alignment() {
-        let mut p1 = TaggedPointer::new(Box::into_raw(Box::new(1u64))).unwrap();
-        let mut p2 = TaggedPointer::new(Box::into_raw(Box::new(2u32))).unwrap();
+        let mut p1 = TaggedPointer::<_, 3>::new(Box::into_raw(Box::new(1u64))).unwrap();
+        let mut p2 = TaggedPointer::<_, 2>::new(Box::into_raw(Box::new(2u32))).unwrap();
 
         p1.set_data(1);
         p2.set_data(2);
 
-        let p1_i64 = p1.cast::<i64>().unwrap();
+        let p1_i64 = p1.cast::<i64>();
         assert_eq!(p1_i64.to_data(), 1);
-        assert!(p1.cast::<u32>().is_err());
-        assert!(p1.cast::<u16>().is_err());
-        assert!(p1.cast::<u8>().is_err());
 
-        let p2_i32 = p2.cast::<i32>().unwrap();
+        let p2_i32 = p2.cast::<i32>();
         assert_eq!(p2_i32.to_data(), 2);
-        assert!(p2.cast::<u64>().is_err());
-        assert!(p2.cast::<u16>().is_err());
-        assert!(p2.cast::<u8>().is_err());
 
         unsafe {
             drop(Box::from_raw(p1.to_ptr()));
