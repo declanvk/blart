@@ -342,30 +342,6 @@ impl<P, const MIN_BITS: u32> fmt::Pointer for TaggedPointer<P, MIN_BITS> {
     }
 }
 
-/// The error type returned when a [`TaggedPointer::cast`] fails because the
-/// alignment of the input type and the alignment of the output type are
-/// different.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct AlignmentCastError {
-    /// The alignment of the input type.
-    pub input_alignment: usize,
-    /// The alignment of the output type.
-    pub output_alignment: usize,
-}
-
-impl fmt::Display for AlignmentCastError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "cannot cast tagged pointer to point to a type with a different alignment. Existing \
-             type alignment [{}]. Attempted type alignment [{}].",
-            self.input_alignment, self.output_alignment
-        )
-    }
-}
-
-impl std::error::Error for AlignmentCastError {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
