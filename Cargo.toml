@@ -1,7 +1,7 @@
 [package]
 name = "blart"
 version = "0.1.0"
-description = "A bunch of helpful lints to avoid common pitfalls in Rust"
+description = "An implementation of an adaptive radix tree packaged as a BTreeMap replacement"
 repository = "https://github.com/declanvk/blart"
 readme = "README.md"
 edition = "2021"
