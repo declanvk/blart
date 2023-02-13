@@ -599,33 +599,33 @@ impl<K, V> TreeMap<K, V> {
     }
 
     /// Moves all elements from other into self, leaving other empty.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,should_panic
-    /// use blart::TreeMap;
-    ///
-    /// let mut a = TreeMap::<u128, _>::new();
-    /// a.try_insert(1, "a").unwrap();
-    /// a.try_insert(2, "b").unwrap();
-    /// a.try_insert(3, "c").unwrap(); // Note: Key (3) also present in b.
-    ///
-    /// let mut b = TreeMap::<u128, _>::new();
-    /// b.try_insert(3, "d").unwrap(); // Note: Key (3) also present in a.
-    /// b.try_insert(4, "e").unwrap();
-    /// b.try_insert(5, "f").unwrap();
-    ///
-    /// a.append(&mut b);
-    ///
-    /// assert_eq!(a.len(), 5);
-    /// assert_eq!(b.len(), 0);
-    ///
-    /// assert_eq!(a[&1], "a");
-    /// assert_eq!(a[&2], "b");
-    /// assert_eq!(a[&3], "d"); // Note: "c" has been overwritten.
-    /// assert_eq!(a[&4], "e");
-    /// assert_eq!(a[&5], "f");
-    /// ```
+    //
+    // # Examples
+    //
+    // ```rust,should_panic
+    // use blart::TreeMap;
+    //
+    // let mut a = TreeMap::<u128, _>::new();
+    // a.try_insert(1, "a").unwrap();
+    // a.try_insert(2, "b").unwrap();
+    // a.try_insert(3, "c").unwrap(); // Note: Key (3) also present in b.
+    //
+    // let mut b = TreeMap::<u128, _>::new();
+    // b.try_insert(3, "d").unwrap(); // Note: Key (3) also present in a.
+    // b.try_insert(4, "e").unwrap();
+    // b.try_insert(5, "f").unwrap();
+    //
+    // a.append(&mut b);
+    //
+    // assert_eq!(a.len(), 5);
+    // assert_eq!(b.len(), 0);
+    //
+    // assert_eq!(a[&1], "a");
+    // assert_eq!(a[&2], "b");
+    // assert_eq!(a[&3], "d"); // Note: "c" has been overwritten.
+    // assert_eq!(a[&4], "e");
+    // assert_eq!(a[&5], "f");
+    // ```
     #[allow(dead_code)]
     pub(crate) fn append(&mut self, other: &mut TreeMap<K, V>)
     where
@@ -642,23 +642,23 @@ impl<K, V> TreeMap<K, V> {
     /// (exclusive). The range may also be entered as `(Bound<T>, Bound<T>)`, so
     /// for example `range((Excluded(4), Included(10)))` will yield a
     /// left-exclusive, right-inclusive range from 4 to 10.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,should_panic
-    /// use blart::TreeMap;
-    /// use std::ops::Bound::Included;
-    ///
-    /// let mut map = TreeMap::<u8, _>::new();
-    /// map.try_insert(3, "a").unwrap();
-    /// map.try_insert(5, "b").unwrap();
-    /// map.try_insert(8, "c").unwrap();
-    ///
-    /// for (key, &value) in map.range((Included(&4), Included(&8))) {
-    ///     println!("{key:?}: {value}");
-    /// }
-    /// assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
-    /// ```
+    //
+    // # Examples
+    //
+    // ```rust,should_panic
+    // use blart::TreeMap;
+    // use std::ops::Bound::Included;
+    //
+    // let mut map = TreeMap::<u8, _>::new();
+    // map.try_insert(3, "a").unwrap();
+    // map.try_insert(5, "b").unwrap();
+    // map.try_insert(8, "c").unwrap();
+    //
+    // for (key, &value) in map.range((Included(&4), Included(&8))) {
+    //     println!("{key:?}: {value}");
+    // }
+    // assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
+    // ```
     #[allow(dead_code)]
     pub(crate) fn range<Q, R>(&self, _range: R) -> iterators::Range<K, V>
     where
@@ -677,35 +677,35 @@ impl<K, V> TreeMap<K, V> {
     /// (exclusive). The range may also be entered as `(Bound<T>, Bound<T>)`, so
     /// for example `range_mut((Excluded(4), Included(10)))` will yield a
     /// left-exclusive, right-inclusive range from 4 to 10.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,should_panic
-    /// use blart::TreeMap;
-    ///
-    /// let mut map: TreeMap<_, i32> = TreeMap::new();
-    ///
-    /// for (key, value) in [("Alice", 0), ("Bob", 0), ("Carol", 0), ("Cheryl", 0)] {
-    ///     let _ = map.try_insert(key, value).unwrap();
-    /// }
-    ///
-    /// for (name, balance) in map.range_mut("B".."Cheryl") {
-    ///     *balance += 100;
-    ///
-    ///     if name.starts_with('C') {
-    ///         *balance *= 2;
-    ///     }
-    /// }
-    ///
-    /// for (name, balance) in &map {
-    ///     println!("{name} => {balance}");
-    /// }
-    ///
-    /// assert_eq!(map["Alice"], 0);
-    /// assert_eq!(map["Bob"], 100);
-    /// assert_eq!(map["Carol"], 200);
-    /// assert_eq!(map["Cheryl"], 200);
-    /// ```
+    //
+    // # Examples
+    //
+    // ```rust,should_panic
+    // use blart::TreeMap;
+    //
+    // let mut map: TreeMap<_, i32> = TreeMap::new();
+    //
+    // for (key, value) in [("Alice", 0), ("Bob", 0), ("Carol", 0), ("Cheryl", 0)] {
+    //     let _ = map.try_insert(key, value).unwrap();
+    // }
+    //
+    // for (name, balance) in map.range_mut("B".."Cheryl") {
+    //     *balance += 100;
+    //
+    //     if name.starts_with('C') {
+    //         *balance *= 2;
+    //     }
+    // }
+    //
+    // for (name, balance) in &map {
+    //     println!("{name} => {balance}");
+    // }
+    //
+    // assert_eq!(map["Alice"], 0);
+    // assert_eq!(map["Bob"], 100);
+    // assert_eq!(map["Carol"], 200);
+    // assert_eq!(map["Cheryl"], 200);
+    // ```
     #[allow(dead_code)]
     pub(crate) fn range_mut<Q, R>(&mut self, _range: R) -> iterators::RangeMut<K, V>
     where
@@ -718,31 +718,31 @@ impl<K, V> TreeMap<K, V> {
 
     /// Splits the collection into two at the given key. Returns everything
     /// after the given key, including the key.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,should_panic
-    /// use blart::TreeMap;
-    ///
-    /// let mut a = TreeMap::new();
-    /// a.try_insert(Box::from([1]), "a").unwrap();
-    /// a.try_insert(Box::from([2]), "b").unwrap();
-    /// a.try_insert(Box::from([3]), "c").unwrap();
-    /// a.try_insert(Box::from([17]), "d").unwrap();
-    /// a.try_insert(Box::from([41]), "e").unwrap();
-    ///
-    /// let b = a.split_off([3].as_ref());
-    ///
-    /// assert_eq!(a.len(), 2);
-    /// assert_eq!(b.len(), 3);
-    ///
-    /// assert_eq!(a[[1].as_ref()], "a");
-    /// assert_eq!(a[[2].as_ref()], "b");
-    ///
-    /// assert_eq!(b[[3].as_ref()], "c");
-    /// assert_eq!(b[[17].as_ref()], "d");
-    /// assert_eq!(b[[41].as_ref()], "e");
-    /// ```
+    //
+    // # Examples
+    //
+    // ```rust,should_panic
+    // use blart::TreeMap;
+    //
+    // let mut a = TreeMap::new();
+    // a.try_insert(Box::from([1]), "a").unwrap();
+    // a.try_insert(Box::from([2]), "b").unwrap();
+    // a.try_insert(Box::from([3]), "c").unwrap();
+    // a.try_insert(Box::from([17]), "d").unwrap();
+    // a.try_insert(Box::from([41]), "e").unwrap();
+    //
+    // let b = a.split_off([3].as_ref());
+    //
+    // assert_eq!(a.len(), 2);
+    // assert_eq!(b.len(), 3);
+    //
+    // assert_eq!(a[[1].as_ref()], "a");
+    // assert_eq!(a[[2].as_ref()], "b");
+    //
+    // assert_eq!(b[[3].as_ref()], "c");
+    // assert_eq!(b[[17].as_ref()], "d");
+    // assert_eq!(b[[41].as_ref()], "e");
+    // ```
     #[allow(dead_code)]
     pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V>
     where
@@ -782,18 +782,18 @@ impl<K, V> TreeMap<K, V> {
     /// It is unspecified how many more elements will be subjected to the
     /// closure if a panic occurs in the closure, or a panic occurs while
     /// dropping an element, or if the DrainFilter value is leaked.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,should_panic
-    /// use blart::TreeMap;
-    ///
-    /// let mut map: TreeMap<u8, u8> = (0..8).map(|x| (x, x)).collect();
-    /// let evens: TreeMap<_, _> = map.drain_filter(|k, _v| k % 2 == 0).collect();
-    /// let odds = map;
-    /// assert_eq!(evens.keys().copied().collect::<Vec<_>>(), [0, 2, 4, 6]);
-    /// assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
-    /// ```
+    //
+    // # Examples
+    //
+    // ```rust,should_panic
+    // use blart::TreeMap;
+    //
+    // let mut map: TreeMap<u8, u8> = (0..8).map(|x| (x, x)).collect();
+    // let evens: TreeMap<_, _> = map.drain_filter(|k, _v| k % 2 == 0).collect();
+    // let odds = map;
+    // assert_eq!(evens.keys().copied().collect::<Vec<_>>(), [0, 2, 4, 6]);
+    // assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
+    // ```
     #[allow(dead_code)]
     pub(crate) fn drain_filter<F>(&mut self, _pred: F) -> iterators::DrainFilter<K, V>
     where
