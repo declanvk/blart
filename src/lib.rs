@@ -47,3 +47,7 @@ pub mod tests_common;
 pub use bytes::*;
 pub use collections::*;
 pub use nodes::*;
+
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDoctests;

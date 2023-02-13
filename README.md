@@ -1,5 +1,47 @@
 # BLART
 
+Here is an example of using the `TreeMap` type (blatantly stolen from [the standard library][stdlib-example-1]):
+
+```rust
+use blart::TreeMap;
+
+// type inference lets us omit an explicit type signature (which
+// would be `TreeMap<&str, &str>` in this example).
+let mut movie_reviews = TreeMap::new();
+
+// review some movies.
+let _ = movie_reviews.try_insert("Office Space",       "Deals with real issues in the workplace.").unwrap();
+let _ = movie_reviews.try_insert("Pulp Fiction",       "Masterpiece.").unwrap();
+let _ = movie_reviews.try_insert("The Godfather",      "Very enjoyable.").unwrap();
+let _ = movie_reviews.try_insert("The Blues Brothers", "Eye lyked it a lot.").unwrap();
+
+// check for a specific one.
+if !movie_reviews.contains_key("Les Misérables") {
+    println!("We've got {} reviews, but Les Misérables ain't one.",
+             movie_reviews.len());
+}
+
+// oops, this review has a lot of spelling mistakes, let's delete it.
+movie_reviews.remove("The Blues Brothers");
+
+// look up the values associated with some keys.
+let to_find = ["Up!", "Office Space"];
+for movie in &to_find {
+    match movie_reviews.get(movie) {
+       Some(review) => println!("{movie}: {review}"),
+       None => println!("{movie} is unreviewed.")
+    }
+}
+
+// Look up the value for a key (will panic if the key is not found).
+println!("Movie review: {}", movie_reviews["Office Space"]);
+
+// iterate over everything.
+for (movie, review) in &movie_reviews {
+    println!("{movie}: \"{review}\"");
+}
+```
+
 ## Documentation
 
 - [Documentation for the `main` branch][declanvk-blart-docs]
