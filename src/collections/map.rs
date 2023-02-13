@@ -590,7 +590,8 @@ impl<K, V> TreeMap<K, V> {
     ///
     /// In other words, remove all pairs (k, v) for which f(&k, &mut v) returns
     /// false. The elements are visited in ascending key order.
-    pub fn retain<F>(&mut self, f: F)
+    #[allow(dead_code)]
+    pub(crate) fn retain<F>(&mut self, f: F)
     where
         F: FnMut(&K, &mut V) -> bool,
     {
@@ -625,7 +626,8 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(a[&4], "e");
     /// assert_eq!(a[&5], "f");
     /// ```
-    pub fn append(&mut self, other: &mut TreeMap<K, V>)
+    #[allow(dead_code)]
+    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V>)
     where
         K: NoPrefixesBytes,
     {
@@ -657,7 +659,8 @@ impl<K, V> TreeMap<K, V> {
     /// }
     /// assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
     /// ```
-    pub fn range<Q, R>(&self, _range: R) -> iterators::Range<K, V>
+    #[allow(dead_code)]
+    pub(crate) fn range<Q, R>(&self, _range: R) -> iterators::Range<K, V>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -703,7 +706,8 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(map["Carol"], 200);
     /// assert_eq!(map["Cheryl"], 200);
     /// ```
-    pub fn range_mut<Q, R>(&mut self, _range: R) -> iterators::RangeMut<K, V>
+    #[allow(dead_code)]
+    pub(crate) fn range_mut<Q, R>(&mut self, _range: R) -> iterators::RangeMut<K, V>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -739,7 +743,8 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(b[[17].as_ref()], "d");
     /// assert_eq!(b[[41].as_ref()], "e");
     /// ```
-    pub fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V>
+    #[allow(dead_code)]
+    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -789,7 +794,8 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(evens.keys().copied().collect::<Vec<_>>(), [0, 2, 4, 6]);
     /// assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
     /// ```
-    pub fn drain_filter<F>(&mut self, _pred: F) -> iterators::DrainFilter<K, V>
+    #[allow(dead_code)]
+    pub(crate) fn drain_filter<F>(&mut self, _pred: F) -> iterators::DrainFilter<K, V>
     where
         F: FnMut(&K, &mut V) -> bool,
     {
