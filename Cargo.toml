@@ -1,8 +1,13 @@
 [package]
 name = "blart"
 version = "0.1.0"
+description = "A bunch of helpful lints to avoid common pitfalls in Rust"
+repository = "https://github.com/declanvk/blart"
+readme = "README.md"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+keywords = ["tree", "map", "collection", "radix-tree"]
+categories = ["data-structures"]
 
 [dependencies]
 sptr = "0.3.2"

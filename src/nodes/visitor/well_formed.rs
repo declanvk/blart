@@ -267,18 +267,21 @@ where
     /// number of nodes in the tree.
     ///
     /// # Safety
+    ///
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn check_tree(
-        tree: &OpaqueNodePtr<K, V>,
-    ) -> Result<usize, MalformedTreeError<K, V>> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the given tree is not well-formed.
+    pub unsafe fn check_tree(tree: OpaqueNodePtr<K, V>) -> Result<usize, MalformedTreeError<K, V>> {
         let mut visitor = WellFormedChecker {
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
         };
 
         // We see the root node at the empty prefix
-        visitor.seen_nodes.insert(*tree, KeyPrefix::default());
+        visitor.seen_nodes.insert(tree, KeyPrefix::default());
 
         tree.visit_with(&mut visitor)
     }
@@ -415,7 +418,7 @@ mod tests {
         // 4  * 3 * 2
         assert_eq!(num_leaves, 24);
 
-        assert_eq!(unsafe { WellFormedChecker::check_tree(&root) }, Ok(41));
+        assert_eq!(unsafe { WellFormedChecker::check_tree(root) }, Ok(41));
 
         unsafe { deallocate_tree(root) };
     }
@@ -467,7 +470,7 @@ mod tests {
             n16.write_child(4, n4_right_ptr.to_opaque());
         }
 
-        let check_result = unsafe { WellFormedChecker::check_tree(&root.to_opaque()) }
+        let check_result = unsafe { WellFormedChecker::check_tree(root.to_opaque()) }
             .expect_err("should have failed for loop");
         match check_result {
             MalformedTreeError::LoopFound {
@@ -529,7 +532,7 @@ mod tests {
 
         let root = NodePtr::from(&mut n16).to_opaque();
 
-        let check_result = unsafe { WellFormedChecker::check_tree(&root) }
+        let check_result = unsafe { WellFormedChecker::check_tree(root) }
             .expect_err("should have failed for loop");
         match check_result {
             MalformedTreeError::WrongChildrenCount {
@@ -582,7 +585,7 @@ mod tests {
 
         let root = NodePtr::from(&mut n16).to_opaque();
 
-        let check_result = unsafe { WellFormedChecker::check_tree(&root) }
+        let check_result = unsafe { WellFormedChecker::check_tree(root) }
             .expect_err("should have failed for loop");
         match check_result {
             MalformedTreeError::PrefixMismatch {

@@ -97,9 +97,6 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
         node: &InnerNodeCompressed<K, V, SIZE>,
         range: R,
     ) -> Self {
-        // SAFETY: Conditions covered by function safety requirements
-        let mut iter = unsafe { Self::new(node) };
-
         // For the `iter.keys_start` pointer, it should point to the next value that it
         // will return from the iterator. If `iter.keys_start` and `iter.keys_end` are
         // equal, then that indicates an empty iterator.
@@ -252,6 +249,9 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
             }
         }
 
+        // SAFETY: Conditions covered by function safety requirements
+        let mut iter = unsafe { Self::new(node) };
+
         modify_iter_start(&mut iter, node, range.start_bound());
         modify_iter_end(&mut iter, node, range.end_bound());
 
@@ -264,7 +264,7 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
         iter
     }
 
-    /// The remaining number of (key, child_pointer) elements in the
+    /// The remaining number of (key, child pointer) elements in the
     /// iterator.
     fn len(&self) -> usize {
         self.keys_end.as_ptr().addr() - self.keys_start.as_ptr().addr()
@@ -397,6 +397,8 @@ impl<K, V> InnerNode48Iter<K, V> {
             let child_pointers_slice = node.initialized_child_pointers();
 
             crate::nightly_rust_apis::non_null_slice_from_raw_parts(
+                // PANIC SAFETY: The pointer is known to be non-null because it is derived from a
+                // slice
                 NonNull::new(child_pointers_slice.as_ptr() as *mut _).unwrap(),
                 child_pointers_slice.len(),
             )
@@ -425,9 +427,6 @@ impl<K, V> InnerNode48Iter<K, V> {
     ///  - The lifetime of the new [`InnerNode48Iter`] must not overlap with any
     ///    operations that mutate the original [`InnerNode48`].
     pub unsafe fn range<R: RangeBounds<u8>>(node: &InnerNode48<K, V>, range: R) -> Self {
-        // SAFETY: Covered by safety conditions on function
-        let mut iter = unsafe { Self::new(node) };
-
         fn modify_iter_start<K, V>(iter: &mut InnerNode48Iter<K, V>, start_bound: Bound<&u8>) {
             let start_key_index = match start_bound {
                 Bound::Included(min_key_byte) => (*min_key_byte) as usize,
@@ -524,6 +523,9 @@ impl<K, V> InnerNode48Iter<K, V> {
                     ));
             }
         }
+
+        // SAFETY: Covered by safety conditions on function
+        let mut iter = unsafe { Self::new(node) };
 
         modify_iter_start(&mut iter, range.start_bound());
         modify_iter_end(&mut iter, range.end_bound());
@@ -698,6 +700,10 @@ impl<K, V> InnerNode256Iter<K, V> {
     pub unsafe fn new(node: &InnerNode256<K, V>) -> Self {
         let child_pointers_range = {
             let slice_range = node.child_pointers.as_ptr_range();
+            // PANIC SAFETY: We know both of these pointers are non-null because the
+            // `child_pointers` array is a fixed size (256, not a ZST) and the
+            // `as_ptr_range` will always return non-null output for non-null input (I
+            // looked at the source)
             Range {
                 start: NonNull::new(slice_range.start as *mut _).unwrap(),
                 end: NonNull::new(slice_range.end as *mut _).unwrap(),
@@ -718,9 +724,6 @@ impl<K, V> InnerNode256Iter<K, V> {
     ///  - The lifetime of the new [`InnerNode256Iter`] must not overlap with
     ///    any operations that mutate the original [`InnerNode256`].
     pub unsafe fn range<R: RangeBounds<u8>>(node: &InnerNode256<K, V>, range: R) -> Self {
-        // SAFETY: Covered by function safety requirements
-        let mut iter = unsafe { Self::new(node) };
-
         fn modify_iter_start<K, V>(iter: &mut InnerNode256Iter<K, V>, start_bound: Bound<&u8>) {
             let start_key_index = match start_bound {
                 Bound::Included(min_key_byte) => (*min_key_byte) as usize,
@@ -817,6 +820,9 @@ impl<K, V> InnerNode256Iter<K, V> {
                     ));
             }
         }
+
+        // SAFETY: Covered by function safety requirements
+        let mut iter = unsafe { Self::new(node) };
 
         modify_iter_start(&mut iter, range.start_bound());
         modify_iter_end(&mut iter, range.end_bound());

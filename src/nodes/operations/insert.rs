@@ -116,7 +116,7 @@ where
             // `maximum_unchecked` function.
             let parent_node = unsafe { parent_inner_node.as_mut() };
 
-            parent_node.write_child(key_byte, new_child)
+            parent_node.write_child(key_byte, new_child);
         }
 
         match parent_inner_node.to_node_ptr() {
@@ -393,6 +393,11 @@ impl<K, V> fmt::Debug for InsertSearchResultType<K, V> {
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
+///
+/// # Errors
+///
+/// If the given `key` is a prefix of an existing key, this function will return
+/// an error.
 pub unsafe fn search_for_insert_point<K, V>(
     root: OpaqueNodePtr<K, V>,
     key: &K,

@@ -36,7 +36,7 @@ impl<P> TaggedPointer<P> {
 
     /// Create a new tagged pointer from a possibly null pointer.
     ///
-    /// If the pointer is null, returns None. Otherwise, returns a tagged
+    /// If the pointer is null, returns `None`. Otherwise, returns a tagged
     /// pointer.
     ///
     /// # Panics

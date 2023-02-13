@@ -275,6 +275,8 @@ impl<K, V> OpaqueNodePtr<K, V> {
 
     /// Retrieve the runtime node type information.
     pub fn node_type(self) -> NodeType {
+        // PANIC SAFETY: We know that we can convert the usize into a `NodeType` because
+        // we have only stored `NodeType` values into this pointer
         NodeType::from_u8(self.0.to_data().try_into().unwrap()).unwrap()
     }
 

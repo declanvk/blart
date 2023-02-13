@@ -20,6 +20,10 @@
     rustdoc::bare_urls,
     rustdoc::invalid_codeblock_attributes
 )]
+#![doc(
+    html_playground_url = "https://play.rust-lang.org/",
+    test(attr(deny(warnings)))
+)]
 
 //! Adaptive radix trie implementation
 //!

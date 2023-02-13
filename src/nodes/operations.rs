@@ -36,6 +36,7 @@ pub unsafe fn deallocate_tree<K, V>(root: OpaqueNodePtr<K, V>) {
             // deallocation of the node happens outside of this block, after the lifetime
             // ends.
             let inner_node = unsafe { inner_ptr.as_ref() };
+
             // SAFETY: This iterator only lives for this block, a subset of the shared
             // lifetime of the `inner_node` variable. By the safety requirements of the
             // `deallocate_tree` function, no other mutation of this node can happen while
@@ -43,9 +44,10 @@ pub unsafe fn deallocate_tree<K, V>(root: OpaqueNodePtr<K, V>) {
             let iter = unsafe { inner_node.iter() };
             stack.extend(iter.map(|(_, child)| child));
         }
+
         // SAFETY: The single call per node requirement is enforced by the safety
         // requirements on this function.
-        drop(unsafe { NodePtr::deallocate_node_ptr(inner_ptr) })
+        drop(unsafe { NodePtr::deallocate_node_ptr(inner_ptr) });
     }
 
     let mut stack = Vec::new();

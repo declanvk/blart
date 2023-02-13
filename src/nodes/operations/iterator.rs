@@ -129,7 +129,7 @@ impl<K, V> InnerNodeTreeIterator<K, V> {
         // that no other mutation of the tree happens while the iterator is
         // live.
         self.node_iters
-            .push_back(unsafe { inner.as_ref().iter().into() })
+            .push_back(unsafe { inner.as_ref().iter().into() });
     }
 }
 

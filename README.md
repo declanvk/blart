@@ -2,7 +2,7 @@
 
 ## Documentation
 
-- [Documentation for the `main` branch](https://declanvk.github.io/blart/)
+- [Documentation for the `main` branch][declanvk-blart-docs]
 
 ## Testing
 
@@ -41,7 +41,7 @@ cargo +nightly fuzz coverage fuzz_raw_api && cargo cov -- show fuzz/target/"$TAR
 
 ## Benchmarks
 
-To run the benchmarks, install [`cargo-criterion`](https://github.com/bheisler/cargo-criterion), then run:
+To run the benchmarks, install [`cargo-criterion`][cargo-criterion], then run:
 
 ```bash
 cargo +nightly criterion --history-id "$(git rev-parse --short HEAD)-0"
@@ -51,7 +51,7 @@ If you get a "Permission denied" error, update perf_event_paranoid:
 ```bash
 sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
 ```
-For further details please take a look at the following [link](https://superuser.com/questions/980632/run-perf-without-root-rights).
+For further details please take a look at the following [link][superuser-run-perf].
 
 
 ## License
@@ -72,3 +72,7 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 [sp-issue]: https://github.com/rust-lang/rust/issues/95228
+[stdlib-example-1]: https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#examples
+[superuser-run-perf]: https://superuser.com/questions/980632/run-perf-without-root-rights
+[cargo-criterion]: https://github.com/bheisler/cargo-criterion
+[declanvk-blart-docs]: https://declanvk.github.io/blart/
