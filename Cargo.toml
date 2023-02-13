@@ -9,6 +9,8 @@ license = "MIT OR Apache-2.0"
 keywords = ["tree", "map", "collection", "radix-tree"]
 categories = ["data-structures"]
 
+exclude = ["fuzz/", "scripts/", "rustfmt.toml"]
+
 [dependencies]
 sptr = "0.3.2"
 
