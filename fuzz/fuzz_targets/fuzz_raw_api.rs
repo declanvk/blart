@@ -109,7 +109,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
             Action::WellFormedCheck => {
                 if let Some(root) = current_root {
-                    let _ = unsafe { WellFormedChecker::check_tree(&root) }
+                    let _ = unsafe { WellFormedChecker::check_tree(root) }
                         .expect("tree should be well-formed");
                 }
             },

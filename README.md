@@ -1,5 +1,18 @@
 # BLART
 
+[![Crates.io][crates-badge]][crates-url]
+[![Docs.rs][docs-badge]][docs-url]
+
+BLART is an implementation of an adaptive radix tree, used as backing for map and set data structures. Adaptive radix
+trees offer great space efficiency and performance on keys that decompose into byte strings.
+
+[crates-badge]: https://img.shields.io/crates/v/blart
+[crates-url]: https://crates.io/crates/blart
+[docs-badge]: https://img.shields.io/docsrs/blart
+[docs-url]: https://docs.rs/blart/latest/blart/
+
+## Example
+
 Here is an example of using the `TreeMap` type (blatantly stolen from [the standard library][stdlib-example-1]):
 
 ```rust
@@ -42,9 +55,13 @@ for (movie, review) in &movie_reviews {
 }
 ```
 
+[stdlib-example-1]: https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#examples
+
 ## Documentation
 
 - [Documentation for the `main` branch][declanvk-blart-docs]
+
+[declanvk-blart-docs]: https://declanvk.github.io/blart/
 
 ## Testing
 
@@ -57,6 +74,8 @@ MIRIFLAGS="-Zmiri-strict-provenance -Zmiri-symbolic-alignment-check" cargo +nigh
 ```
 
 I think this is useful because we're doing some pointer times with our tagged pointers implementation, mutating the contents of the pointer to store bits of data.
+
+[sp-issue]: https://github.com/rust-lang/rust/issues/95228
 
 ## Fuzzing
 
@@ -95,6 +114,8 @@ sudo sh -c 'echo 1 >/proc/sys/kernel/perf_event_paranoid'
 ```
 For further details please take a look at the following [link][superuser-run-perf].
 
+[cargo-criterion]: https://github.com/bheisler/cargo-criterion
+[superuser-run-perf]: https://superuser.com/questions/980632/run-perf-without-root-rights
 
 ## License
 
@@ -112,9 +133,3 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
-
-[sp-issue]: https://github.com/rust-lang/rust/issues/95228
-[stdlib-example-1]: https://doc.rust-lang.org/stable/std/collections/struct.BTreeMap.html#examples
-[superuser-run-perf]: https://superuser.com/questions/980632/run-perf-without-root-rights
-[cargo-criterion]: https://github.com/bheisler/cargo-criterion
-[declanvk-blart-docs]: https://declanvk.github.io/blart/
