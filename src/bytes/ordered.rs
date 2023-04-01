@@ -1,5 +1,10 @@
 use crate::{AsBytes, NoPrefixesBytes, OrderedBytes};
-use std::{fmt::Debug, hash::Hash, marker::PhantomData};
+use std::{
+    fmt::Debug,
+    hash::Hash,
+    marker::PhantomData,
+    net::{Ipv4Addr, Ipv6Addr},
+};
 
 /// Trait representing a reversible conversion from a type to some sort of byte
 /// string, while preserving the ordering of the original type.
@@ -176,8 +181,7 @@ pub struct ToBE<N>(PhantomData<N>);
 pub struct ToUIntBE<N>(PhantomData<N>);
 
 macro_rules! impl_ordered_bytes_ints {
-    ($([$unsigned:ty, $signed:ty; $test_fn:ident]),*) => {
-
+    ($([$unsigned:ty, $signed:ty]),*) => {
         $(
             // SAFETY: This is safe to implement because the big endian conversion is reversible and
             // will guarantee that the byte string ordering is the same as the natural number ordering.
@@ -210,44 +214,92 @@ macro_rules! impl_ordered_bytes_ints {
                 }
             }
         )*
+    };
+}
 
+impl_ordered_bytes_ints!(
+    [u8, i8],
+    [u16, i16],
+    [u32, i32],
+    [u64, i64],
+    [u128, i128],
+    [usize, isize]
+);
 
-        #[cfg(test)]
-        mod tests {
-            use std::fmt::Debug;
+/// This struct represents a conversion of IP addresses (V4 and V6) into their
+/// component bytes. The ordering of IP addresses is already the lexicographic
+/// ordering of the component bytes, so it will be preserved.
+pub struct ToOctets<IP>(PhantomData<IP>);
 
-            use super::*;
+// SAFETY: This is safe to implement because the conversion to octets is
+// reversible and the ordering of the `Ipv4Addr` is already based on these
+// bytes.
+unsafe impl BytesMapping for ToOctets<Ipv4Addr> {
+    type Bytes = [u8; 4];
+    type Domain = Ipv4Addr;
 
-            /// Check that for the given type
-            fn assert_bytes_isomorphism_contract<B>(a: B::Domain, b: B::Domain)
-            where
-                B: BytesMapping,
-                B::Domain: Ord + Debug + Copy,
-            {
-                let a_mapped = Mapped::<B>::new(a);
-                let b_mapped = Mapped::<B>::new(b);
-                let a_bytes = a_mapped.as_bytes();
-                let b_bytes = b_mapped.as_bytes();
-                assert_eq!(
-                    a.cmp(&b),
-                    a_bytes.cmp(b_bytes),
-                    "{:?} and {:?} compare differently than their byte representation (a_bytes={:?},b_bytes={:?})",
-                    a,
-                    b,
-                    a_bytes,
-                    b_bytes
-                );
+    fn to_bytes(value: Self::Domain) -> Self::Bytes {
+        value.octets()
+    }
 
-                fn check_is_ordered_bytes<T: OrderedBytes>() {}
+    fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+        bytes.into()
+    }
+}
 
-                check_is_ordered_bytes::<Mapped<B>>();
+// SAFETY: This is safe to implement because the conversion to octets is
+// reversible and the ordering of the `Ipv6Addr` is already based on these
+// bytes.
+unsafe impl BytesMapping for ToOctets<Ipv6Addr> {
+    type Bytes = [u8; 16];
+    type Domain = Ipv6Addr;
 
-                assert_eq!(B::from_bytes(B::to_bytes(a)), a);
-                assert_eq!(B::from_bytes(B::to_bytes(b)), b);
-            }
+    fn to_bytes(value: Self::Domain) -> Self::Bytes {
+        value.octets()
+    }
 
+    fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+        bytes.into()
+    }
+}
 
+#[cfg(test)]
+mod tests {
+    use std::fmt::Debug;
 
+    use super::*;
+
+    /// Check that for the given type
+    fn assert_bytes_isomorphism_contract<B>(a: B::Domain, b: B::Domain)
+    where
+        B: BytesMapping,
+        B::Domain: Ord + Debug + Copy,
+    {
+        let a_mapped = Mapped::<B>::new(a);
+        let b_mapped = Mapped::<B>::new(b);
+        let a_bytes = a_mapped.as_bytes();
+        let b_bytes = b_mapped.as_bytes();
+        assert_eq!(
+            a.cmp(&b),
+            a_bytes.cmp(b_bytes),
+            "{:?} and {:?} compare differently than their byte representation \
+             (a_bytes={:?},b_bytes={:?})",
+            a,
+            b,
+            a_bytes,
+            b_bytes
+        );
+
+        fn check_is_ordered_bytes<T: OrderedBytes>() {}
+
+        check_is_ordered_bytes::<Mapped<B>>();
+
+        assert_eq!(B::from_bytes(B::to_bytes(a)), a);
+        assert_eq!(B::from_bytes(B::to_bytes(b)), b);
+    }
+
+    macro_rules! impl_ordered_bytes_ints_tests {
+        ($([$unsigned:ty, $signed:ty; $test_fn:ident]),*) => {
             $(
                 #[test]
                 fn $test_fn() {
@@ -267,14 +319,48 @@ macro_rules! impl_ordered_bytes_ints {
                 }
             )*
         }
-    };
-}
+    }
 
-impl_ordered_bytes_ints!(
-    [u8, i8; test_orded_ui8],
-    [u16, i16; test_orded_ui16],
-    [u32, i32; test_orded_ui32],
-    [u64, i64; test_orded_ui64],
-    [u128, i128; test_orded_ui128],
-    [usize, isize; test_orded_uisize]
-);
+    impl_ordered_bytes_ints_tests!(
+        [u8, i8; test_orded_ui8],
+        [u16, i16; test_orded_ui16],
+        [u32, i32; test_orded_ui32],
+        [u64, i64; test_orded_ui64],
+        [u128, i128; test_orded_ui128],
+        [usize, isize; test_orded_uisize]
+    );
+
+    #[test]
+    fn test_orded_ip_types() {
+        assert_bytes_isomorphism_contract::<ToOctets<Ipv4Addr>>(
+            Ipv4Addr::LOCALHOST,
+            Ipv4Addr::BROADCAST,
+        );
+        assert_bytes_isomorphism_contract::<ToOctets<Ipv4Addr>>(
+            Ipv4Addr::LOCALHOST,
+            Ipv4Addr::UNSPECIFIED,
+        );
+        assert_bytes_isomorphism_contract::<ToOctets<Ipv4Addr>>(
+            Ipv4Addr::BROADCAST,
+            Ipv4Addr::UNSPECIFIED,
+        );
+
+        const IPV6_MAX: Ipv6Addr = Ipv6Addr::new(
+            u16::MAX,
+            u16::MAX,
+            u16::MAX,
+            u16::MAX,
+            u16::MAX,
+            u16::MAX,
+            u16::MAX,
+            u16::MAX,
+        );
+
+        assert_bytes_isomorphism_contract::<ToOctets<Ipv6Addr>>(Ipv6Addr::LOCALHOST, IPV6_MAX);
+        assert_bytes_isomorphism_contract::<ToOctets<Ipv6Addr>>(
+            Ipv6Addr::LOCALHOST,
+            Ipv6Addr::UNSPECIFIED,
+        );
+        assert_bytes_isomorphism_contract::<ToOctets<Ipv6Addr>>(IPV6_MAX, Ipv6Addr::UNSPECIFIED);
+    }
+}
