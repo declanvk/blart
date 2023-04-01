@@ -58,19 +58,11 @@ macro_rules! as_bytes_for_integer_like_types {
                 }
             }
 
-            // SAFETY: This trait is safe to implement because the lexicographic
-            // ordering of bytes and `Ord` implementation are the same
-            unsafe impl OrderedBytes for [$type] {}
-
             impl AsBytes for Vec<$type> {
                 fn as_bytes(&self) -> &[u8] {
                     bytemuck::cast_slice(self)
                 }
             }
-
-            // SAFETY: This trait is safe to implement because the lexicographic
-            // ordering of bytes and `Ord` implementation are the same
-            unsafe impl OrderedBytes for Vec<$type> {}
         )*
     };
 }
@@ -104,6 +96,10 @@ as_bytes_for_integer_like_types!(
     NonZeroIsize
 );
 
+/// SAFETY: Since `u8` is a single byte, there are no concerns about endian
+/// ordering
+unsafe impl OrderedBytes for u8 {}
+
 macro_rules! as_bytes_for_integer_arrays {
     ($($type:ty),*) => {
         $(
@@ -122,6 +118,34 @@ macro_rules! as_bytes_for_integer_arrays {
 }
 
 as_bytes_for_integer_arrays!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128);
+
+/// SAFETY: The lexicographic ordering of `[u8; N]` converted to bytes is the
+/// same as its normal representation
+unsafe impl<const N: usize, T> OrderedBytes for [T; N]
+where
+    T: OrderedBytes,
+    [T; N]: AsBytes,
+{
+}
+
+/// SAFETY: The ordering of a slice is the lexicographic ordering of the
+/// elements. If each element compares the same if it is converted to bytes,
+/// then converting the entire slice to bytes should compare the same as the
+/// original slice.
+unsafe impl<T> OrderedBytes for [T]
+where
+    T: OrderedBytes,
+    [T]: AsBytes,
+{
+}
+
+/// SAFETY: Same reasoning as the `OrderedBytes for [T]`
+unsafe impl<T> OrderedBytes for Vec<T>
+where
+    T: OrderedBytes,
+    Vec<T>: AsBytes,
+{
+}
 
 impl AsBytes for str {
     fn as_bytes(&self) -> &[u8] {
@@ -246,13 +270,9 @@ unsafe impl OrderedBytes for PathBuf {}
 impl<'a, B> AsBytes for Cow<'a, B>
 where
     B: ToOwned + AsBytes + ?Sized,
-    <B as ToOwned>::Owned: AsBytes,
 {
     fn as_bytes(&self) -> &[u8] {
-        match self {
-            Cow::Borrowed(borrowed) => <B as AsBytes>::as_bytes(borrowed),
-            Cow::Owned(owned) => <<B as ToOwned>::Owned as AsBytes>::as_bytes(owned),
-        }
+        <B as AsBytes>::as_bytes(self.as_ref())
     }
 }
 
