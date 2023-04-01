@@ -13,7 +13,7 @@ use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 ///
 /// The following property should hold true:
 ///
-/// ```
+/// ```plaintext
 /// value_a == value_b -> Mapping::to_bytes(value_a) == Mapping::to_bytes(value_b)
 /// ```
 ///
