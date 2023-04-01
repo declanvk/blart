@@ -12,6 +12,9 @@ use std::{
     sync::Arc,
 };
 
+mod ordered;
+pub use ordered::*;
+
 /// Any type implementing `AsBytes` can be decomposed into bytes.
 ///
 /// The primary purpose of this trait is to allow different types to be used as
