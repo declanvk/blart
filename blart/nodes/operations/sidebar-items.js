@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["deallocate_tree"],"mod":["delete","insert","iterator","lookup","minmax"]};
