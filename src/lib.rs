@@ -1,3 +1,11 @@
+#![feature(maybe_uninit_slice)]
+#![feature(maybe_uninit_uninit_array)]
+#![feature(maybe_uninit_array_assume_init)]
+#![feature(slice_ptr_get)]
+#![feature(hasher_prefixfree_extras)]
+#![feature(portable_simd)]
+#![feature(core_intrinsics)]
+
 #![cfg_attr(
     feature = "nightly",
     feature(
@@ -38,7 +46,6 @@
 
 mod bytes;
 mod collections;
-mod nightly_rust_apis;
 mod nodes;
 pub mod tagged_pointer;
 #[doc(hidden)]

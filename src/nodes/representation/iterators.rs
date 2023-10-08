@@ -1,6 +1,6 @@
 use std::{
     iter::FusedIterator,
-    mem,
+    mem::{self, MaybeUninit},
     ops::{Bound, Range, RangeBounds},
     ptr::NonNull,
 };
@@ -46,10 +46,10 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
         //        the value is known to be initialized.
         let (keys_start, child_pointers_start) = unsafe {
             (
-                NonNull::new_unchecked(crate::nightly_rust_apis::maybe_uninit_slice_as_ptr(
+                NonNull::new_unchecked(MaybeUninit::slice_as_ptr(
                     &node.keys,
                 ) as *mut _),
-                NonNull::new_unchecked(crate::nightly_rust_apis::maybe_uninit_slice_as_ptr(
+                NonNull::new_unchecked(MaybeUninit::slice_as_ptr(
                     &node.child_pointers,
                 ) as *mut _),
             )
@@ -396,7 +396,7 @@ impl<K, V> InnerNode48Iter<K, V> {
         let child_pointers_ptr = {
             let child_pointers_slice = node.initialized_child_pointers();
 
-            crate::nightly_rust_apis::non_null_slice_from_raw_parts(
+            NonNull::slice_from_raw_parts(
                 // PANIC SAFETY: The pointer is known to be non-null because it is derived from a
                 // slice
                 NonNull::new(child_pointers_slice.as_ptr() as *mut _).unwrap(),
@@ -574,7 +574,7 @@ impl<K, V> Iterator for InnerNode48Iter<K, V> {
                 //        `initialized_child_pointers`, which returns the initialized portion of
                 //        the `child_pointers` array.
                 let child_pointer = unsafe {
-                    crate::nightly_rust_apis::non_null_get_unchecked_mut(
+                    NonNull::get_unchecked_mut(
                         self.child_pointers_ptr,
                         usize::from(u8::from(next_index)),
                     )
@@ -650,7 +650,7 @@ impl<K, V> DoubleEndedIterator for InnerNode48Iter<K, V> {
                 //        `initialized_child_pointers`, which returns the initialized portion of
                 //        the `child_pointers` array.
                 let child_pointer = unsafe {
-                    crate::nightly_rust_apis::non_null_get_unchecked_mut(
+                    NonNull::get_unchecked_mut(
                         self.child_pointers_ptr,
                         usize::from(u8::from(next_index)),
                     )

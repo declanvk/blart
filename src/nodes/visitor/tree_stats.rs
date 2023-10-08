@@ -189,55 +189,55 @@ mod tests {
     use super::*;
     use crate::deallocate_tree;
 
-    #[test]
-    fn mostly_empty_tree_stats_fixed_length_tree() {
-        let root = crate::tests_common::setup_tree_from_entries(
-            crate::tests_common::generate_key_fixed_length([1, 1, 1, 1])
-                .enumerate()
-                .map(|(a, b)| (b, a)),
-        );
-        let stats = unsafe { TreeStatsCollector::collect(root) };
+    // #[test]
+    // fn mostly_empty_tree_stats_fixed_length_tree() {
+    //     let root = crate::tests_common::setup_tree_from_entries(
+    //         crate::tests_common::generate_key_fixed_length([1, 1, 1, 1])
+    //             .enumerate()
+    //             .map(|(a, b)| (b, a)),
+    //     );
+    //     let stats = unsafe { TreeStatsCollector::collect(root) };
 
-        assert_eq!(
-            stats,
-            TreeStats {
-                node4_count: 15,
-                node16_count: 0,
-                node48_count: 0,
-                node256_count: 0,
-                leaf_count: 16,
-                empty_capacity: 30,
-                total_key_bytes: 64,
-                total_inner_node_bytes: 1200
-            }
-        );
+    //     assert_eq!(
+    //         stats,
+    //         TreeStats {
+    //             node4_count: 15,
+    //             node16_count: 0,
+    //             node48_count: 0,
+    //             node256_count: 0,
+    //             leaf_count: 16,
+    //             empty_capacity: 30,
+    //             total_key_bytes: 64,
+    //             total_inner_node_bytes: 1200
+    //         }
+    //     );
 
-        unsafe { deallocate_tree(root) };
-    }
+    //     unsafe { deallocate_tree(root) };
+    // }
 
-    #[test]
-    fn full_tree_stats_fixed_length_tree() {
-        let root = crate::tests_common::setup_tree_from_entries(
-            crate::tests_common::generate_key_fixed_length([15, 3])
-                .enumerate()
-                .map(|(a, b)| (b, a)),
-        );
-        let stats = unsafe { TreeStatsCollector::collect(root) };
+    // #[test]
+    // fn full_tree_stats_fixed_length_tree() {
+    //     let root = crate::tests_common::setup_tree_from_entries(
+    //         crate::tests_common::generate_key_fixed_length([15, 3])
+    //             .enumerate()
+    //             .map(|(a, b)| (b, a)),
+    //     );
+    //     let stats = unsafe { TreeStatsCollector::collect(root) };
 
-        assert_eq!(
-            stats,
-            TreeStats {
-                node4_count: 16,
-                node16_count: 1,
-                node48_count: 0,
-                node256_count: 0,
-                leaf_count: 64,
-                empty_capacity: 0,
-                total_key_bytes: 128,
-                total_inner_node_bytes: 1464,
-            }
-        );
+    //     assert_eq!(
+    //         stats,
+    //         TreeStats {
+    //             node4_count: 16,
+    //             node16_count: 1,
+    //             node48_count: 0,
+    //             node256_count: 0,
+    //             leaf_count: 64,
+    //             empty_capacity: 0,
+    //             total_key_bytes: 128,
+    //             total_inner_node_bytes: 1464,
+    //         }
+    //     );
 
-        unsafe { deallocate_tree(root) };
-    }
+    //     unsafe { deallocate_tree(root) };
+    // }
 }

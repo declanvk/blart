@@ -10,7 +10,7 @@ use crate::{
 use std::{
     borrow::Borrow,
     fmt::Debug,
-    hash::Hash,
+    hash::{Hash, Hasher},
     mem::ManuallyDrop,
     ops::{Index, RangeBounds},
 };
@@ -1102,7 +1102,7 @@ where
     V: Hash,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        crate::nightly_rust_apis::hasher_write_length_prefix(state, self.num_entries);
+        Hasher::write_length_prefix(state, self.num_entries);
         for elt in self {
             elt.hash(state);
         }
