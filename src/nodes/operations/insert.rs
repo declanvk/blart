@@ -150,7 +150,7 @@ where
             // PANIC SAFETY: This is guaranteed not to panic because the `MismatchPrefix`
             // variant is only returned in cases where there was a mismatch in the header
             // prefix, implying that the header is present.
-            let header = unsafe { mismatched_inner_node_ptr.header_mut().unwrap() };
+            let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
 
             if (key_bytes_used + matched_prefix_size) >= key.as_bytes().len() {
                 // then the key has insufficient bytes to be unique. It must be
@@ -189,8 +189,8 @@ where
             if leaf_node.matches_full_key(&key) {
                 // This means that the key provided exactly matched the existing leaf key, so we
                 // will simply replace the contents of the leaf node.
-                #[allow(clippy::undropped_manually_drops)]
-                drop(leaf_node);
+                //#[allow(clippy::undropped_manually_drops)]
+                //drop(leaf_node);
 
                 let new_leaf_node = LeafNode::new(key, value);
                 // SAFETY: The leaf node will not be accessed concurrently because of the safety

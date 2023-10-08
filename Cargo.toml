@@ -1,3 +1,5 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "blart"
 version = "0.1.2"
@@ -25,14 +27,14 @@ version = "1.6.0"
 features = ["std", "rustc_1_57"]
 
 [dependencies.bytemuck]
-version = "1.13.0"
+version = "1.14.0"
 features = ["min_const_generics"]
 
 [features]
 nightly = []
 
 [dev-dependencies]
-argh = "0.1.10"
+argh = "0.1.12"
 criterion = { version = "0.4.0", features = ["html_reports"] }
 dhat = "0.3.2"
 rustc-hash = "1.1.0"
@@ -44,3 +46,10 @@ perfcnt = "0.8.0"
 [[bench]]
 name = "map_apis"
 harness = false
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+incremental = false
+rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]
