@@ -1,5 +1,10 @@
 use crate::{AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr};
-use std::{error::Error, fmt, ops::ControlFlow};
+use std::{
+    error::Error,
+    fmt,
+    intrinsics::{assume, likely, unlikely},
+    ops::ControlFlow,
+};
 
 /// Insert the given key-value pair into the tree.
 ///
@@ -152,7 +157,7 @@ where
             // prefix, implying that the header is present.
             let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
 
-            if (key_bytes_used + matched_prefix_size) >= key.as_bytes().len() {
+            if unlikely((key_bytes_used + matched_prefix_size) >= key.as_bytes().len()) {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key
 
@@ -161,7 +166,10 @@ where
                 });
             }
 
+            unsafe { assume(matched_prefix_size < header.read_prefix().len()) }
+
             let new_leaf_key_byte = key.as_bytes()[key_bytes_used + matched_prefix_size];
+            let header_byte = header.read_prefix()[matched_prefix_size];
 
             let new_leaf_pointer =
                 NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque();
@@ -169,12 +177,15 @@ where
             // prefix mismatch, need to split prefix into two separate nodes and take the
             // common prefix into a new parent node
             let mut new_n4 = InnerNode4::empty();
-
-            new_n4.write_child(
-                header.read_prefix()[matched_prefix_size],
-                mismatched_inner_node_ptr,
-            );
-            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer);
+            unsafe {
+                if header_byte < new_leaf_key_byte {
+                    new_n4.write_child_unchecked(header_byte, mismatched_inner_node_ptr);
+                    new_n4.write_child_unchecked(new_leaf_key_byte, new_leaf_pointer);
+                } else {
+                    new_n4.write_child_unchecked(new_leaf_key_byte, new_leaf_pointer);
+                    new_n4.write_child_unchecked(header_byte, mismatched_inner_node_ptr);
+                }
+            }
 
             new_n4
                 .header
@@ -205,19 +216,21 @@ where
                 });
             }
 
-            let mut new_n4 = InnerNode4::empty();
+            unsafe {
+                assume(key_bytes_used <= leaf_node.key_ref().as_bytes().len());
+                assume(key_bytes_used <= key.as_bytes().len());
+            }
+
             let prefix_size = leaf_node.key_ref().as_bytes()[key_bytes_used..]
                 .iter()
                 .zip(key.as_bytes()[key_bytes_used..].iter())
                 .take_while(|(k1, k2)| k1 == k2)
                 .count();
-            new_n4
-                .header
-                .extend_prefix(&key.as_bytes()[key_bytes_used..(key_bytes_used + prefix_size)]);
-            key_bytes_used += prefix_size;
 
-            if key_bytes_used >= key.as_bytes().len()
-                || key_bytes_used >= leaf_node.key_ref().as_bytes().len()
+            let new_key_bytes_used = key_bytes_used + prefix_size;
+
+            if unlikely(new_key_bytes_used >= key.as_bytes().len()
+                || new_key_bytes_used >= leaf_node.key_ref().as_bytes().len())
             {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key OR an existing key is a prefix of it
@@ -227,14 +240,30 @@ where
                 });
             }
 
-            let new_leaf_key_byte = key.as_bytes()[key_bytes_used];
-            let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
+            unsafe {
+                assume(new_key_bytes_used < key.as_bytes().len());
+                assume(new_key_bytes_used < leaf_node.key_ref().as_bytes().len());
+            }
 
-            new_n4.write_child(
-                leaf_node.key_ref().as_bytes()[key_bytes_used],
-                leaf_node_ptr.to_opaque(),
-            );
-            new_n4.write_child(new_leaf_key_byte, new_leaf_pointer.to_opaque());
+            let mut new_n4 = InnerNode4::empty();
+            new_n4
+                .header
+                .extend_prefix(&key.as_bytes()[key_bytes_used..new_key_bytes_used]);
+
+
+            let leaf_node_key_byte = leaf_node.key_ref().as_bytes()[new_key_bytes_used];
+            let new_leaf_node_key_byte = key.as_bytes()[new_key_bytes_used];
+            let new_leaf_node_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
+
+            unsafe {
+                if leaf_node_key_byte < new_leaf_node_key_byte {
+                    new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
+                    new_n4.write_child_unchecked(new_leaf_node_key_byte, new_leaf_node_pointer.to_opaque());
+                } else {
+                    new_n4.write_child_unchecked(new_leaf_node_key_byte, new_leaf_node_pointer.to_opaque());
+                    new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
+                }
+            }
 
             NodePtr::allocate_node_ptr(new_n4).to_opaque()
         },
@@ -420,7 +449,8 @@ where
         // `search_unchecked` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
         let header = inner_node.header();
-        let matched_prefix_size = header.match_prefix(&key.as_bytes()[*current_depth..]);
+        let matched_prefix_size =
+            unsafe { header.match_prefix(&key.as_bytes().get_unchecked(*current_depth..)) };
         if matched_prefix_size != header.prefix_size() {
             return Ok(ControlFlow::Break(matched_prefix_size));
         }
@@ -428,20 +458,18 @@ where
         // Since the prefix matched, advance the depth by the size of the prefix
         *current_depth += matched_prefix_size;
 
-        let next_key_fragment = if *current_depth < key.as_bytes().len() {
-            key.as_bytes()[*current_depth]
+        if likely(*current_depth < key.as_bytes().len()) {
+            let next_key_fragment = unsafe { *key.as_bytes().get_unchecked(*current_depth) };
+            Ok(ControlFlow::Continue(
+                inner_node.lookup_child(next_key_fragment),
+            ))
         } else {
             // then the key has insufficient bytes to be unique. It must be
             // a prefix of an existing key
-
-            return Err(InsertPrefixError {
+            Err(InsertPrefixError {
                 byte_repr: key.as_bytes().into(),
-            });
-        };
-
-        Ok(ControlFlow::Continue(
-            inner_node.lookup_child(next_key_fragment),
-        ))
+            })
+        }
     }
 
     let mut current_parent = None;
@@ -471,11 +499,17 @@ where
             },
         }?;
 
+        let bytes = key.as_bytes();
+        unsafe {
+            assume(current_depth < bytes.len());
+        }
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
                 match next_child_node {
                     Some(next_child_node) => {
-                        current_parent = Some((current_node, key.as_bytes()[current_depth]));
+                        let byte = unsafe { *bytes.get_unchecked(current_depth) };
+                        current_parent = Some((current_node, byte));
+                        // current_parent = Some((current_node, key.as_bytes()[current_depth]));
                         current_node = next_child_node;
                         // Increment by a single byte
                         current_depth += 1;

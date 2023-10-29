@@ -26,7 +26,7 @@ mod iterators;
 mod tests;
 
 /// The number of bytes stored for path compression in the node header.
-pub const NUM_PREFIX_BYTES: usize = 8;
+pub const NUM_PREFIX_BYTES: usize = 14;
 
 /// The representation of inner nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -790,6 +790,10 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
                 child_index
             },
             WritePoint::Shift(child_index) => {
+                unsafe {
+                    assume(num_children <= self.keys.len());
+                    assume(child_index < num_children);
+                }
                 self.keys
                     .copy_within(child_index..num_children, child_index + 1);
                 self.child_pointers
@@ -798,8 +802,22 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
                 child_index
             },
         };
-        self.keys[child_index].write(key_fragment);
-        self.child_pointers[child_index].write(child_pointer);
+        unsafe {
+            assume(child_index < self.keys.len());
+            self.keys.get_unchecked_mut(child_index).write(key_fragment);
+            self.child_pointers.get_unchecked_mut(child_index).write(child_pointer);
+        }
+    }
+
+    /// Write a child without bounds check or order
+    pub unsafe fn write_child_unchecked(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>) {
+        let i = self.header.num_children as usize;
+        unsafe {
+            assume(i < self.keys.len());
+            self.keys.get_unchecked_mut(i).write(key_fragment);
+            self.child_pointers.get_unchecked_mut(i).write(child_pointer);
+        }
+        self.header.num_children += 1;
     }
 
     fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>>
