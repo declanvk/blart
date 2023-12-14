@@ -1,9 +1,9 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 use std::{
     error::Error,
     fmt,
     intrinsics::{assume, likely, unlikely},
-    ops::ControlFlow,
+    ops::ControlFlow, mem::ManuallyDrop,
 };
 
 /// Insert the given key-value pair into the tree.
@@ -26,282 +26,23 @@ use std::{
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn insert_unchecked<K, V>(
+pub unsafe fn insert_unchecked<'a, K, V>(
     root: OpaqueNodePtr<K, V>,
     key: K,
     value: V,
-) -> Result<InsertResult<K, V>, InsertPrefixError>
+) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
 where
     K: AsBytes,
 {
-    fn write_new_child_in_existing_node<K, V>(
-        inner_node_ptr: OpaqueNodePtr<K, V>,
-        new_leaf_node: LeafNode<K, V>,
-        key_bytes_used: usize,
-    ) -> OpaqueNodePtr<K, V>
-    where
-        K: AsBytes,
-    {
-        fn write_new_child_in_existing_inner_node<K, V, N>(
-            inner_node_ptr: NodePtr<N>,
-            new_leaf_node: LeafNode<K, V>,
-            key_bytes_used: usize,
-        ) -> OpaqueNodePtr<K, V>
-        where
-            N: InnerNode<Key = K, Value = V>,
-            K: AsBytes,
-        {
-            // SAFETY: The `inner_node` reference lasts only for the duration of this
-            // function, and the node will not be read or written via any other source
-            // because of the safety requirements on `insert_unchecked`.
-            let inner_node = unsafe { inner_node_ptr.as_mut() };
-            let new_leaf_key_byte = new_leaf_node.key_ref().as_bytes()[key_bytes_used];
-            let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node).to_opaque();
-            if inner_node.is_full() {
-                // we will create a new node of the next larger type and copy all the
-                // children over.
-
-                let mut new_node = inner_node.grow();
-                new_node.write_child(new_leaf_key_byte, new_leaf_ptr);
-
-                let new_inner_node = NodePtr::allocate_node_ptr(new_node).to_opaque();
-
-                // SAFETY: The `deallocate_node` function is only called a
-                // single time. The uniqueness requirement is passed up to the
-                // `insert_unchecked` safety requirements.
-                unsafe {
-                    #[allow(clippy::drop_ref)]
-                    drop(inner_node);
-                    drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
-                };
-
-                new_inner_node
-            } else {
-                inner_node.write_child(new_leaf_key_byte, new_leaf_ptr);
-
-                inner_node_ptr.to_opaque()
-            }
-        }
-
-        match inner_node_ptr.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => {
-                write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
-            },
-            ConcreteNodePtr::Node16(inner_ptr) => {
-                write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => {
-                write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => {
-                write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
-            },
-            ConcreteNodePtr::LeafNode(_) => {
-                panic!("Cannot have insert into existing with leaf node")
-            },
-        }
-    }
-
-    /// Write a new child node to an inner node at the specified key byte.
-    fn parent_write_child<K, V>(
-        parent_inner_node: OpaqueNodePtr<K, V>,
-        key_byte: u8,
-        new_child: OpaqueNodePtr<K, V>,
-    ) {
-        fn write_inner_node<K, V, N>(
-            parent_inner_node: NodePtr<N>,
-            key_byte: u8,
-            new_child: OpaqueNodePtr<K, V>,
-        ) where
-            N: InnerNode<Key = K, Value = V>,
-        {
-            // SAFETY: The lifetime produced from this is bounded to this scope and does not
-            // escape. Further, no other code mutates the node referenced, which is further
-            // enforced the "no concurrent reads or writes" requirement on the
-            // `maximum_unchecked` function.
-            let parent_node = unsafe { parent_inner_node.as_mut() };
-
-            parent_node.write_child(key_byte, new_child);
-        }
-
-        match parent_inner_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-            ConcreteNodePtr::Node16(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-            ConcreteNodePtr::Node48(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-            ConcreteNodePtr::Node256(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-            ConcreteNodePtr::LeafNode(_) => {
-                panic!("A leaf pointer cannot be the parent of another node")
-            },
-        }
-    }
-
-    // SAFETY: Requirements covered by containing function
-    let InsertSearchResult {
-        parent_ptr_and_child_key_byte,
-        insert_type,
-        mut key_bytes_used,
-    } = unsafe { search_for_insert_point(root, &key)? };
-
-    let new_inner_node = match insert_type {
-        InsertSearchResultType::MismatchPrefix {
-            matched_prefix_size,
-            mismatched_inner_node_ptr,
-        } => {
-            // SAFETY: The lifetime of the header reference is restricted to this block and
-            // within the block no other access occurs. The requirements of
-            // the "no concurrent (read or write) access" is also enforced by the
-            // `insert_unchecked` caller requirements.
-            //
-            // PANIC SAFETY: This is guaranteed not to panic because the `MismatchPrefix`
-            // variant is only returned in cases where there was a mismatch in the header
-            // prefix, implying that the header is present.
-            let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
-
-            if unlikely((key_bytes_used + matched_prefix_size) >= key.as_bytes().len()) {
-                // then the key has insufficient bytes to be unique. It must be
-                // a prefix of an existing key
-
-                return Err(InsertPrefixError {
-                    byte_repr: key.as_bytes().into(),
-                });
-            }
-
-            unsafe { assume(matched_prefix_size < header.read_prefix().len()) }
-
-            let new_leaf_key_byte = key.as_bytes()[key_bytes_used + matched_prefix_size];
-            let header_byte = header.read_prefix()[matched_prefix_size];
-
-            let new_leaf_pointer =
-                NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque();
-
-            // prefix mismatch, need to split prefix into two separate nodes and take the
-            // common prefix into a new parent node
-            let mut new_n4 = InnerNode4::empty();
-            unsafe {
-                if header_byte < new_leaf_key_byte {
-                    new_n4.write_child_unchecked(header_byte, mismatched_inner_node_ptr);
-                    new_n4.write_child_unchecked(new_leaf_key_byte, new_leaf_pointer);
-                } else {
-                    new_n4.write_child_unchecked(new_leaf_key_byte, new_leaf_pointer);
-                    new_n4.write_child_unchecked(header_byte, mismatched_inner_node_ptr);
-                }
-            }
-
-            new_n4
-                .header
-                .extend_prefix(&header.read_prefix()[..matched_prefix_size]);
-            header.ltrim_prefix(matched_prefix_size + 1);
-
-            NodePtr::allocate_node_ptr(new_n4).to_opaque()
-        },
-        InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
-            let leaf_node = leaf_node_ptr.read();
-
-            if leaf_node.matches_full_key(&key) {
-                // This means that the key provided exactly matched the existing leaf key, so we
-                // will simply replace the contents of the leaf node.
-                //#[allow(clippy::undropped_manually_drops)]
-                //drop(leaf_node);
-
-                let new_leaf_node = LeafNode::new(key, value);
-                // SAFETY: The leaf node will not be accessed concurrently because of the safety
-                // doc on the containing function
-                let old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, new_leaf_node) };
-                return Ok(InsertResult {
-                    existing_leaf: Some(old_leaf_node),
-                    // Because we replaced the leaf instead of creating a new leaf, we don't have to
-                    // write back to the parent. In this case, the root is guaranteed to be
-                    // unchanged, even if the old leaf was the root.
-                    new_root: root,
-                });
-            }
-
-            unsafe {
-                assume(key_bytes_used <= leaf_node.key_ref().as_bytes().len());
-                assume(key_bytes_used <= key.as_bytes().len());
-            }
-
-            let prefix_size = leaf_node.key_ref().as_bytes()[key_bytes_used..]
-                .iter()
-                .zip(key.as_bytes()[key_bytes_used..].iter())
-                .take_while(|(k1, k2)| k1 == k2)
-                .count();
-
-            let new_key_bytes_used = key_bytes_used + prefix_size;
-
-            if unlikely(new_key_bytes_used >= key.as_bytes().len()
-                || new_key_bytes_used >= leaf_node.key_ref().as_bytes().len())
-            {
-                // then the key has insufficient bytes to be unique. It must be
-                // a prefix of an existing key OR an existing key is a prefix of it
-
-                return Err(InsertPrefixError {
-                    byte_repr: key.as_bytes().into(),
-                });
-            }
-
-            unsafe {
-                assume(new_key_bytes_used < key.as_bytes().len());
-                assume(new_key_bytes_used < leaf_node.key_ref().as_bytes().len());
-            }
-
-            let mut new_n4 = InnerNode4::empty();
-            new_n4
-                .header
-                .extend_prefix(&key.as_bytes()[key_bytes_used..new_key_bytes_used]);
-
-
-            let leaf_node_key_byte = leaf_node.key_ref().as_bytes()[new_key_bytes_used];
-            let new_leaf_node_key_byte = key.as_bytes()[new_key_bytes_used];
-            let new_leaf_node_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
-
-            unsafe {
-                if leaf_node_key_byte < new_leaf_node_key_byte {
-                    new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
-                    new_n4.write_child_unchecked(new_leaf_node_key_byte, new_leaf_node_pointer.to_opaque());
-                } else {
-                    new_n4.write_child_unchecked(new_leaf_node_key_byte, new_leaf_node_pointer.to_opaque());
-                    new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
-                }
-            }
-
-            NodePtr::allocate_node_ptr(new_n4).to_opaque()
-        },
-        InsertSearchResultType::IntoExisting { inner_node_ptr } => {
-            write_new_child_in_existing_node(
-                inner_node_ptr,
-                LeafNode::new(key, value),
-                key_bytes_used,
-            )
-        },
-    };
-
-    if let Some((parent_ptr, parent_key_fragment)) = parent_ptr_and_child_key_byte {
-        // TODO(#14) Change this write back to parent to only happen when a new inner
-        // node is created (MismatchPrefix & SplitLeaf (when it is not an overwrite of
-        // the existing leaf))
-        parent_write_child(parent_ptr, parent_key_fragment, new_inner_node);
-
-        // If there was a parent either:
-        //   1. Root was the parent, in which case it was unchanged
-        //   2. Or some parent of the parent was root, in which case it was unchanged
-        Ok(InsertResult {
-            existing_leaf: None,
-            new_root: root,
-        })
-    } else {
-        // If there was no parent, then the root node was a leaf or the inner node split
-        // occurred at the root, in which case return the new inner node as root
-        Ok(InsertResult {
-            existing_leaf: None,
-            new_root: new_inner_node,
-        })
-    }
+    let insert_point = unsafe { search_for_insert_point(root, &key)? };
+    insert_point.apply(key, value)
 }
 
 /// The results of a successful tree insert
 #[derive(Debug)]
-pub struct InsertResult<K, V> {
+pub struct InsertResult<'a, K, V> {
+    /// Mutable reference for the newly inserted value
+    pub new_value_ref: &'a mut V,
     /// The existing leaf referenced by the insert key, if present
     pub existing_leaf: Option<LeafNode<K, V>>,
     /// The new tree root after the successful insert
@@ -342,7 +83,7 @@ impl Error for InsertPrefixError {}
 ///
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
-pub struct InsertSearchResult<K, V> {
+pub struct InsertPoint<K, V> {
     /// The parent node pointer and key byte that points to the main node
     /// insert point.
     ///
@@ -354,6 +95,311 @@ pub struct InsertSearchResult<K, V> {
     /// The number of bytes that were read from the key to find the insert
     /// point.
     pub key_bytes_used: usize,
+    /// Current root of the tree, used in the consume
+    pub root: OpaqueNodePtr<K, V>
+}
+
+impl<K, V> InsertPoint<K, V> {
+    pub fn apply<'a>(
+        self,
+        key: K,
+        value: V
+    ) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
+    where
+        K: AsBytes,
+    {
+        unsafe fn create_value_ref<'a, 'b, K, V>(leaf: NodePtr<LeafNode<K, V>>) -> &'b mut V {
+            unsafe { &mut *(leaf.as_value_mut() as *mut _) }
+        }
+
+        fn write_new_child_in_existing_node<'a, K, V>(
+            inner_node_ptr: OpaqueNodePtr<K, V>,
+            new_leaf_node: LeafNode<K, V>,
+            key_bytes_used: usize,
+        ) -> (OpaqueNodePtr<K, V>, &'a mut V)
+        where
+            K: AsBytes,
+        {
+            fn write_new_child_in_existing_inner_node<'a, K, V, N>(
+                inner_node_ptr: NodePtr<N>,
+                new_leaf_node: LeafNode<K, V>,
+                key_bytes_used: usize,
+            ) -> (OpaqueNodePtr<K, V>,  &'a mut V)
+            where
+                N: InnerNode<Key = K, Value = V>,
+                K: AsBytes,
+            {
+                // SAFETY: The `inner_node` reference lasts only for the duration of this
+                // function, and the node will not be read or written via any other source
+                // because of the safety requirements on `insert_unchecked`.
+                let inner_node = unsafe { inner_node_ptr.as_mut() };
+                let new_leaf_key_byte = new_leaf_node.key_ref().as_bytes()[key_bytes_used];
+                let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node);
+                let new_value_ref = unsafe { create_value_ref(new_leaf_ptr) };
+                let new_leaf_ptr = new_leaf_ptr.to_opaque();
+                if inner_node.is_full() {
+                    // we will create a new node of the next larger type and copy all the
+                    // children over.
+
+                    let mut new_node = inner_node.grow();
+                    new_node.write_child(new_leaf_key_byte, new_leaf_ptr);
+
+                    let new_inner_node = NodePtr::allocate_node_ptr(new_node).to_opaque();
+
+                    // SAFETY: The `deallocate_node` function is only called a
+                    // single time. The uniqueness requirement is passed up to the
+                    // `insert_unchecked` safety requirements.
+                    unsafe {
+                        #[allow(clippy::drop_ref)]
+                        drop(inner_node);
+                        drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
+                    };
+
+                    (new_inner_node, new_value_ref)
+                } else {
+                    inner_node.write_child(new_leaf_key_byte, new_leaf_ptr);
+
+                    (inner_node_ptr.to_opaque(), new_value_ref)
+                }
+            }
+
+            match inner_node_ptr.to_node_ptr() {
+                ConcreteNodePtr::Node4(inner_ptr) => {
+                    write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
+                },
+                ConcreteNodePtr::Node16(inner_ptr) => {
+                    write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
+                },
+                ConcreteNodePtr::Node48(inner_ptr) => {
+                    write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
+                },
+                ConcreteNodePtr::Node256(inner_ptr) => {
+                    write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
+                },
+                ConcreteNodePtr::LeafNode(_) => {
+                    panic!("Cannot have insert into existing with leaf node")
+                },
+            }
+        }
+
+        /// Write a new child node to an inner node at the specified key byte.
+        fn parent_write_child<K, V>(
+            parent_inner_node: OpaqueNodePtr<K, V>,
+            key_byte: u8,
+            new_child: OpaqueNodePtr<K, V>,
+        ) {
+            fn write_inner_node<K, V, N>(
+                parent_inner_node: NodePtr<N>,
+                key_byte: u8,
+                new_child: OpaqueNodePtr<K, V>,
+            ) where
+                N: InnerNode<Key = K, Value = V>,
+            {
+                // SAFETY: The lifetime produced from this is bounded to this scope and does not
+                // escape. Further, no other code mutates the node referenced, which is further
+                // enforced the "no concurrent reads or writes" requirement on the
+                // `maximum_unchecked` function.
+                let parent_node = unsafe { parent_inner_node.as_mut() };
+
+                parent_node.write_child(key_byte, new_child);
+            }
+
+            match parent_inner_node.to_node_ptr() {
+                ConcreteNodePtr::Node4(inner_ptr) => {
+                    write_inner_node(inner_ptr, key_byte, new_child)
+                },
+                ConcreteNodePtr::Node16(inner_ptr) => {
+                    write_inner_node(inner_ptr, key_byte, new_child)
+                },
+                ConcreteNodePtr::Node48(inner_ptr) => {
+                    write_inner_node(inner_ptr, key_byte, new_child)
+                },
+                ConcreteNodePtr::Node256(inner_ptr) => {
+                    write_inner_node(inner_ptr, key_byte, new_child)
+                },
+                ConcreteNodePtr::LeafNode(_) => {
+                    panic!("A leaf pointer cannot be the parent of another node")
+                },
+            }
+        }
+
+        let InsertPoint {
+            parent_ptr_and_child_key_byte,
+            insert_type,
+            key_bytes_used,
+            root
+        } = self;
+
+        let (new_inner_node, new_value_ref) = match insert_type {
+            InsertSearchResultType::MismatchPrefix {
+                matched_prefix_size,
+                mismatched_inner_node_ptr,
+            } => {
+                // SAFETY: The lifetime of the header reference is restricted to this block and
+                // within the block no other access occurs. The requirements of
+                // the "no concurrent (read or write) access" is also enforced by the
+                // `insert_unchecked` caller requirements.
+                //
+                // PANIC SAFETY: This is guaranteed not to panic because the `MismatchPrefix`
+                // variant is only returned in cases where there was a mismatch in the header
+                // prefix, implying that the header is present.
+                let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
+
+                if unlikely((key_bytes_used + matched_prefix_size) >= key.as_bytes().len()) {
+                    // then the key has insufficient bytes to be unique. It must be
+                    // a prefix of an existing key
+
+                    return Err(InsertPrefixError {
+                        byte_repr: key.as_bytes().into(),
+                    });
+                }
+
+                unsafe { assume(matched_prefix_size < header.read_prefix().len()) }
+
+                let new_leaf_key_byte = key.as_bytes()[key_bytes_used + matched_prefix_size];
+                let header_byte = header.read_prefix()[matched_prefix_size];
+
+                let new_leaf_pointer =
+                    NodePtr::allocate_node_ptr(LeafNode::new(key, value));
+                let new_value_ref = unsafe { create_value_ref(new_leaf_pointer) };
+                let new_leaf_pointer = new_leaf_pointer.to_opaque();
+
+                // prefix mismatch, need to split prefix into two separate nodes and take the
+                // common prefix into a new parent node
+                let mut new_n4 = InnerNode4::empty();
+                unsafe {
+                    if header_byte < new_leaf_key_byte {
+                        new_n4.write_child_unchecked(header_byte, mismatched_inner_node_ptr);
+                        new_n4.write_child_unchecked(new_leaf_key_byte, new_leaf_pointer);
+                    } else {
+                        new_n4.write_child_unchecked(new_leaf_key_byte, new_leaf_pointer);
+                        new_n4.write_child_unchecked(header_byte, mismatched_inner_node_ptr);
+                    }
+                }
+
+                new_n4
+                    .header
+                    .extend_prefix(&header.read_prefix()[..matched_prefix_size]);
+                header.ltrim_prefix(matched_prefix_size + 1);
+
+                (NodePtr::allocate_node_ptr(new_n4).to_opaque(), new_value_ref)
+            },
+            InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
+                let leaf_node = leaf_node_ptr.read();
+
+                if leaf_node.matches_full_key(&key) {
+                    // This means that the key provided exactly matched the existing leaf key, so we
+                    // will simply replace the contents of the leaf node.
+                    //#[allow(clippy::undropped_manually_drops)]
+                    //drop(leaf_node);
+
+                    let new_leaf_node = LeafNode::new(key, value);
+                    // SAFETY: The leaf node will not be accessed concurrently because of the safety
+                    // doc on the containing function
+                    // TODO: Is this right ?
+                    let old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, new_leaf_node) };
+                    return Ok(InsertResult {
+                        new_value_ref: unsafe { create_value_ref(leaf_node_ptr) },
+                        existing_leaf: Some(old_leaf_node),
+                        // Because we replaced the leaf instead of creating a new leaf, we don't
+                        // have to write back to the parent. In this case,
+                        // the root is guaranteed to be unchanged, even if
+                        // the old leaf was the root.
+                        new_root: root,
+                    });
+                }
+
+                unsafe {
+                    assume(key_bytes_used <= leaf_node.key_ref().as_bytes().len());
+                    assume(key_bytes_used <= key.as_bytes().len());
+                }
+
+                let prefix_size = leaf_node.key_ref().as_bytes()[key_bytes_used..]
+                    .iter()
+                    .zip(key.as_bytes()[key_bytes_used..].iter())
+                    .take_while(|(k1, k2)| k1 == k2)
+                    .count();
+
+                let new_key_bytes_used = key_bytes_used + prefix_size;
+
+                if unlikely(
+                    new_key_bytes_used >= key.as_bytes().len()
+                        || new_key_bytes_used >= leaf_node.key_ref().as_bytes().len(),
+                ) {
+                    // then the key has insufficient bytes to be unique. It must be
+                    // a prefix of an existing key OR an existing key is a prefix of it
+
+                    return Err(InsertPrefixError {
+                        byte_repr: key.as_bytes().into(),
+                    });
+                }
+
+                unsafe {
+                    assume(new_key_bytes_used < key.as_bytes().len());
+                    assume(new_key_bytes_used < leaf_node.key_ref().as_bytes().len());
+                }
+
+                let mut new_n4 = InnerNode4::empty();
+                new_n4
+                    .header
+                    .extend_prefix(&key.as_bytes()[key_bytes_used..new_key_bytes_used]);
+
+                let leaf_node_key_byte = leaf_node.key_ref().as_bytes()[new_key_bytes_used];
+                let new_leaf_node_key_byte = key.as_bytes()[new_key_bytes_used];
+                let new_leaf_node_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
+                let new_value_ref = unsafe { create_value_ref(new_leaf_node_pointer) };
+
+                unsafe {
+                    if leaf_node_key_byte < new_leaf_node_key_byte {
+                        new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
+                        new_n4.write_child_unchecked(
+                            new_leaf_node_key_byte,
+                            new_leaf_node_pointer.to_opaque(),
+                        );
+                    } else {
+                        new_n4.write_child_unchecked(
+                            new_leaf_node_key_byte,
+                            new_leaf_node_pointer.to_opaque(),
+                        );
+                        new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
+                    }
+                }
+
+                (NodePtr::allocate_node_ptr(new_n4).to_opaque(), new_value_ref)
+            },
+            InsertSearchResultType::IntoExisting { inner_node_ptr } => {
+                write_new_child_in_existing_node(
+                    inner_node_ptr,
+                    LeafNode::new(key, value),
+                    key_bytes_used,
+                )
+            },
+        };
+
+        if let Some((parent_ptr, parent_key_fragment)) = parent_ptr_and_child_key_byte {
+            // TODO(#14) Change this write back to parent to only happen when a new inner
+            // node is created (MismatchPrefix & SplitLeaf (when it is not an overwrite of
+            // the existing leaf))
+            parent_write_child(parent_ptr, parent_key_fragment, new_inner_node);
+
+            // If there was a parent either:
+            //   1. Root was the parent, in which case it was unchanged
+            //   2. Or some parent of the parent was root, in which case it was unchanged
+            Ok(InsertResult {
+                new_value_ref,
+                existing_leaf: None,
+                new_root: root,
+            })
+        } else {
+            // If there was no parent, then the root node was a leaf or the inner node split
+            // occurred at the root, in which case return the new inner node as root
+            Ok(InsertResult {
+                new_value_ref,
+                existing_leaf: None,
+                new_root: new_inner_node,
+            })
+        }
+    }
 }
 
 /// The type of insert
@@ -429,8 +475,8 @@ impl<K, V> fmt::Debug for InsertSearchResultType<K, V> {
 /// an error.
 pub unsafe fn search_for_insert_point<K, V>(
     root: OpaqueNodePtr<K, V>,
-    key: &K,
-) -> Result<InsertSearchResult<K, V>, InsertPrefixError>
+    key: &K
+) -> Result<InsertPoint<K, V>, InsertPrefixError>
 where
     K: AsBytes,
 {
@@ -479,22 +525,23 @@ where
     loop {
         let lookup_result = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, &key, &mut current_depth)
             },
             ConcreteNodePtr::Node16(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, &key, &mut current_depth)
             },
             ConcreteNodePtr::Node48(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, &key, &mut current_depth)
             },
             ConcreteNodePtr::Node256(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, &key, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                return Ok(InsertSearchResult {
+                return Ok(InsertPoint {
                     key_bytes_used: current_depth,
                     parent_ptr_and_child_key_byte: current_parent,
                     insert_type: InsertSearchResultType::SplitLeaf { leaf_node_ptr },
+                    root
                 });
             },
         }?;
@@ -509,30 +556,31 @@ where
                     Some(next_child_node) => {
                         let byte = unsafe { *bytes.get_unchecked(current_depth) };
                         current_parent = Some((current_node, byte));
-                        // current_parent = Some((current_node, key.as_bytes()[current_depth]));
                         current_node = next_child_node;
                         // Increment by a single byte
                         current_depth += 1;
                     },
                     None => {
-                        return Ok(InsertSearchResult {
+                        return Ok(InsertPoint {
                             key_bytes_used: current_depth,
                             insert_type: InsertSearchResultType::IntoExisting {
                                 inner_node_ptr: current_node,
                             },
                             parent_ptr_and_child_key_byte: current_parent,
+                            root
                         })
                     },
                 }
             },
             ControlFlow::Break(matched_prefix_size) => {
-                return Ok(InsertSearchResult {
+                return Ok(InsertPoint {
                     key_bytes_used: current_depth,
                     insert_type: InsertSearchResultType::MismatchPrefix {
                         matched_prefix_size,
                         mismatched_inner_node_ptr: current_node,
                     },
                     parent_ptr_and_child_key_byte: current_parent,
+                    root
                 })
             },
         };

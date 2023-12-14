@@ -3,19 +3,27 @@
 
 use crate::{
     deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked,
-    insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
-    visitor::TreeStatsCollector, AsBytes, DeleteResult, InsertPrefixError, InsertResult, LeafNode,
-    NoPrefixesBytes, NodePtr, OpaqueNodePtr,
+    insert_unchecked, maximum_unchecked, minimum_unchecked, search_for_insert_point,
+    search_unchecked,
+    visitor::TreeStatsCollector,
+    AsBytes, ConcreteNodePtr, DeleteResult, InnerNode, InnerNode4, InsertPoint, InsertPrefixError,
+    InsertResult,
+    InsertSearchResultType::{self, IntoExisting, MismatchPrefix, SplitLeaf},
+    LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr,
 };
 use std::{
     borrow::Borrow,
     fmt::Debug,
     hash::{Hash, Hasher},
+    intrinsics::{assume, unlikely},
+    marker::PhantomData,
     mem::ManuallyDrop,
     ops::{Index, RangeBounds},
 };
 
+mod entry;
 mod iterators;
+pub use entry::*;
 pub use iterators::*;
 
 /// An ordered map based on an adaptive radix tree.
@@ -419,6 +427,16 @@ impl<K, V> TreeMap<K, V> {
         }
     }
 
+    fn apply_insert_result(&mut self, result: &InsertResult<K, V>) {
+        self.root = Some(result.new_root);
+
+        if result.existing_leaf.is_none() {
+            // this was a strict add, not a replace. If there was an existing leaf we are
+            // removing and adding a leaf, so the number of entries stays the same
+            self.num_entries += 1;
+        }
+    }
+
     /// Insert a key-value pair into the map.
     ///
     /// If the map did not have this key present, Ok(None) is returned.
@@ -448,13 +466,8 @@ impl<K, V> TreeMap<K, V> {
     where
         K: NoPrefixesBytes,
     {
-        match self.try_insert(key, value) {
-            Ok(value) => value,
-            Err(_err) => unreachable!(
-                "This branch should be unreachable because of the safety contract of \
-                 `NoPrefixesBytes`"
-            ),
-        }
+        // This will never fail because of the safety contract of `NoPrefixesBytes`
+        unsafe { self.try_insert(key, value).unwrap_unchecked() }
     }
 
     /// Inserts a key-value pair into the map.
@@ -492,23 +505,9 @@ impl<K, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let InsertResult {
-                existing_leaf,
-                new_root,
-            } = unsafe { insert_unchecked(root, key, value)? };
-
-            self.root = Some(new_root);
-
-            if existing_leaf.is_none() {
-                // this was a strict add, not a replace. If there was an existing leaf we are
-                // removing and adding a leaf, so the number of entries stays the same
-                self.num_entries = self
-                    .num_entries
-                    .checked_add(1)
-                    .expect("should not overflow a usize");
-            }
-
-            Ok(existing_leaf.map(|leaf| leaf.into_entry().1))
+            let result = unsafe { insert_unchecked(root, key, value)? };
+            self.apply_insert_result(&result);
+            Ok(result.existing_leaf.map(|leaf| leaf.into_entry().1))
         } else {
             self.root = Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque());
 
@@ -550,10 +549,7 @@ impl<K, V> TreeMap<K, V> {
 
             // The `delete_unchecked` returns early if the key was not found, we are
             // guaranteed at this point that the leaf has been removed from the tree.
-            self.num_entries = self
-                .num_entries
-                .checked_sub(1)
-                .expect("should not underflow, inc/dec should be paired");
+            self.num_entries -= 1;
 
             self.root = new_root;
             Some(deleted_leaf.into_entry())
@@ -1004,6 +1000,40 @@ impl<K, V> TreeMap<K, V> {
     /// ```
     pub fn is_empty(&self) -> bool {
         self.num_entries == 0
+    }
+}
+
+impl<K, V> TreeMap<K, V> {
+    pub fn entry(&mut self, key: K) -> Entry<K, V>
+    where
+        K: NoPrefixesBytes,
+    {
+        match self.root {
+            Some(root) => {
+                let insert_point =
+                    unsafe { search_for_insert_point(root, &key).unwrap_unchecked() };
+                match insert_point.insert_type {
+                    SplitLeaf { leaf_node_ptr }
+                        if unsafe { leaf_node_ptr.as_ref().matches_full_key(&key) } =>
+                    {
+                        Entry::Occupied(OccupiedEntry {
+                            key,
+                            leaf: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
+                        })
+                    },
+                    _ => Entry::Vacant(VacantEntry {
+                        key,
+                        insert_point: Some(insert_point),
+                        map: self,
+                    }),
+                }
+            },
+            None => Entry::Vacant(VacantEntry {
+                key,
+                insert_point: None,
+                map: self,
+            }),
+        }
     }
 }
 
