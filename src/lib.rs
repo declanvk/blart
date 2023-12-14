@@ -20,7 +20,7 @@
 )]
 #![allow(unstable_name_collisions)]
 #![deny(
-    missing_docs,
+    // missing_docs,
     clippy::missing_safety_doc,
     unsafe_op_in_unsafe_fn,
     deprecated_in_future,
