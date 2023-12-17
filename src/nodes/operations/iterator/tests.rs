@@ -1,5 +1,5 @@
 use crate::{
-    deallocate_tree, insert_unchecked, tests_common::generate_key_fixed_length, LeafNode, NodePtr,
+    deallocate_tree, tests_common::{generate_key_fixed_length, insert_unchecked}, LeafNode, NodePtr,
     TreeIterator,
 };
 

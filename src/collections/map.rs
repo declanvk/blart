@@ -3,8 +3,7 @@
 
 use crate::{
     deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked,
-    insert_unchecked, maximum_unchecked, minimum_unchecked, search_for_insert_point,
-    search_unchecked,
+    maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked,
     visitor::TreeStatsCollector,
     AsBytes, ConcreteNodePtr, DeleteResult, InnerNode, InnerNode4, InsertPoint, InsertPrefixError,
     InsertResult,
@@ -427,14 +426,33 @@ impl<K, V> TreeMap<K, V> {
         }
     }
 
-    fn apply_insert_result(&mut self, result: &InsertResult<K, V>) {
-        self.root = Some(result.new_root);
+    fn init_tree(&mut self, key: K, value: V) -> NodePtr<LeafNode<K, V>> {
+        let leaf = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
+        self.root = Some(leaf.to_opaque());
+        self.num_entries = 1;
+        leaf
+    }
 
-        if result.existing_leaf.is_none() {
+    fn apply_insert_point(
+        &mut self,
+        insert_point: InsertPoint<K, V>,
+        key: K,
+        value: V,
+    ) -> Result<InsertResult<K, V>, InsertPrefixError>
+    where
+        K: AsBytes,
+    {
+        let insert_result = insert_point.apply(key, value)?;
+
+        self.root = Some(insert_result.new_root);
+
+        if insert_result.existing_leaf.is_none() {
             // this was a strict add, not a replace. If there was an existing leaf we are
             // removing and adding a leaf, so the number of entries stays the same
             self.num_entries += 1;
         }
+
+        Ok(insert_result)
     }
 
     /// Insert a key-value pair into the map.
@@ -505,14 +523,12 @@ impl<K, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let result = unsafe { insert_unchecked(root, key, value)? };
-            self.apply_insert_result(&result);
-            Ok(result.existing_leaf.map(|leaf| leaf.into_entry().1))
+            // let result = unsafe { insert_unchecked(root, key, value)? };
+            let insert_point = unsafe { search_for_insert_point(root, &key)? };
+            let insert_result = self.apply_insert_point(insert_point, key, value)?;
+            Ok(insert_result.existing_leaf.map(|leaf| leaf.into_entry().1))
         } else {
-            self.root = Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque());
-
-            self.num_entries = 1;
-
+            self.init_tree(key, value);
             Ok(None)
         }
     }
@@ -1017,7 +1033,6 @@ impl<K, V> TreeMap<K, V> {
                         if unsafe { leaf_node_ptr.as_ref().matches_full_key(&key) } =>
                     {
                         Entry::Occupied(OccupiedEntry {
-                            key,
                             leaf: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
                         })
                     },

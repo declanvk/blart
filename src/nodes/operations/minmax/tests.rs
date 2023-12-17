@@ -1,6 +1,6 @@
 use crate::{
-    deallocate_tree, insert_unchecked, maximum_unchecked, minimum_unchecked,
-    tests_common::{generate_key_fixed_length, generate_keys_skewed},
+    deallocate_tree, maximum_unchecked, minimum_unchecked,
+    tests_common::{generate_key_fixed_length, generate_keys_skewed, insert_unchecked},
     LeafNode, NodePtr,
 };
 

@@ -1,6 +1,6 @@
 use crate::{
-    deallocate_tree, insert_unchecked, search_unchecked,
-    tests_common::{generate_keys_skewed, setup_tree_from_entries},
+    deallocate_tree, search_unchecked,
+    tests_common::{generate_keys_skewed, setup_tree_from_entries, insert_unchecked},
     InnerNode, InnerNode4, InsertPrefixError, LeafNode, NodePtr, NodeType,
 };
 
