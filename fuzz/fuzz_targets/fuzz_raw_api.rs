@@ -1,7 +1,7 @@
 #![no_main]
 
 use blart::{
-    deallocate_tree, delete_unchecked, insert_unchecked, maximum_unchecked, minimum_unchecked,
+    deallocate_tree, delete_unchecked, maximum_unchecked, minimum_unchecked,
     search_unchecked, visitor::WellFormedChecker, InsertResult, LeafNode, NodePtr, OpaqueNodePtr,
     TreeIterator,
 };

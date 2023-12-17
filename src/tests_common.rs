@@ -4,6 +4,7 @@ use crate::{
     visitor::{DotPrinter, DotPrinterSettings},
     OpaqueNodePtr,
 };
+use crate::{AsBytes, InsertResult, InsertPrefixError};
 use std::{collections::HashSet, fmt, io, iter};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a
@@ -339,10 +340,25 @@ pub fn convert_tree_to_dot_string<K: fmt::Debug, V: fmt::Debug>(
 }
 
 #[cfg(test)]
+pub(crate) unsafe fn insert_unchecked<'a, K, V>(
+    root: OpaqueNodePtr<K, V>,
+    key: K,
+    value: V,
+) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
+where
+    K: AsBytes,
+{
+    use crate::search_for_insert_point;
+
+    let insert_point = unsafe { search_for_insert_point(root, &key)? };
+    insert_point.apply(key, value)
+}
+
+#[cfg(test)]
 pub(crate) fn setup_tree_from_entries<V>(
     mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
 ) -> OpaqueNodePtr<Box<[u8]>, V> {
-    use crate::{insert_unchecked, LeafNode, NodePtr};
+    use crate::{LeafNode, NodePtr};
 
     let (first_key, first_value) = entries_it.next().unwrap();
 

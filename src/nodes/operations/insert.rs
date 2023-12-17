@@ -1,42 +1,14 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
+use crate::{
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, TreeMap,
+};
 use std::{
+    borrow::Borrow,
     error::Error,
     fmt,
     intrinsics::{assume, likely, unlikely},
-    ops::ControlFlow, mem::ManuallyDrop,
+    mem::ManuallyDrop,
+    ops::ControlFlow,
 };
-
-/// Insert the given key-value pair into the tree.
-///
-/// Returns either a pointer to the new tree root or an error.
-///
-/// If the given key already exists in the tree, the old key and value will be
-/// replaced and be returned.
-///
-/// # Errors
-///
-///   - Returns a [`InsertPrefixError<K>`] if the given key is a prefix of
-///     another key that exists in the trie. Or if the given key is prefixed by
-///     an existing key in the trie.
-///
-/// # Safety
-///
-///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
-///    tree
-///  - This function cannot be called concurrently to any reads or writes of the
-///    `root` node or any child node of `root`. This function will arbitrarily
-///    read or write to any child in the given tree.
-pub unsafe fn insert_unchecked<'a, K, V>(
-    root: OpaqueNodePtr<K, V>,
-    key: K,
-    value: V,
-) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
-where
-    K: AsBytes,
-{
-    let insert_point = unsafe { search_for_insert_point(root, &key)? };
-    insert_point.apply(key, value)
-}
 
 /// The results of a successful tree insert
 #[derive(Debug)]
@@ -95,16 +67,12 @@ pub struct InsertPoint<K, V> {
     /// The number of bytes that were read from the key to find the insert
     /// point.
     pub key_bytes_used: usize,
-    /// Current root of the tree, used in the consume
-    pub root: OpaqueNodePtr<K, V>
+    /// Current root of the tree, used in the apply
+    pub root: OpaqueNodePtr<K, V>,
 }
 
 impl<K, V> InsertPoint<K, V> {
-    pub fn apply<'a>(
-        self,
-        key: K,
-        value: V
-    ) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
+    pub fn apply<'a>(self, key: K, value: V) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
     where
         K: AsBytes,
     {
@@ -124,7 +92,7 @@ impl<K, V> InsertPoint<K, V> {
                 inner_node_ptr: NodePtr<N>,
                 new_leaf_node: LeafNode<K, V>,
                 key_bytes_used: usize,
-            ) -> (OpaqueNodePtr<K, V>,  &'a mut V)
+            ) -> (OpaqueNodePtr<K, V>, &'a mut V)
             where
                 N: InnerNode<Key = K, Value = V>,
                 K: AsBytes,
@@ -227,7 +195,7 @@ impl<K, V> InsertPoint<K, V> {
             parent_ptr_and_child_key_byte,
             insert_type,
             key_bytes_used,
-            root
+            root,
         } = self;
 
         let (new_inner_node, new_value_ref) = match insert_type {
@@ -259,8 +227,7 @@ impl<K, V> InsertPoint<K, V> {
                 let new_leaf_key_byte = key.as_bytes()[key_bytes_used + matched_prefix_size];
                 let header_byte = header.read_prefix()[matched_prefix_size];
 
-                let new_leaf_pointer =
-                    NodePtr::allocate_node_ptr(LeafNode::new(key, value));
+                let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
                 let new_value_ref = unsafe { create_value_ref(new_leaf_pointer) };
                 let new_leaf_pointer = new_leaf_pointer.to_opaque();
 
@@ -282,7 +249,10 @@ impl<K, V> InsertPoint<K, V> {
                     .extend_prefix(&header.read_prefix()[..matched_prefix_size]);
                 header.ltrim_prefix(matched_prefix_size + 1);
 
-                (NodePtr::allocate_node_ptr(new_n4).to_opaque(), new_value_ref)
+                (
+                    NodePtr::allocate_node_ptr(new_n4).to_opaque(),
+                    new_value_ref,
+                )
             },
             InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
                 let leaf_node = leaf_node_ptr.read();
@@ -365,7 +335,10 @@ impl<K, V> InsertPoint<K, V> {
                     }
                 }
 
-                (NodePtr::allocate_node_ptr(new_n4).to_opaque(), new_value_ref)
+                (
+                    NodePtr::allocate_node_ptr(new_n4).to_opaque(),
+                    new_value_ref,
+                )
             },
             InsertSearchResultType::IntoExisting { inner_node_ptr } => {
                 write_new_child_in_existing_node(
@@ -475,7 +448,7 @@ impl<K, V> fmt::Debug for InsertSearchResultType<K, V> {
 /// an error.
 pub unsafe fn search_for_insert_point<K, V>(
     root: OpaqueNodePtr<K, V>,
-    key: &K
+    key: &K,
 ) -> Result<InsertPoint<K, V>, InsertPrefixError>
 where
     K: AsBytes,
@@ -525,23 +498,23 @@ where
     loop {
         let lookup_result = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, &key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
             },
             ConcreteNodePtr::Node16(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, &key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
             },
             ConcreteNodePtr::Node48(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, &key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
             },
             ConcreteNodePtr::Node256(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, &key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 return Ok(InsertPoint {
                     key_bytes_used: current_depth,
                     parent_ptr_and_child_key_byte: current_parent,
                     insert_type: InsertSearchResultType::SplitLeaf { leaf_node_ptr },
-                    root
+                    root,
                 });
             },
         }?;
@@ -567,7 +540,7 @@ where
                                 inner_node_ptr: current_node,
                             },
                             parent_ptr_and_child_key_byte: current_parent,
-                            root
+                            root,
                         })
                     },
                 }
@@ -580,7 +553,7 @@ where
                         mismatched_inner_node_ptr: current_node,
                     },
                     parent_ptr_and_child_key_byte: current_parent,
-                    root
+                    root,
                 })
             },
         };
