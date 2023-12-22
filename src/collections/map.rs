@@ -7,7 +7,7 @@ use crate::{
     visitor::TreeStatsCollector,
     AsBytes, ConcreteNodePtr, DeleteResult, InnerNode, InnerNode4, InsertPoint, InsertPrefixError,
     InsertResult,
-    InsertSearchResultType::{self, IntoExisting, MismatchPrefix, SplitLeaf},
+    InsertSearchResultType::{self, Exact, IntoExisting, MismatchPrefix, SplitLeaf},
     LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr,
 };
 use std::{
@@ -442,7 +442,7 @@ impl<K, V> TreeMap<K, V> {
     where
         K: AsBytes,
     {
-        let insert_result = insert_point.apply(key, value)?;
+        let insert_result = insert_point.apply(key, value);
 
         self.root = Some(insert_result.new_root);
 
@@ -1020,22 +1020,17 @@ impl<K, V> TreeMap<K, V> {
 }
 
 impl<K, V> TreeMap<K, V> {
-    pub fn entry(&mut self, key: K) -> Entry<K, V>
+    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V>, InsertPrefixError>
     where
-        K: NoPrefixesBytes,
+        K: AsBytes,
     {
-        match self.root {
+        let entry = match self.root {
             Some(root) => {
-                let insert_point =
-                    unsafe { search_for_insert_point(root, &key).unwrap_unchecked() };
+                let insert_point = unsafe { search_for_insert_point(root, &key)? };
                 match insert_point.insert_type {
-                    SplitLeaf { leaf_node_ptr }
-                        if unsafe { leaf_node_ptr.as_ref().matches_full_key(&key) } =>
-                    {
-                        Entry::Occupied(OccupiedEntry {
-                            leaf: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
-                        })
-                    },
+                    Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
+                        leaf: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
+                    }),
                     _ => Entry::Vacant(VacantEntry {
                         key,
                         insert_point: Some(insert_point),
@@ -1048,7 +1043,15 @@ impl<K, V> TreeMap<K, V> {
                 insert_point: None,
                 map: self,
             }),
-        }
+        };
+        Ok(entry)
+    }
+
+    pub fn entry(&mut self, key: K) -> Entry<K, V>
+    where
+        K: NoPrefixesBytes,
+    {
+        unsafe { self.try_entry(key).unwrap_unchecked() }
     }
 }
 

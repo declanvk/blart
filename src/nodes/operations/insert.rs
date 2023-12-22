@@ -72,7 +72,7 @@ pub struct InsertPoint<K, V> {
 }
 
 impl<K, V> InsertPoint<K, V> {
-    pub fn apply<'a>(self, key: K, value: V) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
+    pub fn apply<'a>(self, key: K, value: V) -> InsertResult<'a, K, V>
     where
         K: AsBytes,
     {
@@ -212,16 +212,6 @@ impl<K, V> InsertPoint<K, V> {
                 // variant is only returned in cases where there was a mismatch in the header
                 // prefix, implying that the header is present.
                 let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
-
-                if unlikely((key_bytes_used + matched_prefix_size) >= key.as_bytes().len()) {
-                    // then the key has insufficient bytes to be unique. It must be
-                    // a prefix of an existing key
-
-                    return Err(InsertPrefixError {
-                        byte_repr: key.as_bytes().into(),
-                    });
-                }
-
                 unsafe { assume(matched_prefix_size < header.read_prefix().len()) }
 
                 let new_leaf_key_byte = key.as_bytes()[key_bytes_used + matched_prefix_size];
@@ -254,57 +244,28 @@ impl<K, V> InsertPoint<K, V> {
                     new_value_ref,
                 )
             },
-            InsertSearchResultType::SplitLeaf { leaf_node_ptr } => {
+            InsertSearchResultType::Exact { leaf_node_ptr } => {
+                let new_leaf_node = LeafNode::new(key, value);
+                // SAFETY: The leaf node will not be accessed concurrently because of the safety
+                // doc on the containing function
+                // TODO: Is this right ?
+                let old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, new_leaf_node) };
+                return InsertResult {
+                    new_value_ref: unsafe { create_value_ref(leaf_node_ptr) },
+                    existing_leaf: Some(old_leaf_node),
+                    // Because we replaced the leaf instead of creating a new leaf, we don't
+                    // have to write back to the parent. In this case,
+                    // the root is guaranteed to be unchanged, even if
+                    // the old leaf was the root.
+                    new_root: root,
+                };
+            }
+            InsertSearchResultType::SplitLeaf { leaf_node_ptr, new_key_bytes_used } => {
                 let leaf_node = leaf_node_ptr.read();
 
-                if leaf_node.matches_full_key(&key) {
-                    // This means that the key provided exactly matched the existing leaf key, so we
-                    // will simply replace the contents of the leaf node.
-                    //#[allow(clippy::undropped_manually_drops)]
-                    //drop(leaf_node);
-
-                    let new_leaf_node = LeafNode::new(key, value);
-                    // SAFETY: The leaf node will not be accessed concurrently because of the safety
-                    // doc on the containing function
-                    // TODO: Is this right ?
-                    let old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, new_leaf_node) };
-                    return Ok(InsertResult {
-                        new_value_ref: unsafe { create_value_ref(leaf_node_ptr) },
-                        existing_leaf: Some(old_leaf_node),
-                        // Because we replaced the leaf instead of creating a new leaf, we don't
-                        // have to write back to the parent. In this case,
-                        // the root is guaranteed to be unchanged, even if
-                        // the old leaf was the root.
-                        new_root: root,
-                    });
-                }
-
                 unsafe {
-                    assume(key_bytes_used <= leaf_node.key_ref().as_bytes().len());
-                    assume(key_bytes_used <= key.as_bytes().len());
-                }
-
-                let prefix_size = leaf_node.key_ref().as_bytes()[key_bytes_used..]
-                    .iter()
-                    .zip(key.as_bytes()[key_bytes_used..].iter())
-                    .take_while(|(k1, k2)| k1 == k2)
-                    .count();
-
-                let new_key_bytes_used = key_bytes_used + prefix_size;
-
-                if unlikely(
-                    new_key_bytes_used >= key.as_bytes().len()
-                        || new_key_bytes_used >= leaf_node.key_ref().as_bytes().len(),
-                ) {
-                    // then the key has insufficient bytes to be unique. It must be
-                    // a prefix of an existing key OR an existing key is a prefix of it
-
-                    return Err(InsertPrefixError {
-                        byte_repr: key.as_bytes().into(),
-                    });
-                }
-
-                unsafe {
+                    assume(key_bytes_used < leaf_node.key_ref().as_bytes().len());
+                    assume(key_bytes_used < key.as_bytes().len());
                     assume(new_key_bytes_used < key.as_bytes().len());
                     assume(new_key_bytes_used < leaf_node.key_ref().as_bytes().len());
                 }
@@ -358,19 +319,19 @@ impl<K, V> InsertPoint<K, V> {
             // If there was a parent either:
             //   1. Root was the parent, in which case it was unchanged
             //   2. Or some parent of the parent was root, in which case it was unchanged
-            Ok(InsertResult {
+            InsertResult {
                 new_value_ref,
                 existing_leaf: None,
                 new_root: root,
-            })
+            }
         } else {
             // If there was no parent, then the root node was a leaf or the inner node split
             // occurred at the root, in which case return the new inner node as root
-            Ok(InsertResult {
+            InsertResult {
                 new_value_ref,
                 existing_leaf: None,
                 new_root: new_inner_node,
-            })
+            }
         }
     }
 }
@@ -393,6 +354,14 @@ pub enum InsertSearchResultType<K, V> {
     /// This insert type will create a new inner node, and assign the
     /// existing leaf and the new leaf as children to that node.
     SplitLeaf {
+        /// A pointer to the leaf node that will be split
+        leaf_node_ptr: NodePtr<LeafNode<K, V>>,
+        new_key_bytes_used: usize
+    },
+    /// Exact match of the leaf was found
+    /// 
+    /// This insert type will replace the older leaf with a new one
+    Exact {
         /// A pointer to the leaf node that will be split
         leaf_node_ptr: NodePtr<LeafNode<K, V>>,
     },
@@ -419,8 +388,13 @@ impl<K, V> fmt::Debug for InsertSearchResultType<K, V> {
                 .field("matched_prefix_size", matched_prefix_size)
                 .field("mismatched_inner_node_ptr", mismatched_inner_node_ptr)
                 .finish(),
-            Self::SplitLeaf { leaf_node_ptr } => f
+            Self::SplitLeaf { leaf_node_ptr, new_key_bytes_used } => f
                 .debug_struct("SplitLeaf")
+                .field("leaf_node_ptr", leaf_node_ptr)
+                .field("new_key_bytes_used", new_key_bytes_used)
+                .finish(),
+            Self::Exact { leaf_node_ptr } => f
+                .debug_struct("Exact")
                 .field("leaf_node_ptr", leaf_node_ptr)
                 .finish(),
             Self::IntoExisting { inner_node_ptr } => f
@@ -510,24 +484,57 @@ where
                 test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+                let leaf_node = leaf_node_ptr.read();
+
+                if leaf_node.matches_full_key(&key) {
+                    return Ok(InsertPoint {
+                        key_bytes_used: current_depth,
+                        parent_ptr_and_child_key_byte: current_parent,
+                        insert_type: InsertSearchResultType::Exact { leaf_node_ptr },
+                        root,
+                    });
+                }
+
+                unsafe {
+                    assume(current_depth < leaf_node.key_ref().as_bytes().len());
+                    assume(current_depth < key.as_bytes().len());
+                }
+
+                let prefix_size = leaf_node.key_ref().as_bytes()[current_depth..]
+                    .iter()
+                    .zip(key.as_bytes()[current_depth..].iter())
+                    .take_while(|(k1, k2)| k1 == k2)
+                    .count();
+
+                let new_key_bytes_used = current_depth + prefix_size;
+
+                if unlikely(
+                    new_key_bytes_used >= key.as_bytes().len()
+                        || new_key_bytes_used >= leaf_node.key_ref().as_bytes().len(),
+                ) {
+                    // then the key has insufficient bytes to be unique. It must be
+                    // a prefix of an existing key OR an existing key is a prefix of it
+
+                    return Err(InsertPrefixError {
+                        byte_repr: key.as_bytes().into(),
+                    });
+                }
+
                 return Ok(InsertPoint {
                     key_bytes_used: current_depth,
                     parent_ptr_and_child_key_byte: current_parent,
-                    insert_type: InsertSearchResultType::SplitLeaf { leaf_node_ptr },
+                    insert_type: InsertSearchResultType::SplitLeaf { leaf_node_ptr, new_key_bytes_used },
                     root,
                 });
             },
         }?;
 
-        let bytes = key.as_bytes();
-        unsafe {
-            assume(current_depth < bytes.len());
-        }
+        unsafe { assume(current_depth < key.as_bytes().len()); }
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
                 match next_child_node {
                     Some(next_child_node) => {
-                        let byte = unsafe { *bytes.get_unchecked(current_depth) };
+                        let byte = key.as_bytes()[current_depth];
                         current_parent = Some((current_node, byte));
                         current_node = next_child_node;
                         // Increment by a single byte
@@ -546,6 +553,15 @@ where
                 }
             },
             ControlFlow::Break(matched_prefix_size) => {
+                if unlikely((current_depth + matched_prefix_size) >= key.as_bytes().len()) {
+                    // then the key has insufficient bytes to be unique. It must be
+                    // a prefix of an existing key
+
+                    return Err(InsertPrefixError {
+                        byte_repr: key.as_bytes().into(),
+                    });
+                }
+
                 return Ok(InsertPoint {
                     key_bytes_used: current_depth,
                     insert_type: InsertSearchResultType::MismatchPrefix {

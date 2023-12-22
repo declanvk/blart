@@ -351,7 +351,7 @@ where
     use crate::search_for_insert_point;
 
     let insert_point = unsafe { search_for_insert_point(root, &key)? };
-    insert_point.apply(key, value)
+    Ok(insert_point.apply(key, value))
 }
 
 #[cfg(test)]
