@@ -438,7 +438,7 @@ impl<K, V> TreeMap<K, V> {
         insert_point: InsertPoint<K, V>,
         key: K,
         value: V,
-    ) -> Result<InsertResult<K, V>, InsertPrefixError>
+    ) -> InsertResult<K, V>
     where
         K: AsBytes,
     {
@@ -452,7 +452,7 @@ impl<K, V> TreeMap<K, V> {
             self.num_entries += 1;
         }
 
-        Ok(insert_result)
+        insert_result
     }
 
     /// Insert a key-value pair into the map.
@@ -523,9 +523,8 @@ impl<K, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            // let result = unsafe { insert_unchecked(root, key, value)? };
             let insert_point = unsafe { search_for_insert_point(root, &key)? };
-            let insert_result = self.apply_insert_point(insert_point, key, value)?;
+            let insert_result = self.apply_insert_point(insert_point, key, value);
             Ok(insert_result.existing_leaf.map(|leaf| leaf.into_entry().1))
         } else {
             self.init_tree(key, value);

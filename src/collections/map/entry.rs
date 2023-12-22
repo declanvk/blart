@@ -48,11 +48,7 @@ impl<'a, K, V> VacantEntry<'a, K, V> {
     {
         match self.insert_point {
             Some(insert_point) => {
-                let result = unsafe {
-                    self.map
-                        .apply_insert_point(insert_point, self.key, value)
-                        .unwrap_unchecked()
-                };
+                let result = self.map.apply_insert_point(insert_point, self.key, value);
                 result.new_value_ref
             },
             None => {
@@ -101,7 +97,7 @@ impl<'a, K, V> Entry<'a, K, V> {
 
     pub fn or_insert(self, value: V) -> &'a mut V
     where
-        K: NoPrefixesBytes,
+        K: AsBytes,
     {
         match self {
             Entry::Occupied(entry) => entry.into_mut(),
@@ -111,7 +107,7 @@ impl<'a, K, V> Entry<'a, K, V> {
 
     pub fn or_default(self) -> &'a mut V
     where
-        K: NoPrefixesBytes,
+        K: AsBytes,
         V: Default,
     {
         match self {
@@ -122,7 +118,7 @@ impl<'a, K, V> Entry<'a, K, V> {
 
     pub fn or_insert_with<F>(self, f: F) -> &'a mut V
     where
-        K: NoPrefixesBytes,
+        K: AsBytes,
         F: FnOnce() -> V,
     {
         match self {
@@ -133,7 +129,7 @@ impl<'a, K, V> Entry<'a, K, V> {
 
     pub fn or_insert_with_key<F>(self, f: F) -> &'a mut V
     where
-        K: NoPrefixesBytes,
+        K: AsBytes,
         F: FnOnce(&K) -> V,
     {
         match self {
