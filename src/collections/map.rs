@@ -21,9 +21,12 @@ use std::{
 };
 
 mod entry;
+mod entry_ref;
 mod iterators;
 pub use entry::*;
 pub use iterators::*;
+
+use self::entry_ref::{EntryRef, OccupiedEntryRef, VacantEntryRef};
 
 /// An ordered map based on an adaptive radix tree.
 pub struct TreeMap<K, V> {
@@ -1028,6 +1031,7 @@ impl<K, V> TreeMap<K, V> {
                 let insert_point = unsafe { search_for_insert_point(root, &key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
+                        key,
                         leaf: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
                     }),
                     _ => Entry::Vacant(VacantEntry {
@@ -1046,11 +1050,48 @@ impl<K, V> TreeMap<K, V> {
         Ok(entry)
     }
 
+    pub fn try_entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> Result<EntryRef<'a, 'b, K, V, Q>, InsertPrefixError>
+    where
+        K: AsBytes + Borrow<Q> + From<&'b Q>,
+        Q: AsBytes + ?Sized
+    {
+        let entry = match self.root {
+            Some(root) => {
+                let insert_point = unsafe { search_for_insert_point(root, &key)? };
+                match insert_point.insert_type {
+                    Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
+                        key,
+                        leaf: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
+                    }),
+                    _ => EntryRef::Vacant(VacantEntryRef {
+                        key,
+                        insert_point: Some(insert_point),
+                        map: self,
+                    }),
+                }
+            },
+            None => EntryRef::Vacant(VacantEntryRef {
+                key,
+                insert_point: None,
+                map: self,
+            }),
+        };
+        Ok(entry)
+    }
+
     pub fn entry(&mut self, key: K) -> Entry<K, V>
     where
         K: NoPrefixesBytes,
     {
         unsafe { self.try_entry(key).unwrap_unchecked() }
+    }
+
+    pub fn entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> EntryRef<'a, 'b, K, V, Q>
+    where
+        K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
+        Q: NoPrefixesBytes + ?Sized
+    {
+        unsafe { self.try_entry_ref(key).unwrap_unchecked() }
     }
 }
 
