@@ -420,21 +420,23 @@ impl<K, V> fmt::Debug for InsertSearchResultType<K, V> {
 ///
 /// If the given `key` is a prefix of an existing key, this function will return
 /// an error.
-pub unsafe fn search_for_insert_point<K, V>(
+pub unsafe fn search_for_insert_point<K, V, Q>(
     root: OpaqueNodePtr<K, V>,
-    key: &K,
+    key: &Q,
 ) -> Result<InsertPoint<K, V>, InsertPrefixError>
 where
-    K: AsBytes,
+    K: AsBytes + Borrow<Q>,
+    Q: AsBytes + ?Sized
 {
-    fn test_prefix_identify_insert<K, V, N>(
+    fn test_prefix_identify_insert<K, V, N, Q>(
         inner_ptr: NodePtr<N>,
-        key: &K,
+        key: &Q,
         current_depth: &mut usize,
     ) -> Result<ControlFlow<usize, Option<OpaqueNodePtr<K, V>>>, InsertPrefixError>
     where
         N: InnerNode<Key = K, Value = V>,
-        K: AsBytes,
+        K: AsBytes + Borrow<Q>,
+        Q: AsBytes + ?Sized
     {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
