@@ -494,34 +494,19 @@ mod tests {
         );
 
         // Something weird about the representation of u128 on intel architectures:
-        // https://github.com/rust-lang/rust/issues/54341
-        if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
-            assert_eq!(
-                TaggedPointer::<u128, 3>::ALIGNMENT,
-                8,
-                "Target architecture [{}]",
-                std::env::consts::ARCH
-            );
-            assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 3);
+        // https://github.com/rust-lang/rust/issues/54341 - This was fixed in 1.77
+        assert_eq!(
+            TaggedPointer::<u128, 5>::ALIGNMENT,
+            16,
+            "Target architecture [{}]",
+            std::env::consts::ARCH
+        );
+        assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 4);
 
-            assert_eq!(
-                TaggedPointer::<u128, 3>::POINTER_MASK,
-                0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
-            );
-        } else {
-            assert_eq!(
-                TaggedPointer::<u128, 3>::ALIGNMENT,
-                16,
-                "Target architecture [{}]",
-                std::env::consts::ARCH
-            );
-            assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 4);
-
-            assert_eq!(
-                TaggedPointer::<u128, 3>::POINTER_MASK,
-                0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
-            );
-        }
+        assert_eq!(
+            TaggedPointer::<u128, 3>::POINTER_MASK,
+            0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
+        );
     }
 
     #[test]

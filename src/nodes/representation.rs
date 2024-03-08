@@ -16,7 +16,7 @@ use std::{
     mem::{self, ManuallyDrop, MaybeUninit},
     ops::Range,
     ptr::{self, NonNull},
-    simd::{u8x16, SimdPartialEq, SimdPartialOrd, Simd},
+    simd::{u8x16, Simd, cmp::{SimdPartialEq, SimdPartialOrd}},
 };
 use tinyvec::TinyVec;
 
@@ -288,22 +288,22 @@ impl<K, V> OpaqueNodePtr<K, V> {
     ///    (read or written) through any other pointer.
     pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header> {
         let header_ptr = match self.node_type() {
-            NodeType::Node4 => {
+            NodeType::Node4 => unsafe {
                 let node_ptr = self.0.cast::<InnerNode4<K, V>>().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
-            NodeType::Node16 => {
+            NodeType::Node16 => unsafe {
                 let node_ptr = self.0.cast::<InnerNode16<K, V>>().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
-            NodeType::Node48 => {
+            NodeType::Node48 => unsafe {
                 let node_ptr = self.0.cast::<InnerNode48<K, V>>().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
             },
-            NodeType::Node256 => {
+            NodeType::Node256 => unsafe {
                 let node_ptr = self.0.cast::<InnerNode256<K, V>>().to_ptr();
 
                 ptr::addr_of_mut!((*node_ptr).header)
@@ -670,9 +670,6 @@ pub trait InnerNode: Node {
     /// Access the header information for this node.
     fn header(&self) -> &Header;
 
-    /// Access the header information for this node.
-    fn header_mut(&mut self) -> &mut Header;
-
     /// Returns true if this node has no more space to store children.
     fn is_full(&self) -> bool {
         self.header().num_children() >= Self::TYPE.upper_capacity()
@@ -965,10 +962,6 @@ impl<K, V> InnerNode for InnerNode4<K, V> {
         &self.header
     }
 
-    fn header_mut(&mut self) -> &mut Header {
-        &mut self.header
-    }
-
     unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
@@ -1063,10 +1056,6 @@ impl<K, V> InnerNode for InnerNode16<K, V> {
 
     fn header(&self) -> &Header {
         &self.header
-    }
-
-    fn header_mut(&mut self) -> &mut Header {
-        &mut self.header
     }
 
     unsafe fn iter(&self) -> Self::Iter {
@@ -1370,10 +1359,6 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
         &self.header
     }
 
-    fn header_mut(&mut self) -> &mut Header {
-        &mut self.header
-    }
-
     unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
@@ -1501,10 +1486,6 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
 
     fn header(&self) -> &Header {
         &self.header
-    }
-
-    fn header_mut(&mut self) -> &mut Header {
-        &mut self.header
     }
 
     unsafe fn iter(&self) -> Self::Iter {
