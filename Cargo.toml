@@ -21,30 +21,27 @@ exclude = [
 
 [dependencies]
 sptr = "0.3.2"
-
-[dependencies.tinyvec]
-version = "1.6.0"
-features = ["std", "rustc_1_57"]
-
-[dependencies.bytemuck]
-version = "1.14.0"
-features = ["min_const_generics"]
+tinyvec = { version = "1.6.0", features = ["std", "rustc_1_57"] }
+bytemuck = { version = "1.14.0", features = ["min_const_generics"] }
 
 [features]
 nightly = []
 
 [dev-dependencies]
 argh = "0.1.12"
-criterion = { version = "0.4.0", features = ["html_reports"] }
+criterion = "0.5.1"
 dhat = "0.3.2"
 rustc-hash = "1.1.0"
-
-[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dev-dependencies]
-criterion-perf-events = "0.3.0"
+paste = "1.0.14"
+criterion-perf-events = "0.4.0"
 perfcnt = "0.8.0"
 
 [[bench]]
-name = "map_apis"
+name = "generated_get"
+harness = false
+
+[[bench]]
+name = "generated_insert"
 harness = false
 
 [profile.release]
