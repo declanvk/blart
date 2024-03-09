@@ -51,6 +51,10 @@ pub mod tagged_pointer;
 #[doc(hidden)]
 pub mod tests_common;
 
+#[cfg(feature = "gen-benches-macro")]
+#[doc(hidden)]
+pub mod benches_common;
+
 pub use bytes::*;
 pub use collections::*;
 pub use nodes::*;

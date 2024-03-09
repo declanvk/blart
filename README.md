@@ -105,7 +105,13 @@ cargo +nightly fuzz coverage fuzz_raw_api && cargo cov -- show fuzz/target/"$TAR
 To run the benchmarks, install [`cargo-criterion`][cargo-criterion], then run:
 
 ```bash
-cargo +nightly criterion --history-id "$(git rev-parse --short HEAD)-0"
+cargo +nightly criterion --history-id "$(git rev-parse --short HEAD)-0" --features gen-benches-macro,<perf-events>
+```
+
+or
+
+```bash
+cargo bench --bench <bench_name> --features gen-benches-macro,<perf-events>
 ```
 
 If you get a "Permission denied" error, update perf_event_paranoid:

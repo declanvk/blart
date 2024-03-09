@@ -4,12 +4,9 @@ use blart::{
     },
     TreeMap,
 };
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use paste::paste;
+use criterion::{measurement::Measurement, Criterion, Throughput};
 
-type Measurement = criterion_perf_events::Perf;
-
-fn gen_group(c: &mut Criterion<Measurement>, group: String, keys: Vec<Box<[u8]>>) {
+fn gen_group<M: Measurement>(c: &mut Criterion<M>, group: String, keys: Vec<Box<[u8]>>) {
     let mut group = c.benchmark_group(group);
     group.warm_up_time(std::time::Duration::from_secs(5));
     group.measurement_time(std::time::Duration::from_secs(10));
@@ -30,7 +27,7 @@ fn gen_group(c: &mut Criterion<Measurement>, group: String, keys: Vec<Box<[u8]>>
 }
 
 #[inline(always)]
-fn bench(c: &mut Criterion<Measurement>, prefix: &str) {
+fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let skewed: Vec<_> = generate_keys_skewed(u8::MAX as usize).collect();
     let fixed_length: Vec<_> = generate_key_fixed_length([2; 8]).collect();
     let large_prefixes: Vec<_> = generate_key_with_prefix(
@@ -53,41 +50,11 @@ fn bench(c: &mut Criterion<Measurement>, prefix: &str) {
     gen_group(c, format!("{prefix}/large_prefixes"), large_prefixes);
 }
 
-macro_rules! benches {
-    ($bench:ident, $(($target:ident, $event:path)),+) => {
-        paste! {
-            $(
-                pub fn $target(c: &mut Criterion<Measurement>) {
-                    $bench(c, stringify!($target));
-                }
-
-                criterion_group! {
-                    name = [<group_ $target>];
-                    config = Criterion::default()
-                    .with_measurement(
-                        criterion_perf_events::Perf::new(
-                            perfcnt::linux::PerfCounterBuilderLinux::from_hardware_event($event),
-                        )
-                    );
-                    targets = $target
-                }
-            )+
-        }
-
-        paste! {
-            criterion_main!($([<group_ $target>]),+);
-        }
-    };
-}
-
-benches!(
+blart::gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (
         instructions,
         perfcnt::linux::HardwareEventType::Instructions
-    ) /* (cache_references, perfcnt::linux::HardwareEventType::CacheReferences),
-       * (cache_misses, perfcnt::linux::HardwareEventType::CacheMisses),
-       * (branch_instructions, perfcnt::linux::HardwareEventType::BranchInstructions),
-       * (branch_misses, perfcnt::linux::HardwareEventType::BranchMisses) */
+    )
 );
