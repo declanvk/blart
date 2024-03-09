@@ -1,7 +1,7 @@
-use std::{ffi::CString, time::Duration, collections::BTreeMap};
+use std::{ffi::CString, time::Duration};
 
 use blart::TreeMap;
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, SeedableRng, seq::SliceRandom};
 
 fn insert(words: Vec<CString>) -> TreeMap<CString, usize> {
@@ -12,8 +12,7 @@ fn insert(words: Vec<CString>) -> TreeMap<CString, usize> {
     art
 }
 
-
-fn criterion_benchmark(c: &mut Criterion) {
+fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let mut rng = StdRng::seed_from_u64(69420);
     let words = include_str!("dict.txt");
     let mut bytes = 0;
@@ -45,63 +44,68 @@ fn criterion_benchmark(c: &mut Criterion) {
     rand_part_words.shuffle(&mut rng);
 
     let part_bytes: usize = part_words.iter().map(|w| w.as_bytes_with_nul().len()).sum();
+
     {
-        {
-            let mut group = c.benchmark_group("words/full");
-            group.throughput(criterion::Throughput::Bytes(bytes as u64));
-            group.warm_up_time(Duration::from_secs(10));
-            group.measurement_time(Duration::from_secs(30));
-            group.bench_function("insert/asc", |b| {
-                b.iter_batched(
-                    || words.clone(),
-                    |words| insert(words),
-                    criterion::BatchSize::SmallInput,
-                )
-            });
-            group.bench_function("insert/desc", |b| {
-                b.iter_batched(
-                    || rev_words.clone(),
-                    |words| insert(words),
-                    criterion::BatchSize::SmallInput,
-                )
-            });
-            group.bench_function("insert/rand", |b| {
-                b.iter_batched(
-                    || rand_words.clone(),
-                    |words| insert(words),
-                    criterion::BatchSize::SmallInput,
-                )
-            });
-        }
-        {
-            let mut group = c.benchmark_group("words/part");
-            group.throughput(criterion::Throughput::Bytes(part_bytes as u64));
-            group.warm_up_time(Duration::from_secs(10));
-            group.measurement_time(Duration::from_secs(30));
-            group.bench_function("insert/asc", |b| {
-                b.iter_batched(
-                    || part_words.clone(),
-                    |words| insert(words),
-                    criterion::BatchSize::SmallInput,
-                )
-            });
-            group.bench_function("insert/desc", |b| {
-                b.iter_batched(
-                    || rev_part_words.clone(),
-                    |words| insert(words),
-                    criterion::BatchSize::SmallInput,
-                )
-            });
-            group.bench_function("insert/rand", |b| {
-                b.iter_batched(
-                    || rand_part_words.clone(),
-                    |words| insert(words),
-                    criterion::BatchSize::SmallInput,
-                )
-            });
-        }
+        let mut group = c.benchmark_group(format!("{prefix}/words/full"));
+        group.throughput(criterion::Throughput::Bytes(bytes as u64));
+        group.warm_up_time(Duration::from_secs(10));
+        group.measurement_time(Duration::from_secs(30));
+        group.bench_function("insert/asc", |b| {
+            b.iter_batched(
+                || words.clone(),
+                |words| insert(words),
+                criterion::BatchSize::SmallInput,
+            )
+        });
+        group.bench_function("insert/desc", |b| {
+            b.iter_batched(
+                || rev_words.clone(),
+                |words| insert(words),
+                criterion::BatchSize::SmallInput,
+            )
+        });
+        group.bench_function("insert/rand", |b| {
+            b.iter_batched(
+                || rand_words.clone(),
+                |words| insert(words),
+                criterion::BatchSize::SmallInput,
+            )
+        });
+    }
+    {
+        let mut group = c.benchmark_group(format!("{prefix}/words/part"));
+        group.throughput(criterion::Throughput::Bytes(part_bytes as u64));
+        group.warm_up_time(Duration::from_secs(10));
+        group.measurement_time(Duration::from_secs(30));
+        group.bench_function("insert/asc", |b| {
+            b.iter_batched(
+                || part_words.clone(),
+                |words| insert(words),
+                criterion::BatchSize::SmallInput,
+            )
+        });
+        group.bench_function("insert/desc", |b| {
+            b.iter_batched(
+                || rev_part_words.clone(),
+                |words| insert(words),
+                criterion::BatchSize::SmallInput,
+            )
+        });
+        group.bench_function("insert/rand", |b| {
+            b.iter_batched(
+                || rand_part_words.clone(),
+                |words| insert(words),
+                criterion::BatchSize::SmallInput,
+            )
+        });
     }
 }
 
-criterion_group!(benches, criterion_benchmark);
-criterion_main!(benches);
+blart::gen_benches!(
+    bench,
+    (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
+    (
+        instructions,
+        perfcnt::linux::HardwareEventType::Instructions
+    )
+);
