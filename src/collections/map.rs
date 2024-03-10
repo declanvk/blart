@@ -4,18 +4,14 @@
 use crate::{
     deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked,
     maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked,
-    visitor::TreeStatsCollector,
-    AsBytes, ConcreteNodePtr, DeleteResult, InnerNode, InnerNode4, InsertPoint, InsertPrefixError,
-    InsertResult,
-    InsertSearchResultType::{self, Exact, IntoExisting, MismatchPrefix, SplitLeaf},
-    LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr,
+    visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzyNode, FuzzySearch,
+    InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode,
+    NoPrefixesBytes, NodePtr, OpaqueNodePtr,
 };
 use std::{
     borrow::Borrow,
     fmt::Debug,
     hash::{Hash, Hasher},
-    intrinsics::{assume, unlikely},
-    marker::PhantomData,
     mem::ManuallyDrop,
     ops::{Index, RangeBounds},
 };
@@ -260,6 +256,84 @@ impl<K, V> TreeMap<K, V> {
         } else {
             None
         }
+    }
+
+    pub fn get_fuzzy<Q>(&self, key: &Q, max_edit_dist: usize) -> Vec<(&K, &V)>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        let Some(node) = self.root else {
+            return vec![];
+        };
+
+        let key = key.as_bytes();
+        let fuzzy_node = FuzzyNode::new(node, (0..(key.len() + 1)).collect());
+
+        let mut results = Vec::new();
+        let mut fuzzy_nodes = vec![fuzzy_node];
+        let mut new_row = vec![0usize; key.len() + 1];
+        while let Some(mut fuzzy_node) = fuzzy_nodes.pop() {
+            match fuzzy_node.node.to_node_ptr() {
+                ConcreteNodePtr::Node4(inner_ptr) => {
+                    let inner_node = unsafe { inner_ptr.as_ref() };
+                    inner_node.fuzzy_search(
+                        key,
+                        &mut fuzzy_node,
+                        &mut new_row,
+                        &mut fuzzy_nodes,
+                        &mut results,
+                        max_edit_dist,
+                    );
+                },
+                ConcreteNodePtr::Node16(inner_ptr) => {
+                    let inner_node = unsafe { inner_ptr.as_ref() };
+                    inner_node.fuzzy_search(
+                        key,
+                        &mut fuzzy_node,
+                        &mut new_row,
+                        &mut fuzzy_nodes,
+                        &mut results,
+                        max_edit_dist,
+                    );
+                },
+                ConcreteNodePtr::Node48(inner_ptr) => {
+                    let inner_node = unsafe { inner_ptr.as_ref() };
+                    inner_node.fuzzy_search(
+                        key,
+                        &mut fuzzy_node,
+                        &mut new_row,
+                        &mut fuzzy_nodes,
+                        &mut results,
+                        max_edit_dist,
+                    );
+                },
+                ConcreteNodePtr::Node256(inner_ptr) => {
+                    let inner_node = unsafe { inner_ptr.as_ref() };
+                    inner_node.fuzzy_search(
+                        key,
+                        &mut fuzzy_node,
+                        &mut new_row,
+                        &mut fuzzy_nodes,
+                        &mut results,
+                        max_edit_dist,
+                    );
+                },
+                ConcreteNodePtr::LeafNode(inner_ptr) => {
+                    let inner_node = unsafe { inner_ptr.as_ref() };
+                    inner_node.fuzzy_search(
+                        key,
+                        &mut fuzzy_node,
+                        &mut new_row,
+                        &mut fuzzy_nodes,
+                        &mut results,
+                        max_edit_dist,
+                    );
+                },
+            }
+        }
+
+        results
     }
 
     /// Returns true if the map contains a value for the specified key.
@@ -1050,10 +1124,13 @@ impl<K, V> TreeMap<K, V> {
         Ok(entry)
     }
 
-    pub fn try_entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> Result<EntryRef<'a, 'b, K, V, Q>, InsertPrefixError>
+    pub fn try_entry_ref<'a, 'b, Q>(
+        &'a mut self,
+        key: &'b Q,
+    ) -> Result<EntryRef<'a, 'b, K, V, Q>, InsertPrefixError>
     where
         K: AsBytes + Borrow<Q> + From<&'b Q>,
-        Q: AsBytes + ?Sized
+        Q: AsBytes + ?Sized,
     {
         let entry = match self.root {
             Some(root) => {
@@ -1089,7 +1166,7 @@ impl<K, V> TreeMap<K, V> {
     pub fn entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> EntryRef<'a, 'b, K, V, Q>
     where
         K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
-        Q: NoPrefixesBytes + ?Sized
+        Q: NoPrefixesBytes + ?Sized,
     {
         unsafe { self.try_entry_ref(key).unwrap_unchecked() }
     }
@@ -1278,7 +1355,8 @@ mod tests {
     use std::{
         cmp::Ordering,
         collections::hash_map::RandomState,
-        hash::{BuildHasher, Hasher},
+        ffi::CString,
+        hash::BuildHasher,
     };
 
     use super::*;
@@ -1645,5 +1723,68 @@ mod tests {
         assert_eq!(tree.pop_first(), None);
         assert_eq!(tree.pop_last(), None);
         assert_eq!(tree.remove(&Box::from([])), None);
+    }
+
+    #[test]
+    fn get_fuzzy() {
+        for n in [4, 5, 17, 49] {
+            let it = 48u8..48 + n;
+            let mut tree = TreeMap::new();
+            let search = CString::new("a").unwrap();
+            for c in it.clone() {
+                let c = c as char;
+                let s = CString::new(format!("a{c}")).unwrap();
+                tree.insert(s, 0usize);
+            }
+            let results = tree.get_fuzzy(&search, 1);
+            for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
+                let c = c as char;
+                let s = CString::new(format!("a{c}")).unwrap();
+                assert_eq!(k, &s);
+            }
+
+            let mut tree = TreeMap::new();
+            let search = CString::new("a").unwrap();
+            for c in it.clone() {
+                let s = if c % 2 == 0 {
+                    let c = c as char;
+                    CString::new(format!("a{c}")).unwrap()
+                } else {
+                    let c = c as char;
+                    CString::new(format!("a{c}a")).unwrap()
+                };
+                tree.insert(s, 0usize);
+            }
+            let results = tree.get_fuzzy(&search, 1);
+            for ((k, _), c) in results.into_iter().rev().zip((it.clone()).step_by(2)) {
+                let c = c as char;
+                let s = CString::new(format!("a{c}")).unwrap();
+                assert_eq!(k, &s);
+            }
+
+            let mut tree = TreeMap::new();
+            let search = CString::new("a").unwrap();
+            for c in it.clone() {
+                let s = if c % 2 == 0 {
+                    let c = c as char;
+                    CString::new(format!("a{c}")).unwrap()
+                } else {
+                    let c = c as char;
+                    CString::new(format!("a{c}a")).unwrap()
+                };
+                tree.insert(s, 0usize);
+            }
+            let results = tree.get_fuzzy(&search, 2);
+            for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
+                let s = if c % 2 == 0 {
+                    let c = c as char;
+                    CString::new(format!("a{c}")).unwrap()
+                } else {
+                    let c = c as char;
+                    CString::new(format!("a{c}a")).unwrap()
+                };
+                assert_eq!(k, &s);
+            }
+        }
     }
 }
