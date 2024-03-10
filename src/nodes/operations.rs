@@ -11,6 +11,9 @@ pub use minmax::*;
 mod lookup;
 pub use lookup::*;
 
+mod fuzzy_search;
+pub use fuzzy_search::*;
+
 mod iterator;
 pub use iterator::*;
 

@@ -3,9 +3,7 @@
 pub use self::iterators::*;
 use crate::{tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
 use std::{
-    arch::x86_64::{
-        __m128i, _mm_cmpeq_epi8, _mm_cmplt_epi8, _mm_loadu_si128, _mm_movemask_epi8, _mm_set1_epi8,
-    },
+    arch::x86_64::{__m128i, _mm_movemask_epi8},
     borrow::Borrow,
     cmp::Ordering,
     error::Error,
@@ -16,7 +14,10 @@ use std::{
     mem::{self, ManuallyDrop, MaybeUninit},
     ops::Range,
     ptr::{self, NonNull},
-    simd::{u8x16, Simd, cmp::{SimdPartialEq, SimdPartialOrd}},
+    simd::{
+        cmp::{SimdPartialEq, SimdPartialOrd},
+        Simd,
+    },
 };
 use tinyvec::TinyVec;
 
@@ -288,25 +289,8 @@ impl<K, V> OpaqueNodePtr<K, V> {
     ///    (read or written) through any other pointer.
     pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header> {
         let header_ptr = match self.node_type() {
-            NodeType::Node4 => unsafe {
-                let node_ptr = self.0.cast::<InnerNode4<K, V>>().to_ptr();
-
-                ptr::addr_of_mut!((*node_ptr).header)
-            },
-            NodeType::Node16 => unsafe {
-                let node_ptr = self.0.cast::<InnerNode16<K, V>>().to_ptr();
-
-                ptr::addr_of_mut!((*node_ptr).header)
-            },
-            NodeType::Node48 => unsafe {
-                let node_ptr = self.0.cast::<InnerNode48<K, V>>().to_ptr();
-
-                ptr::addr_of_mut!((*node_ptr).header)
-            },
-            NodeType::Node256 => unsafe {
-                let node_ptr = self.0.cast::<InnerNode256<K, V>>().to_ptr();
-
-                ptr::addr_of_mut!((*node_ptr).header)
+            NodeType::Node4 | NodeType::Node16 | NodeType::Node48 | NodeType::Node256 => unsafe {
+                self.header_mut_uncheked()
             },
             NodeType::Leaf => {
                 return None;
@@ -316,7 +300,7 @@ impl<K, V> OpaqueNodePtr<K, V> {
         // SAFETY: The pointer is properly aligned and points to a initialized instance
         // of Header that is dereferenceable. The lifetime safety requirements are
         // passed up to the caller of this function.
-        Some(unsafe { &mut *header_ptr })
+        Some(header_ptr)
     }
 
     pub(crate) unsafe fn header_mut_uncheked<'h>(self) -> &'h mut Header {
@@ -802,17 +786,25 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         unsafe {
             assume(child_index < self.keys.len());
             self.keys.get_unchecked_mut(child_index).write(key_fragment);
-            self.child_pointers.get_unchecked_mut(child_index).write(child_pointer);
+            self.child_pointers
+                .get_unchecked_mut(child_index)
+                .write(child_pointer);
         }
     }
 
     /// Write a child without bounds check or order
-    pub unsafe fn write_child_unchecked(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>) {
+    pub unsafe fn write_child_unchecked(
+        &mut self,
+        key_fragment: u8,
+        child_pointer: OpaqueNodePtr<K, V>,
+    ) {
         let i = self.header.num_children as usize;
         unsafe {
             assume(i < self.keys.len());
             self.keys.get_unchecked_mut(i).write(key_fragment);
-            self.child_pointers.get_unchecked_mut(i).write(child_pointer);
+            self.child_pointers
+                .get_unchecked_mut(i)
+                .write(child_pointer);
         }
         self.header.num_children += 1;
     }
