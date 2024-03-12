@@ -591,8 +591,13 @@ pub trait Node: private::Sealed {
     type Value;
 }
 
+pub trait HeaderNode {
+    /// Access the header information for this node.
+    fn header(&self) -> &Header;
+}
+
 /// Common methods implemented by all inner node.
-pub trait InnerNode: Node {
+pub trait InnerNode: Node + HeaderNode {
     /// The type of the next larger node type.
     type GrownNode: InnerNode<Key = <Self as Node>::Key, Value = <Self as Node>::Value>;
 
@@ -650,9 +655,6 @@ pub trait InnerNode: Node {
     /// Panics if the new, smaller node size does not have enough capacity to
     /// hold all the children.
     fn shrink(&self) -> Self::ShrunkNode;
-
-    /// Access the header information for this node.
-    fn header(&self) -> &Header;
 
     /// Returns true if this node has no more space to store children.
     fn is_full(&self) -> bool {
@@ -884,6 +886,12 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 }
 
+impl<K, V, const SIZE: usize> HeaderNode for InnerNodeCompressed<K, V, SIZE> {
+    fn header(&self) -> &Header {
+        &self.header
+    }
+}
+
 /// Node that references between 2 and 4 children
 pub type InnerNode4<K, V> = InnerNodeCompressed<K, V, 4>;
 
@@ -948,10 +956,6 @@ impl<K, V> InnerNode for InnerNode4<K, V> {
 
     fn shrink(&self) -> Self::ShrunkNode {
         panic!("unable to shrink a Node4, something went wrong!")
-    }
-
-    fn header(&self) -> &Header {
-        &self.header
     }
 
     unsafe fn iter(&self) -> Self::Iter {
@@ -1044,10 +1048,6 @@ impl<K, V> InnerNode for InnerNode16<K, V> {
 
     fn shrink(&self) -> Self::ShrunkNode {
         self.change_block_size()
-    }
-
-    fn header(&self) -> &Header {
-        &self.header
     }
 
     unsafe fn iter(&self) -> Self::Iter {
@@ -1196,6 +1196,12 @@ impl<K, V> Node for InnerNode48<K, V> {
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node48;
+}
+
+impl<K, V> HeaderNode for InnerNode48<K, V> {
+    fn header(&self) -> &Header {
+        &self.header
+    }
 }
 
 impl<K, V> InnerNode for InnerNode48<K, V> {
@@ -1347,10 +1353,6 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
         }
     }
 
-    fn header(&self) -> &Header {
-        &self.header
-    }
-
     unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
@@ -1400,6 +1402,12 @@ impl<K, V> Node for InnerNode256<K, V> {
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node256;
+}
+
+impl<K, V> HeaderNode for InnerNode256<K, V> {
+    fn header(&self) -> &Header {
+        &self.header
+    }
 }
 
 impl<K, V> InnerNode for InnerNode256<K, V> {
@@ -1474,10 +1482,6 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
             child_indices,
             child_pointers,
         }
-    }
-
-    fn header(&self) -> &Header {
-        &self.header
     }
 
     unsafe fn iter(&self) -> Self::Iter {
