@@ -2,17 +2,13 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked,
-    maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked,
-    visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzyNode, FuzzySearch,
-    InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode,
-    NoPrefixesBytes, NodePtr, OpaqueNodePtr,
+    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked, maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked, visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzyNode, FuzzySearch, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr
 };
 use std::{
     borrow::Borrow,
     fmt::Debug,
     hash::{Hash, Hasher},
-    mem::ManuallyDrop,
+    mem::{ManuallyDrop, MaybeUninit},
     ops::{Index, RangeBounds},
 };
 
@@ -268,11 +264,14 @@ impl<K, V> TreeMap<K, V> {
         };
 
         let key = key.as_bytes();
-        let fuzzy_node = FuzzyNode::new(node, (0..(key.len() + 1)).collect());
+        let fuzzy_node = FuzzyNode::new(
+            node,
+            (0..(key.len() + 1)).collect(),
+        );
 
         let mut results = Vec::new();
         let mut fuzzy_nodes = vec![fuzzy_node];
-        let mut new_row = vec![0usize; key.len() + 1];
+        let mut new_row = Box::new_uninit_slice(key.len() + 1);
         while let Some(mut fuzzy_node) = fuzzy_nodes.pop() {
             match fuzzy_node.node.to_node_ptr() {
                 ConcreteNodePtr::Node4(inner_ptr) => {
@@ -330,7 +329,7 @@ impl<K, V> TreeMap<K, V> {
                         max_edit_dist,
                     );
                 },
-            }
+            };
         }
 
         results
@@ -1352,12 +1351,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cmp::Ordering,
-        collections::hash_map::RandomState,
-        ffi::CString,
-        hash::BuildHasher,
-    };
+    use std::{cmp::Ordering, collections::hash_map::RandomState, ffi::CString, hash::BuildHasher};
 
     use super::*;
 
