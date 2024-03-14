@@ -5,6 +5,7 @@
 #![feature(hasher_prefixfree_extras)]
 #![feature(portable_simd)]
 #![feature(core_intrinsics)]
+#![feature(new_uninit)]
 
 #![cfg_attr(
     feature = "nightly",
