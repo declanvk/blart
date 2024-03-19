@@ -8,7 +8,7 @@ use std::{
     borrow::Borrow,
     fmt::Debug,
     hash::{Hash, Hasher},
-    mem::{ManuallyDrop, MaybeUninit},
+    mem::ManuallyDrop,
     ops::{Index, RangeBounds},
 };
 
@@ -17,7 +17,6 @@ mod entry_ref;
 mod iterators;
 pub use entry::*;
 pub use iterators::*;
-use typed_arena::Arena;
 
 use self::entry_ref::{EntryRef, OccupiedEntryRef, VacantEntryRef};
 
@@ -260,7 +259,6 @@ impl<K, V> TreeMap<K, V> {
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
     {
-        // let begin_stats = dhat::HeapStats::get();
         let Some(node) = self.root else {
             return vec![];
         };
@@ -345,10 +343,6 @@ impl<K, V> TreeMap<K, V> {
                 },
             };
         }
-        // let end_stats = dhat::HeapStats::get();
-        // println!("Begin: {begin_stats:?}");
-        // println!("End:   {end_stats:?}");
-
         results
     }
 

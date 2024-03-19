@@ -23,8 +23,6 @@ exclude = [
 sptr = "0.3.2"
 tinyvec = { version = "1.6.0", features = ["std", "rustc_1_57"] }
 bytemuck = { version = "1.14.0", features = ["min_const_generics"] }
-typed-arena = "2.0.2"
-dhat = "0.3.3"
 
 [features]
 nightly = []

@@ -3,10 +3,8 @@ use std::{
     mem::MaybeUninit,
 };
 
-use typed_arena::Arena;
-
 use crate::{
-    AsBytes, HeaderNode, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
+    AsBytes, HeaderNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
     OpaqueNodePtr,
 };
 
