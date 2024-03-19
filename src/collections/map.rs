@@ -2,7 +2,7 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked, maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked, visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzyNode, FuzzySearch, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr
+    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked, maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked, visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzyNode, FuzzySearch, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena
 };
 use std::{
     borrow::Borrow,
@@ -17,6 +17,7 @@ mod entry_ref;
 mod iterators;
 pub use entry::*;
 pub use iterators::*;
+use typed_arena::Arena;
 
 use self::entry_ref::{EntryRef, OccupiedEntryRef, VacantEntryRef};
 
@@ -259,24 +260,30 @@ impl<K, V> TreeMap<K, V> {
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
     {
+        // let begin_stats = dhat::HeapStats::get();
         let Some(node) = self.root else {
             return vec![];
         };
 
         let key = key.as_bytes();
+
+        let arena = Arena::new();
+        // let mut arena = StackArena::new(key.len() + 1);
+
         let fuzzy_node = FuzzyNode::new(
             node,
-            (0..(key.len() + 1)).collect(),
+            arena.alloc_extend(0..(key.len() + 1))
         );
 
         let mut results = Vec::new();
         let mut fuzzy_nodes = vec![fuzzy_node];
-        let mut new_row = Box::new_uninit_slice(key.len() + 1);
+        let mut new_row = unsafe { arena.alloc_uninitialized(key.len() + 1) };
         while let Some(mut fuzzy_node) = fuzzy_nodes.pop() {
             match fuzzy_node.node.to_node_ptr() {
                 ConcreteNodePtr::Node4(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
+                        &arena,
                         key,
                         &mut fuzzy_node,
                         &mut new_row,
@@ -288,6 +295,7 @@ impl<K, V> TreeMap<K, V> {
                 ConcreteNodePtr::Node16(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
+                        &arena,
                         key,
                         &mut fuzzy_node,
                         &mut new_row,
@@ -299,6 +307,7 @@ impl<K, V> TreeMap<K, V> {
                 ConcreteNodePtr::Node48(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
+                        &arena,
                         key,
                         &mut fuzzy_node,
                         &mut new_row,
@@ -310,6 +319,7 @@ impl<K, V> TreeMap<K, V> {
                 ConcreteNodePtr::Node256(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
+                        &arena,
                         key,
                         &mut fuzzy_node,
                         &mut new_row,
@@ -321,6 +331,7 @@ impl<K, V> TreeMap<K, V> {
                 ConcreteNodePtr::LeafNode(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
+                        &arena,
                         key,
                         &mut fuzzy_node,
                         &mut new_row,
@@ -331,6 +342,9 @@ impl<K, V> TreeMap<K, V> {
                 },
             };
         }
+        // let end_stats = dhat::HeapStats::get();
+        // println!("Begin: {begin_stats:?}");
+        // println!("End:   {end_stats:?}");
 
         results
     }
@@ -1348,6 +1362,18 @@ where
         self.iter().eq(other.iter())
     }
 }
+
+unsafe impl<K, V> Send for TreeMap<K, V>
+where
+    K: Send,
+    V: Send
+{}
+
+unsafe impl<K, V> Sync for TreeMap<K, V>
+where
+    K: Sync,
+    V: Sync
+{}
 
 #[cfg(test)]
 mod tests {
