@@ -1750,15 +1750,6 @@ mod tests {
 
     #[test]
     fn get_fuzzy() {
-        let mut tree = TreeMap::new();
-        tree.try_insert(String::from("incoming"), 0usize).unwrap();
-        tree.try_insert(String::from("incomplete"), 0usize).unwrap();
-        // tree.try_insert(String::from("incomplex"), 0usize).unwrap();
-        // tree.try_insert(String::from("incomparable"), 0usize).unwrap();
-        let search = String::from("institute");
-        let results = tree.get_fuzzy(&search, 4);
-
-        return;
         for n in [4, 5, 17, 49] {
             let it = 48u8..48 + n;
             let mut tree = TreeMap::new();
