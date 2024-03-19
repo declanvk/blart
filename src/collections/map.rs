@@ -2,7 +2,7 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked, maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked, visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzyNode, FuzzySearch, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena
+    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked, maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked, visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzySearch, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena
 };
 use std::{
     borrow::Borrow,
@@ -265,29 +265,32 @@ impl<K, V> TreeMap<K, V> {
             return vec![];
         };
 
-        let key = key.as_bytes();
-
-        let arena = Arena::new();
-        // let mut arena = StackArena::new(key.len() + 1);
-
-        let fuzzy_node = FuzzyNode::new(
-            node,
-            arena.alloc_extend(0..(key.len() + 1))
-        );
-
         let mut results = Vec::new();
-        let mut fuzzy_nodes = vec![fuzzy_node];
-        let mut new_row = unsafe { arena.alloc_uninitialized(key.len() + 1) };
-        while let Some(mut fuzzy_node) = fuzzy_nodes.pop() {
-            match fuzzy_node.node.to_node_ptr() {
+
+        let key = key.as_bytes();
+        let mut nodes_to_search = vec![node];
+        let mut arena = StackArena::<usize>::new(key.len() + 1);
+        let n = arena.size();
+        let s = arena.push();
+        for i in 0..n {
+            s[i].write(i);
+        }
+
+        let mut old_row = Box::new_uninit_slice(arena.size());
+        let mut old_row = old_row.as_mut();
+        let mut new_row = Box::<[usize]>::new_uninit_slice(arena.size());
+        let mut new_row = new_row.as_mut();
+
+        while let (Some(node), Some(old_row)) = (nodes_to_search.pop(), arena.pop_copy(&mut old_row)) {
+            match node.to_node_ptr() {
                 ConcreteNodePtr::Node4(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
-                        &arena,
+                        &mut arena,
                         key,
-                        &mut fuzzy_node,
+                        old_row,
                         &mut new_row,
-                        &mut fuzzy_nodes,
+                        &mut nodes_to_search,
                         &mut results,
                         max_edit_dist,
                     );
@@ -295,11 +298,11 @@ impl<K, V> TreeMap<K, V> {
                 ConcreteNodePtr::Node16(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
-                        &arena,
+                        &mut arena,
                         key,
-                        &mut fuzzy_node,
+                        old_row,
                         &mut new_row,
-                        &mut fuzzy_nodes,
+                        &mut nodes_to_search,
                         &mut results,
                         max_edit_dist,
                     );
@@ -307,11 +310,11 @@ impl<K, V> TreeMap<K, V> {
                 ConcreteNodePtr::Node48(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
-                        &arena,
+                        &mut arena,
                         key,
-                        &mut fuzzy_node,
+                        old_row,
                         &mut new_row,
-                        &mut fuzzy_nodes,
+                        &mut nodes_to_search,
                         &mut results,
                         max_edit_dist,
                     );
@@ -319,11 +322,11 @@ impl<K, V> TreeMap<K, V> {
                 ConcreteNodePtr::Node256(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
-                        &arena,
+                        &mut arena,
                         key,
-                        &mut fuzzy_node,
+                        old_row,
                         &mut new_row,
-                        &mut fuzzy_nodes,
+                        &mut nodes_to_search,
                         &mut results,
                         max_edit_dist,
                     );
@@ -331,11 +334,11 @@ impl<K, V> TreeMap<K, V> {
                 ConcreteNodePtr::LeafNode(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
                     inner_node.fuzzy_search(
-                        &arena,
+                        &mut arena,
                         key,
-                        &mut fuzzy_node,
+                        old_row,
                         &mut new_row,
-                        &mut fuzzy_nodes,
+                        &mut nodes_to_search,
                         &mut results,
                         max_edit_dist,
                     );
@@ -1747,6 +1750,15 @@ mod tests {
 
     #[test]
     fn get_fuzzy() {
+        let mut tree = TreeMap::new();
+        tree.try_insert(String::from("incoming"), 0usize).unwrap();
+        tree.try_insert(String::from("incomplete"), 0usize).unwrap();
+        // tree.try_insert(String::from("incomplex"), 0usize).unwrap();
+        // tree.try_insert(String::from("incomparable"), 0usize).unwrap();
+        let search = String::from("institute");
+        let results = tree.get_fuzzy(&search, 4);
+
+        return;
         for n in [4, 5, 17, 49] {
             let it = 48u8..48 + n;
             let mut tree = TreeMap::new();
