@@ -10,15 +10,12 @@ use crate::{
     OpaqueNodePtr,
 };
 
-#[repr(transparent)]
-pub struct StackArenaRef(usize);
-
-pub struct StackArena<T> {
+pub struct StackArena<T: Copy> {
     data: Vec<MaybeUninit<T>>,
     n: usize
 }
 
-impl<T> StackArena<T> {
+impl<T: Copy> StackArena<T> {
     pub fn new(n: usize) -> Self {
         Self {
             data: Vec::new(),
@@ -26,20 +23,37 @@ impl<T> StackArena<T> {
         }
     }
 
-    pub fn push(&mut self) -> StackArenaRef {
-        self.data.reserve(self.n);
-        let old_len = self.data.len();
-        let new_len = old_len + self.n;
-        unsafe { self.data.set_len(new_len) };
-        StackArenaRef(old_len)
+    pub fn size(&self) -> usize {
+        self.n
     }
 
-    pub fn get(&mut self, idx: StackArenaRef) -> &mut [MaybeUninit<T>] {
-        &mut self.data[idx.0..(idx.0+self.n)]
+    pub fn push(&mut self) -> &mut [MaybeUninit<T>] {
+        let old_len = self.data.len();
+        let new_len = old_len + self.n;
+        self.data.resize_with(new_len, MaybeUninit::uninit);
+        &mut self.data[old_len..new_len]
+    }
+
+    pub fn pop_copy<'a, 'b>(&mut self, buffer: &'a mut &'b mut [MaybeUninit<T>]) -> Option<&'a mut &'b mut [T]> {
+        unsafe {
+            assume(self.data.len() % self.n == 0);
+        }
+
+        if self.data.len() == 0 {
+            return None;
+        }
+
+        let begin = self.data.len() - self.n;
+        let end = self.data.len();
+        buffer.copy_from_slice(&self.data[begin..end]);
+
+        self.pop();
+
+        Some(unsafe { std::mem::transmute(buffer) })
     }
 
     pub fn pop(&mut self) {
-        unsafe { self.data.set_len(self.data.len() - self.n) }
+        self.data.truncate(self.data.len() - self.n);
     }
 }
 
@@ -84,25 +98,15 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
     std::mem::swap(temp, new_row);
 }
 
-pub struct FuzzyNode<'a, K, V> {
-    pub node: OpaqueNodePtr<K, V>,
-    pub old_row: &'a mut [usize],
-}
-
-impl<'a, K: AsBytes, V> FuzzyNode<'a, K, V> {
-    pub fn new(node: OpaqueNodePtr<K, V>, old_row: &'a mut [usize]) -> Self {
-        Self { node, old_row }
-    }
-}
 
 pub trait FuzzySearch<K, V> {
-    fn fuzzy_search<'s, 'a>(
+    fn fuzzy_search<'s>(
         &'s self,
-        arena: &'a Arena<usize>,
+        arena: &mut StackArena<usize>,
         key: &[u8],
-        fuzzy_node: &mut FuzzyNode<K, V>,
+        old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        fuzzy_nodes: &mut Vec<FuzzyNode<K, V>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V>>,
         results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     );
@@ -111,7 +115,7 @@ pub trait FuzzySearch<K, V> {
     fn fuzzy_search_prefix(
         &self,
         key: &[u8],
-        fuzzy_node: &mut FuzzyNode<K, V>,
+        old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
         max_edit_dist: usize,
     ) -> bool
@@ -121,51 +125,52 @@ pub trait FuzzySearch<K, V> {
         let prefix = self.header().read_prefix();
         let mut keep = true;
         for k in prefix {
-            keep &= edit_dist(key, *k, &fuzzy_node.old_row, new_row, max_edit_dist);
-            unsafe { swap(&mut fuzzy_node.old_row, new_row) };
+            keep &= edit_dist(key, *k, *old_row, *new_row, max_edit_dist);
+            unsafe { swap(old_row, new_row) };
         }
         keep
     }
 }
 
 impl<K: AsBytes, V, const SIZE: usize> FuzzySearch<K, V> for InnerNodeCompressed<K, V, SIZE> {
-    fn fuzzy_search<'s, 'a>(
+    fn fuzzy_search<'s>(
         &'s self,
-        arena: &'a Arena<usize>,
+        arena: &mut StackArena<usize>,
         key: &[u8],
-        fuzzy_node: &mut FuzzyNode<K, V>,
+        old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        fuzzy_nodes: &mut Vec<FuzzyNode<K, V>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V>>,
         _results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     ) {
-        if !self.fuzzy_search_prefix(key, fuzzy_node, new_row, max_edit_dist) {
+        if !self.fuzzy_search_prefix(key, old_row, new_row, max_edit_dist) {
             return;
         }
 
         let (keys, nodes) = self.initialized_portion();
         for (k, node) in keys.iter().zip(nodes) {
-            let mut new_row = unsafe { arena.alloc_uninitialized(key.len() + 1) };
-            if edit_dist(key, *k, &fuzzy_node.old_row, &mut new_row, max_edit_dist) {
-                let fuzzy_node = FuzzyNode::new(*node, unsafe { std::mem::transmute(new_row) });
-                fuzzy_nodes.push(fuzzy_node);
+            let new_row = arena.push();
+            if edit_dist(key, *k, *old_row, new_row, max_edit_dist) {
+                nodes_to_search.push(*node);
+            } else {
+                arena.pop();
             }
         }
     }
 }
 
 impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode48<K, V> {
-    fn fuzzy_search<'s, 'a>(
+    fn fuzzy_search<'s>(
         &'s self,
-        arena: &'a Arena<usize>,
+        arena: &mut StackArena<usize>,
         key: &[u8],
-        fuzzy_node: &mut FuzzyNode<K, V>,
+        old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        fuzzy_nodes: &mut Vec<FuzzyNode<K, V>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V>>,
         _results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     ) {
-        if !self.fuzzy_search_prefix(key, fuzzy_node, new_row, max_edit_dist) {
+        if !self.fuzzy_search_prefix(key, old_row, new_row, max_edit_dist) {
             return;
         }
 
@@ -174,34 +179,35 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode48<K, V> {
             if index.is_empty() {
                 continue;
             }
-            let mut new_row = unsafe { arena.alloc_uninitialized(key.len() + 1) };
+            let new_row = arena.push();
             if edit_dist(
                 key,
                 k as u8,
-                &fuzzy_node.old_row,
-                &mut new_row,
+                *old_row,
+                new_row,
                 max_edit_dist,
             ) {
                 let node = child_pointers[usize::from(*index)];
-                let fuzzy_node = FuzzyNode::new(node, unsafe { std::mem::transmute(new_row) });
-                fuzzy_nodes.push(fuzzy_node);
+                nodes_to_search.push(node);
+            } else {
+                arena.pop();
             }
         }
     }
 }
 
 impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode256<K, V> {
-    fn fuzzy_search<'s, 'a>(
+    fn fuzzy_search<'s>(
         &'s self,
-        arena: &'a Arena<usize>,
+        arena: &mut StackArena<usize>,
         key: &[u8],
-        fuzzy_node: &mut FuzzyNode<K, V>,
+        old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        fuzzy_nodes: &mut Vec<FuzzyNode<K, V>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V>>,
         _results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     ) {
-        if !self.fuzzy_search_prefix(key, fuzzy_node, new_row, max_edit_dist) {
+        if !self.fuzzy_search_prefix(key, old_row, new_row, max_edit_dist) {
             return;
         }
 
@@ -209,39 +215,38 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode256<K, V> {
             let Some(node) = node else {
                 continue;
             };
-            let mut new_row = unsafe { arena.alloc_uninitialized(key.len() + 1) };
+            let new_row = arena.push();
             if edit_dist(
                 key,
                 k as u8,
-                &fuzzy_node.old_row,
-                &mut new_row,
+                *old_row,
+                new_row,
                 max_edit_dist,
             ) {
-                let fuzzy_node = FuzzyNode::new(*node, unsafe { std::mem::transmute(new_row) });
-                fuzzy_nodes.push(fuzzy_node);
+                nodes_to_search.push(*node);
             }
         }
     }
 }
 
 impl<K: AsBytes, V> FuzzySearch<K, V> for LeafNode<K, V> {
-    fn fuzzy_search<'s, 'a>(
+    fn fuzzy_search<'s>(
         &'s self,
-        _arena: &'a Arena<usize>,
+        _arena: &mut StackArena<usize>,
         key: &[u8],
-        fuzzy_node: &mut FuzzyNode<K, V>,
+        old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        _fuzzy_nodes: &mut Vec<FuzzyNode<K, V>>,
+        _nodes_to_search: &mut Vec<OpaqueNodePtr<K, V>>,
         results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     ) {
-        let current_len = fuzzy_node.old_row[0];
+        let current_len = old_row[0];
         let remaining_key = &self.key_ref().as_bytes()[current_len..];
         for k in remaining_key {
-            edit_dist(key, *k, &fuzzy_node.old_row, new_row, max_edit_dist);
-            unsafe { swap(&mut fuzzy_node.old_row, new_row) };
+            edit_dist(key, *k, *old_row, *new_row, max_edit_dist);
+            unsafe { swap(old_row, new_row) };
         }
-        let edit_dist = *fuzzy_node.old_row.last().unwrap();
+        let edit_dist = *old_row.last().unwrap();
         if edit_dist <= max_edit_dist {
             results.push(self.entry_ref());
         }
