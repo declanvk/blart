@@ -4,20 +4,19 @@ use std::{
 };
 
 use crate::{
-    AsBytes, HeaderNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
-    OpaqueNodePtr,
+    AsBytes, HeaderNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, OpaqueNodePtr,
 };
 
 pub struct StackArena<T: Copy> {
     data: Vec<MaybeUninit<T>>,
-    n: usize
+    n: usize,
 }
 
 impl<T: Copy> StackArena<T> {
     pub fn new(n: usize) -> Self {
         Self {
             data: Vec::new(),
-            n
+            n,
         }
     }
 
@@ -32,7 +31,10 @@ impl<T: Copy> StackArena<T> {
         &mut self.data[old_len..new_len]
     }
 
-    pub fn pop_copy<'a, 'b>(&mut self, buffer: &'a mut &'b mut [MaybeUninit<T>]) -> Option<&'a mut &'b mut [T]> {
+    pub fn pop_copy<'a, 'b>(
+        &mut self,
+        buffer: &'a mut &'b mut [MaybeUninit<T>],
+    ) -> Option<&'a mut &'b mut [T]> {
         unsafe {
             assume(self.data.len() % self.n == 0);
         }
@@ -55,7 +57,7 @@ impl<T: Copy> StackArena<T> {
     }
 }
 
-// #[inline(never)]
+#[inline(always)]
 fn edit_dist(
     key: &[u8],
     c: u8,
@@ -74,15 +76,26 @@ fn edit_dist(
     for i in 1..new.len() {
         unsafe {
             let b = *key.get_unchecked(i - 1) == c;
+
             let k1 = b as usize;
             let k2 = !b as usize;
-            let v1 = k1 * *old.get_unchecked(i - 1);
-            let v2 = k2
-                * ((*old.get_unchecked(i - 1))
-                    .min(*old.get_unchecked(i))
-                    .min(new.get_unchecked(i - 1).assume_init())
-                    + 1);
+
+            let substitution = *old.get_unchecked(i - 1);
+            let insertion = *old.get_unchecked(i);
+            let deletion = new.get_unchecked(i - 1).assume_init();
+
+            let v1 = k1 * substitution;
+            // For some reason doing the operation in this exact order
+            // generates better asm
+            let v2 = k2 * (substitution.min(insertion).min(deletion) + 1);
             let v = *new.get_unchecked_mut(i).write(v1 + v2);
+
+            // This generates worse asm than doing two multiplications
+            // let substitution = *old.get_unchecked(i - 1) + !b as usize;
+            // let insertion = *old.get_unchecked(i) + 1;
+            // let deletion = new.get_unchecked(i - 1).assume_init() + 1;
+            // let edit_dist = insertion.min(substitution).min(deletion);
+            // let v = *new.get_unchecked_mut(i).write(edit_dist);
 
             keep |= v <= max_edit_dist;
         }
@@ -95,7 +108,6 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
     let temp = unsafe { std::mem::transmute(old_row) };
     std::mem::swap(temp, new_row);
 }
-
 
 pub trait FuzzySearch<K, V> {
     fn fuzzy_search<'s>(
@@ -178,13 +190,7 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode48<K, V> {
                 continue;
             }
             let new_row = arena.push();
-            if edit_dist(
-                key,
-                k as u8,
-                *old_row,
-                new_row,
-                max_edit_dist,
-            ) {
+            if edit_dist(key, k as u8, *old_row, new_row, max_edit_dist) {
                 let node = child_pointers[usize::from(*index)];
                 nodes_to_search.push(node);
             } else {
@@ -214,13 +220,7 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode256<K, V> {
                 continue;
             };
             let new_row = arena.push();
-            if edit_dist(
-                key,
-                k as u8,
-                *old_row,
-                new_row,
-                max_edit_dist,
-            ) {
+            if edit_dist(key, k as u8, *old_row, new_row, max_edit_dist) {
                 nodes_to_search.push(*node);
             }
         }

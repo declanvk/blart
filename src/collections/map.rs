@@ -2,7 +2,11 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked, maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked, visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzySearch, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena
+    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked,
+    maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked,
+    visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzySearch, InsertPoint,
+    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
+    NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
     borrow::Borrow,
@@ -279,7 +283,9 @@ impl<K, V> TreeMap<K, V> {
         let mut new_row = Box::<[usize]>::new_uninit_slice(arena.size());
         let mut new_row = new_row.as_mut();
 
-        while let (Some(node), Some(old_row)) = (nodes_to_search.pop(), arena.pop_copy(&mut old_row)) {
+        while let (Some(node), Some(old_row)) =
+            (nodes_to_search.pop(), arena.pop_copy(&mut old_row))
+        {
             match node.to_node_ptr() {
                 ConcreteNodePtr::Node4(inner_ptr) => {
                     let inner_node = unsafe { inner_ptr.as_ref() };
@@ -1363,14 +1369,16 @@ where
 unsafe impl<K, V> Send for TreeMap<K, V>
 where
     K: Send,
-    V: Send
-{}
+    V: Send,
+{
+}
 
 unsafe impl<K, V> Sync for TreeMap<K, V>
 where
     K: Sync,
-    V: Sync
-{}
+    V: Sync,
+{
+}
 
 #[cfg(test)]
 mod tests {
