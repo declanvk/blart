@@ -267,11 +267,10 @@ impl<K, V> TreeMap<K, V> {
             return vec![];
         };
 
-        let mut results = Vec::new();
-
         let key = key.as_bytes();
+        let mut results = vec![];
         let mut nodes_to_search = vec![node];
-        let mut arena = StackArena::<usize>::new(key.len() + 1);
+        let mut arena = StackArena::new(key.len() + 1);
         let n = arena.size();
         let s = arena.push();
         for i in 0..n {
@@ -280,7 +279,7 @@ impl<K, V> TreeMap<K, V> {
 
         let mut old_row = Box::new_uninit_slice(arena.size());
         let mut old_row = old_row.as_mut();
-        let mut new_row = Box::<[usize]>::new_uninit_slice(arena.size());
+        let mut new_row = Box::new_uninit_slice(arena.size());
         let mut new_row = new_row.as_mut();
 
         while let (Some(node), Some(old_row)) =

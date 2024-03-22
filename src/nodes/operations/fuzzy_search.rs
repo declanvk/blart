@@ -7,12 +7,12 @@ use crate::{
     AsBytes, HeaderNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, OpaqueNodePtr,
 };
 
-pub struct StackArena<T: Copy> {
-    data: Vec<MaybeUninit<T>>,
+pub struct StackArena {
+    data: Vec<MaybeUninit<usize>>,
     n: usize,
 }
 
-impl<T: Copy> StackArena<T> {
+impl StackArena {
     pub fn new(n: usize) -> Self {
         Self {
             data: Vec::new(),
@@ -24,17 +24,17 @@ impl<T: Copy> StackArena<T> {
         self.n
     }
 
-    pub fn push(&mut self) -> &mut [MaybeUninit<T>] {
+    pub fn push(&mut self) -> &mut [MaybeUninit<usize>] {
         let old_len = self.data.len();
         let new_len = old_len + self.n;
         self.data.resize_with(new_len, MaybeUninit::uninit);
-        &mut self.data[old_len..new_len]
+        unsafe { self.data.get_unchecked_mut(old_len..new_len) }
     }
 
     pub fn pop_copy<'a, 'b>(
         &mut self,
-        buffer: &'a mut &'b mut [MaybeUninit<T>],
-    ) -> Option<&'a mut &'b mut [T]> {
+        buffer: &'a mut &'b mut [MaybeUninit<usize>],
+    ) -> Option<&'a mut &'b mut [usize]> {
         unsafe {
             assume(self.data.len() % self.n == 0);
         }
@@ -45,7 +45,13 @@ impl<T: Copy> StackArena<T> {
 
         let begin = self.data.len() - self.n;
         let end = self.data.len();
-        buffer.copy_from_slice(&self.data[begin..end]);
+        let s = unsafe { &self.data.get_unchecked(begin..end) };
+
+        unsafe {
+            assume(buffer.len() == s.len());
+        }
+
+        buffer.copy_from_slice(s);
 
         self.pop();
 
@@ -53,7 +59,7 @@ impl<T: Copy> StackArena<T> {
     }
 
     pub fn pop(&mut self) {
-        self.data.truncate(self.data.len() - self.n);
+        unsafe { self.data.set_len(self.data.len() - self.n) }
     }
 }
 
@@ -112,7 +118,7 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
 pub trait FuzzySearch<K, V> {
     fn fuzzy_search<'s>(
         &'s self,
-        arena: &mut StackArena<usize>,
+        arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
@@ -145,7 +151,7 @@ pub trait FuzzySearch<K, V> {
 impl<K: AsBytes, V, const SIZE: usize> FuzzySearch<K, V> for InnerNodeCompressed<K, V, SIZE> {
     fn fuzzy_search<'s>(
         &'s self,
-        arena: &mut StackArena<usize>,
+        arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
@@ -172,7 +178,7 @@ impl<K: AsBytes, V, const SIZE: usize> FuzzySearch<K, V> for InnerNodeCompressed
 impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode48<K, V> {
     fn fuzzy_search<'s>(
         &'s self,
-        arena: &mut StackArena<usize>,
+        arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
@@ -191,7 +197,7 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode48<K, V> {
             }
             let new_row = arena.push();
             if edit_dist(key, k as u8, *old_row, new_row, max_edit_dist) {
-                let node = child_pointers[usize::from(*index)];
+                let node = unsafe { *child_pointers.get_unchecked(usize::from(*index)) };
                 nodes_to_search.push(node);
             } else {
                 arena.pop();
@@ -203,7 +209,7 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode48<K, V> {
 impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode256<K, V> {
     fn fuzzy_search<'s>(
         &'s self,
-        arena: &mut StackArena<usize>,
+        arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
@@ -222,6 +228,8 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode256<K, V> {
             let new_row = arena.push();
             if edit_dist(key, k as u8, *old_row, new_row, max_edit_dist) {
                 nodes_to_search.push(*node);
+            } else {
+                arena.pop()
             }
         }
     }
@@ -230,7 +238,7 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode256<K, V> {
 impl<K: AsBytes, V> FuzzySearch<K, V> for LeafNode<K, V> {
     fn fuzzy_search<'s>(
         &'s self,
-        _arena: &mut StackArena<usize>,
+        _arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
@@ -239,12 +247,12 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for LeafNode<K, V> {
         max_edit_dist: usize,
     ) {
         let current_len = old_row[0];
-        let remaining_key = &self.key_ref().as_bytes()[current_len..];
+        let remaining_key = unsafe { self.key_ref().as_bytes().get_unchecked(current_len..) };
         for k in remaining_key {
             edit_dist(key, *k, *old_row, *new_row, max_edit_dist);
             unsafe { swap(old_row, new_row) };
         }
-        let edit_dist = *old_row.last().unwrap();
+        let edit_dist = unsafe { *old_row.last().unwrap_unchecked() };
         if edit_dist <= max_edit_dist {
             results.push(self.entry_ref());
         }
