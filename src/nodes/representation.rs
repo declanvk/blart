@@ -101,7 +101,7 @@ pub struct Header {
     /// a leaf node.
     pub num_children: u16,
     /// The key prefix for this node.
-    pub prefix: TinyVec<[u8; NUM_PREFIX_BYTES]>,
+    pub prefix: Vec<u8>,
 }
 
 impl Header {
@@ -109,7 +109,7 @@ impl Header {
     pub fn empty() -> Self {
         Header {
             num_children: 0,
-            prefix: TinyVec::new(),
+            prefix: Vec::new(),
         }
     }
 
@@ -135,14 +135,7 @@ impl Header {
     pub fn ltrim_prefix(&mut self, num_bytes: usize) {
         // this is an explicit match instead of a direct `self.prefix.drain` because it
         // is more efficient. See `TinyVec::drain` documentation.
-        match self.prefix {
-            TinyVec::Inline(ref mut vec) => {
-                vec.drain(..num_bytes).for_each(|_| ());
-            },
-            TinyVec::Heap(ref mut vec) => {
-                vec.drain(..num_bytes).for_each(|_| ());
-            },
-        }
+        self.prefix.drain(..num_bytes).for_each(|_| ());
     }
 
     /// Read the initialized portion of the prefix present in the header.
