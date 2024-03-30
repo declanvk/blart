@@ -222,23 +222,17 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
 
                 // prefix mismatch, need to split prefix into two separate nodes and take the
                 // common prefix into a new parent node
-                let new_header = Header::new(0, mismatch.matched_bytes, header.read_prefix());
-                let mut new_n4 = InnerNode4::with_header(new_header);
+                let mut new_n4 =
+                    InnerNode4::from_prefix(&header.read_prefix()[..mismatch.matched_bytes]);
 
                 unsafe {
                     // write the old node and new leaf in order
                     if mismatch.leaf_byte < mismatch.key_byte {
-                        new_n4.write_child_unchecked(
-                            mismatch.leaf_byte,
-                            mismatched_inner_node_ptr,
-                        );
+                        new_n4.write_child_unchecked(mismatch.leaf_byte, mismatched_inner_node_ptr);
                         new_n4.write_child_unchecked(mismatch.key_byte, new_leaf_pointer);
                     } else {
                         new_n4.write_child_unchecked(mismatch.key_byte, new_leaf_pointer);
-                        new_n4.write_child_unchecked(
-                            mismatch.leaf_byte,
-                            mismatched_inner_node_ptr,
-                        );
+                        new_n4.write_child_unchecked(mismatch.leaf_byte, mismatched_inner_node_ptr);
                     }
                 }
                 // In this case we trim the current prefix, by skipping the matched bytes + 1
@@ -286,8 +280,10 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                     assume(new_key_bytes_used < key.as_bytes().len());
                 }
 
-                let new_header = Header::new(key_bytes_used, new_key_bytes_used, key.as_bytes());
-                let mut new_n4 = InnerNode4::with_header(new_header);
+                // let new_header = Header::new(key_bytes_used, new_key_bytes_used,
+                // key.as_bytes());
+                let mut new_n4 =
+                    InnerNode4::from_prefix(&key.as_bytes()[key_bytes_used..new_key_bytes_used]);
 
                 let leaf_node_key_byte =
                     unsafe { leaf_node_ptr.as_key_ref().as_bytes()[new_key_bytes_used] };

@@ -436,9 +436,9 @@ mod tests {
         let l2_ptr = NodePtr::allocate_node_ptr(l2);
         let l3_ptr = NodePtr::allocate_node_ptr(l3);
 
-        let n4_left = InnerNode4::empty();
-        let n4_right = InnerNode4::empty();
-        let n16 = InnerNode16::empty();
+        let n4_left = InnerNode4::from_prefix(&[5, 6]);
+        let n4_right = InnerNode4::from_prefix(&[7, 8]);
+        let n16 = InnerNode16::from_prefix(&[1, 2]);
 
         let n4_left_ptr = NodePtr::allocate_node_ptr(n4_left);
         let n4_right_ptr = NodePtr::allocate_node_ptr(n4_right);
@@ -449,7 +449,6 @@ mod tests {
         {
             let n4_left = unsafe { n4_left_ptr.as_mut() };
             // Update inner node prefix and child slots
-            n4_left.header.extend_prefix(&[5, 6]);
             n4_left.write_child(1, l1_ptr.to_opaque());
             n4_left.write_child(2, l2_ptr.to_opaque());
         }
@@ -457,7 +456,6 @@ mod tests {
         {
             let n4_right = unsafe { n4_right_ptr.as_mut() };
 
-            n4_right.header.extend_prefix(&[7, 8]);
             n4_right.write_child(3, l3_ptr.to_opaque());
             // replace normal l4 pointer with loop back to root
             n4_right.write_child(4, root.to_opaque());
@@ -465,7 +463,6 @@ mod tests {
 
         {
             let n16 = unsafe { root.as_mut() };
-            n16.header.extend_prefix(&[1, 2]);
             n16.write_child(3, n4_left_ptr.to_opaque());
             n16.write_child(4, n4_right_ptr.to_opaque());
         }
@@ -510,23 +507,20 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let mut n4_left = InnerNode4::empty();
-        let mut n4_right = InnerNode4::empty();
-        let mut n16 = InnerNode16::empty();
+        let mut n4_left = InnerNode4::from_prefix(&[5, 6]);
+        let mut n4_right = InnerNode4::from_prefix(&[7, 8]);
+        let mut n16 = InnerNode16::from_prefix(&[1, 2]);
 
         // Update inner node prefix and child slots
-        n4_left.header.extend_prefix(&[5, 6]);
         n4_left.write_child(1, l1_ptr);
         n4_left.write_child(2, l2_ptr);
 
-        n4_right.header.extend_prefix(&[7, 8]);
         n4_right.write_child(3, l3_ptr);
         n4_right.write_child(4, l4_ptr);
 
         let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
         let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-        n16.header.extend_prefix(&[1, 2]);
         n16.write_child(3, n4_left_ptr);
         n16.write_child(4, n4_right_ptr);
 
@@ -563,23 +557,20 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let mut n4_left = InnerNode4::empty();
-        let mut n4_right = InnerNode4::empty();
-        let mut n16 = InnerNode16::empty();
+        let mut n4_left = InnerNode4::from_prefix(&[5, 6]);
+        let mut n4_right = InnerNode4::from_prefix(&[7, 8]);
+        let mut n16 = InnerNode16::from_prefix(&[1, 2]);
 
         // Update inner node prefix and child slots
-        n4_left.header.extend_prefix(&[5, 6]);
         n4_left.write_child(1, l1_ptr);
         n4_left.write_child(2, l2_ptr);
 
-        n4_right.header.extend_prefix(&[7, 8]);
         n4_right.write_child(3, l3_ptr);
         n4_right.write_child(4, l4_ptr);
 
         let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
         let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-        n16.header.extend_prefix(&[1, 2]);
         n16.write_child(3, n4_left_ptr);
         n16.write_child(4, n4_right_ptr);
 

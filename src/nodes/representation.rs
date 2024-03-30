@@ -3,21 +3,10 @@
 pub use self::iterators::*;
 use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
 use std::{
-    arch::x86_64::{__m128i, _mm_movemask_epi8},
-    borrow::Borrow,
-    cmp::Ordering,
-    error::Error,
-    fmt,
-    hash::Hash,
-    intrinsics::assume,
-    marker::PhantomData,
-    mem::{self, ManuallyDrop, MaybeUninit},
-    ops::Range,
-    ptr::{self, NonNull},
-    simd::{
+    arch::x86_64::{__m128i, _mm_movemask_epi8}, array::from_fn, borrow::Borrow, cmp::Ordering, error::Error, fmt, hash::Hash, intrinsics::assume, marker::PhantomData, mem::{self, ManuallyDrop, MaybeUninit}, ops::Range, ptr::{self, NonNull}, simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
         Simd,
-    },
+    }
 };
 
 mod iterators;
@@ -26,7 +15,7 @@ mod iterators;
 mod tests;
 
 /// The number of bytes stored for path compression in the node header.
-pub const NUM_PREFIX_BYTES: usize = 11;
+pub const NUM_PREFIX_BYTES: usize = 10;
 
 /// The representation of inner nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,7 +88,10 @@ impl NodeType {
 pub struct Header {
     /// Number of children of this inner node. This field has no meaning for
     /// a leaf node.
-    pub num_children: u8,
+    /// 
+    /// This needs to be a [`u16`], since a node 256 can hold up to 256 children
+    /// if this was a [`u8`] (0-255) it would overflow when adding the last element
+    pub num_children: u16,
     /// Number of bytes used by the prefix
     pub prefix_len: u32,
     /// The key prefix for this node.
@@ -107,17 +99,14 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn new(begin: usize, prefix_len: usize, prefix: &[u8]) -> Self {
-        let end = prefix_len.min(prefix.len());
-        let len = end - begin;
+    pub fn new(prefix: &[u8]) -> Self {
         let mut header = Header {
             num_children: 0,
-            prefix_len: len as u32,
+            prefix_len: prefix.len() as u32,
             prefix: [0; NUM_PREFIX_BYTES],
         };
-        let prefix = &prefix[begin..end];
-        let prefix = &prefix[..prefix.len().min(NUM_PREFIX_BYTES)];
-        header.prefix[..len.min(NUM_PREFIX_BYTES)].copy_from_slice(prefix);
+        let len = prefix.len().min(NUM_PREFIX_BYTES);
+        header.prefix[..len].copy_from_slice(&prefix[..len]);
 
         header
     }
@@ -130,31 +119,6 @@ impl Header {
             prefix: [0; NUM_PREFIX_BYTES],
         }
     }
-
-    // /// Write prefix bytes to this header, appending to existing bytes if
-    // /// present.
-    // pub fn extend_prefix(&mut self, new_bytes: &[u8]) {
-    //     self.prefix.extend(new_bytes.iter().copied());
-    // }
-
-    // /// Write bytes to the start of the key prefix.
-    // pub fn prepend_prefix(&mut self, new_bytes: &[u8]) {
-    //     self.prefix
-    //         .splice(0..0, new_bytes.iter().copied())
-    //         .for_each(|_| ());
-    // }
-
-    // /// Remove the specified number of bytes from the start of the prefix.
-    // ///
-    // /// # Panics
-    // ///
-    // ///  - Panics if the number of bytes to remove is greater than the prefix
-    // ///    size.
-    // pub fn ltrim_prefix(&mut self, num_bytes: usize) {
-    //     // this is an explicit match instead of a direct `self.prefix.drain`
-    // because it     // is more efficient. See `TinyVec::drain` documentation.
-    //     self.prefix.drain(..num_bytes).for_each(|_| ());
-    // }
 
     /// Read the initialized portion of the prefix present in the header.
     pub fn read_prefix(&self) -> &[u8] {
@@ -667,6 +631,16 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         > + DoubleEndedIterator
         + Into<InnerNodeIter<<Self as Node>::Key, <Self as Node>::Value>>;
 
+    fn empty() -> Self {
+        Self::from_header(Header::empty())
+    }
+
+    fn from_prefix(prefix: &[u8]) -> Self {
+        Self::from_header(Header::new(prefix))
+    }
+
+    fn from_header(header: Header) -> Self;
+
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
     fn lookup_child(
@@ -865,23 +839,6 @@ impl<K: AsBytes, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, 
 }
 
 impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
-    /// Create an empty [`InnerNodeCompressed`] with the given [`NodeType`].
-    pub fn empty() -> Self {
-        InnerNodeCompressed {
-            header: Header::default(),
-            child_pointers: MaybeUninit::uninit_array(),
-            keys: [MaybeUninit::new(0); SIZE],
-        }
-    }
-
-    pub fn with_header(header: Header) -> Self {
-        InnerNodeCompressed {
-            header,
-            child_pointers: MaybeUninit::uninit_array(),
-            keys: [MaybeUninit::new(0); SIZE],
-        }
-    }
-
     /// Return the initialized portions of the keys and child pointer arrays.
     pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<K, V>]) {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
@@ -1083,6 +1040,14 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
     type Iter = InnerNodeCompressedIter<<Self as Node>::Key, <Self as Node>::Value>;
     type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
 
+    fn from_header(header: Header) -> Self {
+        InnerNodeCompressed {
+            header,
+            child_pointers: MaybeUninit::uninit_array(),
+            keys: MaybeUninit::uninit_array(),
+        }
+    }
+
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>> {
         self.lookup_child_inner(key_fragment)
     }
@@ -1174,6 +1139,14 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
     type GrownNode = InnerNode48<<Self as Node>::Key, <Self as Node>::Value>;
     type Iter = InnerNodeCompressedIter<<Self as Node>::Key, <Self as Node>::Value>;
     type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
+
+    fn from_header(header: Header) -> Self {
+        InnerNodeCompressed {
+            header,
+            child_pointers: MaybeUninit::uninit_array(),
+            keys: MaybeUninit::uninit_array(),
+        }
+    }
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>> {
         self.lookup_child_inner(key_fragment)
@@ -1320,15 +1293,6 @@ impl<K: AsBytes, V> Clone for InnerNode48<K, V> {
 }
 
 impl<K: AsBytes, V> InnerNode48<K, V> {
-    /// Create an empty `Node48`.
-    pub fn empty() -> Self {
-        InnerNode48 {
-            header: Header::default(),
-            child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
-            child_pointers: MaybeUninit::uninit_array(),
-        }
-    }
-
     /// Return the initialized portions of the child pointer array.
     pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<K, V>] {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
@@ -1356,6 +1320,14 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     type GrownNode = InnerNode256<<Self as Node>::Key, <Self as Node>::Value>;
     type Iter = InnerNode48Iter<<Self as Node>::Key, <Self as Node>::Value>;
     type ShrunkNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
+
+    fn from_header(header: Header) -> Self {
+        InnerNode48 {
+            header,
+            child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
+            child_pointers: MaybeUninit::uninit_array(),
+        }
+    }
 
     fn lookup_child(
         &self,
@@ -1535,16 +1507,6 @@ impl<K: AsBytes, V> Clone for InnerNode256<K, V> {
     }
 }
 
-impl<K: AsBytes, V> InnerNode256<K, V> {
-    /// Create an empty `InnerNode256`.
-    pub fn empty() -> Self {
-        InnerNode256 {
-            header: Header::default(),
-            child_pointers: [None; 256],
-        }
-    }
-}
-
 impl<K: AsBytes, V> Node for InnerNode256<K, V> {
     type Key = K;
     type Value = V;
@@ -1563,6 +1525,13 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     type Iter = InnerNode256Iter<K, V>;
     type ShrunkNode = InnerNode48<K, V>;
 
+    fn from_header(header: Header) -> Self {
+        InnerNode256 {
+            header,
+            child_pointers: [None; 256],
+        }
+    }
+    
     fn lookup_child(
         &self,
         key_fragment: u8,
