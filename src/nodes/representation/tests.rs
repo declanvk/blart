@@ -165,6 +165,7 @@ fn inner_node_write_child_test(
             .collect::<Vec<_>>();
 
         for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            println!("{idx}");
             node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
         }
 
@@ -526,97 +527,6 @@ fn node256_shrink_too_many_children_panic() {
     inner_node_shrink_test(InnerNode256::empty(), 49);
 }
 
-#[test]
-fn header_read_write_prefix() {
-    let mut h = Header::empty();
-
-    assert_eq!(h.prefix_len(), 0);
-    assert_eq!(h.read_prefix(), &[]);
-
-    h.extend_prefix(&[1, 2, 3]);
-
-    assert_eq!(h.prefix_len(), 3);
-    assert_eq!(h.read_prefix(), &[1, 2, 3]);
-
-    h.extend_prefix(&[4, 5, 6]);
-
-    assert_eq!(h.prefix_len(), 6);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6]);
-
-    h.extend_prefix(&[7, 8]);
-
-    assert_eq!(h.prefix_len(), 8);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-
-    h.extend_prefix(&[9, 10, 11, 12]);
-
-    assert_eq!(h.prefix_len(), 12);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-
-    h.extend_prefix(&[]);
-
-    assert_eq!(h.prefix_len(), 12);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-}
-
-#[test]
-fn header_prepend_prefix() {
-    let mut h = Header::default();
-
-    assert_eq!(h.prefix_len(), 0);
-    assert_eq!(h.read_prefix(), &[]);
-
-    h.prepend_prefix(&[]);
-
-    assert_eq!(h.prefix_len(), 0);
-    assert_eq!(h.read_prefix(), &[]);
-
-    h.prepend_prefix(&[1, 2, 3]);
-
-    assert_eq!(h.prefix_len(), 3);
-    assert_eq!(h.read_prefix(), &[1, 2, 3]);
-
-    h.prepend_prefix(&[4, 5, 6]);
-
-    assert_eq!(h.prefix_len(), 6);
-    assert_eq!(h.read_prefix(), &[4, 5, 6, 1, 2, 3]);
-
-    h.extend_prefix(&[7, 8, 9]);
-
-    assert_eq!(h.prefix_len(), 9);
-    assert_eq!(h.read_prefix(), &[4, 5, 6, 1, 2, 3, 7, 8, 9]);
-}
-
-#[test]
-fn header_check_prefix() {
-    let mut h = Header::empty();
-
-    h.extend_prefix(&[1, 2, 3]);
-
-    assert_eq!(h.match_prefix(&[1, 2, 3]), 3);
-    assert_eq!(h.match_prefix(&[0, 1, 2]), 0);
-    assert_eq!(h.match_prefix(&[1, 2]), 2);
-    assert_eq!(h.match_prefix(&[]), 0);
-
-    h.extend_prefix(&[4, 5, 6, 7, 8, 9, 10, 11, 12]);
-
-    assert_eq!(h.match_prefix(&[1, 2, 3]), 3);
-    assert_eq!(h.match_prefix(&[0, 1, 2]), 0);
-    assert_eq!(h.match_prefix(&[1, 2]), 2);
-    assert_eq!(h.match_prefix(&[]), 0);
-
-    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]), 8);
-    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 12);
-    assert_eq!(
-        h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]),
-        12
-    );
-    assert_eq!(
-        h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 100, 200, 254, 255]),
-        8
-    );
-}
-
 // #[test]
 // fn empty_prefix_bytes_match() {
 //     let mut h = Header::empty();
@@ -637,24 +547,23 @@ fn header_check_prefix() {
 
 #[test]
 fn header_delete_prefix() {
-    let mut h = Header::empty();
-    h.extend_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
+    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
-    h.ltrim_prefix(0);
+    h.ltrim_by(0);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
-    h.ltrim_prefix(3);
+    h.ltrim_by(3);
     assert_eq!(h.read_prefix(), &[4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 5);
 
-    h.ltrim_prefix(1);
+    h.ltrim_by(1);
     assert_eq!(h.read_prefix(), &[5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 4);
 
-    h.ltrim_prefix(4);
+    h.ltrim_by(4);
     assert_eq!(h.read_prefix(), &[]);
     assert_eq!(h.prefix_len(), 0);
 }
@@ -662,21 +571,19 @@ fn header_delete_prefix() {
 #[test]
 #[should_panic]
 fn header_ltrim_prefix_too_many_bytes_panic() {
-    let mut h = Header::empty();
-    h.extend_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
+    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
-    h.ltrim_prefix(10);
+    h.ltrim_by(10);
 }
 
 #[test]
 #[should_panic]
 fn header_ltrim_prefix_non_stored_bytes_panic() {
-    let mut h = Header::empty();
-    h.extend_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
-    h.ltrim_prefix(0);
+    h.ltrim_by(0);
 }
