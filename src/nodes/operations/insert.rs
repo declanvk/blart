@@ -222,8 +222,10 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
 
                 // prefix mismatch, need to split prefix into two separate nodes and take the
                 // common prefix into a new parent node
+                let prefix = &header.read_prefix();
+                let prefix = &prefix[..prefix.len().min(mismatch.matched_bytes)];
                 let mut new_n4 =
-                    InnerNode4::from_prefix(&header.read_prefix()[..mismatch.matched_bytes]);
+                    InnerNode4::from_prefix(prefix);
 
                 unsafe {
                     // write the old node and new leaf in order
