@@ -30,10 +30,10 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn count_leaf_nodes<K, V>(root: OpaqueNodePtr<K, V>) -> usize {
+    pub unsafe fn count_leaf_nodes<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> usize {
         struct LeafNodeCounter;
 
-        impl<K, V> Visitor<K, V> for LeafNodeCounter {
+        impl<K: AsBytes, V> Visitor<K, V> for LeafNodeCounter {
             type Output = usize;
 
             fn default_output(&self) -> Self::Output {

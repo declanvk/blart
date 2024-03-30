@@ -30,7 +30,7 @@ impl<const LEN: usize> PartialEq<[u8; LEN]> for KeyPrefix {
 
 /// An issue with the well-formed-ness of the tree. See the documentation on
 /// [`WellFormedChecker`] for more context.
-pub enum MalformedTreeError<K, V> {
+pub enum MalformedTreeError<K: AsBytes, V> {
     /// A loop was observed between nodes
     LoopFound {
         /// The node that was observed more than once while traversing the tree
@@ -145,7 +145,7 @@ where
     }
 }
 
-impl<K, V> Clone for MalformedTreeError<K, V>
+impl<K: AsBytes, V> Clone for MalformedTreeError<K, V>
 where
     K: Clone,
 {
@@ -180,7 +180,7 @@ where
     }
 }
 
-impl<K, V> PartialEq for MalformedTreeError<K, V>
+impl<K: AsBytes, V> PartialEq for MalformedTreeError<K, V>
 where
     K: Eq,
 {
@@ -233,7 +233,7 @@ where
     }
 }
 
-impl<K, V> Eq for MalformedTreeError<K, V> where K: Eq {}
+impl<K, V> Eq for MalformedTreeError<K, V> where K: Eq + AsBytes {}
 
 impl<K, V> Error for MalformedTreeError<K, V> where K: AsBytes {}
 
@@ -254,7 +254,7 @@ impl<K, V> Error for MalformedTreeError<K, V> where K: AsBytes {}
 /// "well-formed" (by the definition given above) if the checker returns
 /// `Ok(())`.
 #[derive(Debug)]
-pub struct WellFormedChecker<K, V> {
+pub struct WellFormedChecker<K: AsBytes, V> {
     current_key_prefix: Vec<u8>,
     seen_nodes: HashMap<OpaqueNodePtr<K, V>, KeyPrefix>,
 }

@@ -25,14 +25,14 @@ pub use iterators::*;
 use self::entry_ref::{EntryRef, OccupiedEntryRef, VacantEntryRef};
 
 /// An ordered map based on an adaptive radix tree.
-pub struct TreeMap<K, V> {
+pub struct TreeMap<K: AsBytes, V> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
     root: Option<OpaqueNodePtr<K, V>>,
 }
 
-impl<K, V> TreeMap<K, V> {
+impl<K: AsBytes, V> TreeMap<K, V> {
     /// Create a new, empty [`TreeMap`].
     ///
     /// This function will not pre-allocate anything.
@@ -1110,7 +1110,7 @@ impl<K, V> TreeMap<K, V> {
     }
 }
 
-impl<K, V> TreeMap<K, V> {
+impl<K: AsBytes, V> TreeMap<K, V> {
     pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V>, InsertPrefixError>
     where
         K: AsBytes,
@@ -1187,7 +1187,7 @@ impl<K, V> TreeMap<K, V> {
     }
 }
 
-impl<K, V> Drop for TreeMap<K, V> {
+impl<K: AsBytes, V> Drop for TreeMap<K, V> {
     fn drop(&mut self) {
         self.clear();
     }
@@ -1213,7 +1213,7 @@ where
 
 impl<K, V> Debug for TreeMap<K, V>
 where
-    K: Debug,
+    K: Debug + AsBytes,
     V: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1221,7 +1221,7 @@ where
     }
 }
 
-impl<K, V> Default for TreeMap<K, V> {
+impl<K: AsBytes, V> Default for TreeMap<K, V> {
     fn default() -> Self {
         Self::new()
     }
@@ -1278,7 +1278,7 @@ where
 
 impl<K, V> Hash for TreeMap<K, V>
 where
-    K: Hash,
+    K: Hash + AsBytes,
     V: Hash,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -1301,7 +1301,7 @@ where
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a TreeMap<K, V> {
+impl<'a, K: AsBytes, V> IntoIterator for &'a TreeMap<K, V> {
     type IntoIter = iterators::Iter<'a, K, V>;
     type Item = (&'a K, &'a V);
 
@@ -1310,7 +1310,7 @@ impl<'a, K, V> IntoIterator for &'a TreeMap<K, V> {
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a mut TreeMap<K, V> {
+impl<'a, K: AsBytes, V> IntoIterator for &'a mut TreeMap<K, V> {
     type IntoIter = iterators::IterMut<'a, K, V>;
     type Item = (&'a K, &'a mut V);
 
@@ -1319,7 +1319,7 @@ impl<'a, K, V> IntoIterator for &'a mut TreeMap<K, V> {
     }
 }
 
-impl<K, V> IntoIterator for TreeMap<K, V> {
+impl<K: AsBytes, V> IntoIterator for TreeMap<K, V> {
     type IntoIter = iterators::IntoIter<K, V>;
     type Item = (K, V);
 
@@ -1330,7 +1330,7 @@ impl<K, V> IntoIterator for TreeMap<K, V> {
 
 impl<K, V> Ord for TreeMap<K, V>
 where
-    K: Ord,
+    K: Ord + AsBytes,
     V: Ord,
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -1340,7 +1340,7 @@ where
 
 impl<K, V> PartialOrd for TreeMap<K, V>
 where
-    K: PartialOrd,
+    K: PartialOrd + AsBytes,
     V: PartialOrd,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -1350,14 +1350,14 @@ where
 
 impl<K, V> Eq for TreeMap<K, V>
 where
-    K: Eq,
+    K: Eq + AsBytes,
     V: Eq,
 {
 }
 
 impl<K, V> PartialEq for TreeMap<K, V>
 where
-    K: PartialEq,
+    K: PartialEq + AsBytes,
     V: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -1367,14 +1367,14 @@ where
 
 unsafe impl<K, V> Send for TreeMap<K, V>
 where
-    K: Send,
+    K: Send + AsBytes,
     V: Send,
 {
 }
 
 unsafe impl<K, V> Sync for TreeMap<K, V>
 where
-    K: Sync,
+    K: Sync + AsBytes,
     V: Sync,
 {
 }

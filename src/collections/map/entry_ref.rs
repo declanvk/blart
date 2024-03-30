@@ -7,12 +7,12 @@ use std::{
 
 use crate::{AsBytes, InsertPoint, LeafNode, NoPrefixesBytes, NodePtr, TreeMap};
 
-pub struct OccupiedEntryRef<'a, 'b, K, V, Q: ?Sized> {
+pub struct OccupiedEntryRef<'a, 'b, K: AsBytes, V, Q: ?Sized> {
     pub leaf: (&'a K, &'a mut V),
     pub key: &'b Q,
 }
 
-impl<'a, 'b, K, V, Q: ?Sized> OccupiedEntryRef<'a, 'b, K, V, Q> {
+impl<'a, 'b, K: AsBytes, V, Q: ?Sized> OccupiedEntryRef<'a, 'b, K, V, Q> {
     pub fn get(&self) -> &V {
         self.leaf.1
     }
@@ -36,13 +36,13 @@ impl<'a, 'b, K, V, Q: ?Sized> OccupiedEntryRef<'a, 'b, K, V, Q> {
     // TODO: Remove, Replace
 }
 
-pub struct VacantEntryRef<'a, 'b, K, V, Q: ?Sized> {
+pub struct VacantEntryRef<'a, 'b, K: AsBytes, V, Q: ?Sized> {
     pub map: &'a mut TreeMap<K, V>,
     pub key: &'b Q,
     pub insert_point: Option<InsertPoint<K, V>>,
 }
 
-impl<'a, 'b, K, V, Q: ?Sized> VacantEntryRef<'a, 'b, K, V, Q> {
+impl<'a, 'b, K: AsBytes, V, Q: ?Sized> VacantEntryRef<'a, 'b, K, V, Q> {
     pub fn insert(self, value: V) -> &'a mut V
     where
         K: AsBytes + From<&'b Q>,
@@ -75,12 +75,12 @@ impl<'a, 'b, K, V, Q: ?Sized> VacantEntryRef<'a, 'b, K, V, Q> {
     }
 }
 
-pub enum EntryRef<'a, 'b, K, V, Q: ?Sized> {
+pub enum EntryRef<'a, 'b, K: AsBytes, V, Q: ?Sized> {
     Occupied(OccupiedEntryRef<'a, 'b, K, V, Q>),
     Vacant(VacantEntryRef<'a, 'b, K, V, Q>),
 }
 
-impl<'a, 'b, K, V, Q: ?Sized> EntryRef<'a, 'b, K, V, Q> {
+impl<'a, 'b, K: AsBytes, V, Q: ?Sized> EntryRef<'a, 'b, K, V, Q> {
     pub fn and_modify<F>(self, f: F) -> Self
     where
         F: FnOnce(&mut V),

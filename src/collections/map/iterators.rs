@@ -1,9 +1,9 @@
-use crate::{LeafNode, NodePtr, TreeIterator, TreeMap};
+use crate::{AsBytes, LeafNode, NodePtr, TreeIterator, TreeMap};
 use std::marker::PhantomData;
 
 macro_rules! impl_ref_mut_iterator {
     ($iter_name:ty, $item:ty $(; $flag:tt)?) => {
-        impl<'m, K, V: 'm> Iterator for $iter_name {
+        impl<'m, K: AsBytes, V: 'm> Iterator for $iter_name {
             type Item = $item;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -30,7 +30,7 @@ macro_rules! impl_ref_mut_iterator {
             )?
         }
 
-        impl<'m, K, V: 'm> DoubleEndedIterator for $iter_name {
+        impl<'m, K: AsBytes, V: 'm> DoubleEndedIterator for $iter_name {
             fn next_back(&mut self) -> Option<Self::Item> {
                 self.raw_iter.as_mut()?.next_back().map(|leaf_node_ptr| {
                     self.size -= 1;
@@ -76,13 +76,13 @@ macro_rules! impl_ref_mut_iterator {
 /// documentation for more.
 ///
 /// [`iter`]: TreeMap::iter
-pub struct Iter<'m, K, V> {
+pub struct Iter<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m TreeMap<K, V>>,
     raw_iter: Option<TreeIterator<K, V>>,
     size: usize,
 }
 
-impl<'m, K, V> Iter<'m, K, V> {
+impl<'m, K: AsBytes, V> Iter<'m, K, V> {
     pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
         Self {
             _marker: PhantomData,
@@ -118,13 +118,13 @@ impl_ref_mut_iterator!(Iter<'m, K, V>, (&'m K, &'m V) ; items_are_sorted);
 /// documentation for more.
 ///
 /// [`iter_mut`]: TreeMap::iter_mut
-pub struct IterMut<'m, K, V> {
+pub struct IterMut<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m mut TreeMap<K, V>>,
     raw_iter: Option<TreeIterator<K, V>>,
     size: usize,
 }
 
-impl<'m, K, V> IterMut<'m, K, V> {
+impl<'m, K: AsBytes, V> IterMut<'m, K, V> {
     pub(crate) fn new(tree: &'m mut TreeMap<K, V>) -> Self {
         Self {
             _marker: PhantomData,
@@ -159,13 +159,13 @@ impl_ref_mut_iterator!(IterMut<'m, K, V>, (&'m K, &'m mut V) ; items_are_sorted)
 /// documentation for more.
 ///
 /// [`keys`]: TreeMap::keys
-pub struct Keys<'m, K, V> {
+pub struct Keys<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m TreeMap<K, V>>,
     raw_iter: Option<TreeIterator<K, V>>,
     size: usize,
 }
 
-impl<'m, K, V> Keys<'m, K, V> {
+impl<'m, K: AsBytes, V> Keys<'m, K, V> {
     pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
         Self {
             _marker: PhantomData,
@@ -200,13 +200,13 @@ impl_ref_mut_iterator!(Keys<'m, K, V>, &'m K ; items_are_sorted);
 /// documentation for more.
 ///
 /// [`values`]: TreeMap::values
-pub struct Values<'m, K, V> {
+pub struct Values<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m TreeMap<K, V>>,
     raw_iter: Option<TreeIterator<K, V>>,
     size: usize,
 }
 
-impl<'m, K, V> Values<'m, K, V> {
+impl<'m, K: AsBytes, V> Values<'m, K, V> {
     pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
         Self {
             _marker: PhantomData,
@@ -239,13 +239,13 @@ impl_ref_mut_iterator!(Values<'m, K, V>, &'m V);
 /// its documentation for more.
 ///
 /// [`values_mut`]: TreeMap::values_mut
-pub struct ValuesMut<'m, K, V> {
+pub struct ValuesMut<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m mut TreeMap<K, V>>,
     raw_iter: Option<TreeIterator<K, V>>,
     size: usize,
 }
 
-impl<'m, K, V> ValuesMut<'m, K, V> {
+impl<'m, K: AsBytes, V> ValuesMut<'m, K, V> {
     pub(crate) fn new(tree: &'m mut TreeMap<K, V>) -> Self {
         Self {
             _marker: PhantomData,
@@ -438,15 +438,15 @@ impl<K, V> DoubleEndedIterator for DrainFilter<K, V> {
 /// See its documentation for more.
 ///
 /// [`into_keys`]: TreeMap::into_keys
-pub struct IntoKeys<K, V>(IntoIter<K, V>);
+pub struct IntoKeys<K: AsBytes, V>(IntoIter<K, V>);
 
-impl<K, V> IntoKeys<K, V> {
+impl<K: AsBytes, V> IntoKeys<K, V> {
     pub(crate) fn new(tree: TreeMap<K, V>) -> Self {
         IntoKeys(IntoIter::new(tree))
     }
 }
 
-impl<K, V> Iterator for IntoKeys<K, V> {
+impl<K: AsBytes, V> Iterator for IntoKeys<K, V> {
     type Item = K;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -454,7 +454,7 @@ impl<K, V> Iterator for IntoKeys<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for IntoKeys<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for IntoKeys<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.0.next_back()?.0)
     }
@@ -466,15 +466,15 @@ impl<K, V> DoubleEndedIterator for IntoKeys<K, V> {
 /// See its documentation for more.
 ///
 /// [`into_values`]: TreeMap::into_values
-pub struct IntoValues<K, V>(IntoIter<K, V>);
+pub struct IntoValues<K: AsBytes, V>(IntoIter<K, V>);
 
-impl<K, V> IntoValues<K, V> {
+impl<K: AsBytes, V> IntoValues<K, V> {
     pub(crate) fn new(tree: TreeMap<K, V>) -> Self {
         IntoValues(IntoIter::new(tree))
     }
 }
 
-impl<K, V> Iterator for IntoValues<K, V> {
+impl<K: AsBytes, V> Iterator for IntoValues<K, V> {
     type Item = V;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -482,7 +482,7 @@ impl<K, V> Iterator for IntoValues<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for IntoValues<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for IntoValues<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.0.next_back()?.1)
     }
@@ -495,15 +495,15 @@ impl<K, V> DoubleEndedIterator for IntoValues<K, V> {
 ///
 /// [`into_iter`]: IntoIterator::into_iter
 /// [`IntoIterator`]: core::iter::IntoIterator
-pub struct IntoIter<K, V>(TreeMap<K, V>);
+pub struct IntoIter<K: AsBytes, V>(TreeMap<K, V>);
 
-impl<K, V> IntoIter<K, V> {
+impl<K: AsBytes, V> IntoIter<K, V> {
     pub(crate) fn new(tree: TreeMap<K, V>) -> Self {
         IntoIter(tree)
     }
 }
 
-impl<K, V> Iterator for IntoIter<K, V> {
+impl<K: AsBytes, V> Iterator for IntoIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -517,7 +517,7 @@ impl<K, V> Iterator for IntoIter<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for IntoIter<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for IntoIter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.0.pop_last()
     }

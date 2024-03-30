@@ -8,7 +8,7 @@ use std::{
 #[cfg(not(feature = "nightly"))]
 use sptr::Strict;
 
-use crate::{InnerNode256, InnerNode48, InnerNodeCompressed, OpaqueNodePtr, RestrictedNodeIndex};
+use crate::{AsBytes, InnerNode256, InnerNode48, InnerNodeCompressed, OpaqueNodePtr, RestrictedNodeIndex};
 
 /// An iterator all the children of an [`InnerNodeCompressed`].
 ///
@@ -18,14 +18,14 @@ use crate::{InnerNode256, InnerNode48, InnerNodeCompressed, OpaqueNodePtr, Restr
 ///    of the node.
 //  - All the `NonNull` pointers in this struct are constructed from shared
 //    references and must not be used to mutate.
-pub struct InnerNodeCompressedIter<K, V> {
+pub struct InnerNodeCompressedIter<K: AsBytes, V> {
     keys_start: NonNull<u8>,
     keys_end: NonNull<u8>,
     child_pointers_start: NonNull<OpaqueNodePtr<K, V>>,
     child_pointers_end: NonNull<OpaqueNodePtr<K, V>>,
 }
 
-impl<K, V> InnerNodeCompressedIter<K, V> {
+impl<K: AsBytes, V> InnerNodeCompressedIter<K, V> {
     /// Create a new iterator over all the children of the given
     /// [`InnerNodeCompressed`].
     ///
@@ -110,7 +110,7 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
         // `_start` and `_end` pointers the same way; `_start` at the next element to
         // return, and `_end` one past the last element to return.
 
-        fn modify_iter_start<const SIZE: usize, K, V>(
+        fn modify_iter_start<const SIZE: usize, K: AsBytes, V>(
             iter: &mut InnerNodeCompressedIter<K, V>,
             node: &InnerNodeCompressed<K, V, SIZE>,
             start_bound: Bound<&u8>,
@@ -180,7 +180,7 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
             }
         }
 
-        fn modify_iter_end<const SIZE: usize, K, V>(
+        fn modify_iter_end<const SIZE: usize, K: AsBytes, V>(
             iter: &mut InnerNodeCompressedIter<K, V>,
             node: &InnerNodeCompressed<K, V, SIZE>,
             end_bound: Bound<&u8>,
@@ -311,7 +311,7 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
     }
 }
 
-impl<K, V> Iterator for InnerNodeCompressedIter<K, V> {
+impl<K: AsBytes, V> Iterator for InnerNodeCompressedIter<K, V> {
     type Item = (u8, OpaqueNodePtr<K, V>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -352,7 +352,7 @@ impl<K, V> Iterator for InnerNodeCompressedIter<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for InnerNodeCompressedIter<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for InnerNodeCompressedIter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.keys_start == self.keys_end {
             return None;
@@ -374,18 +374,18 @@ impl<K, V> DoubleEndedIterator for InnerNodeCompressedIter<K, V> {
     }
 }
 
-impl<K, V> FusedIterator for InnerNodeCompressedIter<K, V> {}
+impl<K: AsBytes, V> FusedIterator for InnerNodeCompressedIter<K, V> {}
 
 /// An iterator over all the children of a [`InnerNode48`].
 // All the `NonNull` pointers in this struct are constructed from shared
 // references and must not be used to mutate.
-pub struct InnerNode48Iter<K, V> {
+pub struct InnerNode48Iter<K: AsBytes, V> {
     original_child_indices_start: NonNull<RestrictedNodeIndex<48>>,
     child_indices_range: Range<NonNull<RestrictedNodeIndex<48>>>,
     child_pointers_ptr: NonNull<[OpaqueNodePtr<K, V>]>,
 }
 
-impl<K, V> InnerNode48Iter<K, V> {
+impl<K: AsBytes, V> InnerNode48Iter<K, V> {
     /// Create a new iterator over the children of the given [`InnerNode48`].
     ///
     /// # Safety
@@ -427,7 +427,7 @@ impl<K, V> InnerNode48Iter<K, V> {
     ///  - The lifetime of the new [`InnerNode48Iter`] must not overlap with any
     ///    operations that mutate the original [`InnerNode48`].
     pub unsafe fn range<R: RangeBounds<u8>>(node: &InnerNode48<K, V>, range: R) -> Self {
-        fn modify_iter_start<K, V>(iter: &mut InnerNode48Iter<K, V>, start_bound: Bound<&u8>) {
+        fn modify_iter_start<K: AsBytes, V>(iter: &mut InnerNode48Iter<K, V>, start_bound: Bound<&u8>) {
             let start_key_index = match start_bound {
                 Bound::Included(min_key_byte) => (*min_key_byte) as usize,
                 Bound::Excluded(min_key_byte_excluded) => {
@@ -472,7 +472,7 @@ impl<K, V> InnerNode48Iter<K, V> {
             }
         }
 
-        fn modify_iter_end<K, V>(iter: &mut InnerNode48Iter<K, V>, end_bound: Bound<&u8>) {
+        fn modify_iter_end<K: AsBytes, V>(iter: &mut InnerNode48Iter<K, V>, end_bound: Bound<&u8>) {
             let end_key_index = match end_bound {
                 Bound::Included(min_key_byte) => {
                     // Since we want to include the value, we add one so the pointer will be one
@@ -539,7 +539,7 @@ impl<K, V> InnerNode48Iter<K, V> {
     }
 }
 
-impl<K, V> Iterator for InnerNode48Iter<K, V> {
+impl<K: AsBytes, V> Iterator for InnerNode48Iter<K, V> {
     type Item = (u8, OpaqueNodePtr<K, V>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -619,7 +619,7 @@ impl<K, V> Iterator for InnerNode48Iter<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for InnerNode48Iter<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for InnerNode48Iter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while !self.child_indices_range.is_empty() {
             let next_ptr = {
@@ -680,17 +680,17 @@ impl<K, V> DoubleEndedIterator for InnerNode48Iter<K, V> {
     }
 }
 
-impl<K, V> FusedIterator for InnerNode48Iter<K, V> {}
+impl<K: AsBytes, V> FusedIterator for InnerNode48Iter<K, V> {}
 
 /// An iterator over all the children of a [`InnerNode256`].
 // All the `NonNull` pointers in this struct are constructed from shared
 // references and must not be used to mutate.
-pub struct InnerNode256Iter<K, V> {
+pub struct InnerNode256Iter<K: AsBytes, V> {
     original_child_pointers_start: NonNull<Option<OpaqueNodePtr<K, V>>>,
     child_pointers_range: Range<NonNull<Option<OpaqueNodePtr<K, V>>>>,
 }
 
-impl<K, V> InnerNode256Iter<K, V> {
+impl<K: AsBytes, V> InnerNode256Iter<K, V> {
     /// Create a new iterator over the children of the given [`InnerNode48`].
     ///
     /// # Safety
@@ -724,7 +724,7 @@ impl<K, V> InnerNode256Iter<K, V> {
     ///  - The lifetime of the new [`InnerNode256Iter`] must not overlap with
     ///    any operations that mutate the original [`InnerNode256`].
     pub unsafe fn range<R: RangeBounds<u8>>(node: &InnerNode256<K, V>, range: R) -> Self {
-        fn modify_iter_start<K, V>(iter: &mut InnerNode256Iter<K, V>, start_bound: Bound<&u8>) {
+        fn modify_iter_start<K: AsBytes, V>(iter: &mut InnerNode256Iter<K, V>, start_bound: Bound<&u8>) {
             let start_key_index = match start_bound {
                 Bound::Included(min_key_byte) => (*min_key_byte) as usize,
                 Bound::Excluded(min_key_byte_excluded) => {
@@ -769,7 +769,7 @@ impl<K, V> InnerNode256Iter<K, V> {
             }
         }
 
-        fn modify_iter_end<K, V>(iter: &mut InnerNode256Iter<K, V>, end_bound: Bound<&u8>) {
+        fn modify_iter_end<K: AsBytes, V>(iter: &mut InnerNode256Iter<K, V>, end_bound: Bound<&u8>) {
             let end_key_index = match end_bound {
                 Bound::Included(min_key_byte) => {
                     // Since we want to include the value, we add one so the pointer will be one
@@ -836,7 +836,7 @@ impl<K, V> InnerNode256Iter<K, V> {
     }
 }
 
-impl<K, V> Iterator for InnerNode256Iter<K, V> {
+impl<K: AsBytes, V> Iterator for InnerNode256Iter<K, V> {
     type Item = (u8, OpaqueNodePtr<K, V>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -886,7 +886,7 @@ impl<K, V> Iterator for InnerNode256Iter<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for InnerNode256Iter<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for InnerNode256Iter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while !self.child_pointers_range.is_empty() {
             let next_ptr = {
@@ -925,7 +925,7 @@ impl<K, V> DoubleEndedIterator for InnerNode256Iter<K, V> {
     }
 }
 
-impl<K, V> FusedIterator for InnerNode256Iter<K, V> {}
+impl<K: AsBytes, V> FusedIterator for InnerNode256Iter<K, V> {}
 
 #[cfg(test)]
 mod tests;

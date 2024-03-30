@@ -1,7 +1,7 @@
 //! Trie node representation
 
 pub use self::iterators::*;
-use crate::{tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
+use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
 use std::{
     arch::x86_64::{__m128i, _mm_movemask_epi8},
     borrow::Borrow,
@@ -19,7 +19,6 @@ use std::{
         Simd,
     },
 };
-use tinyvec::TinyVec;
 
 mod iterators;
 
@@ -27,7 +26,7 @@ mod iterators;
 mod tests;
 
 /// The number of bytes stored for path compression in the node header.
-pub const NUM_PREFIX_BYTES: usize = 14;
+pub const NUM_PREFIX_BYTES: usize = 11;
 
 /// The representation of inner nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,71 +95,117 @@ impl NodeType {
 
 /// The common header for all inner nodes
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[repr(align(8))]
 pub struct Header {
     /// Number of children of this inner node. This field has no meaning for
     /// a leaf node.
-    pub num_children: u16,
+    pub num_children: u8,
+    /// Number of bytes used by the prefix
+    pub prefix_len: u32,
     /// The key prefix for this node.
-    pub prefix: Vec<u8>,
+    pub prefix: [u8; NUM_PREFIX_BYTES],
 }
 
 impl Header {
+    pub fn new(begin: usize, prefix_len: usize, prefix: &[u8]) -> Self {
+        let end = prefix_len.min(prefix.len());
+        let len = end - begin;
+        let mut header = Header {
+            num_children: 0,
+            prefix_len: len as u32,
+            prefix: [0; NUM_PREFIX_BYTES],
+        };
+        let prefix = &prefix[begin..end];
+        let prefix = &prefix[..prefix.len().min(NUM_PREFIX_BYTES)];
+        header.prefix[..len.min(NUM_PREFIX_BYTES)].copy_from_slice(prefix);
+
+        header
+    }
+
     /// Create a new `Header` for an empty node.
     pub fn empty() -> Self {
         Header {
             num_children: 0,
-            prefix: Vec::new(),
+            prefix_len: 0,
+            prefix: [0; NUM_PREFIX_BYTES],
         }
     }
 
-    /// Write prefix bytes to this header, appending to existing bytes if
-    /// present.
-    pub fn extend_prefix(&mut self, new_bytes: &[u8]) {
-        self.prefix.extend(new_bytes.iter().copied());
-    }
+    // /// Write prefix bytes to this header, appending to existing bytes if
+    // /// present.
+    // pub fn extend_prefix(&mut self, new_bytes: &[u8]) {
+    //     self.prefix.extend(new_bytes.iter().copied());
+    // }
 
-    /// Write bytes to the start of the key prefix.
-    pub fn prepend_prefix(&mut self, new_bytes: &[u8]) {
-        self.prefix
-            .splice(0..0, new_bytes.iter().copied())
-            .for_each(|_| ());
-    }
+    // /// Write bytes to the start of the key prefix.
+    // pub fn prepend_prefix(&mut self, new_bytes: &[u8]) {
+    //     self.prefix
+    //         .splice(0..0, new_bytes.iter().copied())
+    //         .for_each(|_| ());
+    // }
 
-    /// Remove the specified number of bytes from the start of the prefix.
-    ///
-    /// # Panics
-    ///
-    ///  - Panics if the number of bytes to remove is greater than the prefix
-    ///    size.
-    pub fn ltrim_prefix(&mut self, num_bytes: usize) {
-        // this is an explicit match instead of a direct `self.prefix.drain` because it
-        // is more efficient. See `TinyVec::drain` documentation.
-        self.prefix.drain(..num_bytes).for_each(|_| ());
-    }
+    // /// Remove the specified number of bytes from the start of the prefix.
+    // ///
+    // /// # Panics
+    // ///
+    // ///  - Panics if the number of bytes to remove is greater than the prefix
+    // ///    size.
+    // pub fn ltrim_prefix(&mut self, num_bytes: usize) {
+    //     // this is an explicit match instead of a direct `self.prefix.drain`
+    // because it     // is more efficient. See `TinyVec::drain` documentation.
+    //     self.prefix.drain(..num_bytes).for_each(|_| ());
+    // }
 
     /// Read the initialized portion of the prefix present in the header.
     pub fn read_prefix(&self) -> &[u8] {
-        self.prefix.as_ref()
+        &self.prefix[0..self.capped_prefix_len()]
     }
 
     /// Return the number of bytes in the prefix.
-    pub fn prefix_size(&self) -> usize {
-        self.prefix.len()
+    pub fn prefix_len(&self) -> usize {
+        self.prefix_len as usize
     }
 
-    /// Compares the compressed path of a node with the key and returns the
-    /// number of equal bytes.
-    pub fn match_prefix(&self, possible_key: &[u8]) -> usize {
-        self.read_prefix()
-            .iter()
-            .zip(possible_key)
-            .take_while(|(a, b)| **a == **b)
-            .count()
+    pub fn capped_prefix_len(&self) -> usize {
+        (self.prefix_len as usize).min(NUM_PREFIX_BYTES)
     }
 
     /// Return the number of children of this node.
     pub fn num_children(&self) -> usize {
         usize::from(self.num_children)
+    }
+
+    /// Left trim by [`len`], copies the remaining data to the beging of the
+    /// prefix
+    pub fn ltrim_by(&mut self, len: usize) {
+        self.prefix_len -= len as u32;
+
+        let begin = len;
+        let end = begin + self.capped_prefix_len();
+        self.prefix.copy_within(begin..end, 0);
+    }
+
+    /// Left trim by [`len`], copies the remaining data to the beging of the
+    /// prefix, in this case we use a leaf to achieve this, we also need the
+    /// [`depth`] (a.k.a how many bytes of the leaf have already been used)
+    pub fn ltrim_by_with_leaf<K: AsBytes, V>(
+        &mut self,
+        len: usize,
+        depth: usize,
+        leaf_ptr: NodePtr<LeafNode<K, V>>,
+    ) {
+        self.prefix_len -= len as u32;
+
+        let leaf_key = unsafe { leaf_ptr.as_key_ref() };
+        let leaf_key = leaf_key.as_bytes();
+
+        let begin = depth + len;
+        let end = begin + self.capped_prefix_len();
+        let len = end - begin;
+
+        let leaf_key = &leaf_key[begin..end];
+        let leaf_key = &leaf_key[..leaf_key.len().min(NUM_PREFIX_BYTES)];
+        self.prefix[..len.min(NUM_PREFIX_BYTES)].copy_from_slice(leaf_key)
     }
 }
 
@@ -176,43 +221,43 @@ struct OpaqueValue;
 /// Could be any one of the NodeTypes, need to perform check on the runtime type
 /// and then cast to a [`NodePtr`].
 #[repr(transparent)]
-pub struct OpaqueNodePtr<K, V>(TaggedPointer<OpaqueValue, 3>, PhantomData<(K, V)>);
+pub struct OpaqueNodePtr<K: AsBytes, V>(TaggedPointer<OpaqueValue, 3>, PhantomData<(K, V)>);
 
-impl<K, V> Copy for OpaqueNodePtr<K, V> {}
+impl<K: AsBytes, V> Copy for OpaqueNodePtr<K, V> {}
 
-impl<K, V> Clone for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V> Clone for OpaqueNodePtr<K, V> {
     fn clone(&self) -> Self {
         Self(self.0, PhantomData)
     }
 }
 
-impl<K, V> fmt::Debug for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V> fmt::Debug for OpaqueNodePtr<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("OpaqueNodePtr").field(&self.0).finish()
     }
 }
 
-impl<K, V> fmt::Pointer for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V> fmt::Pointer for OpaqueNodePtr<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.0, f)
     }
 }
 
-impl<K, V> Eq for OpaqueNodePtr<K, V> {}
+impl<K: AsBytes, V> Eq for OpaqueNodePtr<K, V> {}
 
-impl<K, V> PartialEq for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V> PartialEq for OpaqueNodePtr<K, V> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl<K, V> Hash for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V> Hash for OpaqueNodePtr<K, V> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
 
-impl<K, V> OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
     /// Construct a new opaque node pointer from an existing non-null node
     /// pointer.
     pub fn new<N>(pointer: NonNull<N>) -> Self
@@ -302,7 +347,7 @@ impl<K, V> OpaqueNodePtr<K, V> {
 }
 
 /// An enum that encapsulates pointers to every type of Node
-pub enum ConcreteNodePtr<K, V> {
+pub enum ConcreteNodePtr<K: AsBytes, V> {
     /// Node that references between 2 and 4 children
     Node4(NodePtr<InnerNode4<K, V>>),
     /// Node that references between 5 and 16 children
@@ -315,7 +360,7 @@ pub enum ConcreteNodePtr<K, V> {
     LeafNode(NodePtr<LeafNode<K, V>>),
 }
 
-impl<K, V> fmt::Debug for ConcreteNodePtr<K, V> {
+impl<K: AsBytes, V> fmt::Debug for ConcreteNodePtr<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
@@ -431,7 +476,7 @@ impl<N: Node> NodePtr<N> {
     }
 }
 
-impl<K, V> NodePtr<LeafNode<K, V>> {
+impl<K: AsBytes, V> NodePtr<LeafNode<K, V>> {
     /// Returns a shared reference to the key and value of the pointed to
     /// [`LeafNode`].
     ///
@@ -561,15 +606,17 @@ impl<N: Node> fmt::Pointer for NodePtr<N> {
 }
 
 pub(crate) mod private {
+    use crate::AsBytes;
+
     /// This trait is used to seal other traits, such that they cannot be
     /// implemented outside of the crate.
     pub trait Sealed {}
 
-    impl<K, V> Sealed for super::InnerNode4<K, V> {}
-    impl<K, V> Sealed for super::InnerNode16<K, V> {}
-    impl<K, V> Sealed for super::InnerNode48<K, V> {}
-    impl<K, V> Sealed for super::InnerNode256<K, V> {}
-    impl<K, V> Sealed for super::LeafNode<K, V> {}
+    impl<K: AsBytes, V> Sealed for super::InnerNode4<K, V> {}
+    impl<K: AsBytes, V> Sealed for super::InnerNode16<K, V> {}
+    impl<K: AsBytes, V> Sealed for super::InnerNode48<K, V> {}
+    impl<K: AsBytes, V> Sealed for super::InnerNode256<K, V> {}
+    impl<K: AsBytes, V> Sealed for super::LeafNode<K, V> {}
 }
 
 /// All nodes which contain a runtime tag that validates their type.
@@ -578,7 +625,7 @@ pub trait Node: private::Sealed {
     const TYPE: NodeType;
 
     /// The key type carried by the leafe nodes
-    type Key;
+    type Key: AsBytes;
 
     /// The value type carried by the leaf nodes
     type Value;
@@ -589,8 +636,22 @@ pub trait HeaderNode {
     fn header(&self) -> &Header;
 }
 
+#[derive(Debug)]
+pub enum MatchPrefix<K: AsBytes, V> {
+    Mismatch { mismatch: Mismatch<K, V> },
+    Match { matched_bytes: usize },
+}
+
+#[derive(Debug)]
+pub struct Mismatch<K: AsBytes, V> {
+    pub matched_bytes: usize,
+    pub key_byte: u8,
+    pub leaf_byte: u8,
+    pub leaf_ptr: Option<NodePtr<LeafNode<K, V>>>,
+}
+
 /// Common methods implemented by all inner node.
-pub trait InnerNode: Node + HeaderNode {
+pub trait InnerNode: Node + HeaderNode + Sized {
     /// The type of the next larger node type.
     type GrownNode: InnerNode<Key = <Self as Node>::Key, Value = <Self as Node>::Value>;
 
@@ -663,6 +724,92 @@ pub trait InnerNode: Node + HeaderNode {
     /// function must enforce that the lifetime of the iterator does not overlap
     /// with any mutating operations on the node.
     unsafe fn iter(&self) -> Self::Iter;
+
+    /// Compares the compressed path of a node with the key and returns the
+    /// number of equal bytes.
+    ///
+    /// TODO: Move this to somewehere else
+    fn match_prefix(
+        node_ptr: NodePtr<Self>,
+        key: &[u8],
+        current_depth: usize,
+    ) -> MatchPrefix<<Self as Node>::Key, <Self as Node>::Value> {
+        // TODO: Optimize this
+        let key = &key[current_depth..];
+
+        let node = unsafe { node_ptr.as_ref() };
+        let header = node.header();
+        let it = header.read_prefix().iter().zip(key);
+
+        let iter_len = it.len();
+        let matched_bytes = it.take_while(|(a, b)| **a == **b).count();
+
+        // If we stop before consuming all the bytes we are done
+        // If the length of the prefix <= NUM_PREFIX_BYTES we don't
+        // need to reconstruct the missing bytes of the prefix
+        if matched_bytes < iter_len {
+            if header.prefix_len() <= NUM_PREFIX_BYTES {
+                return MatchPrefix::Mismatch {
+                    mismatch: Mismatch {
+                        matched_bytes,
+                        key_byte: key[matched_bytes],
+                        leaf_byte: header.read_prefix()[matched_bytes],
+                        leaf_ptr: None,
+                    },
+                };
+            } else {
+                let leaf_ptr = unsafe { minimum_unchecked(node_ptr.to_opaque()) };
+                return MatchPrefix::Mismatch {
+                    mismatch: Mismatch {
+                        matched_bytes,
+                        key_byte: key[matched_bytes],
+                        leaf_byte: header.read_prefix()[matched_bytes],
+                        leaf_ptr: Some(leaf_ptr),
+                    },
+                };
+            }
+        }
+
+        if header.prefix_len() <= NUM_PREFIX_BYTES {
+            return MatchPrefix::Match { matched_bytes };
+        }
+
+        // After this point we know that consumed_bytes == iter_len
+        // and that consumed_bytes <= NUM_PREFIX_BYTES, since the
+        // prefix has at maxium NUM_PREFIX_BYTES
+
+        // Find the minium leaf
+        let leaf_ptr = unsafe { minimum_unchecked(node_ptr.to_opaque()) };
+        let leaf = unsafe { leaf_ptr.as_ref() };
+
+        // Skip the alredy consumed bytes
+        let key = &key[matched_bytes..];
+        let leaf = &leaf.key_ref().as_bytes()[(current_depth + matched_bytes)..];
+
+        // Consume the remaining bytes from the leaf, we can to consume
+        // at most the length of the prefix, since we alredy consumed
+        // some bytes, only consume the remaning ones
+        let matched_bytes_leaf = key
+            .iter()
+            .zip(leaf)
+            .take(header.prefix_len() - matched_bytes)
+            .take_while(|(a, b)| **a == **b)
+            .count();
+        let matched_bytes = matched_bytes + matched_bytes_leaf;
+
+        if matched_bytes == header.prefix_len() {
+            MatchPrefix::Match { matched_bytes }
+        } else {
+            MatchPrefix::Mismatch {
+                mismatch: Mismatch {
+                    matched_bytes,
+                    key_byte: key[matched_bytes_leaf],
+                    leaf_byte: leaf[matched_bytes_leaf],
+                    leaf_ptr: Some(leaf_ptr),
+                },
+            }
+        }
+    }
 }
 
 enum WritePoint {
@@ -679,7 +826,7 @@ trait SearchInnerNodeCompressed {
 /// Node type that has a compact representation for key bytes and children
 /// pointers.
 #[repr(C, align(8))]
-pub struct InnerNodeCompressed<K, V, const SIZE: usize> {
+pub struct InnerNodeCompressed<K: AsBytes, V, const SIZE: usize> {
     /// The common node fields.
     pub header: Header,
     /// An array that contains single key bytes in the same index as the
@@ -695,7 +842,7 @@ pub struct InnerNodeCompressed<K, V, const SIZE: usize> {
     pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V>>; SIZE],
 }
 
-impl<K, V, const SIZE: usize> Clone for InnerNodeCompressed<K, V, SIZE> {
+impl<K: AsBytes, V, const SIZE: usize> Clone for InnerNodeCompressed<K, V, SIZE> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -705,7 +852,7 @@ impl<K, V, const SIZE: usize> Clone for InnerNodeCompressed<K, V, SIZE> {
     }
 }
 
-impl<K, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, SIZE> {
+impl<K: AsBytes, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, SIZE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (keys, child_pointers) = self.initialized_portion();
         f.debug_struct("InnerNodeBlock")
@@ -717,11 +864,19 @@ impl<K, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, SIZE> {
     }
 }
 
-impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
+impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     /// Create an empty [`InnerNodeCompressed`] with the given [`NodeType`].
     pub fn empty() -> Self {
         InnerNodeCompressed {
             header: Header::default(),
+            child_pointers: MaybeUninit::uninit_array(),
+            keys: [MaybeUninit::new(0); SIZE],
+        }
+    }
+
+    pub fn with_header(header: Header) -> Self {
+        InnerNodeCompressed {
+            header,
             child_pointers: MaybeUninit::uninit_array(),
             keys: [MaybeUninit::new(0); SIZE],
         }
@@ -879,7 +1034,7 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 }
 
-impl<K, V, const SIZE: usize> HeaderNode for InnerNodeCompressed<K, V, SIZE> {
+impl<K: AsBytes, V, const SIZE: usize> HeaderNode for InnerNodeCompressed<K, V, SIZE> {
     fn header(&self) -> &Header {
         &self.header
     }
@@ -888,7 +1043,7 @@ impl<K, V, const SIZE: usize> HeaderNode for InnerNodeCompressed<K, V, SIZE> {
 /// Node that references between 2 and 4 children
 pub type InnerNode4<K, V> = InnerNodeCompressed<K, V, 4>;
 
-impl<K, V> SearchInnerNodeCompressed for InnerNode4<K, V> {
+impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode4<K, V> {
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         let (keys, _) = self.initialized_portion();
         for (child_index, key) in keys.iter().enumerate() {
@@ -916,14 +1071,14 @@ impl<K, V> SearchInnerNodeCompressed for InnerNode4<K, V> {
     }
 }
 
-impl<K, V> Node for InnerNode4<K, V> {
+impl<K: AsBytes, V> Node for InnerNode4<K, V> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node4;
 }
 
-impl<K, V> InnerNode for InnerNode4<K, V> {
+impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
     type GrownNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
     type Iter = InnerNodeCompressedIter<<Self as Node>::Key, <Self as Node>::Value>;
     type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
@@ -961,7 +1116,7 @@ impl<K, V> InnerNode for InnerNode4<K, V> {
 /// Node that references between 5 and 16 children
 pub type InnerNode16<K, V> = InnerNodeCompressed<K, V, 16>;
 
-impl<K, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
+impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         const SIZE: usize = 16;
         type T = __m128i;
@@ -1008,14 +1163,14 @@ impl<K, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
     }
 }
 
-impl<K, V> Node for InnerNode16<K, V> {
+impl<K: AsBytes, V> Node for InnerNode16<K, V> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node16;
 }
 
-impl<K, V> InnerNode for InnerNode16<K, V> {
+impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
     type GrownNode = InnerNode48<<Self as Node>::Key, <Self as Node>::Value>;
     type Iter = InnerNodeCompressedIter<<Self as Node>::Key, <Self as Node>::Value>;
     type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
@@ -1130,7 +1285,7 @@ impl Error for TryFromByteError {}
 
 /// Node that references between 17 and 49 children
 #[repr(C, align(8))]
-pub struct InnerNode48<K, V> {
+pub struct InnerNode48<K: AsBytes, V> {
     /// The common node fields.
     pub header: Header,
     /// An array that maps key bytes (as the index) to the index value in the
@@ -1144,7 +1299,7 @@ pub struct InnerNode48<K, V> {
     pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V>>; 48],
 }
 
-impl<K, V> fmt::Debug for InnerNode48<K, V> {
+impl<K: AsBytes, V> fmt::Debug for InnerNode48<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode48")
             .field("header", &self.header)
@@ -1154,7 +1309,7 @@ impl<K, V> fmt::Debug for InnerNode48<K, V> {
     }
 }
 
-impl<K, V> Clone for InnerNode48<K, V> {
+impl<K: AsBytes, V> Clone for InnerNode48<K, V> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -1164,7 +1319,7 @@ impl<K, V> Clone for InnerNode48<K, V> {
     }
 }
 
-impl<K, V> InnerNode48<K, V> {
+impl<K: AsBytes, V> InnerNode48<K, V> {
     /// Create an empty `Node48`.
     pub fn empty() -> Self {
         InnerNode48 {
@@ -1184,20 +1339,20 @@ impl<K, V> InnerNode48<K, V> {
     }
 }
 
-impl<K, V> Node for InnerNode48<K, V> {
+impl<K: AsBytes, V> Node for InnerNode48<K, V> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node48;
 }
 
-impl<K, V> HeaderNode for InnerNode48<K, V> {
+impl<K: AsBytes, V> HeaderNode for InnerNode48<K, V> {
     fn header(&self) -> &Header {
         &self.header
     }
 }
 
-impl<K, V> InnerNode for InnerNode48<K, V> {
+impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     type GrownNode = InnerNode256<<Self as Node>::Key, <Self as Node>::Value>;
     type Iter = InnerNode48Iter<<Self as Node>::Key, <Self as Node>::Value>;
     type ShrunkNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
@@ -1355,14 +1510,14 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
 
 /// Node that references between 49 and 256 children
 #[repr(C, align(8))]
-pub struct InnerNode256<K, V> {
+pub struct InnerNode256<K: AsBytes, V> {
     /// The common node fields.
     pub header: Header,
     /// An array that directly maps a key byte (as index) to a child node.
     pub child_pointers: [Option<OpaqueNodePtr<K, V>>; 256],
 }
 
-impl<K, V> fmt::Debug for InnerNode256<K, V> {
+impl<K: AsBytes, V> fmt::Debug for InnerNode256<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode256")
             .field("header", &self.header)
@@ -1371,7 +1526,7 @@ impl<K, V> fmt::Debug for InnerNode256<K, V> {
     }
 }
 
-impl<K, V> Clone for InnerNode256<K, V> {
+impl<K: AsBytes, V> Clone for InnerNode256<K, V> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -1380,7 +1535,7 @@ impl<K, V> Clone for InnerNode256<K, V> {
     }
 }
 
-impl<K, V> InnerNode256<K, V> {
+impl<K: AsBytes, V> InnerNode256<K, V> {
     /// Create an empty `InnerNode256`.
     pub fn empty() -> Self {
         InnerNode256 {
@@ -1390,20 +1545,20 @@ impl<K, V> InnerNode256<K, V> {
     }
 }
 
-impl<K, V> Node for InnerNode256<K, V> {
+impl<K: AsBytes, V> Node for InnerNode256<K, V> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node256;
 }
 
-impl<K, V> HeaderNode for InnerNode256<K, V> {
+impl<K: AsBytes, V> HeaderNode for InnerNode256<K, V> {
     fn header(&self) -> &Header {
         &self.header
     }
 }
 
-impl<K, V> InnerNode for InnerNode256<K, V> {
+impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     type GrownNode = Self;
     type Iter = InnerNode256Iter<K, V>;
     type ShrunkNode = InnerNode48<K, V>;
@@ -1465,8 +1620,8 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
             // PANIC SAFETY: This `try_from` will not panic because the `next_index` value
             // is guaranteed to be 48 or less by the `assert!(num_children < 48)` at the
             // start of the function.
-            child_indices[usize::from(key_byte)] =
-                unsafe { RestrictedNodeIndex::try_from(child_index).unwrap() };
+            let key_byte = usize::from(key_byte);
+            child_indices[key_byte] = RestrictedNodeIndex::try_from(child_index).unwrap();
             child_pointers[child_index].write(child_ptr);
         }
 
@@ -1542,7 +1697,7 @@ impl<K, V> LeafNode<K, V> {
     }
 }
 
-impl<K, V> Node for LeafNode<K, V> {
+impl<K: AsBytes, V> Node for LeafNode<K, V> {
     type Key = K;
     type Value = V;
 

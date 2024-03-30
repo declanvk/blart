@@ -5,8 +5,7 @@ mod tree_stats;
 mod well_formed;
 
 use crate::{
-    ConcreteNodePtr, InnerNode16, InnerNode256, InnerNode256Iter, InnerNode4, InnerNode48,
-    InnerNode48Iter, InnerNodeCompressedIter, LeafNode, Node, NodePtr, OpaqueNodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode16, InnerNode256, InnerNode256Iter, InnerNode4, InnerNode48, InnerNode48Iter, InnerNodeCompressedIter, LeafNode, Node, NodePtr, OpaqueNodePtr
 };
 pub use pretty_printer::*;
 pub use tree_stats::*;
@@ -14,7 +13,7 @@ pub use well_formed::*;
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.
-pub trait Visitable<K, T> {
+pub trait Visitable<K: AsBytes, T> {
     /// This function provides the default traversal behavior for the
     /// implementing type.
     ///
@@ -47,7 +46,7 @@ pub trait Visitable<K, T> {
     }
 }
 
-impl<K, T> Visitable<K, T> for OpaqueNodePtr<K, T> {
+impl<K: AsBytes, T> Visitable<K, T> for OpaqueNodePtr<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
         match self.to_node_ptr() {
             ConcreteNodePtr::Node4(inner) => inner.visit_with(visitor),
@@ -59,14 +58,14 @@ impl<K, T> Visitable<K, T> for OpaqueNodePtr<K, T> {
     }
 }
 
-impl<K, T, N: Node + Visitable<K, T>> Visitable<K, T> for NodePtr<N> {
+impl<K: AsBytes, T, N: Node + Visitable<K, T>> Visitable<K, T> for NodePtr<N> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
         let inner = self.read();
         inner.visit_with(visitor)
     }
 }
 
-impl<K, T> Visitable<K, T> for InnerNode4<K, T> {
+impl<K: AsBytes, T> Visitable<K, T> for InnerNode4<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
         // SAFETY: This iterator lives for a subset of the lifetime of this function,
         // which is entirely covered by the lifetime of reference to the
@@ -81,7 +80,7 @@ impl<K, T> Visitable<K, T> for InnerNode4<K, T> {
     }
 }
 
-impl<K, T> Visitable<K, T> for InnerNode16<K, T> {
+impl<K: AsBytes, T> Visitable<K, T> for InnerNode16<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
         // SAFETY: This iterator lives for a subset of the lifetime of this function,
         // which is entirely covered by the lifetime of reference to the
@@ -96,7 +95,7 @@ impl<K, T> Visitable<K, T> for InnerNode16<K, T> {
     }
 }
 
-impl<K, T> Visitable<K, T> for InnerNode48<K, T> {
+impl<K: AsBytes, T> Visitable<K, T> for InnerNode48<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
         // SAFETY: This iterator lives for a subset of the lifetime of this function,
         // which is entirely covered by the lifetime of reference to the `InnerNode48`.
@@ -111,7 +110,7 @@ impl<K, T> Visitable<K, T> for InnerNode48<K, T> {
     }
 }
 
-impl<K, T> Visitable<K, T> for InnerNode256<K, T> {
+impl<K: AsBytes, T> Visitable<K, T> for InnerNode256<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
         // SAFETY: This iterator lives for a subset of the lifetime of this function,
         // which is entirely covered by the lifetime of reference to the `InnerNode256`.
@@ -126,7 +125,7 @@ impl<K, T> Visitable<K, T> for InnerNode256<K, T> {
     }
 }
 
-impl<K, T> Visitable<K, T> for LeafNode<K, T> {
+impl<K: AsBytes, T> Visitable<K, T> for LeafNode<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
         visitor.default_output()
     }
@@ -138,7 +137,7 @@ impl<K, T> Visitable<K, T> for LeafNode<K, T> {
 
 /// The `Visitor` trait allows creating new operations on the radix tree by
 /// overriding specific handling methods for each of the node types.
-pub trait Visitor<K, V>: Sized {
+pub trait Visitor<K: AsBytes, V>: Sized {
     /// The type of value that the visitor produces.
     type Output;
 
@@ -174,7 +173,7 @@ pub trait Visitor<K, V>: Sized {
     }
 }
 
-fn combine_inner_node_child_output<K, T, V: Visitor<K, T>>(
+fn combine_inner_node_child_output<K: AsBytes, T, V: Visitor<K, T>>(
     mut iter: impl Iterator<Item = (u8, OpaqueNodePtr<K, T>)>,
     visitor: &mut V,
 ) -> V::Output {

@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefix, NodePtr, OpaqueNodePtr};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -82,33 +82,33 @@ where
     // enforced the "no concurrent reads or writes" requirement on the
     // `search_unchecked` function.
     let inner_node = unsafe { inner_ptr.as_ref() };
-    let header = inner_node.header();
-    let matched_prefix_size = header.match_prefix(&key.as_bytes()[*current_depth..]);
-    if matched_prefix_size != header.prefix_size() {
-        return None;
+    let match_prefix = InnerNode::match_prefix(inner_ptr, key.as_bytes(), *current_depth);
+    match match_prefix {
+        MatchPrefix::Mismatch { .. } => None,
+        MatchPrefix::Match { matched_bytes } => {
+            // Since the prefix matched, advance the depth by the size of the prefix
+            *current_depth += matched_bytes;
+
+            let next_key_fragment = if *current_depth < key.as_bytes().len() {
+                key.as_bytes()[*current_depth]
+            } else {
+                // the key has insufficient bytes, it is a prefix of an existing key. Thus, the
+                // key must not exist in the tree by the requirements of the insert function
+                // (any key in the tree must not be the prefix of any other key in the tree)
+                return None;
+            };
+
+            let child_lookup = inner_node.lookup_child(next_key_fragment);
+
+            if child_lookup.is_some() {
+                // Since the prefix matched and it found a child, advance the depth by 1 more
+                // key byte
+                *current_depth += 1;
+            }
+
+            child_lookup
+        },
     }
-
-    // Since the prefix matched, advance the depth by the size of the prefix
-    *current_depth += matched_prefix_size;
-
-    let next_key_fragment = if *current_depth < key.as_bytes().len() {
-        key.as_bytes()[*current_depth]
-    } else {
-        // the key has insufficient bytes, it is a prefix of an existing key. Thus, the
-        // key must not exist in the tree by the requirements of the insert function
-        // (any key in the tree must not be the prefix of any other key in the tree)
-        return None;
-    };
-
-    let child_lookup = inner_node.lookup_child(next_key_fragment);
-
-    if child_lookup.is_some() {
-        // Since the prefix matched and it found a child, advance the depth by 1 more
-        // key byte
-        *current_depth += 1;
-    }
-
-    child_lookup
 }
 
 #[cfg(test)]
