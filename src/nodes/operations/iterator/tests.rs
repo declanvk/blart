@@ -1,9 +1,8 @@
 use crate::{
-    deallocate_tree, tests_common::{generate_key_fixed_length, insert_unchecked}, LeafNode, NodePtr,
-    TreeIterator,
+    deallocate_tree, tests_common::{generate_key_fixed_length, insert_unchecked}, AsBytes, LeafNode, NodePtr, TreeIterator
 };
 
-fn map_item_to_ref<'a, K, V>(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> (&'a K, &'a V) {
+fn map_item_to_ref<'a, K: AsBytes, V>(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> (&'a K, &'a V) {
     let (key, value) = unsafe { leaf_node_ptr.as_key_value_ref() };
     (key, value)
 }

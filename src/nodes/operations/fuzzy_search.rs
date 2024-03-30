@@ -115,7 +115,7 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
     std::mem::swap(temp, new_row);
 }
 
-pub trait FuzzySearch<K, V> {
+pub trait FuzzySearch<K: AsBytes, V> {
     fn fuzzy_search<'s>(
         &'s self,
         arena: &mut StackArena,
@@ -138,6 +138,7 @@ pub trait FuzzySearch<K, V> {
     where
         Self: HeaderNode,
     {
+        // TODO: FIX THIS
         let prefix = self.header().read_prefix();
         let mut keep = true;
         for k in prefix {

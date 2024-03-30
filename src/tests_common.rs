@@ -327,7 +327,7 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
 /// # Safety
 ///  - There must be no concurrent modifications to the tree while this function
 ///    runs.
-pub fn convert_tree_to_dot_string<K: fmt::Debug, V: fmt::Debug>(
+pub fn convert_tree_to_dot_string<K: fmt::Debug + AsBytes, V: fmt::Debug>(
     root: OpaqueNodePtr<K, V>,
     settings: DotPrinterSettings,
 ) -> io::Result<String> {

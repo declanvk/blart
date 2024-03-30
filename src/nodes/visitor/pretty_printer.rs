@@ -1,6 +1,5 @@
 use crate::{
-    visitor::{Visitable, Visitor},
-    InnerNode, NodeType, OpaqueNodePtr,
+    visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr
 };
 use std::{
     fmt::Debug,
@@ -36,7 +35,7 @@ impl<O: Write> DotPrinter<O> {
         settings: DotPrinterSettings,
     ) -> io::Result<()>
     where
-        K: Debug,
+        K: Debug + AsBytes,
         V: Debug,
     {
         let mut visitor = DotPrinter {
@@ -67,7 +66,7 @@ impl<O: Write> DotPrinter<O> {
 
     fn write_inner_node<K, T, N>(&mut self, inner_node: &N) -> io::Result<usize>
     where
-        K: Debug,
+        K: Debug + AsBytes,
         T: Debug,
         N: InnerNode<Key = K, Value = T>,
     {
@@ -82,7 +81,7 @@ impl<O: Write> DotPrinter<O> {
                 "{{<h0> {:p}}}  | {{{:?} | {:?} | {:?}}} | {{",
                 inner_node as *const _,
                 N::TYPE,
-                header.prefix_size(),
+                header.prefix_len(),
                 header.read_prefix()
             )?;
         } else {
@@ -90,7 +89,7 @@ impl<O: Write> DotPrinter<O> {
                 self.output,
                 "{{<h0> {:?} | {:?} | {:?}}} | {{",
                 N::TYPE,
-                header.prefix_size(),
+                header.prefix_len(),
                 header.read_prefix()
             )?;
         }
@@ -124,7 +123,7 @@ impl<O: Write> DotPrinter<O> {
 
 impl<K, T, O> Visitor<K, T> for DotPrinter<O>
 where
-    K: Debug,
+    K: Debug + AsBytes,
     T: Debug,
     O: Write,
 {

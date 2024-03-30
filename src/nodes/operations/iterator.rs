@@ -1,6 +1,5 @@
 use crate::{
-    ConcreteNodePtr, InnerNode, InnerNode256Iter, InnerNode48Iter, InnerNodeCompressedIter,
-    LeafNode, NodePtr, OpaqueNodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode256Iter, InnerNode48Iter, InnerNodeCompressedIter, LeafNode, NodePtr, OpaqueNodePtr
 };
 use std::{
     collections::VecDeque,
@@ -13,14 +12,14 @@ use std::{
 ///
 /// This iterator maintains pointers to internal nodes from the trie. No
 /// mutating operation can occur while this an instance of the iterator is live.
-pub enum TreeIterator<K, V> {
+pub enum TreeIterator<K: AsBytes, V> {
     /// An iterator over a tree with only a single entry.
     Singleton(iter::Once<NodePtr<LeafNode<K, V>>>),
     /// An iterator over a tree that has at least one [`InnerNode`].
     InnerNode(InnerNodeTreeIterator<K, V>),
 }
 
-impl<K, V> TreeIterator<K, V> {
+impl<K: AsBytes, V> TreeIterator<K, V> {
     /// Create a new iterator that will visit all leaf nodes descended from the
     /// given node.
     ///
@@ -52,7 +51,7 @@ impl<K, V> TreeIterator<K, V> {
     }
 }
 
-impl<K, V> Iterator for TreeIterator<K, V> {
+impl<K: AsBytes, V> Iterator for TreeIterator<K, V> {
     type Item = NodePtr<LeafNode<K, V>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -63,7 +62,7 @@ impl<K, V> Iterator for TreeIterator<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for TreeIterator<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for TreeIterator<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self {
             TreeIterator::Singleton(ref mut inner) => inner.next_back(),
@@ -72,7 +71,7 @@ impl<K, V> DoubleEndedIterator for TreeIterator<K, V> {
     }
 }
 
-impl<K, V> FusedIterator for TreeIterator<K, V> {}
+impl<K: AsBytes, V> FusedIterator for TreeIterator<K, V> {}
 
 /// An iterator over all the [`LeafNode`]s in a non-singleton tree.
 ///
@@ -82,11 +81,11 @@ impl<K, V> FusedIterator for TreeIterator<K, V> {}
 ///
 /// This iterator maintains pointers to internal nodes from the trie. No
 /// mutating operation can occur while this an instance of the iterator is live.
-pub struct InnerNodeTreeIterator<K, V> {
+pub struct InnerNodeTreeIterator<K: AsBytes, V> {
     node_iters: VecDeque<InnerNodeIter<K, V>>,
 }
 
-impl<K, V> InnerNodeTreeIterator<K, V> {
+impl<K: AsBytes, V> InnerNodeTreeIterator<K, V> {
     /// Create a new iterator that will visit all leaf nodes descended from the
     /// given node.
     ///
@@ -133,7 +132,7 @@ impl<K, V> InnerNodeTreeIterator<K, V> {
     }
 }
 
-impl<K, V> Iterator for InnerNodeTreeIterator<K, V> {
+impl<K: AsBytes, V> Iterator for InnerNodeTreeIterator<K, V> {
     type Item = NodePtr<LeafNode<K, V>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -157,7 +156,7 @@ impl<K, V> Iterator for InnerNodeTreeIterator<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for InnerNodeTreeIterator<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for InnerNodeTreeIterator<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while !self.node_iters.is_empty() {
             if let Some((_, child)) = self.node_iters.back_mut().unwrap().next_back() {
@@ -179,11 +178,11 @@ impl<K, V> DoubleEndedIterator for InnerNodeTreeIterator<K, V> {
     }
 }
 
-impl<K, V> FusedIterator for InnerNodeTreeIterator<K, V> {}
+impl<K: AsBytes, V> FusedIterator for InnerNodeTreeIterator<K, V> {}
 
 /// A generic iterator that uses specific iterators for each
 /// [`NodeType`][crate::NodeType] (excluding leaves) inside.
-pub enum InnerNodeIter<K, V> {
+pub enum InnerNodeIter<K: AsBytes, V> {
     /// An iterator over the children of an
     /// [`InnerNodeCompressed`][crate::InnerNodeCompressed] node.
     InnerNodeCompressed(InnerNodeCompressedIter<K, V>),
@@ -195,7 +194,7 @@ pub enum InnerNodeIter<K, V> {
     InnerNode256(InnerNode256Iter<K, V>),
 }
 
-impl<K, V> Iterator for InnerNodeIter<K, V> {
+impl<K: AsBytes, V> Iterator for InnerNodeIter<K, V> {
     type Item = (u8, OpaqueNodePtr<K, V>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -237,7 +236,7 @@ impl<K, V> Iterator for InnerNodeIter<K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for InnerNodeIter<K, V> {
+impl<K: AsBytes, V> DoubleEndedIterator for InnerNodeIter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self {
             InnerNodeIter::InnerNodeCompressed(ref mut inner) => inner.next_back(),
@@ -247,21 +246,21 @@ impl<K, V> DoubleEndedIterator for InnerNodeIter<K, V> {
     }
 }
 
-impl<K, V> FusedIterator for InnerNodeIter<K, V> {}
+impl<K: AsBytes, V> FusedIterator for InnerNodeIter<K, V> {}
 
-impl<K, V> From<InnerNodeCompressedIter<K, V>> for InnerNodeIter<K, V> {
+impl<K: AsBytes, V> From<InnerNodeCompressedIter<K, V>> for InnerNodeIter<K, V> {
     fn from(src: InnerNodeCompressedIter<K, V>) -> Self {
         InnerNodeIter::InnerNodeCompressed(src)
     }
 }
 
-impl<K, V> From<InnerNode48Iter<K, V>> for InnerNodeIter<K, V> {
+impl<K: AsBytes, V> From<InnerNode48Iter<K, V>> for InnerNodeIter<K, V> {
     fn from(src: InnerNode48Iter<K, V>) -> Self {
         InnerNodeIter::InnerNode48(src)
     }
 }
 
-impl<K, V> From<InnerNode256Iter<K, V>> for InnerNodeIter<K, V> {
+impl<K: AsBytes, V> From<InnerNode256Iter<K, V>> for InnerNodeIter<K, V> {
     fn from(src: InnerNode256Iter<K, V>) -> Self {
         InnerNodeIter::InnerNode256(src)
     }

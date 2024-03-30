@@ -1,4 +1,4 @@
-use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
@@ -14,7 +14,7 @@ use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 ///    tree:
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
-pub unsafe fn minimum_unchecked<K, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
+pub unsafe fn minimum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
     fn get_next_node<N: InnerNode>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Key, N::Value> {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
@@ -60,7 +60,7 @@ pub unsafe fn minimum_unchecked<K, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<Leaf
 ///    tree:
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
-pub unsafe fn maximum_unchecked<K, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
+pub unsafe fn maximum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
     fn get_next_node<N>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Key, N::Value>
     where
         N: InnerNode,

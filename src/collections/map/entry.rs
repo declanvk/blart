@@ -36,13 +36,13 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
     // TODO: Remove, Replace
 }
 
-pub struct VacantEntry<'a, K, V> {
+pub struct VacantEntry<'a, K: AsBytes, V> {
     pub map: &'a mut TreeMap<K, V>,
     pub key: K,
     pub insert_point: Option<InsertPoint<K, V>>,
 }
 
-impl<'a, K, V> VacantEntry<'a, K, V> {
+impl<'a, K: AsBytes, V> VacantEntry<'a, K, V> {
     pub fn insert(self, value: V) -> &'a mut V
     where
         K: AsBytes,
@@ -70,12 +70,12 @@ impl<'a, K, V> VacantEntry<'a, K, V> {
     }
 }
 
-pub enum Entry<'a, K, V> {
+pub enum Entry<'a, K: AsBytes, V> {
     Occupied(OccupiedEntry<'a, K, V>),
     Vacant(VacantEntry<'a, K, V>),
 }
 
-impl<'a, K, V> Entry<'a, K, V> {
+impl<'a, K: AsBytes, V> Entry<'a, K, V> {
     pub fn and_modify<F>(self, f: F) -> Self
     where
         F: FnOnce(&mut V),
