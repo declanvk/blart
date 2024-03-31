@@ -226,7 +226,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 let prefix = &header.read_prefix();
                 let prefix = &prefix[..prefix.len().min(mismatch.matched_bytes)];
                 let mut new_n4 =
-                    InnerNode4::from_prefix(prefix);
+                    InnerNode4::from_prefix(prefix, mismatch.matched_bytes);
 
                 unsafe {
                     // write the old node and new leaf in order
@@ -283,10 +283,8 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                     assume(new_key_bytes_used < key.as_bytes().len());
                 }
 
-                // let new_header = Header::new(key_bytes_used, new_key_bytes_used,
-                // key.as_bytes());
                 let mut new_n4 =
-                    InnerNode4::from_prefix(&key.as_bytes()[key_bytes_used..new_key_bytes_used]);
+                    InnerNode4::from_prefix(&key.as_bytes()[key_bytes_used..new_key_bytes_used], new_key_bytes_used - key_bytes_used);
 
                 let leaf_node_key_byte =
                     unsafe { leaf_node_ptr.as_key_ref().as_bytes()[new_key_bytes_used] };

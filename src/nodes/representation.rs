@@ -99,10 +99,10 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn new(prefix: &[u8]) -> Self {
+    pub fn new(prefix: &[u8], prefix_len: usize) -> Self {
         let mut header = Header {
             num_children: 0,
-            prefix_len: prefix.len() as u32,
+            prefix_len: prefix_len as u32,
             prefix: [0; NUM_PREFIX_BYTES],
         };
         let len = prefix.len().min(NUM_PREFIX_BYTES);
@@ -634,8 +634,8 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         Self::from_header(Header::empty())
     }
 
-    fn from_prefix(prefix: &[u8]) -> Self {
-        Self::from_header(Header::new(prefix))
+    fn from_prefix(prefix: &[u8], prefix_len: usize) -> Self {
+        Self::from_header(Header::new(prefix, prefix_len))
     }
 
     fn from_header(header: Header) -> Self;
@@ -718,8 +718,6 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         let matched_bytes = it.take_while(|(a, b)| **a == **b).count();
 
         // If we stop before consuming all the bytes we are done
-        // If the length of the prefix <= NUM_PREFIX_BYTES we don't
-        // need to reconstruct the missing bytes of the prefix
         if matched_bytes < iter_len {
             if header.prefix_len() <= NUM_PREFIX_BYTES {
                 return MatchPrefix::Mismatch {
@@ -741,6 +739,8 @@ pub trait InnerNode: Node + HeaderNode + Sized {
             }
         }
 
+        // If the length of the prefix <= NUM_PREFIX_BYTES we don't
+        // need to reconstruct the missing bytes of the prefix
         if header.prefix_len() <= NUM_PREFIX_BYTES {
             return MatchPrefix::Match { matched_bytes };
         }
@@ -1082,7 +1082,7 @@ impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
         const SIZE: usize = 16;
         type T = __m128i;
         unsafe {
-            let keys = MaybeUninit::array_assume_init::<16>(self.keys);
+            let keys = MaybeUninit::array_assume_init(self.keys);
             let cmp = T::from(
                 Simd::<u8, SIZE>::splat(key_fragment)
                     .simd_eq(Simd::<u8, SIZE>::from_array(keys))
@@ -1105,7 +1105,7 @@ impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
             match self.lookup_child_index(key_fragment) {
                 Some(child_index) => WritePoint::Existing(child_index),
                 None => {
-                    let keys = MaybeUninit::array_assume_init::<16>(self.keys);
+                    let keys = MaybeUninit::array_assume_init(self.keys);
                     let cmp = T::from(
                         Simd::<u8, SIZE>::splat(key_fragment)
                             .simd_lt(Simd::<u8, SIZE>::from_array(keys))
@@ -1140,7 +1140,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         InnerNodeCompressed {
             header,
             child_pointers: MaybeUninit::uninit_array(),
-            keys: MaybeUninit::uninit_array(),
+            keys: [MaybeUninit::new(0); 16],
         }
     }
 
