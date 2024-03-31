@@ -547,7 +547,7 @@ fn node256_shrink_too_many_children_panic() {
 
 #[test]
 fn header_delete_prefix() {
-    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8]);
+    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8], 8);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
@@ -571,7 +571,7 @@ fn header_delete_prefix() {
 #[test]
 #[should_panic]
 fn header_ltrim_prefix_too_many_bytes_panic() {
-    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8]);
+    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8], 8);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
@@ -581,7 +581,7 @@ fn header_ltrim_prefix_too_many_bytes_panic() {
 #[test]
 #[should_panic]
 fn header_ltrim_prefix_non_stored_bytes_panic() {
-    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    let mut h = Header::new(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 14);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
