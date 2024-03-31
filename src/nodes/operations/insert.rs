@@ -215,6 +215,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 // variant is only returned in cases where there was a mismatch in the header
                 // prefix, implying that the header is present.
                 let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
+                let key_byte = key.as_bytes()[key_bytes_used + mismatch.matched_bytes];
 
                 let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
                 let new_value_ref = unsafe { create_value_ref(new_leaf_pointer) };
@@ -229,11 +230,11 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
 
                 unsafe {
                     // write the old node and new leaf in order
-                    if mismatch.leaf_byte < mismatch.key_byte {
+                    if mismatch.leaf_byte < key_byte {
                         new_n4.write_child_unchecked(mismatch.leaf_byte, mismatched_inner_node_ptr);
-                        new_n4.write_child_unchecked(mismatch.key_byte, new_leaf_pointer);
+                        new_n4.write_child_unchecked(key_byte, new_leaf_pointer);
                     } else {
-                        new_n4.write_child_unchecked(mismatch.key_byte, new_leaf_pointer);
+                        new_n4.write_child_unchecked(key_byte, new_leaf_pointer);
                         new_n4.write_child_unchecked(mismatch.leaf_byte, mismatched_inner_node_ptr);
                     }
                 }
