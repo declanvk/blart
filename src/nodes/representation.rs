@@ -609,7 +609,6 @@ pub enum MatchPrefix<K: AsBytes, V> {
 #[derive(Debug)]
 pub struct Mismatch<K: AsBytes, V> {
     pub matched_bytes: usize,
-    pub key_byte: u8,
     pub leaf_byte: u8,
     pub leaf_ptr: Option<NodePtr<LeafNode<K, V>>>,
 }
@@ -726,7 +725,6 @@ pub trait InnerNode: Node + HeaderNode + Sized {
                 return MatchPrefix::Mismatch {
                     mismatch: Mismatch {
                         matched_bytes,
-                        key_byte: key[matched_bytes],
                         leaf_byte: header.read_prefix()[matched_bytes],
                         leaf_ptr: None,
                     },
@@ -736,7 +734,6 @@ pub trait InnerNode: Node + HeaderNode + Sized {
                 return MatchPrefix::Mismatch {
                     mismatch: Mismatch {
                         matched_bytes,
-                        key_byte: key[matched_bytes],
                         leaf_byte: header.read_prefix()[matched_bytes],
                         leaf_ptr: Some(leaf_ptr),
                     },
@@ -777,7 +774,6 @@ pub trait InnerNode: Node + HeaderNode + Sized {
             MatchPrefix::Mismatch {
                 mismatch: Mismatch {
                     matched_bytes,
-                    key_byte: key[matched_bytes_leaf],
                     leaf_byte: leaf[matched_bytes_leaf],
                     leaf_ptr: Some(leaf_ptr),
                 },
