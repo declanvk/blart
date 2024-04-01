@@ -15,7 +15,7 @@ mod iterators;
 mod tests;
 
 /// The number of bytes stored for path compression in the node header.
-pub const NUM_PREFIX_BYTES: usize = 10;
+pub const NUM_PREFIX_BYTES: usize = 14;
 
 /// The representation of inner nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
