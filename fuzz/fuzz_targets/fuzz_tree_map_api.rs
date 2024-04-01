@@ -12,17 +12,17 @@ enum Action {
     Clear,
     ContainsKey(Box<[u8]>),
     GetMinimum,
-    // PopMinimum,
+    PopMinimum,
     GetMaximum,
-    // PopMaximum,
+    PopMaximum,
     GetKey(Box<[u8]>),
     CheckLen,
-    // CheckIter,
+    CheckIter,
     Remove(Box<[u8]>),
     TryInsert(Box<[u8]>),
     Clone,
     Extend(Vec<Box<[u8]>>),
-    // Hash,
+    Hash,
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -43,24 +43,24 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     assert!(*min_value < next_key);
                 }
             },
-            // Action::PopMinimum => {
-            //     let min = tree.pop_first();
-            //     if let Some((_, min_value)) = min {
-            //         assert!(min_value < next_key);
-            //     }
-            // },
+            Action::PopMinimum => {
+                let min = tree.pop_first();
+                if let Some((_, min_value)) = min {
+                    assert!(min_value < next_key);
+                }
+            },
             Action::GetMaximum => {
                 let max = tree.last_key_value();
                 if let Some((_, max_value)) = max {
                     assert!(*max_value < next_key);
                 }
             },
-            // Action::PopMaximum => {
-            //     let max = tree.pop_last();
-            //     if let Some((_, max_value)) = max {
-            //         assert!(max_value < next_key);
-            //     }
-            // },
+            Action::PopMaximum => {
+                let max = tree.pop_last();
+                if let Some((_, max_value)) = max {
+                    assert!(max_value < next_key);
+                }
+            },
             Action::GetKey(key) => {
                 let entry = tree.get_mut(key.as_ref());
                 if let Some(value) = entry {
@@ -70,18 +70,18 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             Action::CheckLen => {
                 assert!((tree.is_empty() && tree.len() == 0) || tree.len() > 0);
             },
-            // Action::CheckIter => {
-            //     let zipped_key_value = tree.keys().zip(tree.values());
-            //     let regular_iter = tree.iter();
+            Action::CheckIter => {
+                let zipped_key_value = tree.keys().zip(tree.values());
+                let regular_iter = tree.iter();
 
-            //     assert!(zipped_key_value
-            //         .zip(regular_iter)
-            //         .all(|(elt_zipped, elt_regular)| { elt_zipped == elt_regular }));
+                assert!(zipped_key_value
+                    .zip(regular_iter)
+                    .all(|(elt_zipped, elt_regular)| { elt_zipped == elt_regular }));
 
-            //     tree.iter_mut().for_each(|(_, value)| {
-            //         *value = value.saturating_sub(1);
-            //     });
-            // },
+                tree.iter_mut().for_each(|(_, value)| {
+                    *value = value.saturating_sub(1);
+                });
+            },
             Action::Remove(key) => {
                 if let Some(value) = tree.remove(key.as_ref()) {
                     assert!(value < next_key);
@@ -104,15 +104,15 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     let _ = tree.try_insert(key, value);
                 }
             },
-            // Action::Hash => {
-            //     let hash_builder = RandomState::new();
-            //     let tree_copy = tree.clone();
+            Action::Hash => {
+                let hash_builder = RandomState::new();
+                let tree_copy = tree.clone();
 
-            //     let original_hash = hash_one(&hash_builder, &tree);
-            //     let copy_hash = hash_one(&hash_builder, &tree_copy);
+                let original_hash = hash_one(&hash_builder, &tree);
+                let copy_hash = hash_one(&hash_builder, &tree_copy);
 
-            //     assert_eq!(original_hash, copy_hash, "{:?} != {:?}", tree, tree_copy);
-            // },
+                assert_eq!(original_hash, copy_hash, "{:?} != {:?}", tree, tree_copy);
+            },
         }
     }
 });
