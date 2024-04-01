@@ -176,11 +176,21 @@ unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
         // references to this child node. The reference only lasts for the scope of this
         // `if` block.
         if let Some(child_header) = unsafe { child_node_ptr.header_mut() } {
-            // This needs to go in reverse order, since prepend_prefix always writes to the
-            // front
-            // TODO: FIX THIS
-            // child_header.prepend_prefix(&[child_key_byte]);
-            // child_header.prepend_prefix(inner_node.header().read_prefix());
+            // Construct the new prefix, by concatenating the parent header, child_key_byte, child header
+            // Here we can use the fact that the header of both the child and the parent can hold up
+            // to NUM_PREFIX_BYTES, so if for example the parent header len >= NUM_PREFIX_BYTES, the
+            // new child header will hold only this bytes since the size is alredy greater than the capacity
+            // so we can "clear" the child prefix, by setting the len to 0 and repopulate by pushing the parent
+            // header, child_key_byte, child prefix. If the header if alredy full we don't copy, just increment
+            // the len by the size
+            let parent_header = inner_node.header();
+            let parent_prefix = parent_header.read_prefix();
+            let parent_len = parent_header.prefix_len();
+
+            let (old_prefix, old_len, old_capped_len) = child_header.clear_prefix();
+            child_header.push_prefix(parent_prefix, parent_len);
+            child_header.push_prefix(&[child_key_byte], 1);
+            child_header.push_prefix(&old_prefix[..old_capped_len], old_len);
         }
         // the else case here is that the child does not have a header, and
         // is a leaf

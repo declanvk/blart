@@ -171,6 +171,22 @@ impl Header {
         let leaf_key = &leaf_key[..leaf_key.len().min(NUM_PREFIX_BYTES)];
         self.prefix[..len.min(NUM_PREFIX_BYTES)].copy_from_slice(leaf_key)
     }
+
+    pub fn push_prefix(&mut self, new: &[u8], new_len: usize) {
+        let begin = self.capped_prefix_len();
+        let end = (begin + new.len()).min(NUM_PREFIX_BYTES);
+        let len = end - begin;
+        self.prefix[begin..end].copy_from_slice(&new[..len]);
+        self.prefix_len += new_len as u32;
+    }
+
+    pub fn clear_prefix(&mut self) -> ([u8; NUM_PREFIX_BYTES], usize, usize) {
+        let len = self.prefix_len();
+        let capped_len = self.capped_prefix_len();
+        self.prefix_len = 0;
+
+        (self.prefix, len, capped_len)
+    }
 }
 
 /// A placeholder type that has the required amount of alignment.

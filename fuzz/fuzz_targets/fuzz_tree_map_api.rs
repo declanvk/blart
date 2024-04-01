@@ -18,7 +18,7 @@ enum Action {
     GetKey(Box<[u8]>),
     CheckLen,
     // CheckIter,
-    // Remove(Box<[u8]>),
+    Remove(Box<[u8]>),
     TryInsert(Box<[u8]>),
     Clone,
     Extend(Vec<Box<[u8]>>),
@@ -82,11 +82,11 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             //         *value = value.saturating_sub(1);
             //     });
             // },
-            // Action::Remove(key) => {
-            //     if let Some(value) = tree.remove(key.as_ref()) {
-            //         assert!(value < next_key);
-            //     }
-            // },
+            Action::Remove(key) => {
+                if let Some(value) = tree.remove(key.as_ref()) {
+                    assert!(value < next_key);
+                }
+            },
             Action::TryInsert(key) => {
                 let value = next_key;
                 next_key += 1;
