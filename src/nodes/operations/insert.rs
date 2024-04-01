@@ -230,12 +230,12 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
 
                 unsafe {
                     // write the old node and new leaf in order
-                    if mismatch.leaf_byte < key_byte {
-                        new_n4.write_child_unchecked(mismatch.leaf_byte, mismatched_inner_node_ptr);
+                    if mismatch.prefix_byte < key_byte {
+                        new_n4.write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
                         new_n4.write_child_unchecked(key_byte, new_leaf_pointer);
                     } else {
                         new_n4.write_child_unchecked(key_byte, new_leaf_pointer);
-                        new_n4.write_child_unchecked(mismatch.leaf_byte, mismatched_inner_node_ptr);
+                        new_n4.write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
                     }
                 }
                 // In this case we trim the current prefix, by skipping the matched bytes + 1
@@ -459,7 +459,7 @@ where
         // enforced the "no concurrent reads or writes" requirement on the
         // `search_unchecked` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
-        let match_prefix = InnerNode::match_prefix(inner_ptr, key.as_bytes(), *current_depth);
+        let match_prefix = inner_node.match_prefix(key.as_bytes(), *current_depth);
         match match_prefix {
             MatchPrefix::Mismatch { mismatch } => Ok(ControlFlow::Break(mismatch)),
             MatchPrefix::Match { matched_bytes } => {

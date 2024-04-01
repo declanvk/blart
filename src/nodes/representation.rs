@@ -3,10 +3,22 @@
 pub use self::iterators::*;
 use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
 use std::{
-    arch::x86_64::{__m128i, _mm_movemask_epi8}, array::from_fn, borrow::Borrow, cmp::Ordering, error::Error, fmt, hash::Hash, intrinsics::assume, marker::PhantomData, mem::{self, ManuallyDrop, MaybeUninit}, ops::Range, ptr::{self, NonNull}, simd::{
+    arch::x86_64::{__m128i, _mm_movemask_epi8},
+    array::from_fn,
+    borrow::Borrow,
+    cmp::Ordering,
+    error::Error,
+    fmt,
+    hash::Hash,
+    intrinsics::{assume, likely},
+    marker::PhantomData,
+    mem::{self, ManuallyDrop, MaybeUninit},
+    ops::Range,
+    ptr::{self, NonNull},
+    simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
         Simd,
-    }
+    },
 };
 
 mod iterators;
@@ -15,7 +27,7 @@ mod iterators;
 mod tests;
 
 /// The number of bytes stored for path compression in the node header.
-pub const NUM_PREFIX_BYTES: usize = 14;
+pub const NUM_PREFIX_BYTES: usize = 16;
 
 /// The representation of inner nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,9 +100,10 @@ impl NodeType {
 pub struct Header {
     /// Number of children of this inner node. This field has no meaning for
     /// a leaf node.
-    /// 
+    ///
     /// This needs to be a [`u16`], since a node 256 can hold up to 256 children
-    /// if this was a [`u8`] (0-255) it would overflow when adding the last element
+    /// if this was a [`u8`] (0-255) it would overflow when adding the last
+    /// element
     pub num_children: u16,
     /// Number of bytes used by the prefix
     pub prefix_len: u32,
@@ -625,7 +638,7 @@ pub enum MatchPrefix<K: AsBytes, V> {
 #[derive(Debug)]
 pub struct Mismatch<K: AsBytes, V> {
     pub matched_bytes: usize,
-    pub leaf_byte: u8,
+    pub prefix_byte: u8,
     pub leaf_ptr: Option<NodePtr<LeafNode<K, V>>>,
 }
 
@@ -716,84 +729,48 @@ pub trait InnerNode: Node + HeaderNode + Sized {
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
-    ///
-    /// TODO: Move this to somewehere else
     fn match_prefix(
-        node_ptr: NodePtr<Self>,
+        &self,
         key: &[u8],
         current_depth: usize,
     ) -> MatchPrefix<<Self as Node>::Key, <Self as Node>::Value> {
-        // TODO: Optimize this
+        let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
         let key = &key[current_depth..];
-
-        let node = unsafe { node_ptr.as_ref() };
-        let header = node.header();
-        let it = header.read_prefix().iter().zip(key);
+        let it = prefix.iter().zip(key);
 
         let iter_len = it.len();
         let matched_bytes = it.take_while(|(a, b)| **a == **b).count();
-
-        // If we stop before consuming all the bytes we are done
         if matched_bytes < iter_len {
-            if header.prefix_len() <= NUM_PREFIX_BYTES {
-                return MatchPrefix::Mismatch {
-                    mismatch: Mismatch {
-                        matched_bytes,
-                        leaf_byte: header.read_prefix()[matched_bytes],
-                        leaf_ptr: None,
-                    },
-                };
-            } else {
-                let leaf_ptr = unsafe { minimum_unchecked(node_ptr.to_opaque()) };
-                return MatchPrefix::Mismatch {
-                    mismatch: Mismatch {
-                        matched_bytes,
-                        leaf_byte: header.read_prefix()[matched_bytes],
-                        leaf_ptr: Some(leaf_ptr),
-                    },
-                };
-            }
-        }
-
-        // If the length of the prefix <= NUM_PREFIX_BYTES we don't
-        // need to reconstruct the missing bytes of the prefix
-        if header.prefix_len() <= NUM_PREFIX_BYTES {
-            return MatchPrefix::Match { matched_bytes };
-        }
-
-        // After this point we know that consumed_bytes == iter_len
-        // and that consumed_bytes <= NUM_PREFIX_BYTES, since the
-        // prefix has at maxium NUM_PREFIX_BYTES
-
-        // Find the minium leaf
-        let leaf_ptr = unsafe { minimum_unchecked(node_ptr.to_opaque()) };
-        let leaf = unsafe { leaf_ptr.as_ref() };
-
-        // Skip the alredy consumed bytes
-        let key = &key[matched_bytes..];
-        let leaf = &leaf.key_ref().as_bytes()[(current_depth + matched_bytes)..];
-
-        // Consume the remaining bytes from the leaf, we can to consume
-        // at most the length of the prefix, since we alredy consumed
-        // some bytes, only consume the remaning ones
-        let matched_bytes_leaf = key
-            .iter()
-            .zip(leaf)
-            .take(header.prefix_len() - matched_bytes)
-            .take_while(|(a, b)| **a == **b)
-            .count();
-        let matched_bytes = matched_bytes + matched_bytes_leaf;
-
-        if matched_bytes == header.prefix_len() {
-            MatchPrefix::Match { matched_bytes }
-        } else {
             MatchPrefix::Mismatch {
                 mismatch: Mismatch {
                     matched_bytes,
-                    leaf_byte: leaf[matched_bytes_leaf],
-                    leaf_ptr: Some(leaf_ptr),
+                    prefix_byte: prefix[matched_bytes],
+                    leaf_ptr,
                 },
             }
+        } else {
+            MatchPrefix::Match { matched_bytes }
+        }
+    }
+
+    fn read_full_prefix(
+        &self,
+        current_depth: usize,
+    ) -> (
+        &[u8],
+        Option<NodePtr<LeafNode<<Self as Node>::Key, <Self as Node>::Value>>>,
+    ) {
+        let header = self.header();
+        let len = header.prefix_len();
+        if likely(len <= NUM_PREFIX_BYTES) {
+            (header.read_prefix(), None)
+        } else {
+            // optimize this
+            let (_, min_child) = unsafe { self.iter().next().unwrap() };
+            let leaf_ptr = unsafe { minimum_unchecked(min_child) };
+            let leaf = unsafe { leaf_ptr.as_ref() };
+            let leaf = &leaf.key_ref().as_bytes()[current_depth..(current_depth + len)];
+            (leaf, Some(leaf_ptr))
         }
     }
 }
@@ -1543,7 +1520,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
             child_pointers: [None; 256],
         }
     }
-    
+
     fn lookup_child(
         &self,
         key_fragment: u8,
