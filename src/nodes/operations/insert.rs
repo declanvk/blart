@@ -260,7 +260,6 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 let new_leaf_node = LeafNode::new(key, value);
                 // SAFETY: The leaf node will not be accessed concurrently because of the safety
                 // doc on the containing function
-                // TODO: Is this right ?
                 let old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, new_leaf_node) };
                 return InsertResult {
                     new_value_ref: unsafe { create_value_ref(leaf_node_ptr) },
@@ -276,19 +275,27 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 leaf_node_ptr,
                 new_key_bytes_used,
             } => {
+                let leaf_key_bytes = unsafe { leaf_node_ptr.as_key_ref().as_bytes() };
+                let key_bytes = key.as_bytes();
                 unsafe {
-                    assume(key_bytes_used < leaf_node_ptr.as_key_ref().as_bytes().len());
-                    assume(key_bytes_used < key.as_bytes().len());
-                    assume(new_key_bytes_used < leaf_node_ptr.as_key_ref().as_bytes().len());
-                    assume(new_key_bytes_used < key.as_bytes().len());
+                    // SAFETY: When reaching this point in the insertion proccess this invarants
+                    // should always be true, due to the check of [`InsertPrefixError`] which 
+                    // guarantees that the amount of bytes used is always < len of the key or key in the leaf
+                    // if this was not true, then a [`InsertPrefixError`] would already be triggered
+                    assume(key_bytes_used < leaf_key_bytes.len());
+                    assume(key_bytes_used < key_bytes.len());
+                    assume(new_key_bytes_used < leaf_key_bytes.len());
+                    assume(new_key_bytes_used < key_bytes.len());
+
+                    // SAFETY: This is safe by construction, since new_key_bytes_used = key_bytes_used + x
+                    assume(key_bytes_used <= new_key_bytes_used);
                 }
 
                 let mut new_n4 =
-                    InnerNode4::from_prefix(&key.as_bytes()[key_bytes_used..new_key_bytes_used], new_key_bytes_used - key_bytes_used);
+                    InnerNode4::from_prefix(&key_bytes[key_bytes_used..new_key_bytes_used], new_key_bytes_used - key_bytes_used);
 
-                let leaf_node_key_byte =
-                    unsafe { leaf_node_ptr.as_key_ref().as_bytes()[new_key_bytes_used] };
-                let new_leaf_node_key_byte = key.as_bytes()[new_key_bytes_used];
+                let leaf_node_key_byte = leaf_key_bytes[new_key_bytes_used];
+                let new_leaf_node_key_byte = key_bytes[new_key_bytes_used];
                 let new_leaf_node_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
                 let new_value_ref = unsafe { create_value_ref(new_leaf_node_pointer) };
 
@@ -513,28 +520,33 @@ where
                     });
                 }
 
+                let leaf_key_bytes = leaf_node.key_ref().as_bytes();
+                let key_bytes = key.as_bytes();
                 unsafe {
-                    assume(current_depth < leaf_node.key_ref().as_bytes().len());
-                    assume(current_depth < key.as_bytes().len());
+                    // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
+                    // which would lead to this not holding, but since it already checked we know
+                    // that current_depth < len of the key and the key in the leaf
+                    assume(current_depth < leaf_key_bytes.len());
+                    assume(current_depth < key_bytes.len());
                 }
 
-                let prefix_size = leaf_node.key_ref().as_bytes()[current_depth..]
+                let prefix_size = leaf_key_bytes[current_depth..]
                     .iter()
-                    .zip(key.as_bytes()[current_depth..].iter())
+                    .zip(key_bytes[current_depth..].iter())
                     .take_while(|(k1, k2)| k1 == k2)
                     .count();
 
                 let new_key_bytes_used = current_depth + prefix_size;
 
                 if unlikely(
-                    new_key_bytes_used >= key.as_bytes().len()
-                        || new_key_bytes_used >= leaf_node.key_ref().as_bytes().len(),
+                    new_key_bytes_used >= key_bytes.len()
+                        || new_key_bytes_used >= leaf_key_bytes.len(),
                 ) {
                     // then the key has insufficient bytes to be unique. It must be
                     // a prefix of an existing key OR an existing key is a prefix of it
 
                     return Err(InsertPrefixError {
-                        byte_repr: key.as_bytes().into(),
+                        byte_repr: key_bytes.into(),
                     });
                 }
 
@@ -551,6 +563,9 @@ where
         }?;
 
         unsafe {
+            // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
+            // which would lead to this not holding, but since it already checked we know
+            // that current_depth < len of the key and the key in the leaf
             assume(current_depth < key.as_bytes().len());
         }
         match lookup_result {
