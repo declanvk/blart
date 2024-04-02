@@ -9,7 +9,7 @@ use criterion::{measurement::Measurement, Criterion, Throughput};
 fn gen_group<M: Measurement>(c: &mut Criterion<M>, group: String, keys: Vec<Box<[u8]>>) {
     let mut group = c.benchmark_group(group);
     group.warm_up_time(std::time::Duration::from_secs(5));
-    group.measurement_time(std::time::Duration::from_secs(10));
+    group.measurement_time(std::time::Duration::from_secs(15));
     group.throughput(Throughput::Bytes(keys.iter().map(|k| k.len() as u64).sum()));
     group.bench_function("insert", |b| {
         b.iter_batched(
