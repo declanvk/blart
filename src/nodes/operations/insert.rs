@@ -214,8 +214,16 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 // PANIC SAFETY: This is guaranteed not to panic because the `MismatchPrefix`
                 // variant is only returned in cases where there was a mismatch in the header
                 // prefix, implying that the header is present.
+                let key_bytes = key.as_bytes();
+                unsafe {
+                    // SAFETY: Since we are iterating the key and prefixes, we
+                    // expect that the depth never exceeds the key len.
+                    // Because if this happens we ran out of bytes in the key to match
+                    // and the whole process should be already finished
+                    assume(key_bytes_used + mismatch.matched_bytes < key_bytes.len());
+                }
                 let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
-                let key_byte = key.as_bytes()[key_bytes_used + mismatch.matched_bytes];
+                let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
 
                 let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
                 let new_value_ref = unsafe { create_value_ref(new_leaf_pointer) };
@@ -452,31 +460,29 @@ where
     K: AsBytes + Borrow<Q>,
     Q: AsBytes + ?Sized,
 {
-    fn test_prefix_identify_insert<K, V, N, Q>(
+    fn test_prefix_identify_insert<K, V, N>(
         inner_ptr: NodePtr<N>,
-        key: &Q,
+        key: &[u8],
         current_depth: &mut usize,
     ) -> Result<ControlFlow<Mismatch<K, V>, Option<OpaqueNodePtr<K, V>>>, InsertPrefixError>
     where
         N: InnerNode<Key = K, Value = V>,
-        K: AsBytes + Borrow<Q>,
-        Q: AsBytes + ?Sized,
+        K: AsBytes
     {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
         // enforced the "no concurrent reads or writes" requirement on the
         // `search_unchecked` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
-        let match_prefix = inner_node.match_prefix(key.as_bytes(), *current_depth);
+        let match_prefix = inner_node.match_prefix(key, *current_depth);
         match match_prefix {
             MatchPrefix::Mismatch { mismatch } => Ok(ControlFlow::Break(mismatch)),
             MatchPrefix::Match { matched_bytes } => {
                 // Since the prefix matched, advance the depth by the size of the prefix
                 *current_depth += matched_bytes;
 
-                if likely(*current_depth < key.as_bytes().len()) {
-                    let next_key_fragment =
-                        unsafe { *key.as_bytes().get_unchecked(*current_depth) };
+                if likely(*current_depth < key.len()) {
+                    let next_key_fragment = key[*current_depth];
                     Ok(ControlFlow::Continue(
                         inner_node.lookup_child(next_key_fragment),
                     ))
@@ -484,7 +490,7 @@ where
                     // then the key has insufficient bytes to be unique. It must be
                     // a prefix of an existing key
                     Err(InsertPrefixError {
-                        byte_repr: key.as_bytes().into(),
+                        byte_repr: key.into(),
                     })
                 }
             },
@@ -494,20 +500,21 @@ where
     let mut current_parent = None;
     let mut current_node = root;
     let mut current_depth = 0;
+    let key_bytes = key.as_bytes();
 
     loop {
         let lookup_result = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node16(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node48(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node256(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 let leaf_node = leaf_node_ptr.read();
@@ -521,7 +528,6 @@ where
                     });
                 }
 
-                let key_bytes = key.as_bytes();
                 let leaf_bytes = leaf_node.key_ref().as_bytes();
                 unsafe {
                     // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
@@ -570,13 +576,13 @@ where
             // that current_depth < len of the key and the key in the leaf. And also the
             // only edge case can occur in the Leaf node, but if we reach a leaf not the
             // function returns early, so it's impossible to be <=
-            assume(current_depth < key.as_bytes().len());
+            assume(current_depth < key_bytes.len());
         }
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
                 match next_child_node {
                     Some(next_child_node) => {
-                        let byte = key.as_bytes()[current_depth];
+                        let byte = key_bytes[current_depth];
                         current_parent = Some((current_node, byte));
                         current_node = next_child_node;
                         // Increment by a single byte
@@ -595,12 +601,12 @@ where
                 }
             },
             ControlFlow::Break(mismatch) => {
-                if unlikely((current_depth + mismatch.matched_bytes) >= key.as_bytes().len()) {
+                if unlikely((current_depth + mismatch.matched_bytes) >= key_bytes.len()) {
                     // then the key has insufficient bytes to be unique. It must be
                     // a prefix of an existing key
 
                     return Err(InsertPrefixError {
-                        byte_repr: key.as_bytes().into(),
+                        byte_repr: key_bytes.into(),
                     });
                 }
 

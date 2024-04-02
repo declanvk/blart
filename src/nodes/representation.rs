@@ -154,11 +154,22 @@ impl Header {
 
     /// Left trim by [`len`], copies the remaining data to the beging of the
     /// prefix
+    /// 
+    /// # Panics
+    /// 
+    /// If `len` > length of the prefix
     pub fn ltrim_by(&mut self, len: usize) {
         self.prefix_len -= len as u32;
-
+        
         let begin = len;
         let end = begin + self.capped_prefix_len();
+        unsafe {
+            // SAFETY: This function is called a mismatch happened and
+            // we used the leaf to match the number of matching bytes,
+            // by this we know that len < prefix len, but since we + 1,
+            // to skip the key byte we have that len <= prefix len
+            assume(end <= self.prefix.len());
+        }
         self.prefix.copy_within(begin..end, 0);
     }
 
@@ -729,11 +740,22 @@ pub trait InnerNode: Node + HeaderNode + Sized {
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
+    /// 
+    /// # Panics
+    /// 
+    /// `current_depth` > key len
     fn match_prefix(
         &self,
         key: &[u8],
         current_depth: usize,
     ) -> MatchPrefix<<Self as Node>::Key, <Self as Node>::Value> {
+        unsafe {
+            // SAFETY: Since we are iterating the key and prefixes, we
+            // expect that the depth never exceeds the key len.
+            // Because if this happens we ran out of bytes in the key to match
+            // and the whole process should be already finished
+            assume(current_depth <= key.len());
+        }
         let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
         let key = &key[current_depth..];
         let it = prefix.iter().zip(key);
@@ -769,7 +791,19 @@ pub trait InnerNode: Node + HeaderNode + Sized {
             let (_, min_child) = unsafe { self.iter().next().unwrap() };
             let leaf_ptr = unsafe { minimum_unchecked(min_child) };
             let leaf = unsafe { leaf_ptr.as_ref() };
-            let leaf = &leaf.key_ref().as_bytes()[current_depth..(current_depth + len)];
+            let leaf = leaf.key_ref().as_bytes();
+            unsafe {
+                // SAFETY: Since we are iterating the key and prefixes, we
+                // expect that the depth never exceeds the key len.
+                // Because if this happens we ran out of bytes in the key to match
+                // and the whole process should be already finished
+                assume(current_depth <= leaf.len());
+
+                // SAFETY: By the construction of the prefix we know that this is inbounds
+                // since the prefix len guarantees it to us
+                assume(current_depth + len <= leaf.len());
+            }
+            let leaf = &leaf[current_depth..(current_depth + len)];
             (leaf, Some(leaf_ptr))
         }
     }
