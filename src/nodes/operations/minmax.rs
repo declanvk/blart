@@ -21,14 +21,7 @@ pub unsafe fn minimum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> Nod
         // enforced the "no concurrent reads or writes" requirement on the
         // `minimum_unchecked` function.
         let inner_node = unsafe { inner_node.as_ref() };
-
-        // SAFETY: The iterator is limited to the lifetime of this function call and
-        // does not escape. No other code mutates the referenced node, guaranteed by the
-        // `minimum_unchecked` safey requirements and the reference.
-        let mut iter = unsafe { inner_node.iter() };
-        iter.next()
-            .expect("an inner node must always have at least one child")
-            .1
+        unsafe { inner_node.min().unwrap_unchecked() }
     }
 
     let mut current_node = root;
