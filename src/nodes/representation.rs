@@ -807,6 +807,8 @@ pub trait InnerNode: Node + HeaderNode + Sized {
             (leaf, Some(leaf_ptr))
         }
     }
+
+    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>>;
 }
 
 enum WritePoint {
@@ -1119,6 +1121,11 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
     }
+    
+    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+        let (_, children) = self.initialized_portion();
+        children.first().copied()
+    }
 }
 
 /// Node that references between 5 and 16 children
@@ -1218,6 +1225,11 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
+    }
+    
+    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+        let (_, children) = self.initialized_portion();
+        children.first().copied()
     }
 }
 
@@ -1521,6 +1533,17 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         // function
         unsafe { InnerNode48Iter::new(self) }
     }
+    
+    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+        // TODO: use simd
+        for idx in self.child_indices {
+            if !idx.is_empty() {
+                let child_pointers = self.initialized_child_pointers();
+                return child_pointers.get(usize::from(idx)).copied();
+            }
+        }
+        None
+    }
 }
 
 /// Node that references between 49 and 256 children
@@ -1648,6 +1671,15 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
         unsafe { InnerNode256Iter::new(self) }
+    }
+    
+    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+        for ptr in self.child_pointers {
+            if ptr.is_some() {
+                return ptr;
+            }
+        }
+        None
     }
 }
 
