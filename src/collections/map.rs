@@ -572,6 +572,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     ///
     /// assert_eq!(map.len(), 2);
     /// ```
+    #[inline(never)]
     pub fn insert(&mut self, key: K, value: V) -> Option<V>
     where
         K: NoPrefixesBytes,
