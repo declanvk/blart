@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use blart::{
     tests_common::{
         generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
@@ -52,6 +54,8 @@ fn setup_tree_run_benches_cleanup<M: Measurement>(
 
     {
         let mut group = c.benchmark_group(group_name);
+        group.warm_up_time(Duration::from_secs(5));
+        group.measurement_time(Duration::from_secs(15));
         run_benchmarks(&mut group, keys.as_ref(), &tree);
     }
 }
