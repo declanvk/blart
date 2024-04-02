@@ -830,10 +830,10 @@ impl<K: AsBytes, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, 
 impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     /// Return the initialized portions of the keys and child pointer arrays.
     pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<K, V>]) {
+        // SAFETY: The array prefix with length `header.num_children` is guaranteed to
+        // be initialized
         unsafe {
             let num_children = self.header.num_children();
-            // SAFETY: The array prefix with length `header.num_children` is guaranteed to
-            // be initialized
             assume(num_children <= self.keys.len());
             (
                 MaybeUninit::slice_assume_init_ref(self.keys.get_unchecked(0..num_children)),
@@ -855,12 +855,6 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) })
     }
 
-    /// Writes a child to the node by check the order of insertion
-    /// 
-    /// # Panics
-    /// 
-    /// This functions assumes that the write is gonna be inbound
-    /// (i.e the check for a full node is done previously to the call of this function)
     fn write_child_inner(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>)
     where
         Self: SearchInnerNodeCompressed,
@@ -874,13 +868,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
             },
             WritePoint::Shift(child_index) => {
                 unsafe {
-                    // SAFETY: This is by construction, since the number of children
-                    // is always <= maximum number o keys (childrens) that we can hold
                     assume(num_children <= self.keys.len());
-                    // SAFETY: When we are shifting children, because a new minimum one
-                    // is being inserted this guarantees to us that the index of insertion
-                    // is < current number of children (because if it was >= we wouldn't
-                    // need to shift the data)
                     assume(child_index < num_children);
                 }
                 self.keys
@@ -892,9 +880,6 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
             },
         };
         unsafe {
-            // SAFETY: The check for a full node is done previsouly to the call
-            // of this function, so it's safe to assume that the new child index is
-            // in bounds
             assume(child_index < self.keys.len());
             self.keys.get_unchecked_mut(child_index).write(key_fragment);
             self.child_pointers
@@ -903,12 +888,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         }
     }
 
-    /// Writes a child to the node without bounds check or order
-    /// 
-    /// # Panics
-    /// 
-    /// This functions assumes that the write is gonna be inbound
-    /// (i.e the check for a full node is done previously to the call of this function)
+    /// Write a child without bounds check or order
     pub unsafe fn write_child_unchecked(
         &mut self,
         key_fragment: u8,
