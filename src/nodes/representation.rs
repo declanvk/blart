@@ -743,6 +743,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
     /// # Panics
     ///
     /// `current_depth` > key len
+    #[inline(always)]
     fn match_prefix(
         &self,
         key: &[u8],
@@ -774,6 +775,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         }
     }
 
+    #[inline(always)]
     fn read_full_prefix(
         &self,
         current_depth: usize,
@@ -786,8 +788,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         if likely(len <= NUM_PREFIX_BYTES) {
             (header.read_prefix(), None)
         } else {
-            // optimize this
-            let (_, min_child) = unsafe { self.iter().next().unwrap() };
+            let min_child = self.min().unwrap();
             let leaf_ptr = unsafe { minimum_unchecked(min_child) };
             let leaf = unsafe { leaf_ptr.as_ref() };
             let leaf = leaf.key_ref().as_bytes();
@@ -1539,40 +1540,42 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             .simd_eq(empty)
             .to_bitmask();
 
-        // let idxs = [
-        //     r0.trailing_ones(), 
-        //     r1.trailing_ones() + 64, 
-        //     r2.trailing_ones() + 128, 
-        //     r3.trailing_ones() + 192, 
-        //     256,
-        // ];
-        // let b0 = (r0 == u64::MAX) as usize;
-        // let b1 = (r1 == u64::MAX) as usize;
-        // let b2 = (r2 == u64::MAX) as usize;
-        // let b3 = (r3 == u64::MAX) as usize;
-        // let idx = b0 + (b0 & b1) + (b0 & b1 & b2) + (b0 & b1 & b2 & b3);
-        // let idx = idxs[idx] as usize;
-
-        // let b0 = r0 != u64::MAX;
-        // let b1 = r1 != u64::MAX && !b0;
-        // let b2 = r2 != u64::MAX && !b1;
-        // let b3 = r3 != u64::MAX && !b2;
-        // let b0 = b0 as u32;
-        // let b1 = b1 as u32;
-        // let b2 = b2 as u32;
-        // let b3 = b3 as u32;
-        // let idx = (b0 * r0.trailing_ones()
-        //     + b1 * (r1.trailing_ones() + 64)
-        //     + b2 * (r2.trailing_ones() + 128)
-        //     + b3 * (r3.trailing_ones() + 192)) as usize;
-
-        // let k0: u128 = (r0 as u128) | (r1 as u128) << 64;
-        // let k1: u128 = (r2 as u128) | (r3 as u128) << 64;
-        // let idx = if k0 != u128::MAX {
-        //     k0.trailing_ones()
-        // } else {
-        //     k1.trailing_ones() + 128
-        // } as usize;
+        // {
+        //     let idxs = [
+        //         r0.trailing_ones(), 
+        //         r1.trailing_ones() + 64, 
+        //         r2.trailing_ones() + 128, 
+        //         r3.trailing_ones() + 192, 
+        //         256,
+        //     ];
+        //     let b0 = (r0 == u64::MAX) as usize;
+        //     let b1 = (r1 == u64::MAX) as usize;
+        //     let b2 = (r2 == u64::MAX) as usize;
+        //     let b3 = (r3 == u64::MAX) as usize;
+        //     let idx = b0 + (b0 & b1) + (b0 & b1 & b2) + (b0 & b1 & b2 & b3);
+        //     let idx = idxs[idx] as usize;
+    
+        //     let b0 = r0 != u64::MAX;
+        //     let b1 = r1 != u64::MAX && !b0;
+        //     let b2 = r2 != u64::MAX && !b1;
+        //     let b3 = r3 != u64::MAX && !b2;
+        //     let b0 = b0 as u32;
+        //     let b1 = b1 as u32;
+        //     let b2 = b2 as u32;
+        //     let b3 = b3 as u32;
+        //     let idx = (b0 * r0.trailing_ones()
+        //         + b1 * (r1.trailing_ones() + 64)
+        //         + b2 * (r2.trailing_ones() + 128)
+        //         + b3 * (r3.trailing_ones() + 192)) as usize;
+    
+        //     let k0: u128 = (r0 as u128) | (r1 as u128) << 64;
+        //     let k1: u128 = (r2 as u128) | (r3 as u128) << 64;
+        //     let idx = if k0 != u128::MAX {
+        //         k0.trailing_ones()
+        //     } else {
+        //         k1.trailing_ones() + 128
+        //     } as usize;
+        // }
 
         let idx = if r0 != u64::MAX {
             r0.trailing_ones()

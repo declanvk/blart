@@ -14,6 +14,7 @@ use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePt
 ///    tree:
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
+#[inline(always)]
 pub unsafe fn minimum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
     fn get_next_node<N: InnerNode>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Key, N::Value> {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
