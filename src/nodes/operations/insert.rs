@@ -570,16 +570,17 @@ where
             },
         }?;
 
-        unsafe {
-            // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
-            // which would lead to this not holding, but since it already checked we know
-            // that current_depth < len of the key and the key in the leaf. And also the
-            // only edge case can occur in the Leaf node, but if we reach a leaf not the
-            // function returns early, so it's impossible to be <=
-            assume(current_depth < key_bytes.len());
-        }
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
+                unsafe {
+                    // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
+                    // which would lead to this not holding, but since it already checked we know
+                    // that current_depth < len of the key and the key in the leaf. And also the
+                    // only edge case can occur in the Leaf node, but if we reach a leaf not the
+                    // function returns early, so it's impossible to be <=
+                    assume(current_depth < key_bytes.len());
+                }
+
                 match next_child_node {
                     Some(next_child_node) => {
                         let byte = key_bytes[current_depth];
