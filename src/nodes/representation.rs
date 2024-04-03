@@ -758,11 +758,9 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         }
         let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
         let key = &key[current_depth..];
-        let it = prefix.iter().zip(key);
 
-        let iter_len = it.len();
-        let matched_bytes = it.take_while(|(a, b)| **a == **b).count();
-        if matched_bytes < iter_len {
+        let matched_bytes = prefix.iter().zip(key).take_while(|(a, b)| **a == **b).count();
+        if matched_bytes < prefix.len() {
             MatchPrefix::Mismatch {
                 mismatch: Mismatch {
                     matched_bytes,
@@ -1587,7 +1585,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             r3.trailing_ones() + 192
         } as usize;
 
-        self.initialized_child_pointers().get(idx).copied()
+        self.initialized_child_pointers().get(usize::from(self.child_indices[idx])).copied()
     }
 }
 
