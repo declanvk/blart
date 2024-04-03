@@ -17,7 +17,7 @@ use std::{
     ptr::{self, NonNull},
     simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
-        Simd,
+        u8x16, u8x64, Simd,
     },
 };
 
@@ -154,13 +154,13 @@ impl Header {
 
     /// Left trim by [`len`], copies the remaining data to the beging of the
     /// prefix
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// If `len` > length of the prefix
     pub fn ltrim_by(&mut self, len: usize) {
         self.prefix_len -= len as u32;
-        
+
         let begin = len;
         let end = begin + self.capped_prefix_len();
         unsafe {
@@ -740,9 +740,9 @@ pub trait InnerNode: Node + HeaderNode + Sized {
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// `current_depth` > key len
     fn match_prefix(
         &self,
@@ -892,11 +892,12 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 
     /// Writes a child to the node by check the order of insertion
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// This functions assumes that the write is gonna be inbound
-    /// (i.e the check for a full node is done previously to the call of this function)
+    /// (i.e the check for a full node is done previously to the call of this
+    /// function)
     fn write_child_inner(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>)
     where
         Self: SearchInnerNodeCompressed,
@@ -940,11 +941,12 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 
     /// Writes a child to the node without bounds check or order
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// This functions assumes that the write is gonna be inbound
-    /// (i.e the check for a full node is done previously to the call of this function)
+    /// (i.e the check for a full node is done previously to the call of this
+    /// function)
     pub unsafe fn write_child_unchecked(
         &mut self,
         key_fragment: u8,
@@ -1121,7 +1123,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
     }
-    
+
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         let (_, children) = self.initialized_portion();
         children.first().copied()
@@ -1133,47 +1135,35 @@ pub type InnerNode16<K, V> = InnerNodeCompressed<K, V, 16>;
 
 impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        const SIZE: usize = 16;
-        type T = __m128i;
-        unsafe {
-            let keys = MaybeUninit::array_assume_init(self.keys);
-            let cmp = T::from(
-                Simd::<u8, SIZE>::splat(key_fragment)
-                    .simd_eq(Simd::<u8, SIZE>::from_array(keys))
-                    .to_int(),
-            );
-            let mask = (1i32 << self.header.num_children) - 1;
-            let bitfield = _mm_movemask_epi8(cmp) & mask;
-            if bitfield != 0 {
-                Some(bitfield.trailing_zeros() as usize)
-            } else {
-                None
-            }
+        let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
+        let cmp = u8x16::splat(key_fragment)
+            .simd_eq(u8x16::from_array(keys))
+            .to_bitmask() as u32;
+        let mask = (1u32 << self.header.num_children) - 1;
+        let bitfield = cmp & mask;
+        if bitfield != 0 {
+            Some(bitfield.trailing_zeros() as usize)
+        } else {
+            None
         }
     }
 
     fn find_write_point(&self, key_fragment: u8) -> WritePoint {
-        const SIZE: usize = 16;
-        type T = __m128i;
-        unsafe {
-            match self.lookup_child_index(key_fragment) {
-                Some(child_index) => WritePoint::Existing(child_index),
-                None => {
-                    let keys = MaybeUninit::array_assume_init(self.keys);
-                    let cmp = T::from(
-                        Simd::<u8, SIZE>::splat(key_fragment)
-                            .simd_lt(Simd::<u8, SIZE>::from_array(keys))
-                            .to_int(),
-                    );
-                    let mask = (1i32 << self.header.num_children) - 1;
-                    let bitfield = _mm_movemask_epi8(cmp) & mask;
-                    if bitfield != 0 {
-                        WritePoint::Shift(bitfield.trailing_zeros() as usize)
-                    } else {
-                        WritePoint::Last(self.header.num_children())
-                    }
-                },
-            }
+        match self.lookup_child_index(key_fragment) {
+            Some(child_index) => WritePoint::Existing(child_index),
+            None => {
+                let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
+                let cmp = u8x16::splat(key_fragment)
+                    .simd_lt(u8x16::from_array(keys))
+                    .to_bitmask() as u32;
+                let mask = (1u32 << self.header.num_children) - 1;
+                let bitfield = cmp & mask;
+                if bitfield != 0 {
+                    WritePoint::Shift(bitfield.trailing_zeros() as usize)
+                } else {
+                    WritePoint::Last(self.header.num_children())
+                }
+            },
         }
     }
 }
@@ -1226,7 +1216,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         // function
         unsafe { InnerNodeCompressedIter::new(self) }
     }
-    
+
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         let (_, children) = self.initialized_portion();
         children.first().copied()
@@ -1533,16 +1523,78 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         // function
         unsafe { InnerNode48Iter::new(self) }
     }
-    
+
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
-        // TODO: use simd
-        for idx in self.child_indices {
-            if !idx.is_empty() {
-                let child_pointers = self.initialized_child_pointers();
-                return child_pointers.get(usize::from(idx)).copied();
-            }
-        }
-        None
+        let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
+        let empty = u8x64::splat(48);
+        let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r1 = u8x64::from_array(child_indices[64..128].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r2 = u8x64::from_array(child_indices[128..192].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r3 = u8x64::from_array(child_indices[192..256].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+
+        // /// 0 1 0..
+        // let k0: u128 = (r0 as u128) | (r1 as u128) << 64;
+        // /// 0 1 0..
+        // let k1: u128 = (r2 as u128) | (r3 as u128) << 64;
+        // let results = [k0.trailing_ones(), k1.trailing_ones() + 128, 256];
+        // let p0 = k0 as bool as usize;
+        // let p1 = k1 as bool as usize;
+        // // p0 = 1
+        // // !p0 = 0
+        // // p1 = 1
+        // // !p1 = 0
+        // // 0 + (0 & 0)
+        // let idx = !p0 + (!p0 & !p1);
+        // results[idx]
+
+        // let b0 = r0 != u64::MAX;
+        // let b1 = r1 != u64::MAX && !b0;
+        // let b2 = r2 != u64::MAX && !b1;
+        // let b3 = r3 != u64::MAX && !b2;
+        // let b0 = b0 as u32;
+        // let b1 = b1 as u32;
+        // let b2 = b2 as u32;
+        // let b3 = b3 as u32;
+        // b0 * r0.trailing_ones()
+        //     + b1 * (r1.trailing_ones() + 64)
+        //     + b2 * (r2.trailing_ones() + 128)
+        //     + b3 * (r3.trailing_ones() + 192)
+
+        // let k0: u128 = (r0 as u128) | (r1 as u128) << 64;
+        // let k1: u128 = (r2 as u128) | (r3 as u128) << 64;
+        // if k0 != u128::MAX {
+        //     k0.trailing_ones()
+        // } else {
+        //     k1.trailing_ones() + 128
+        // }
+
+        let idx = if r0 != u64::MAX {
+            r0.trailing_ones()
+        } else if r1 != u64::MAX {
+            r1.trailing_ones() + 64
+        } else if r2 != u64::MAX {
+            r2.trailing_ones() + 128
+        } else {
+            r3.trailing_ones() + 192
+        } as usize;
+        self.initialized_child_pointers().get(usize::from(idx)).copied()
+
+        // // TODO: use simd
+        // for idx in self.child_indices {
+        //     if !idx.is_empty() {
+        //         let child_pointers = self.initialized_child_pointers();
+        //         return child_pointers.get(usize::from(idx)).copied();
+        //     }
+        // }
+        // None
     }
 }
 
@@ -1672,7 +1724,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         // function
         unsafe { InnerNode256Iter::new(self) }
     }
-    
+
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         for ptr in self.child_pointers {
             if ptr.is_some() {
