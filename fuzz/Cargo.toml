@@ -29,3 +29,10 @@ name = "fuzz_tree_map_api"
 path = "fuzz_targets/fuzz_tree_map_api.rs"
 test = false
 doc = false
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+incremental = false
+rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]
