@@ -16,8 +16,7 @@ use std::{
     ops::Range,
     ptr::{self, NonNull},
     simd::{
-        cmp::{SimdPartialEq, SimdPartialOrd},
-        u8x16, u8x64, Simd,
+        cmp::{SimdPartialEq, SimdPartialOrd}, u8x16, u8x64, usizex64, Simd
     },
 };
 
@@ -1717,12 +1716,32 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     }
 
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
-        for ptr in self.child_pointers {
-            if ptr.is_some() {
-                return ptr;
-            }
-        }
-        None
+        let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
+        let empty = usizex64::splat(0);
+        let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r1 = usizex64::from_array(child_pointers[64..128].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r2 = usizex64::from_array(child_pointers[128..192].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r3 = usizex64::from_array(child_pointers[192..256].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+
+        let idx = if r0 != u64::MAX {
+            r0.trailing_ones()
+        } else if r1 != u64::MAX {
+            r1.trailing_ones() + 64
+        } else if r2 != u64::MAX {
+            r2.trailing_ones() + 128
+        } else {
+            r3.trailing_ones() + 192
+        } as usize;
+
+        self.child_pointers.get(idx).copied().flatten()
     }
 }
 
