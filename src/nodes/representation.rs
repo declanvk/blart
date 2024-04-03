@@ -1540,20 +1540,19 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             .simd_eq(empty)
             .to_bitmask();
 
-        // /// 0 1 0..
-        // let k0: u128 = (r0 as u128) | (r1 as u128) << 64;
-        // /// 0 1 0..
-        // let k1: u128 = (r2 as u128) | (r3 as u128) << 64;
-        // let results = [k0.trailing_ones(), k1.trailing_ones() + 128, 256];
-        // let p0 = k0 as bool as usize;
-        // let p1 = k1 as bool as usize;
-        // // p0 = 1
-        // // !p0 = 0
-        // // p1 = 1
-        // // !p1 = 0
-        // // 0 + (0 & 0)
-        // let idx = !p0 + (!p0 & !p1);
-        // results[idx]
+        // let idxs = [
+        //     r0.trailing_ones(), 
+        //     r1.trailing_ones() + 64, 
+        //     r2.trailing_ones() + 128, 
+        //     r3.trailing_ones() + 192, 
+        //     256,
+        // ];
+        // let b0 = (r0 == u64::MAX) as usize;
+        // let b1 = (r1 == u64::MAX) as usize;
+        // let b2 = (r2 == u64::MAX) as usize;
+        // let b3 = (r3 == u64::MAX) as usize;
+        // let idx = b0 + (b0 & b1) + (b0 & b1 & b2) + (b0 & b1 & b2 & b3);
+        // let idx = idxs[idx] as usize;
 
         // let b0 = r0 != u64::MAX;
         // let b1 = r1 != u64::MAX && !b0;
@@ -1563,18 +1562,18 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         // let b1 = b1 as u32;
         // let b2 = b2 as u32;
         // let b3 = b3 as u32;
-        // b0 * r0.trailing_ones()
+        // let idx = (b0 * r0.trailing_ones()
         //     + b1 * (r1.trailing_ones() + 64)
         //     + b2 * (r2.trailing_ones() + 128)
-        //     + b3 * (r3.trailing_ones() + 192)
+        //     + b3 * (r3.trailing_ones() + 192)) as usize;
 
         // let k0: u128 = (r0 as u128) | (r1 as u128) << 64;
         // let k1: u128 = (r2 as u128) | (r3 as u128) << 64;
-        // if k0 != u128::MAX {
+        // let idx = if k0 != u128::MAX {
         //     k0.trailing_ones()
         // } else {
         //     k1.trailing_ones() + 128
-        // }
+        // } as usize;
 
         let idx = if r0 != u64::MAX {
             r0.trailing_ones()
@@ -1585,16 +1584,8 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         } else {
             r3.trailing_ones() + 192
         } as usize;
-        self.initialized_child_pointers().get(usize::from(idx)).copied()
 
-        // // TODO: use simd
-        // for idx in self.child_indices {
-        //     if !idx.is_empty() {
-        //         let child_pointers = self.initialized_child_pointers();
-        //         return child_pointers.get(usize::from(idx)).copied();
-        //     }
-        // }
-        // None
+        self.initialized_child_pointers().get(idx).copied()
     }
 }
 
