@@ -82,7 +82,7 @@ where
     // enforced the "no concurrent reads or writes" requirement on the
     // `search_unchecked` function.
     let inner_node = unsafe { inner_ptr.as_ref() };
-    let match_prefix = inner_node.match_prefix_1(key.as_bytes(), *current_depth);
+    let match_prefix = inner_node.match_prefix(key.as_bytes(), *current_depth);
     match match_prefix {
         MatchPrefix::Mismatch { .. } => None,
         MatchPrefix::Match { matched_bytes } => {
