@@ -463,6 +463,7 @@ where
     fn test_prefix_identify_insert<K, V, N>(
         inner_ptr: NodePtr<N>,
         key: &[u8],
+        key_len: usize,
         current_depth: &mut usize,
     ) -> Result<ControlFlow<Mismatch<K, V>, Option<OpaqueNodePtr<K, V>>>, InsertPrefixError>
     where
@@ -474,14 +475,14 @@ where
         // enforced the "no concurrent reads or writes" requirement on the
         // `search_unchecked` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
-        let match_prefix = inner_node.match_prefix(key, *current_depth);
+        let match_prefix = inner_node.match_prefix(key, key_len, *current_depth);
         match match_prefix {
             MatchPrefix::Mismatch { mismatch } => Ok(ControlFlow::Break(mismatch)),
             MatchPrefix::Match { matched_bytes } => {
                 // Since the prefix matched, advance the depth by the size of the prefix
                 *current_depth += matched_bytes;
 
-                if likely(*current_depth < key.len()) {
+                if likely(*current_depth < key_len) {
                     let next_key_fragment = key[*current_depth];
                     Ok(ControlFlow::Continue(
                         inner_node.lookup_child(next_key_fragment),
@@ -490,7 +491,7 @@ where
                     // then the key has insufficient bytes to be unique. It must be
                     // a prefix of an existing key
                     Err(InsertPrefixError {
-                        byte_repr: key.into(),
+                        byte_repr: key[..key_len].into(),
                     })
                 }
             },
@@ -500,21 +501,26 @@ where
     let mut current_parent = None;
     let mut current_node = root;
     let mut current_depth = 0;
+    
     let key_bytes = key.as_bytes();
+    let key_bytes_len = key_bytes.len();
+    let mut padded_key_bytes = vec![0; key_bytes_len + 16].into_boxed_slice();
+    padded_key_bytes[..key_bytes_len].copy_from_slice(key_bytes);
+    let padded_key_bytes = padded_key_bytes;
 
     loop {
         let lookup_result = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, &padded_key_bytes, key_bytes_len, &mut current_depth)
             },
             ConcreteNodePtr::Node16(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, &padded_key_bytes, key_bytes_len, &mut current_depth)
             },
             ConcreteNodePtr::Node48(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, &padded_key_bytes, key_bytes_len, &mut current_depth)
             },
             ConcreteNodePtr::Node256(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, &padded_key_bytes, key_bytes_len, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 let leaf_node = leaf_node_ptr.read();
