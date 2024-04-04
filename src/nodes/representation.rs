@@ -16,7 +16,8 @@ use std::{
     ops::Range,
     ptr::{self, NonNull},
     simd::{
-        cmp::{SimdPartialEq, SimdPartialOrd}, u8x16, u8x64, usizex64, Simd
+        cmp::{SimdPartialEq, SimdPartialOrd},
+        u8x16, u8x64, usizex64, Simd,
     },
 };
 
@@ -744,7 +745,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
     ///
     /// `current_depth` > key len
     #[inline(always)]
-    fn match_prefix(
+    fn match_prefix_1(
         &self,
         key: &[u8],
         current_depth: usize,
@@ -770,6 +771,82 @@ pub trait InnerNode: Node + HeaderNode + Sized {
             }
         } else {
             MatchPrefix::Match { matched_bytes }
+        }
+    }
+
+    #[inline(always)]
+    fn match_prefix(
+        &self,
+        key: &[u8],
+        current_depth: usize,
+    ) -> MatchPrefix<<Self as Node>::Key, <Self as Node>::Value> {
+        unsafe {
+            // SAFETY: Since we are iterating the key and prefixes, we
+            // expect that the depth never exceeds the key len.
+            // Because if this happens we ran out of bytes in the key to match
+            // and the whole process should be already finished
+            assume(current_depth <= key.len());
+        }
+        let header = self.header();
+        let prefix_len = header.prefix_len();
+        let key = &key[current_depth..];
+        if likely(prefix_len <= NUM_PREFIX_BYTES) {
+            // creates and fill the buffer up to `NUM_PREFIX_BYTES`
+            let mut key_buffer = [0u8; NUM_PREFIX_BYTES];
+            let key_len = key.len().min(NUM_PREFIX_BYTES);
+            key_buffer[..key_len].copy_from_slice(&key[..key_len]);
+
+            // do the comparison
+            let cmp = u8x16::from_array(key_buffer)
+                .simd_eq(u8x16::from_array(header.prefix))
+                .to_bitmask() as u32;
+
+            // makes a mask with only the first `prefix_len` bytes set to 1
+            let mask = (1u32 << prefix_len) - 1;
+
+            // get the number of matching bytes
+            let matched_bytes = (cmp & mask).trailing_ones() as usize;
+            if matched_bytes < prefix_len {
+                return MatchPrefix::Mismatch {
+                    mismatch: Mismatch {
+                        matched_bytes,
+                        prefix_byte: header.prefix[matched_bytes],
+                        leaf_ptr: None,
+                    }
+                };
+            } else {
+                return MatchPrefix::Match { matched_bytes };
+            }
+        } else {
+            let min_child = self.min().unwrap();
+            let leaf_ptr = unsafe { minimum_unchecked(min_child) };
+            let leaf = unsafe { leaf_ptr.as_ref() };
+            let leaf = leaf.key_ref().as_bytes();
+            unsafe {
+                // SAFETY: Since we are iterating the key and prefixes, we
+                // expect that the depth never exceeds the key len.
+                // Because if this happens we ran out of bytes in the key to match
+                // and the whole process should be already finished
+                assume(current_depth <= leaf.len());
+
+                // SAFETY: By the construction of the prefix we know that this is inbounds
+                // since the prefix len guarantees it to us
+                assume(current_depth + prefix_len <= leaf.len());
+            }
+            let prefix = &leaf[current_depth..(current_depth + prefix_len)];
+            let matched_bytes = prefix.iter().zip(key).take_while(|(a, b)| **a == **b).count();
+
+            if matched_bytes < prefix_len {
+                return MatchPrefix::Mismatch {
+                    mismatch: Mismatch {
+                        matched_bytes,
+                        prefix_byte: prefix[matched_bytes],
+                        leaf_ptr: Some(leaf_ptr),
+                    },
+                };
+            } else {
+                return MatchPrefix::Match { matched_bytes };
+            }
         }
     }
 
@@ -1540,10 +1617,10 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
 
         // {
         //     let idxs = [
-        //         r0.trailing_ones(), 
-        //         r1.trailing_ones() + 64, 
-        //         r2.trailing_ones() + 128, 
-        //         r3.trailing_ones() + 192, 
+        //         r0.trailing_ones(),
+        //         r1.trailing_ones() + 64,
+        //         r2.trailing_ones() + 128,
+        //         r3.trailing_ones() + 192,
         //         256,
         //     ];
         //     let b0 = (r0 == u64::MAX) as usize;
@@ -1552,7 +1629,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         //     let b3 = (r3 == u64::MAX) as usize;
         //     let idx = b0 + (b0 & b1) + (b0 & b1 & b2) + (b0 & b1 & b2 & b3);
         //     let idx = idxs[idx] as usize;
-    
+
         //     let b0 = r0 != u64::MAX;
         //     let b1 = r1 != u64::MAX && !b0;
         //     let b2 = r2 != u64::MAX && !b1;
@@ -1565,7 +1642,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         //         + b1 * (r1.trailing_ones() + 64)
         //         + b2 * (r2.trailing_ones() + 128)
         //         + b3 * (r3.trailing_ones() + 192)) as usize;
-    
+
         //     let k0: u128 = (r0 as u128) | (r1 as u128) << 64;
         //     let k1: u128 = (r2 as u128) | (r3 as u128) << 64;
         //     let idx = if k0 != u128::MAX {

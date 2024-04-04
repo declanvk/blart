@@ -1,5 +1,5 @@
 use super::*;
-use std::mem;
+use std::{ffi::CString, mem};
 
 #[cfg(not(feature = "nightly"))]
 use sptr::Strict;
@@ -102,7 +102,6 @@ fn opaque_node_ptr_is_correct() {
 //     assert_eq!(mem::size_of::<Option<OpaqueNodePtr<Box<[u8]>, ()>>>(), 8);
 //     assert_eq!(mem::size_of::<OpaqueNodePtr<Box<[u8]>, ()>>(), 8);
 // }
-
 #[test]
 fn node_alignment() {
     assert_eq!(mem::align_of::<InnerNode4<Box<[u8]>, u8>>(), 8);
@@ -382,13 +381,13 @@ fn node16_grow() {
         let mut l = LeafNode::new(vec![].into(), ());
         let l_ptr = NodePtr::from(&mut l).to_opaque();
         v.push(l_ptr);
-        n16.write_child(i*2, l_ptr);
+        n16.write_child(i * 2, l_ptr);
     }
 
     let n48 = n16.grow();
 
     for i in 0..16 {
-        assert_eq!(n48.lookup_child(i*2), Some(v[i as usize]));
+        assert_eq!(n48.lookup_child(i * 2), Some(v[i as usize]));
     }
 }
 
@@ -586,4 +585,49 @@ fn header_ltrim_prefix_non_stored_bytes_panic() {
     assert_eq!(h.prefix_len(), 8);
 
     h.ltrim_by(0);
+}
+
+#[test]
+fn simd_match_prefix() {
+    let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5, 6], 6);
+    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5], 0);
+    match match_prefix {
+        MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => assert_eq!(matched_bytes, 5),
+        MatchPrefix::Match { matched_bytes } => panic!("should be a mismatch"),
+    };
+
+    let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5, 6], 6);
+    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5, 6], 0);
+    match match_prefix {
+        MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => panic!("should be a match"),
+        MatchPrefix::Match { matched_bytes } => assert_eq!(matched_bytes, 6),
+    };
+
+    let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5], 5);
+    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5, 6], 0);
+    match match_prefix {
+        MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => panic!("should be a match"),
+        MatchPrefix::Match { matched_bytes } => assert_eq!(matched_bytes, 5),
+    };
+
+    let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5], 5);
+    let match_prefix = node.match_prefix(&[0, 2, 3, 4, 5], 0);
+    match match_prefix {
+        MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => assert_eq!(matched_bytes, 0),
+        MatchPrefix::Match { matched_bytes } => panic!("should be a mismatch"),
+    };
+
+    let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5], 5);
+    let match_prefix = node.match_prefix(&[1, 2, 0, 4, 5], 0);
+    match match_prefix {
+        MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => assert_eq!(matched_bytes, 2),
+        MatchPrefix::Match { matched_bytes } => panic!("should be a mismatch"),
+    };
+
+    let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5], 5);
+    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 0], 0);
+    match match_prefix {
+        MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => assert_eq!(matched_bytes, 4),
+        MatchPrefix::Match { matched_bytes } => panic!("should be a mismatch"),
+    };
 }
