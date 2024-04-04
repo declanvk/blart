@@ -34,8 +34,8 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
 
     {
         let mut old_group = c.benchmark_group(format!("{prefix}/old"));
-        old_group.warm_up_time(Duration::from_secs(3));
-        old_group.measurement_time(Duration::from_secs(5));
+        old_group.warm_up_time(Duration::from_secs(5));
+        old_group.measurement_time(Duration::from_secs(10));
         old_group.bench_function("node48/small/match", |b| {
             b.iter(|| std::hint::black_box(node48_small.match_prefix_1(key_small_match, 0)));
         });
@@ -65,8 +65,8 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
 
     {
         let mut new_group = c.benchmark_group(format!("{prefix}/new"));
-        new_group.warm_up_time(Duration::from_secs(3));
-        new_group.measurement_time(Duration::from_secs(5));
+        new_group.warm_up_time(Duration::from_secs(5));
+        new_group.measurement_time(Duration::from_secs(10));
         new_group.bench_function("node48/small/match", |b| {
             b.iter(|| std::hint::black_box(node48_small.match_prefix(key_small_match_padded, key_small_match.len(), 0)));
         });
