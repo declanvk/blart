@@ -37,63 +37,31 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         old_group.warm_up_time(Duration::from_secs(5));
         old_group.measurement_time(Duration::from_secs(10));
         old_group.bench_function("node48/small/match", |b| {
-            b.iter(|| std::hint::black_box(node48_small.match_prefix_1(key_small_match, 0)));
+            b.iter(|| std::hint::black_box(node48_small.match_prefix(key_small_match, 0)));
         });
         old_group.bench_function("node48/small/mismatch", |b| {
-            b.iter(|| std::hint::black_box(node48_small.match_prefix_1(key_small_mismatch, 0)));
+            b.iter(|| std::hint::black_box(node48_small.match_prefix(key_small_mismatch, 0)));
         });
         old_group.bench_function("node48/large/match", |b| {
-            b.iter(|| std::hint::black_box(node48_large.match_prefix_1(key_large_match, 0)));
+            b.iter(|| std::hint::black_box(node48_large.match_prefix(key_large_match, 0)));
         });
         old_group.bench_function("node48/large/mismatch", |b| {
-            b.iter(|| std::hint::black_box(node48_large.match_prefix_1(key_large_mismatch, 0)));
+            b.iter(|| std::hint::black_box(node48_large.match_prefix(key_large_mismatch, 0)));
         });
     
         old_group.bench_function("node256/small/match", |b| {
-            b.iter(|| std::hint::black_box(node256_small.match_prefix_1(key_small_match, 0)));
+            b.iter(|| std::hint::black_box(node256_small.match_prefix(key_small_match, 0)));
         });
         old_group.bench_function("node256/small/mismatch", |b| {
-            b.iter(|| std::hint::black_box(node256_small.match_prefix_1(key_small_mismatch, 0)));
+            b.iter(|| std::hint::black_box(node256_small.match_prefix(key_small_mismatch, 0)));
         });
         old_group.bench_function("node256/large/match", |b| {
-            b.iter(|| std::hint::black_box(node256_large.match_prefix_1(key_large_match, 0)));
+            b.iter(|| std::hint::black_box(node256_large.match_prefix(key_large_match, 0)));
         });
         old_group.bench_function("node256/large/mismatch", |b| {
-            b.iter(|| std::hint::black_box(node256_large.match_prefix_1(key_large_mismatch, 0)));
+            b.iter(|| std::hint::black_box(node256_large.match_prefix(key_large_mismatch, 0)));
         });
     }
-
-    {
-        let mut new_group = c.benchmark_group(format!("{prefix}/new"));
-        new_group.warm_up_time(Duration::from_secs(5));
-        new_group.measurement_time(Duration::from_secs(10));
-        new_group.bench_function("node48/small/match", |b| {
-            b.iter(|| std::hint::black_box(node48_small.match_prefix(key_small_match_padded, key_small_match.len(), 0)));
-        });
-        new_group.bench_function("node48/small/mismatch", |b| {
-            b.iter(|| std::hint::black_box(node48_small.match_prefix(key_small_mismatch_padded, key_small_mismatch.len(), 0)));
-        });
-        new_group.bench_function("node48/large/match", |b| {
-            b.iter(|| std::hint::black_box(node48_large.match_prefix(key_large_match_padded, key_large_match.len(), 0)));
-        });
-        new_group.bench_function("node48/large/mismatch", |b| {
-            b.iter(|| std::hint::black_box(node48_large.match_prefix(key_large_mismatch_padded, key_large_mismatch.len(), 0)));
-        });
-    
-        new_group.bench_function("node256/small/match", |b| {
-            b.iter(|| std::hint::black_box(node256_small.match_prefix(key_small_match_padded, key_small_match.len(), 0)));
-        });
-        new_group.bench_function("node256/small/mismatch", |b| {
-            b.iter(|| std::hint::black_box(node256_small.match_prefix(key_small_mismatch_padded, key_small_mismatch.len(), 0)));
-        });
-        new_group.bench_function("node256/large/match", |b| {
-            b.iter(|| std::hint::black_box(node256_large.match_prefix(key_large_match_padded, key_large_match.len(), 0)));
-        });
-        new_group.bench_function("node256/large/mismatch", |b| {
-            b.iter(|| std::hint::black_box(node256_large.match_prefix(key_large_mismatch_padded, key_large_mismatch.len(), 0)));
-        });
-    }
-
 
     drop(unsafe { Box::from_raw(leaf_ptr) });
 }

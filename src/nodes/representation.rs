@@ -745,7 +745,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
     ///
     /// `current_depth` > key len
     #[inline(always)]
-    fn match_prefix_1(
+    fn match_prefix(
         &self,
         key: &[u8],
         current_depth: usize,
@@ -771,82 +771,6 @@ pub trait InnerNode: Node + HeaderNode + Sized {
             }
         } else {
             MatchPrefix::Match { matched_bytes }
-        }
-    }
-
-    #[inline(always)]
-    fn match_prefix(
-        &self,
-        key: &[u8],
-        key_len: usize,
-        current_depth: usize,
-    ) -> MatchPrefix<<Self as Node>::Key, <Self as Node>::Value> {
-        unsafe {
-            // SAFETY: Since we are iterating the key and prefixes, we
-            // expect that the depth never exceeds the key len.
-            // Because if this happens we ran out of bytes in the key to match
-            // and the whole process should be already finished
-            assume(key_len < key.len());
-            assume(current_depth <= key.len());
-        }
-        let header = self.header();
-        let prefix_len = header.prefix_len();
-        if likely(prefix_len <= NUM_PREFIX_BYTES) {
-            // do the comparison
-            let cmp = u8x16::from_slice(&key[current_depth..current_depth + 16])
-                .simd_eq(u8x16::from_array(header.prefix))
-                .to_bitmask() as u32;
-
-            // makes a mask with only the first `prefix_len` bytes set to 1
-            let mask = (1u32 << prefix_len.min(key_len)) - 1;
-
-            // get the number of matching bytes
-            let matched_bytes = (cmp & mask).trailing_ones() as usize;
-            if matched_bytes < prefix_len {
-                return MatchPrefix::Mismatch {
-                    mismatch: Mismatch {
-                        matched_bytes,
-                        prefix_byte: header.prefix[matched_bytes],
-                        leaf_ptr: None,
-                    },
-                };
-            } else {
-                return MatchPrefix::Match { matched_bytes };
-            }
-        } else {
-            let min_child = self.min().unwrap();
-            let leaf_ptr = unsafe { minimum_unchecked(min_child) };
-            let leaf = unsafe { leaf_ptr.as_ref() };
-            let leaf = leaf.key_ref().as_bytes();
-            unsafe {
-                // SAFETY: Since we are iterating the key and prefixes, we
-                // expect that the depth never exceeds the key len.
-                // Because if this happens we ran out of bytes in the key to match
-                // and the whole process should be already finished
-                assume(current_depth <= leaf.len());
-
-                // SAFETY: By the construction of the prefix we know that this is inbounds
-                // since the prefix len guarantees it to us
-                assume(current_depth + prefix_len <= leaf.len());
-            }
-            let prefix = &leaf[current_depth..(current_depth + prefix_len)];
-            let matched_bytes = prefix
-                .iter()
-                .zip(&key[current_depth..key_len])
-                .take_while(|(a, b)| **a == **b)
-                .count();
-
-            if matched_bytes < prefix_len {
-                return MatchPrefix::Mismatch {
-                    mismatch: Mismatch {
-                        matched_bytes,
-                        prefix_byte: prefix[matched_bytes],
-                        leaf_ptr: Some(leaf_ptr),
-                    },
-                };
-            } else {
-                return MatchPrefix::Match { matched_bytes };
-            }
         }
     }
 
