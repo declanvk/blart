@@ -778,6 +778,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
     fn match_prefix(
         &self,
         key: &[u8],
+        key_len: usize,
         current_depth: usize,
     ) -> MatchPrefix<<Self as Node>::Key, <Self as Node>::Value> {
         unsafe {
@@ -785,24 +786,19 @@ pub trait InnerNode: Node + HeaderNode + Sized {
             // expect that the depth never exceeds the key len.
             // Because if this happens we ran out of bytes in the key to match
             // and the whole process should be already finished
+            assume(key_len < key.len());
             assume(current_depth <= key.len());
         }
         let header = self.header();
         let prefix_len = header.prefix_len();
-        let key = &key[current_depth..];
         if likely(prefix_len <= NUM_PREFIX_BYTES) {
-            // creates and fill the buffer up to `NUM_PREFIX_BYTES`
-            let mut key_buffer = [0u8; NUM_PREFIX_BYTES];
-            let key_len = key.len().min(NUM_PREFIX_BYTES);
-            key_buffer[..key_len].copy_from_slice(&key[..key_len]);
-
             // do the comparison
-            let cmp = u8x16::from_array(key_buffer)
+            let cmp = u8x16::from_slice(&key[current_depth..current_depth + 16])
                 .simd_eq(u8x16::from_array(header.prefix))
                 .to_bitmask() as u32;
 
             // makes a mask with only the first `prefix_len` bytes set to 1
-            let mask = (1u32 << prefix_len) - 1;
+            let mask = (1u32 << prefix_len.min(key_len)) - 1;
 
             // get the number of matching bytes
             let matched_bytes = (cmp & mask).trailing_ones() as usize;
@@ -812,7 +808,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
                         matched_bytes,
                         prefix_byte: header.prefix[matched_bytes],
                         leaf_ptr: None,
-                    }
+                    },
                 };
             } else {
                 return MatchPrefix::Match { matched_bytes };
@@ -834,7 +830,11 @@ pub trait InnerNode: Node + HeaderNode + Sized {
                 assume(current_depth + prefix_len <= leaf.len());
             }
             let prefix = &leaf[current_depth..(current_depth + prefix_len)];
-            let matched_bytes = prefix.iter().zip(key).take_while(|(a, b)| **a == **b).count();
+            let matched_bytes = prefix
+                .iter()
+                .zip(&key[current_depth..key_len])
+                .take_while(|(a, b)| **a == **b)
+                .count();
 
             if matched_bytes < prefix_len {
                 return MatchPrefix::Mismatch {
@@ -1662,7 +1662,9 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             r3.trailing_ones() + 192
         } as usize;
 
-        self.initialized_child_pointers().get(usize::from(self.child_indices[idx])).copied()
+        self.initialized_child_pointers()
+            .get(usize::from(self.child_indices[idx]))
+            .copied()
     }
 }
 

@@ -590,42 +590,42 @@ fn header_ltrim_prefix_non_stored_bytes_panic() {
 #[test]
 fn simd_match_prefix() {
     let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5, 6], 6);
-    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5], 0);
+    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 5, 0);
     match match_prefix {
         MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => assert_eq!(matched_bytes, 5),
         MatchPrefix::Match { matched_bytes } => panic!("should be a mismatch"),
     };
 
     let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5, 6], 6);
-    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5, 6], 0);
+    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 6, 0);
     match match_prefix {
         MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => panic!("should be a match"),
         MatchPrefix::Match { matched_bytes } => assert_eq!(matched_bytes, 6),
     };
 
     let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5], 5);
-    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5, 6], 0);
+    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 6, 0);
     match match_prefix {
         MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => panic!("should be a match"),
         MatchPrefix::Match { matched_bytes } => assert_eq!(matched_bytes, 5),
     };
 
     let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5], 5);
-    let match_prefix = node.match_prefix(&[0, 2, 3, 4, 5], 0);
+    let match_prefix = node.match_prefix(&[0, 2, 3, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 5, 0);
     match match_prefix {
         MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => assert_eq!(matched_bytes, 0),
         MatchPrefix::Match { matched_bytes } => panic!("should be a mismatch"),
     };
 
     let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5], 5);
-    let match_prefix = node.match_prefix(&[1, 2, 0, 4, 5], 0);
+    let match_prefix = node.match_prefix(&[1, 2, 0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 5, 0);
     match match_prefix {
         MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => assert_eq!(matched_bytes, 2),
         MatchPrefix::Match { matched_bytes } => panic!("should be a mismatch"),
     };
 
     let node = InnerNode4::<CString, usize>::from_prefix(&[1, 2, 3, 4, 5], 5);
-    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 0], 0);
+    let match_prefix = node.match_prefix(&[1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 5, 0);
     match match_prefix {
         MatchPrefix::Mismatch {  mismatch: Mismatch { matched_bytes, .. } } => assert_eq!(matched_bytes, 4),
         MatchPrefix::Match { matched_bytes } => panic!("should be a mismatch"),
