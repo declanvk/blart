@@ -778,6 +778,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         }
     }
 
+    #[inline(always)]
     fn read_full_prefix(
         &self,
         current_depth: usize,
