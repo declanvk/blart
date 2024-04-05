@@ -760,7 +760,11 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
         let key = &key[current_depth..];
 
-        let matched_bytes = prefix.iter().zip(key).take_while(|(a, b)| **a == **b).count();
+        let matched_bytes = prefix
+            .iter()
+            .zip(key)
+            .take_while(|(a, b)| **a == **b)
+            .count();
         if matched_bytes < prefix.len() {
             MatchPrefix::Mismatch {
                 mismatch: Mismatch {
@@ -774,7 +778,6 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         }
     }
 
-    #[inline(always)]
     fn read_full_prefix(
         &self,
         current_depth: usize,
@@ -787,7 +790,12 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         if likely(len <= NUM_PREFIX_BYTES) {
             (header.read_prefix(), None)
         } else {
-            let min_child = self.min().unwrap();
+            // SAFETY: By construction a InnerNode, must have >= 1 childs, this
+            // is even more strict since in the case of 1 child the node can be
+            // collapsed, so a InnserNode must have >= 2 childs, so it's safe
+            // to search for the minium. And the same applies to the `minimum_unchecked`
+            // function
+            let min_child = unsafe { self.min().unwrap_unchecked() };
             let leaf_ptr = unsafe { minimum_unchecked(min_child) };
             let leaf = unsafe { leaf_ptr.as_ref() };
             let leaf = leaf.key_ref().as_bytes();
@@ -801,6 +809,9 @@ pub trait InnerNode: Node + HeaderNode + Sized {
                 // SAFETY: By the construction of the prefix we know that this is inbounds
                 // since the prefix len guarantees it to us
                 assume(current_depth + len <= leaf.len());
+
+                // SAFETY: This can't overflow since len comes from a u32
+                assume(current_depth <= current_depth + len);
             }
             let leaf = &leaf[current_depth..(current_depth + len)];
             (leaf, Some(leaf_ptr))
@@ -982,7 +993,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 
     fn change_block_size<const NEW_SIZE: usize>(&self) -> InnerNodeCompressed<K, V, NEW_SIZE> {
-        assert!(
+        debug_assert!(
             self.header.num_children() <= NEW_SIZE,
             "Cannot change InnerNodeCompressed<{}> to size {} when it has more than {} children. \
              Currently has [{}] children.",
@@ -995,10 +1006,27 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         let header = self.header.clone();
         let mut keys = [MaybeUninit::new(0); NEW_SIZE];
         let mut child_pointers = MaybeUninit::uninit_array();
+        let num_children = header.num_children();
 
-        keys[..header.num_children()].copy_from_slice(&self.keys[..header.num_children()]);
-        child_pointers[..header.num_children()]
-            .copy_from_slice(&self.child_pointers[..header.num_children()]);
+        unsafe {
+            // SAFETY: By construction the number of children in the header
+            // is kept in sync with the number of children written in the node
+            // and if this number exceeds the maximum len the node should have
+            // alredy grown. So we know for a fact that that num_children <= node len
+            assume(num_children <= self.keys.len());
+            assume(num_children <= self.child_pointers.len());
+
+            // SAFETY: When calling this function the NEW_SIZE, should fit the nodes.
+            // We only need to be careful when shrinking the node, since when growing
+            // NEW_SIZE >= SIZE.
+            // This function is only called in a shrink case when a node is removed from
+            // a node and the new current size fits in the NEW_SIZE
+            assume(num_children <= keys.len());
+            assume(num_children <= child_pointers.len());
+        }
+
+        keys[..num_children].copy_from_slice(&self.keys[..num_children]);
+        child_pointers[..num_children].copy_from_slice(&self.child_pointers[..num_children]);
 
         InnerNodeCompressed {
             header,
@@ -1012,22 +1040,35 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
         let mut child_pointers = MaybeUninit::uninit_array();
 
-        let (n16_keys, _) = self.initialized_portion();
+        let (keys, _) = self.initialized_portion();
 
-        assert_eq!(
-            n16_keys.len(),
+        debug_assert_eq!(
+            keys.len(),
             self.keys.len(),
             "Node must be full to grow to node 48"
         );
 
-        for (index, key) in n16_keys.iter().copied().enumerate() {
-            // PANIC SAFETY: This `try_from` will not panic because index is guaranteed to
+        for (index, key) in keys.iter().copied().enumerate() {
+            // SAFETY: This `try_from` will not panic because index is guaranteed to
             // be 15 or less because of the length of the `InnerNode16.keys` array.
-            child_indices[usize::from(key)] = RestrictedNodeIndex::try_from(index).unwrap();
+            child_indices[usize::from(key)] =
+                unsafe { RestrictedNodeIndex::try_from(index).unwrap_unchecked() };
         }
 
-        child_pointers[..header.num_children()]
-            .copy_from_slice(&self.child_pointers[..header.num_children()]);
+        let num_children = header.num_children();
+
+        unsafe {
+            // SAFETY: By construction the number of children in the header
+            // is kept in sync with the number of children written in the node
+            // and if this number exceeds the maximum len the node should have
+            // alredy grown. So we know for a fact that that num_children <= node len
+            assume(num_children <= self.child_pointers.len());
+
+            // SAFETY: We know that the new size is >= old size, so this is safe
+            assume(num_children <= child_pointers.len());
+        }
+
+        child_pointers[..num_children].copy_from_slice(&self.child_pointers[..num_children]);
 
         InnerNode48 {
             header,
@@ -1339,10 +1380,11 @@ impl<K: AsBytes, V> Clone for InnerNode48<K, V> {
 impl<K: AsBytes, V> InnerNode48<K, V> {
     /// Return the initialized portions of the child pointer array.
     pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<K, V>] {
-        // SAFETY: The array prefix with length `header.num_children` is guaranteed to
-        // be initialized
         unsafe {
-            MaybeUninit::slice_assume_init_ref(&self.child_pointers[0..self.header.num_children()])
+            // SAFETY: The array prefix with length `header.num_children` is guaranteed to
+            // be initialized
+            assume(self.header.num_children() <= self.child_pointers.len());
+            MaybeUninit::slice_assume_init_ref(&self.child_pointers[..self.header.num_children()])
         }
     }
 }
@@ -1394,16 +1436,31 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         let key_fragment_idx = usize::from(key_fragment);
         let child_index = if self.child_indices[key_fragment_idx] == RestrictedNodeIndex::EMPTY {
             let child_index = self.header.num_children();
-            assert!(child_index < self.child_pointers.len(), "node is full");
+            debug_assert!(child_index < self.child_pointers.len(), "node is full");
 
+            // SAFETY: By construction the number of children in the header
+            // is kept in sync with the number of children written in the node
+            // and if this number exceeds the maximum len the node should have
+            // alredy grown. So we know for a fact that that num_children <= node len.
+            //
+            // With this we know that child_index is <= 47, because at the 48th time
+            // calling this function for writing, the current len will bet 47, and
+            // after this insert we increment it to 48, so this symbolizes that the
+            // node is full and before calling this function again the node should
+            // have alredy grown
             self.child_indices[key_fragment_idx] =
-                RestrictedNodeIndex::try_from(child_index).unwrap();
+                unsafe { RestrictedNodeIndex::try_from(child_index).unwrap_unchecked() };
             self.header.num_children += 1;
             child_index
         } else {
             // overwrite existing
             usize::from(self.child_indices[key_fragment_idx])
         };
+
+        // SAFETY: This index can be up to <= 47 as decribed above
+        unsafe {
+            assume(child_index < self.child_pointers.len());
+        }
         self.child_pointers[child_index].write(child_pointer);
     }
 
@@ -1457,9 +1514,22 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         let mut child_pointers = [None; 256];
         // SAFETY: This iterator lives only for the lifetime of this function, which
         // does not mutate the `InnerNode48` (guaranteed by reference).
-        let iter = unsafe { InnerNode48Iter::new(self) };
+        // let iter = unsafe { InnerNode48Iter::new(self) };
 
-        for (key_fragment, child_pointer) in iter {
+        let initialized_child_pointers = self.initialized_child_pointers();
+        for (key_fragment, idx) in self.child_indices.iter().enumerate() {
+            if idx.is_empty() {
+                continue;
+            }
+
+            let idx = usize::from(*idx);
+            unsafe {
+                // SAFETY: When growing initialized_child_pointers should be full
+                // i.e initialized_child_pointers len == 48. And idx <= 47, since
+                // we can't insert in a full, node
+                assume(idx < initialized_child_pointers.len());
+            }
+            let child_pointer = initialized_child_pointers[idx];
             child_pointers[usize::from(key_fragment)] = Some(child_pointer);
         }
 
@@ -1470,7 +1540,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     }
 
     fn shrink(&self) -> Self::ShrunkNode {
-        assert!(
+        debug_assert!(
             self.header.num_children <= 16,
             "Cannot shrink a Node48 when it has more than 16 children. Currently has [{}] \
              children.",
@@ -1539,43 +1609,6 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             .simd_eq(empty)
             .to_bitmask();
 
-        // {
-        //     let idxs = [
-        //         r0.trailing_ones(),
-        //         r1.trailing_ones() + 64,
-        //         r2.trailing_ones() + 128,
-        //         r3.trailing_ones() + 192,
-        //         256,
-        //     ];
-        //     let b0 = (r0 == u64::MAX) as usize;
-        //     let b1 = (r1 == u64::MAX) as usize;
-        //     let b2 = (r2 == u64::MAX) as usize;
-        //     let b3 = (r3 == u64::MAX) as usize;
-        //     let idx = b0 + (b0 & b1) + (b0 & b1 & b2) + (b0 & b1 & b2 & b3);
-        //     let idx = idxs[idx] as usize;
-
-        //     let b0 = r0 != u64::MAX;
-        //     let b1 = r1 != u64::MAX && !b0;
-        //     let b2 = r2 != u64::MAX && !b1;
-        //     let b3 = r3 != u64::MAX && !b2;
-        //     let b0 = b0 as u32;
-        //     let b1 = b1 as u32;
-        //     let b2 = b2 as u32;
-        //     let b3 = b3 as u32;
-        //     let idx = (b0 * r0.trailing_ones()
-        //         + b1 * (r1.trailing_ones() + 64)
-        //         + b2 * (r2.trailing_ones() + 128)
-        //         + b3 * (r3.trailing_ones() + 192)) as usize;
-
-        //     let k0: u128 = (r0 as u128) | (r1 as u128) << 64;
-        //     let k1: u128 = (r2 as u128) | (r3 as u128) << 64;
-        //     let idx = if k0 != u128::MAX {
-        //         k0.trailing_ones()
-        //     } else {
-        //         k1.trailing_ones() + 128
-        //     } as usize;
-        // }
-
         let idx = if r0 != u64::MAX {
             r0.trailing_ones()
         } else if r1 != u64::MAX {
@@ -1586,6 +1619,13 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             r3.trailing_ones() + 192
         } as usize;
 
+        unsafe {
+            // SAFETY: idx can be at up to 256, but if we have a inner node
+            // this means that this node has at least 1 child (it's even more
+            // strict since, if we have 1 child the node would collapse), so we
+            // know that exists at least one idx where != 48
+            assume(idx < self.child_indices.len());
+        }
         self.initialized_child_pointers()
             .get(usize::from(self.child_indices[idx]))
             .copied()
@@ -1682,7 +1722,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     }
 
     fn shrink(&self) -> Self::ShrunkNode {
-        assert!(
+        debug_assert!(
             self.header.num_children <= 48,
             "Cannot shrink a Node256 when it has more than 48 children. Currently has [{}] \
              children.",
