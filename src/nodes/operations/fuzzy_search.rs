@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::{
-    AsBytes, HeaderNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, OpaqueNodePtr,
+    AsBytes, HeaderNode, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
+    OpaqueNodePtr,
 };
 
 pub struct StackArena {
@@ -136,10 +137,15 @@ pub trait FuzzySearch<K: AsBytes, V> {
         max_edit_dist: usize,
     ) -> bool
     where
-        Self: HeaderNode,
+        Self: InnerNode,
     {
         // TODO: FIX THIS
-        let prefix = self.header().read_prefix();
+        // We can use the fact that the first entry in the old_row holds,
+        // the length of how many bytes we used so far, so this becomes de depth
+
+        // SAFETY: old_row len >= 1, since it's length is defined as
+        // key len + 1
+        let (prefix, _) = unsafe { self.read_full_prefix(*old_row.first().unwrap_unchecked()) };
         let mut keep = true;
         for k in prefix {
             keep &= edit_dist(key, *k, *old_row, *new_row, max_edit_dist);
@@ -149,7 +155,10 @@ pub trait FuzzySearch<K: AsBytes, V> {
     }
 }
 
-impl<K: AsBytes, V, const SIZE: usize> FuzzySearch<K, V> for InnerNodeCompressed<K, V, SIZE> {
+impl<K: AsBytes, V, const SIZE: usize> FuzzySearch<K, V> for InnerNodeCompressed<K, V, SIZE>
+where
+    Self: InnerNode,
+{
     fn fuzzy_search<'s>(
         &'s self,
         arena: &mut StackArena,
