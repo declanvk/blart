@@ -12,7 +12,6 @@ use std::{
     borrow::Borrow,
     fmt::Debug,
     hash::{Hash, Hasher},
-    marker::PhantomData,
     mem::ManuallyDrop,
     ops::{Index, RangeBounds},
 };
@@ -21,9 +20,8 @@ mod entry;
 mod entry_ref;
 mod iterators;
 pub use entry::*;
+pub use entry_ref::*;
 pub use iterators::*;
-
-use self::entry_ref::{EntryRef, OccupiedEntryRef, VacantEntryRef};
 
 /// An ordered map based on an adaptive radix tree.
 pub struct TreeMap<K: AsBytes, V> {
@@ -1156,11 +1154,11 @@ impl<K: AsBytes, V> TreeMap<K, V> {
                 let insert_point = unsafe { search_for_insert_point(root, &key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
+                        map: self,
                         leaf_node_ptr,
                         grandparent_ptr_and_parent_key_byte: insert_point
                             .grandparent_ptr_and_parent_key_byte,
                         parent_ptr_and_child_key_byte: insert_point.parent_ptr_and_child_key_byte,
-                        marker: PhantomData,
                     }),
                     _ => EntryRef::Vacant(VacantEntryRef {
                         key,
