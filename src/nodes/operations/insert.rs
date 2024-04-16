@@ -58,6 +58,17 @@ impl Error for InsertPrefixError {}
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
 pub struct InsertPoint<K: AsBytes, V> {
+    /// The grandparent node pointer and key byte that points to the parent node
+    /// insert point.
+    ///
+    /// In the case that the root node is the main insert point, this will
+    /// have a `None` value.
+    /// 
+    /// # Note
+    /// 
+    /// This is only used during the removal in the entry, and it's not a lot
+    /// extra work or space to keep track
+    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
     /// The parent node pointer and key byte that points to the main node
     /// insert point.
     ///
@@ -203,6 +214,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
             insert_type,
             key_bytes_used,
             root,
+            ..
         } = self;
 
         let (new_inner_node, entry_ref) = match insert_type {
@@ -467,6 +479,16 @@ where
         }
     }
 
+    // We keep track of the grandparent because when dealing with
+    // entry api we want to be able to remove the entry if it's
+    // occupied, since the entry api works by searching the insertion
+    // point we do similar work to the delete process by keeping track
+    // of the grandparent. Of course this is not as efficient as deleting
+    // directly since we are doing a ton of extra work. But this will
+    // only be used during the remove in the entry api. It's also not a
+    // lot of extra work to keep track of the grandparent since it's just
+    // a copy of a ptr and u8
+    let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;
     let mut current_depth = 0;
@@ -492,6 +514,7 @@ where
                 if leaf_node.matches_full_key(&key) {
                     return Ok(InsertPoint {
                         key_bytes_used: current_depth,
+                        grandparent_ptr_and_parent_key_byte: current_grandparent,
                         parent_ptr_and_child_key_byte: current_parent,
                         insert_type: InsertSearchResultType::Exact { leaf_node_ptr },
                         root,
@@ -529,6 +552,7 @@ where
 
                 return Ok(InsertPoint {
                     key_bytes_used: current_depth,
+                    grandparent_ptr_and_parent_key_byte: current_grandparent,
                     parent_ptr_and_child_key_byte: current_parent,
                     insert_type: InsertSearchResultType::SplitLeaf {
                         leaf_node_ptr,
@@ -552,6 +576,7 @@ where
 
                 match next_child_node {
                     Some(next_child_node) => {
+                        current_grandparent = current_parent;
                         let byte = key_bytes[current_depth];
                         current_parent = Some((current_node, byte));
                         current_node = next_child_node;
@@ -564,6 +589,7 @@ where
                             insert_type: InsertSearchResultType::IntoExisting {
                                 inner_node_ptr: current_node,
                             },
+                            grandparent_ptr_and_parent_key_byte: current_grandparent,
                             parent_ptr_and_child_key_byte: current_parent,
                             root,
                         })
@@ -586,6 +612,7 @@ where
                         mismatch,
                         mismatched_inner_node_ptr: current_node,
                     },
+                    grandparent_ptr_and_parent_key_byte: current_grandparent,
                     parent_ptr_and_child_key_byte: current_parent,
                     root,
                 });
