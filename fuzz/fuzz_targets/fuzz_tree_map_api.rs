@@ -1,11 +1,24 @@
 #![no_main]
 
 use blart::map::TreeMap;
+use blart::map::Entry;
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 use std::{
     collections::hash_map::RandomState,
     hash::{BuildHasher, Hash, Hasher},
 };
+
+#[derive(Arbitrary, Debug)]
+enum EntryAction {
+    AndModify,
+    InsertEntry,
+    Key,
+    OrDefault,
+    OrInsert,
+    OrInsertWith,
+    OrInsertWithKey,
+    RemoveEntry
+}
 
 #[derive(Arbitrary, Debug)]
 enum Action {
@@ -20,9 +33,10 @@ enum Action {
     CheckIter,
     Remove(Box<[u8]>),
     TryInsert(Box<[u8]>),
-    Clone,
     Extend(Vec<Box<[u8]>>),
+    Clone,
     Hash,
+    Entry(EntryAction, Box<[u8]>)
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -93,9 +107,6 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
 
                 let _ = tree.try_insert(key, value);
             },
-            Action::Clone => {
-                tree = tree.clone();
-            },
             Action::Extend(new_keys) => {
                 for key in new_keys {
                     let value = next_key;
@@ -103,6 +114,9 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
 
                     let _ = tree.try_insert(key, value);
                 }
+            },
+            Action::Clone => {
+                tree = tree.clone();
             },
             Action::Hash => {
                 let hash_builder = RandomState::new();
@@ -113,6 +127,27 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
 
                 assert_eq!(original_hash, copy_hash, "{:?} != {:?}", tree, tree_copy);
             },
+            Action::Entry(ea, key) => {
+                if let Ok(entry) = tree.try_entry(key) {
+                    let value = next_key;
+                    next_key += 1;
+                    match ea {
+                        EntryAction::AndModify => {entry.and_modify(|v| *v = v.saturating_sub(1));},
+                        EntryAction::InsertEntry => {entry.insert_entry(value);},
+                        EntryAction::Key => {entry.key();},
+                        EntryAction::OrDefault => {entry.or_default();},
+                        EntryAction::OrInsert => {entry.or_insert(value);},
+                        EntryAction::OrInsertWith => {entry.or_insert_with(|| value);},
+                        EntryAction::OrInsertWithKey => {entry.or_insert_with_key(|_| value);},
+                        EntryAction::RemoveEntry => {
+                            match entry {
+                                blart::map::Entry::Occupied(e) => {e.remove_entry();},
+                                blart::map::Entry::Vacant(_) => {},
+                            };
+                        }
+                    };
+                }
+            }
         }
     }
 });
