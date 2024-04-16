@@ -7,30 +7,29 @@ use std::{
 
 use crate::{AsBytes, InsertPoint, LeafNode, NoPrefixesBytes, NodePtr, TreeMap};
 
-pub struct OccupiedEntryRef<'a, 'b, K: AsBytes, V, Q: ?Sized> {
-    pub leaf: (&'a K, &'a mut V),
-    pub key: &'b Q,
+pub struct OccupiedEntryRef<'a, K: AsBytes, V> {
+    pub entry_ref: (&'a K, &'a mut V),
 }
 
-impl<'a, 'b, K: AsBytes, V, Q: ?Sized> OccupiedEntryRef<'a, 'b, K, V, Q> {
+impl<'a, K: AsBytes, V> OccupiedEntryRef<'a, K, V> {
     pub fn get(&self) -> &V {
-        self.leaf.1
+        self.entry_ref.1
     }
 
     pub fn get_mut(&mut self) -> &mut V {
-        self.leaf.1
+        self.entry_ref.1
     }
 
     pub fn insert(&mut self, value: V) -> V {
-        replace(self.leaf.1, value)
+        replace(self.entry_ref.1, value)
     }
 
     pub fn into_mut(self) -> &'a mut V {
-        self.leaf.1
+        self.entry_ref.1
     }
 
-    pub fn key(&self) -> &Q {
-        self.key
+    pub fn key(&self) -> &K {
+        self.entry_ref.0
     }
 
     // TODO: Remove, Replace
@@ -43,7 +42,7 @@ pub struct VacantEntryRef<'a, 'b, K: AsBytes, V, Q: ?Sized> {
 }
 
 impl<'a, 'b, K: AsBytes, V, Q: ?Sized> VacantEntryRef<'a, 'b, K, V, Q> {
-    pub fn insert(self, value: V) -> &'a mut V
+    fn inner_insert(self, value: V) -> (&'a K, &'a mut V)
     where
         K: AsBytes + From<&'b Q>,
     {
@@ -52,16 +51,30 @@ impl<'a, 'b, K: AsBytes, V, Q: ?Sized> VacantEntryRef<'a, 'b, K, V, Q> {
                 let result = self
                     .map
                     .apply_insert_point(insert_point, self.key.into(), value);
-                result.new_value_ref
+                result.entry_ref
             },
             None => {
                 let leaf = self.map.init_tree(self.key.into(), value);
-                unsafe { leaf.as_value_mut() }
+                unsafe { leaf.as_key_ref_value_mut() }
             },
         }
     }
 
-    // TODO: insert_entry
+    pub fn insert(self, value: V) -> &'a mut V
+    where
+        K: AsBytes + From<&'b Q>,
+    {
+        self.inner_insert(value).1
+    }
+
+    pub fn insert_entry(self, value: V) -> OccupiedEntryRef<'a, K, V>
+    where
+        K: AsBytes + From<&'b Q>,
+    {
+        OccupiedEntryRef {
+            entry_ref: self.inner_insert(value),
+        }
+    }
 
     pub fn into_key(self) -> K
     where
@@ -76,7 +89,7 @@ impl<'a, 'b, K: AsBytes, V, Q: ?Sized> VacantEntryRef<'a, 'b, K, V, Q> {
 }
 
 pub enum EntryRef<'a, 'b, K: AsBytes, V, Q: ?Sized> {
-    Occupied(OccupiedEntryRef<'a, 'b, K, V, Q>),
+    Occupied(OccupiedEntryRef<'a, K, V>),
     Vacant(VacantEntryRef<'a, 'b, K, V, Q>),
 }
 
@@ -87,10 +100,23 @@ impl<'a, 'b, K: AsBytes, V, Q: ?Sized> EntryRef<'a, 'b, K, V, Q> {
     {
         match self {
             EntryRef::Occupied(entry) => {
-                f(entry.leaf.1);
+                f(entry.entry_ref.1);
                 EntryRef::Occupied(entry)
             },
             EntryRef::Vacant(entry) => EntryRef::Vacant(entry),
+        }
+    }
+
+    pub fn insert_entry(self, value: V) -> OccupiedEntryRef<'a, K, V>
+    where
+        K: AsBytes + From<&'b Q>,
+    {
+        match self {
+            EntryRef::Occupied(mut entry) => {
+                entry.insert(value);
+                entry
+            },
+            EntryRef::Vacant(entry) => entry.insert_entry(value),
         }
     }
 
@@ -100,18 +126,8 @@ impl<'a, 'b, K: AsBytes, V, Q: ?Sized> EntryRef<'a, 'b, K, V, Q> {
         Q: AsBytes,
     {
         match self {
-            EntryRef::Occupied(entry) => entry.key(),
+            EntryRef::Occupied(entry) => entry.key().borrow(),
             EntryRef::Vacant(entry) => entry.key(),
-        }
-    }
-
-    pub fn or_insert(self, value: V) -> &'a mut V
-    where
-        K: AsBytes + From<&'b Q>,
-    {
-        match self {
-            EntryRef::Occupied(entry) => entry.into_mut(),
-            EntryRef::Vacant(entry) => entry.insert(value),
         }
     }
 
@@ -123,6 +139,16 @@ impl<'a, 'b, K: AsBytes, V, Q: ?Sized> EntryRef<'a, 'b, K, V, Q> {
         match self {
             EntryRef::Occupied(entry) => entry.into_mut(),
             EntryRef::Vacant(entry) => entry.insert(V::default()),
+        }
+    }
+
+    pub fn or_insert(self, value: V) -> &'a mut V
+    where
+        K: AsBytes + From<&'b Q>,
+    {
+        match self {
+            EntryRef::Occupied(entry) => entry.into_mut(),
+            EntryRef::Vacant(entry) => entry.insert(value),
         }
     }
 
@@ -225,20 +251,20 @@ mod tests {
     }
 
     #[test]
-    fn occupied_entry_insert() {
+    fn insert_entry() {
         let mut tree = TreeMap::new();
         let a = CString::new("a").unwrap();
         let b = CString::new("b").unwrap();
+        let c = CString::new("c").unwrap();
         tree.insert(a.clone(), String::from("a"));
         tree.insert(b.clone(), String::from("b"));
 
-        match tree.entry_ref(&a) {
-            EntryRef::Occupied(mut entry) => {
-                let v = entry.insert(String::from("aa"));
-                assert_eq!(v, "a");
-                assert_eq!(tree.get(&a).unwrap(), "aa");
-            },
-            EntryRef::Vacant(_) => panic!(),
-        }
+        tree.entry_ref(&a).insert_entry(String::from("aa"));
+        tree.entry_ref(&b).insert_entry(String::from("bb"));
+        tree.entry_ref(&c).insert_entry(String::from("cc"));
+
+        assert_eq!(tree.get(&a).unwrap(), "aa");
+        assert_eq!(tree.get(&b).unwrap(), "bb");
+        assert_eq!(tree.get(&c).unwrap(), "cc");
     }
 }
