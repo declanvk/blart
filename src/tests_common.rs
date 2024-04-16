@@ -346,7 +346,7 @@ pub(crate) unsafe fn insert_unchecked<'a, K, V>(
     value: V,
 ) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
 where
-    K: AsBytes,
+    K: AsBytes + 'a,
 {
     use crate::search_for_insert_point;
 

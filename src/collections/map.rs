@@ -1120,8 +1120,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
                 let insert_point = unsafe { search_for_insert_point(root, &key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
-                        key,
-                        leaf: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
+                        entry_ref: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
                     }),
                     _ => Entry::Vacant(VacantEntry {
                         key,
@@ -1152,8 +1151,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
                 let insert_point = unsafe { search_for_insert_point(root, &key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
-                        key,
-                        leaf: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
+                        entry_ref: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
                     }),
                     _ => EntryRef::Vacant(VacantEntryRef {
                         key,
@@ -1171,7 +1169,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         Ok(entry)
     }
 
-    pub fn entry(&mut self, key: K) -> Entry<K, V>
+    pub fn entry<'a>(&'a mut self, key: K) -> Entry<'a, K, V>
     where
         K: NoPrefixesBytes,
     {

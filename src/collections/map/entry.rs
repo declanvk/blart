@@ -8,29 +8,28 @@ use std::{
 use crate::{AsBytes, InsertPoint, LeafNode, NoPrefixesBytes, NodePtr, TreeMap};
 
 pub struct OccupiedEntry<'a, K, V> {
-    pub leaf: (&'a K, &'a mut V),
-    pub key: K,
+    pub entry_ref: (&'a K, &'a mut V),
 }
 
 impl<'a, K, V> OccupiedEntry<'a, K, V> {
     pub fn get(&self) -> &V {
-        self.leaf.1
+        self.entry_ref.1
     }
 
     pub fn get_mut(&mut self) -> &mut V {
-        self.leaf.1
+        self.entry_ref.1
     }
 
     pub fn insert(&mut self, value: V) -> V {
-        replace(self.leaf.1, value)
+        replace(self.entry_ref.1, value)
     }
 
     pub fn into_mut(self) -> &'a mut V {
-        self.leaf.1
+        self.entry_ref.1
     }
 
     pub fn key(&self) -> &K {
-        &self.key
+        &self.entry_ref.0
     }
 
     // TODO: Remove, Replace
@@ -43,23 +42,37 @@ pub struct VacantEntry<'a, K: AsBytes, V> {
 }
 
 impl<'a, K: AsBytes, V> VacantEntry<'a, K, V> {
-    pub fn insert(self, value: V) -> &'a mut V
+    fn inner_insert(self, value: V) -> (&'a K, &'a mut V)
     where
         K: AsBytes,
     {
         match self.insert_point {
             Some(insert_point) => {
                 let result = self.map.apply_insert_point(insert_point, self.key, value);
-                result.new_value_ref
+                result.entry_ref
             },
             None => {
                 let leaf = self.map.init_tree(self.key, value);
-                unsafe { leaf.as_value_mut() }
+                unsafe { leaf.as_key_ref_value_mut() }
             },
         }
     }
 
-    // TODO: insert_entry
+    pub fn insert(self, value: V) -> &'a mut V
+    where
+        K: AsBytes,
+    {
+        self.inner_insert(value).1
+    }
+
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V>
+    where
+        K: AsBytes,
+    {
+        OccupiedEntry {
+            entry_ref: self.inner_insert(value),
+        }
+    }
 
     pub fn into_key(self) -> K {
         self.key
@@ -82,10 +95,23 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
     {
         match self {
             Entry::Occupied(entry) => {
-                f(entry.leaf.1);
+                f(entry.entry_ref.1);
                 Entry::Occupied(entry)
             },
             Entry::Vacant(entry) => Entry::Vacant(entry),
+        }
+    }
+
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V>
+    where
+        K: AsBytes,
+    {
+        match self {
+            Entry::Occupied(mut entry) => {
+                entry.insert(value);
+                entry
+            },
+            Entry::Vacant(entry) => entry.insert_entry(value),
         }
     }
 
@@ -93,16 +119,6 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
         match self {
             Entry::Occupied(entry) => entry.key(),
             Entry::Vacant(entry) => entry.key(),
-        }
-    }
-
-    pub fn or_insert(self, value: V) -> &'a mut V
-    where
-        K: AsBytes,
-    {
-        match self {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(value),
         }
     }
 
@@ -114,6 +130,16 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
         match self {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(V::default()),
+        }
+    }
+
+    pub fn or_insert(self, value: V) -> &'a mut V
+    where
+        K: AsBytes,
+    {
+        match self {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(value),
         }
     }
 
@@ -214,20 +240,20 @@ mod tests {
     }
 
     #[test]
-    fn occupied_entry_insert() {
+    fn insert_entry() {
         let mut tree = TreeMap::new();
         let a = CString::new("a").unwrap();
         let b = CString::new("b").unwrap();
+        let c = CString::new("c").unwrap();
         tree.insert(a.clone(), String::from("a"));
         tree.insert(b.clone(), String::from("b"));
 
-        match tree.entry(a.clone()) {
-            Entry::Occupied(mut entry) => {
-                let v = entry.insert(String::from("aa"));
-                assert_eq!(v, "a");
-                assert_eq!(tree.get(&a).unwrap(), "aa");
-            },
-            Entry::Vacant(_) => panic!(),
-        }
+        tree.entry(a.clone()).insert_entry(String::from("aa"));
+        tree.entry(b.clone()).insert_entry(String::from("bb"));
+        tree.entry(c.clone()).insert_entry(String::from("cc"));
+
+        assert_eq!(tree.get(&a).unwrap(), "aa");
+        assert_eq!(tree.get(&b).unwrap(), "bb");
+        assert_eq!(tree.get(&c).unwrap(), "cc");
     }
 }

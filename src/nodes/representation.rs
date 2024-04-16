@@ -10,6 +10,7 @@ use std::{
     error::Error,
     fmt,
     hash::Hash,
+    hint::unreachable_unchecked,
     intrinsics::{assume, likely},
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
@@ -164,11 +165,14 @@ impl Header {
         let begin = len;
         let end = begin + self.capped_prefix_len();
         unsafe {
-            // SAFETY: This function is called a mismatch happened and
-            // we used the leaf to match the number of matching bytes,
+            // SAFETY: This function is called when mismatch happened and
+            // we used the node to match the number of bytes,
             // by this we know that len < prefix len, but since we + 1,
             // to skip the key byte we have that len <= prefix len
             assume(end <= self.prefix.len());
+
+            // SAFETY: This is by construction end = begin + len
+            assume(begin <= end);
         }
         self.prefix.copy_within(begin..end, 0);
     }
@@ -184,12 +188,21 @@ impl Header {
     ) {
         self.prefix_len -= len as u32;
 
-        let leaf_key = unsafe { leaf_ptr.as_key_ref() };
-        let leaf_key = leaf_key.as_bytes();
+        let leaf_key = unsafe { leaf_ptr.as_key_ref().as_bytes() };
 
         let begin = depth + len;
         let end = begin + self.capped_prefix_len();
         let len = end - begin;
+        unsafe {
+            // SAFETY: This function is called a mismatch happened and
+            // we used the leaf to match the number of matching bytes,
+            // by this we know that len < prefix len, but since we + 1,
+            // to skip the key byte we have that len <= prefix len
+            assume(end <= leaf_key.len());
+
+            // SAFETY: This is by construction end = begin + len
+            assume(begin <= end);
+        }
 
         let leaf_key = &leaf_key[begin..end];
         let leaf_key = &leaf_key[..leaf_key.len().min(NUM_PREFIX_BYTES)];
@@ -895,11 +908,17 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     where
         Self: SearchInnerNodeCompressed,
     {
-        let child_index = self.lookup_child_index(key_fragment)?;
-        // SAFETY: The value at `child_index` is guaranteed to be initialized because
-        // the `lookup_child_index` function will only search in the initialized portion
-        // of the `child_pointers` array.
-        Some(unsafe { MaybeUninit::assume_init(self.child_pointers[child_index]) })
+        let idx = self.lookup_child_index(key_fragment)?;
+        unsafe {
+            // SAFETY: If `idx` is out of bounds the node should already have grown
+            // so it's safe to assume that `idx` is in bounds
+            assume(idx < self.child_pointers.len());
+
+            // SAFETY: The value at `child_index` is guaranteed to be initialized because
+            // the `lookup_child_index` function will only search in the initialized portion
+            // of the `child_pointers` array.
+            Some(MaybeUninit::assume_init(self.child_pointers[idx]))
+        }
     }
 
     /// Writes a child to the node by check the order of insertion
@@ -925,11 +944,15 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
                     // SAFETY: This is by construction, since the number of children
                     // is always <= maximum number o keys (childrens) that we can hold
                     assume(num_children <= self.keys.len());
+
                     // SAFETY: When we are shifting children, because a new minimum one
                     // is being inserted this guarantees to us that the index of insertion
                     // is < current number of children (because if it was >= we wouldn't
                     // need to shift the data)
                     assume(child_index < num_children);
+
+                    // assume(child_index + 1 + (num_children - child_index) <=
+                    // self.keys.len());
                 }
                 self.keys
                     .copy_within(child_index..num_children, child_index + 1);
@@ -1423,7 +1446,14 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         let index = &self.child_indices[usize::from(key_fragment)];
         let child_pointers = self.initialized_child_pointers();
         if !index.is_empty() {
-            Some(child_pointers[usize::from(*index)])
+            let idx = usize::from(*index);
+            unsafe {
+                // SAFETY: If `idx` is out of bounds we have more than
+                // 48 childs in this node, so it should have already
+                // grown. So it's safe to assume that it's in bounds
+                assume(idx < child_pointers.len());
+            }
+            Some(child_pointers[idx])
         } else {
             None
         }
