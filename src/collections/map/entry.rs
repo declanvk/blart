@@ -287,4 +287,37 @@ mod tests {
         assert_eq!(tree.get(&b).unwrap(), "bb");
         assert_eq!(tree.get(&c).unwrap(), "cc");
     }
+
+    #[test]
+    fn remove_entry() {
+        let mut tree = TreeMap::new();
+        let a = CString::new("a").unwrap();
+        let b = CString::new("b").unwrap();
+        let c = CString::new("c").unwrap();
+        let d = CString::new("d").unwrap();
+        let e = CString::new("e").unwrap();
+        tree.insert(a.clone(), String::from("aa"));
+        tree.insert(b.clone(), String::from("bb"));
+        tree.insert(c.clone(), String::from("cc"));
+        tree.insert(d.clone(), String::from("dd"));
+        tree.insert(e.clone(), String::from("ee"));
+
+        match tree.entry(a.clone()) {
+            Entry::Occupied(e) => {
+                let (k, v) = e.remove_entry();
+                assert_eq!(k, a);
+                assert_eq!(v, "aa");
+            },
+            Entry::Vacant(_) => unreachable!(),
+        }
+
+        match tree.entry(a.clone()) {
+            Entry::Occupied(_) => unreachable!(),
+            Entry::Vacant(e) => {
+                let e = e.insert_entry(String::from("aaa"));
+                let v = e.get();
+                assert_eq!(v, "aaa");
+            },
+        }
+    }
 }
