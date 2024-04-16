@@ -10,7 +10,10 @@ use crate::{
     NoPrefixesBytes, NodePtr, OpaqueNodePtr, TreeMap,
 };
 
-pub struct OccupiedEntry<'a, K: AsBytes, V> {
+pub struct OccupiedEntry<'a, K, V>
+where
+    K: AsBytes,
+{
     pub leaf_node_ptr: NodePtr<LeafNode<K, V>>,
 
     /// Used for the removal
@@ -21,7 +24,10 @@ pub struct OccupiedEntry<'a, K: AsBytes, V> {
     pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
 }
 
-impl<'a, K: AsBytes, V> OccupiedEntry<'a, K, V> {
+impl<'a, K, V> OccupiedEntry<'a, K, V>
+where
+    K: AsBytes,
+{
     pub fn get(&self) -> &V {
         unsafe { self.leaf_node_ptr.as_value_ref() }
     }
@@ -65,24 +71,24 @@ impl<'a, K: AsBytes, V> OccupiedEntry<'a, K, V> {
     }
 }
 
-pub struct VacantEntry<'a, K: AsBytes, V> {
+pub struct VacantEntry<'a, K, V>
+where
+    K: AsBytes,
+{
     pub map: &'a mut TreeMap<K, V>,
     pub key: K,
     pub insert_point: Option<InsertPoint<K, V>>,
 }
 
-impl<'a, K: AsBytes, V> VacantEntry<'a, K, V> {
-    pub fn insert(self, value: V) -> &'a mut V
-    where
-        K: AsBytes,
-    {
+impl<'a, K, V> VacantEntry<'a, K, V>
+where
+    K: AsBytes,
+{
+    pub fn insert(self, value: V) -> &'a mut V {
         unsafe { self.insert_entry(value).leaf_node_ptr.as_value_mut() }
     }
 
-    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V>
-    where
-        K: AsBytes,
-    {
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V> {
         let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
             match self.insert_point {
                 Some(insert_point) => {
@@ -114,12 +120,18 @@ impl<'a, K: AsBytes, V> VacantEntry<'a, K, V> {
     }
 }
 
-pub enum Entry<'a, K: AsBytes, V> {
+pub enum Entry<'a, K, V>
+where
+    K: AsBytes,
+{
     Occupied(OccupiedEntry<'a, K, V>),
     Vacant(VacantEntry<'a, K, V>),
 }
 
-impl<'a, K: AsBytes, V> Entry<'a, K, V> {
+impl<'a, K, V> Entry<'a, K, V>
+where
+    K: AsBytes,
+{
     pub fn and_modify<F>(self, f: F) -> Self
     where
         F: FnOnce(&mut V),
@@ -133,10 +145,7 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
         }
     }
 
-    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V>
-    where
-        K: AsBytes,
-    {
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V> {
         match self {
             Entry::Occupied(mut entry) => {
                 entry.insert(value);
@@ -155,7 +164,6 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
 
     pub fn or_default(self) -> &'a mut V
     where
-        K: AsBytes,
         V: Default,
     {
         match self {
@@ -164,10 +172,7 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
         }
     }
 
-    pub fn or_insert(self, value: V) -> &'a mut V
-    where
-        K: AsBytes,
-    {
+    pub fn or_insert(self, value: V) -> &'a mut V {
         match self {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(value),
@@ -176,7 +181,6 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
 
     pub fn or_insert_with<F>(self, f: F) -> &'a mut V
     where
-        K: AsBytes,
         F: FnOnce() -> V,
     {
         match self {
@@ -187,7 +191,6 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
 
     pub fn or_insert_with_key<F>(self, f: F) -> &'a mut V
     where
-        K: AsBytes,
         F: FnOnce(&K) -> V,
     {
         match self {
@@ -195,6 +198,47 @@ impl<'a, K: AsBytes, V> Entry<'a, K, V> {
             Entry::Vacant(entry) => {
                 let k = f(entry.key());
                 entry.insert(k)
+            },
+        }
+    }
+
+
+    pub fn or_default_entry(self) -> OccupiedEntry<'a, K, V>
+    where
+        V: Default,
+    {
+        match self {
+            Entry::Occupied(entry) => entry,
+            Entry::Vacant(entry) => entry.insert_entry(V::default()),
+        }
+    }
+
+    pub fn or_insert_entry(self, value: V) -> OccupiedEntry<'a, K, V> {
+        match self {
+            Entry::Occupied(entry) => entry,
+            Entry::Vacant(entry) => entry.insert_entry(value),
+        }
+    }
+
+    pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V>
+    where
+        F: FnOnce() -> V,
+    {
+        match self {
+            Entry::Occupied(entry) => entry,
+            Entry::Vacant(entry) => entry.insert_entry(f()),
+        }
+    }
+
+    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V>
+    where
+        F: FnOnce(&K) -> V,
+    {
+        match self {
+            Entry::Occupied(entry) => entry,
+            Entry::Vacant(entry) => {
+                let k = f(entry.key());
+                entry.insert_entry(k)
             },
         }
     }
