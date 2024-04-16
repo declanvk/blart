@@ -92,8 +92,8 @@ pub unsafe fn delete_maximum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>)
 unsafe fn inner_delete_unchecked<K: AsBytes, V>(
     root: OpaqueNodePtr<K, V>,
     DeleteSearchResult {
-        grandparent_node_ptr,
-        parent_node_ptr,
+        grandparent_ptr_and_parent_key_byte: grandparent_node_ptr,
+        parent_ptr_and_child_key_byte: parent_node_ptr,
         leaf_node_ptr,
     }: DeleteSearchResult<K, V>,
 ) -> DeleteResult<K, V> {
@@ -237,8 +237,8 @@ unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
 ///    other mutable references.
 unsafe fn inner_delete_non_root_unchecked<K: AsBytes, V>(
     leaf_node_ptr: NodePtr<LeafNode<K, V>>,
-    (parent_key_byte, parent_node_ptr): (u8, OpaqueNodePtr<K, V>),
-    grandparent_node_ptr: Option<(u8, OpaqueNodePtr<K, V>)>,
+    (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V>, u8),
+    grandparent_node_ptr: Option<(OpaqueNodePtr<K, V>, u8)>,
     original_root: OpaqueNodePtr<K, V>,
 ) -> DeleteResult<K, V> {
     let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
@@ -264,7 +264,7 @@ unsafe fn inner_delete_non_root_unchecked<K: AsBytes, V>(
     // If the parent node was changed to something else, we have to write the new
     // value to the grandparent
     if let Some(new_parent_node_ptr) = new_parent_node_ptr {
-        if let Some((grandparent_key_byte, grandparent_node_ptr)) = grandparent_node_ptr {
+        if let Some((grandparent_node_ptr, grandparent_key_byte)) = grandparent_node_ptr {
             match grandparent_node_ptr.to_node_ptr() {
                 ConcreteNodePtr::Node4(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
@@ -332,14 +332,14 @@ struct DeleteSearchResult<K: AsBytes, V> {
     /// that was used to continue search.
     ///
     /// If there is no grandparent, this value is `None`.
-    grandparent_node_ptr: Option<(u8, OpaqueNodePtr<K, V>)>,
+    grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
 
     /// The parent node of the leaf that will be deleted and the key byte that
     /// was used to continue search.
     ///
     /// If the leaf node to delete is also the root, then this value is `None`.
     /// If the grandparent node is present, this value also must be present.
-    parent_node_ptr: Option<(u8, OpaqueNodePtr<K, V>)>,
+    parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
     /// The node to delete.
     leaf_node_ptr: NodePtr<LeafNode<K, V>>,
 }
@@ -347,8 +347,8 @@ struct DeleteSearchResult<K: AsBytes, V> {
 impl<K: AsBytes, V> std::fmt::Debug for DeleteSearchResult<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeleteSearchResult")
-            .field("grandparent_node", &self.grandparent_node_ptr)
-            .field("parent_node", &self.parent_node_ptr)
+            .field("grandparent_node", &self.grandparent_ptr_and_parent_key_byte)
+            .field("parent_node", &self.parent_ptr_and_child_key_byte)
             .field("leaf_node", &self.leaf_node_ptr)
             .finish()
     }
@@ -407,8 +407,8 @@ where
                 // key to confirm that it is the right value.
                 if leaf_node.matches_full_key(key) {
                     return Some(DeleteSearchResult {
-                        grandparent_node_ptr: current_grandparent,
-                        parent_node_ptr: current_parent,
+                        grandparent_ptr_and_parent_key_byte: current_grandparent,
+                        parent_ptr_and_child_key_byte: current_parent,
                         leaf_node_ptr,
                     });
                 } else {
@@ -426,7 +426,7 @@ where
         let last_key_byte = key.as_bytes()[current_depth - 1];
 
         current_grandparent = current_parent;
-        current_parent = Some((last_key_byte, current_node));
+        current_parent = Some((current_node, last_key_byte));
         current_node = next_node;
     }
 }
@@ -494,15 +494,15 @@ unsafe fn find_minimum_to_delete<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> De
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 return DeleteSearchResult {
-                    grandparent_node_ptr: current_grandparent,
-                    parent_node_ptr: current_parent,
+                    grandparent_ptr_and_parent_key_byte: current_grandparent,
+                    parent_ptr_and_child_key_byte: current_parent,
                     leaf_node_ptr,
                 };
             },
         };
 
         current_grandparent = current_parent;
-        current_parent = Some((last_key_byte, current_node));
+        current_parent = Some((current_node, last_key_byte));
         current_node = next_node;
     }
 }
@@ -570,15 +570,15 @@ unsafe fn find_maximum_to_delete<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> De
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 return DeleteSearchResult {
-                    grandparent_node_ptr: current_grandparent,
-                    parent_node_ptr: current_parent,
+                    grandparent_ptr_and_parent_key_byte: current_grandparent,
+                    parent_ptr_and_child_key_byte: current_parent,
                     leaf_node_ptr,
                 };
             },
         };
 
         current_grandparent = current_parent;
-        current_parent = Some((last_key_byte, current_node));
+        current_parent = Some((current_node, last_key_byte));
         current_node = next_node;
     }
 }
