@@ -5,31 +5,39 @@ use std::{
     mem::{replace, swap},
 };
 
-use crate::{AsBytes, InsertPoint, LeafNode, NoPrefixesBytes, NodePtr, TreeMap};
+use crate::{AsBytes, InsertPoint, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, TreeMap};
 
 pub struct OccupiedEntryRef<'a, K: AsBytes, V> {
-    pub entry_ref: (&'a K, &'a mut V),
+    pub leaf_node_ptr: NodePtr<LeafNode<K, V>>,
+
+    /// Used for the removal
+    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
+    /// Used for the removal
+    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
+
+    pub marker: PhantomData<(&'a mut K, &'a V)>,
 }
 
 impl<'a, K: AsBytes, V> OccupiedEntryRef<'a, K, V> {
     pub fn get(&self) -> &V {
-        self.entry_ref.1
+        unsafe { self.leaf_node_ptr.as_value_ref() }
     }
 
     pub fn get_mut(&mut self) -> &mut V {
-        self.entry_ref.1
+        unsafe { self.leaf_node_ptr.as_value_mut() }
     }
 
     pub fn insert(&mut self, value: V) -> V {
-        replace(self.entry_ref.1, value)
+        let leaf_value = unsafe { self.leaf_node_ptr.as_value_mut() };
+        replace(leaf_value, value)
     }
 
     pub fn into_mut(self) -> &'a mut V {
-        self.entry_ref.1
+        unsafe { self.leaf_node_ptr.as_value_mut() }
     }
 
     pub fn key(&self) -> &K {
-        self.entry_ref.0
+        unsafe { self.leaf_node_ptr.as_key_ref() }
     }
 
     // TODO: Remove, Replace
@@ -42,20 +50,29 @@ pub struct VacantEntryRef<'a, 'b, K: AsBytes, V, Q: ?Sized> {
 }
 
 impl<'a, 'b, K: AsBytes, V, Q: ?Sized> VacantEntryRef<'a, 'b, K, V, Q> {
-    fn inner_insert(self, value: V) -> (&'a K, &'a mut V)
+    fn inner_insert(
+        self,
+        value: V,
+    ) -> (
+        NodePtr<LeafNode<K, V>>,
+        Option<(OpaqueNodePtr<K, V>, u8)>,
+        Option<(OpaqueNodePtr<K, V>, u8)>,
+    )
     where
         K: AsBytes + From<&'b Q>,
     {
         match self.insert_point {
             Some(insert_point) => {
+                let grandparent_ptr = insert_point.grandparent_ptr_and_parent_key_byte;
+                let parent_ptr = insert_point.parent_ptr_and_child_key_byte;
                 let result = self
                     .map
                     .apply_insert_point(insert_point, self.key.into(), value);
-                result.entry_ref
+                (result.leaf_node_ptr, grandparent_ptr, parent_ptr)
             },
             None => {
-                let leaf = self.map.init_tree(self.key.into(), value);
-                unsafe { leaf.as_key_ref_value_mut() }
+                let leaf_node_ptr = self.map.init_tree(self.key.into(), value);
+                (leaf_node_ptr, None, None)
             },
         }
     }
@@ -64,15 +81,20 @@ impl<'a, 'b, K: AsBytes, V, Q: ?Sized> VacantEntryRef<'a, 'b, K, V, Q> {
     where
         K: AsBytes + From<&'b Q>,
     {
-        self.inner_insert(value).1
+        unsafe { self.inner_insert(value).0.as_value_mut() }
     }
 
     pub fn insert_entry(self, value: V) -> OccupiedEntryRef<'a, K, V>
     where
         K: AsBytes + From<&'b Q>,
     {
+        let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
+            self.inner_insert(value);
         OccupiedEntryRef {
-            entry_ref: self.inner_insert(value),
+            leaf_node_ptr,
+            grandparent_ptr_and_parent_key_byte,
+            parent_ptr_and_child_key_byte,
+            marker: PhantomData,
         }
     }
 
@@ -100,7 +122,7 @@ impl<'a, 'b, K: AsBytes, V, Q: ?Sized> EntryRef<'a, 'b, K, V, Q> {
     {
         match self {
             EntryRef::Occupied(entry) => {
-                f(entry.entry_ref.1);
+                f(unsafe { entry.leaf_node_ptr.as_value_mut() });
                 EntryRef::Occupied(entry)
             },
             EntryRef::Vacant(entry) => EntryRef::Vacant(entry),

@@ -12,6 +12,7 @@ use std::{
     borrow::Borrow,
     fmt::Debug,
     hash::{Hash, Hasher},
+    marker::PhantomData,
     mem::ManuallyDrop,
     ops::{Index, RangeBounds},
 };
@@ -1120,7 +1121,11 @@ impl<K: AsBytes, V> TreeMap<K, V> {
                 let insert_point = unsafe { search_for_insert_point(root, &key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
-                        entry_ref: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
+                        map: self,
+                        leaf_node_ptr,
+                        grandparent_ptr_and_parent_key_byte: insert_point
+                            .grandparent_ptr_and_parent_key_byte,
+                        parent_ptr_and_child_key_byte: insert_point.parent_ptr_and_child_key_byte,
                     }),
                     _ => Entry::Vacant(VacantEntry {
                         key,
@@ -1151,7 +1156,11 @@ impl<K: AsBytes, V> TreeMap<K, V> {
                 let insert_point = unsafe { search_for_insert_point(root, &key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
-                        entry_ref: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
+                        leaf_node_ptr,
+                        grandparent_ptr_and_parent_key_byte: insert_point
+                            .grandparent_ptr_and_parent_key_byte,
+                        parent_ptr_and_child_key_byte: insert_point.parent_ptr_and_child_key_byte,
+                        marker: PhantomData,
                     }),
                     _ => EntryRef::Vacant(VacantEntryRef {
                         key,

@@ -8,6 +8,7 @@ use std::{
     fmt,
     hint::unreachable_unchecked,
     intrinsics::{assume, likely, unlikely},
+    marker::PhantomData,
     mem::ManuallyDrop,
     ops::ControlFlow,
 };
@@ -15,12 +16,14 @@ use std::{
 /// The results of a successful tree insert
 #[derive(Debug)]
 pub struct InsertResult<'a, K: AsBytes, V> {
-    /// Reference to the leaf entry
-    pub entry_ref: (&'a K, &'a mut V),
+    /// Pointer to the leaf
+    pub leaf_node_ptr: NodePtr<LeafNode<K, V>>,
     /// The existing leaf referenced by the insert key, if present
     pub existing_leaf: Option<LeafNode<K, V>>,
     /// The new tree root after the successful insert
     pub new_root: OpaqueNodePtr<K, V>,
+
+    pub marker: PhantomData<(&'a mut K, &'a V)>,
 }
 
 /// Attempted to insert a key which was a prefix of an existing key in
@@ -63,9 +66,9 @@ pub struct InsertPoint<K: AsBytes, V> {
     ///
     /// In the case that the root node is the main insert point, this will
     /// have a `None` value.
-    /// 
+    ///
     /// # Note
-    /// 
+    ///
     /// This is only used during the removal in the entry, and it's not a lot
     /// extra work or space to keep track
     pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
@@ -94,7 +97,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
             inner_node_ptr: OpaqueNodePtr<K, V>,
             new_leaf_node: LeafNode<K, V>,
             key_bytes_used: usize,
-        ) -> (OpaqueNodePtr<K, V>, (&'a K, &'a mut V))
+        ) -> (OpaqueNodePtr<K, V>, NodePtr<LeafNode<K, V>>)
         where
             K: AsBytes + 'a,
             V: 'a,
@@ -103,7 +106,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 inner_node_ptr: NodePtr<N>,
                 new_leaf_node: LeafNode<K, V>,
                 key_bytes_used: usize,
-            ) -> (OpaqueNodePtr<K, V>, (&'a K, &'a mut V))
+            ) -> (OpaqueNodePtr<K, V>, NodePtr<LeafNode<K, V>>)
             where
                 N: InnerNode<Key = K, Value = V>,
                 K: AsBytes + 'a,
@@ -115,14 +118,13 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 let inner_node = unsafe { inner_node_ptr.as_mut() };
                 let new_leaf_key_byte = new_leaf_node.key_ref().as_bytes()[key_bytes_used];
                 let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node);
-                let entry_ref = unsafe { new_leaf_ptr.as_key_ref_value_mut() };
-                let new_leaf_ptr = new_leaf_ptr.to_opaque();
+                let new_leaf_ptr_opaque = new_leaf_ptr.to_opaque();
                 if inner_node.is_full() {
                     // we will create a new node of the next larger type and copy all the
                     // children over.
 
                     let mut new_node = inner_node.grow();
-                    new_node.write_child(new_leaf_key_byte, new_leaf_ptr);
+                    new_node.write_child(new_leaf_key_byte, new_leaf_ptr_opaque);
 
                     let new_inner_node = NodePtr::allocate_node_ptr(new_node).to_opaque();
 
@@ -135,11 +137,11 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                         drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
                     };
 
-                    (new_inner_node, entry_ref)
+                    (new_inner_node, new_leaf_ptr)
                 } else {
-                    inner_node.write_child(new_leaf_key_byte, new_leaf_ptr);
+                    inner_node.write_child(new_leaf_key_byte, new_leaf_ptr_opaque);
 
-                    (inner_node_ptr.to_opaque(), entry_ref)
+                    (inner_node_ptr.to_opaque(), new_leaf_ptr)
                 }
             }
 
@@ -217,7 +219,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
             ..
         } = self;
 
-        let (new_inner_node, entry_ref) = match insert_type {
+        let (new_inner_node, leaf_node_ptr) = match insert_type {
             InsertSearchResultType::MismatchPrefix {
                 mismatch,
                 mismatched_inner_node_ptr,
@@ -242,8 +244,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
 
                 let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
-                let entry_ref = unsafe { new_leaf_pointer.as_key_ref_value_mut() };
-                let new_leaf_pointer = new_leaf_pointer.to_opaque();
+                let new_leaf_pointer_opaque = new_leaf_pointer.to_opaque();
 
                 // prefix mismatch, need to split prefix into two separate nodes and take the
                 // common prefix into a new parent node
@@ -256,9 +257,9 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                     if mismatch.prefix_byte < key_byte {
                         new_n4
                             .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
-                        new_n4.write_child_unchecked(key_byte, new_leaf_pointer);
+                        new_n4.write_child_unchecked(key_byte, new_leaf_pointer_opaque);
                     } else {
-                        new_n4.write_child_unchecked(key_byte, new_leaf_pointer);
+                        new_n4.write_child_unchecked(key_byte, new_leaf_pointer_opaque);
                         new_n4
                             .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
                     }
@@ -276,7 +277,10 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                     },
                 }
 
-                (NodePtr::allocate_node_ptr(new_n4).to_opaque(), entry_ref)
+                (
+                    NodePtr::allocate_node_ptr(new_n4).to_opaque(),
+                    new_leaf_pointer,
+                )
             },
             InsertSearchResultType::Exact { leaf_node_ptr } => {
                 let new_leaf_node = LeafNode::new(key, value);
@@ -284,13 +288,14 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 // doc on the containing function
                 let old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, new_leaf_node) };
                 return InsertResult {
-                    entry_ref: unsafe { leaf_node_ptr.as_key_ref_value_mut() },
+                    leaf_node_ptr,
                     existing_leaf: Some(old_leaf_node),
                     // Because we replaced the leaf instead of creating a new leaf, we don't
                     // have to write back to the parent. In this case,
                     // the root is guaranteed to be unchanged, even if
                     // the old leaf was the root.
                     new_root: root,
+                    marker: PhantomData,
                 };
             },
             InsertSearchResultType::SplitLeaf {
@@ -323,7 +328,6 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 let leaf_node_key_byte = leaf_bytes[new_key_bytes_used];
                 let new_leaf_node_key_byte = key_bytes[new_key_bytes_used];
                 let new_leaf_node_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
-                let entry_ref = unsafe { new_leaf_node_pointer.as_key_ref_value_mut() };
 
                 unsafe {
                     if leaf_node_key_byte < new_leaf_node_key_byte {
@@ -341,7 +345,10 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                     }
                 }
 
-                (NodePtr::allocate_node_ptr(new_n4).to_opaque(), entry_ref)
+                (
+                    NodePtr::allocate_node_ptr(new_n4).to_opaque(),
+                    new_leaf_node_pointer,
+                )
             },
             InsertSearchResultType::IntoExisting { inner_node_ptr } => {
                 write_new_child_in_existing_node(
@@ -362,17 +369,19 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
             //   1. Root was the parent, in which case it was unchanged
             //   2. Or some parent of the parent was root, in which case it was unchanged
             InsertResult {
-                entry_ref,
+                leaf_node_ptr,
                 existing_leaf: None,
                 new_root: root,
+                marker: PhantomData,
             }
         } else {
             // If there was no parent, then the root node was a leaf or the inner node split
             // occurred at the root, in which case return the new inner node as root
             InsertResult {
-                entry_ref,
+                leaf_node_ptr,
                 existing_leaf: None,
                 new_root: new_inner_node,
+                marker: PhantomData,
             }
         }
     }
