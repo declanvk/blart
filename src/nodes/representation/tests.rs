@@ -713,3 +713,21 @@ fn node256_fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, ()>, 4> {
 
     (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
 }
+
+#[test]
+fn node256_iterate() {
+    let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node256_fixture();
+
+    assert!(node
+        .iter()
+        .any(|(key_fragment, ptr)| key_fragment == 3 && ptr == l1_ptr));
+    assert!(node
+        .iter()
+        .any(|(key_fragment, ptr)| key_fragment == 255 && ptr == l2_ptr));
+    assert!(node
+        .iter()
+        .any(|(key_fragment, ptr)| key_fragment == 0u8 && ptr == l3_ptr));
+    assert!(node
+        .iter()
+        .any(|(key_fragment, ptr)| key_fragment == 85 && ptr == l4_ptr));
+}
