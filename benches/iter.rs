@@ -27,7 +27,9 @@ fn iter_node<M: Measurement, N: InnerNode>(
 
         group.bench_function(format!("{size}").as_str(), |b| {
             b.iter(|| unsafe {
-                node.iter().map(|(k, _)| k as u32).sum::<u32>();
+                node.iter().for_each(|(k, n)| {
+                    std::hint::black_box((k, n));
+                });
             });
         });
     }
@@ -50,7 +52,9 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     group.measurement_time(std::time::Duration::from_secs(15));
     group.bench_function("dict", |b| {
         b.iter(|| {
-            tree.iter().map(|(k, v)| k.as_bytes_with_nul().len() + *v).sum::<usize>()
+            tree.iter().for_each(|(k, v)| {
+                std::hint::black_box((k, v));
+            });
         });
     });
 }
