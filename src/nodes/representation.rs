@@ -751,6 +751,15 @@ pub trait InnerNode: Node + HeaderNode + Sized {
     /// with any mutating operations on the node.
     unsafe fn iter(&self) -> Self::Iter;
 
+    fn iter_1(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            u8,
+            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        ),
+    >;
+
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
     ///
@@ -1192,6 +1201,18 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         let (_, children) = self.initialized_portion();
         children.first().copied()
     }
+
+    fn iter_1(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            u8,
+            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        ),
+    > {
+        let (keys, nodes) = self.initialized_portion();
+        keys.iter().copied().zip(nodes.iter().copied())
+    }
 }
 
 /// Node that references between 5 and 16 children
@@ -1284,6 +1305,18 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         let (_, children) = self.initialized_portion();
         children.first().copied()
+    }
+
+    fn iter_1(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            u8,
+            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        ),
+    > {
+        let (keys, nodes) = self.initialized_portion();
+        keys.iter().copied().zip(nodes.iter().copied())
     }
 }
 
@@ -1661,6 +1694,24 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             .get(usize::from(self.child_indices[idx]))
             .copied()
     }
+
+    fn iter_1(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            u8,
+            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        ),
+    > {
+        unsafe {
+            let child_pointers = self.initialized_child_pointers();
+            self.child_indices
+                .iter()
+                .enumerate()
+                .filter_map(|(key, idx)| (!idx.is_empty()).then_some((key as u8, usize::from(*idx))))
+                .map(|(key, idx)| (key, *child_pointers.get_unchecked(idx)))
+        }
+    }
 }
 
 /// Node that references between 49 and 256 children
@@ -1817,6 +1868,20 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         } as usize;
 
         self.child_pointers.get(idx).copied().flatten()
+    }
+
+    fn iter_1(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            u8,
+            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        ),
+    > {
+        self.child_pointers
+            .iter()
+            .enumerate()
+            .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
     }
 }
 
