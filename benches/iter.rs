@@ -20,14 +20,14 @@ fn iter_node<M: Measurement, N: InnerNode>(
 
     let mut group = c.benchmark_group(format!("{prefix}/{ty}"));
     for size in sizes {
-        let mut node = N::from_prefix(&[], 0);
+        let mut node = N::empty();
         for key in bytes.choose_multiple(&mut rng, *size as usize) {
             node.write_child(*key, dangling_opaque)
         }
 
         group.bench_function(format!("{size}").as_str(), |b| {
-            b.iter(|| {
-                unsafe { node.iter().map(|(k, _)| k as u32).sum::<u32>() };
+            b.iter(|| unsafe {
+                node.iter().map(|(k, _)| k as u32).sum::<u32>();
             });
         });
     }
@@ -38,6 +38,21 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     iter_node::<_, InnerNode16<CString, usize>>(c, prefix, "n16", &[5, 12, 16]);
     iter_node::<_, InnerNode48<CString, usize>>(c, prefix, "n48", &[17, 32, 48]);
     iter_node::<_, InnerNode256<CString, usize>>(c, prefix, "n256", &[49, 100, 152, 204, 256]);
+
+    let words = include_str!("dict.txt");
+    let mut tree: TreeMap<_, _> = words
+        .lines()
+        .map(|s| (CString::new(s).unwrap(), 0usize))
+        .collect();
+
+    let mut group = c.benchmark_group(format!("{prefix}/tree"));
+    group.warm_up_time(std::time::Duration::from_secs(5));
+    group.measurement_time(std::time::Duration::from_secs(15));
+    group.bench_function("dict", |b| {
+        b.iter(|| {
+            tree.iter().map(|(k, v)| k.as_bytes_with_nul().len() + *v).sum::<usize>()
+        });
+    });
 }
 
 blart::gen_benches!(
