@@ -78,7 +78,7 @@ macro_rules! impl_ref_mut_iterator {
 /// [`iter`]: TreeMap::iter
 pub struct Iter<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<K, V>>,
+    raw_iter: Option<TreeIterator<'m, K, V>>,
     size: usize,
 }
 
@@ -120,7 +120,7 @@ impl_ref_mut_iterator!(Iter<'m, K, V>, (&'m K, &'m V) ; items_are_sorted);
 /// [`iter_mut`]: TreeMap::iter_mut
 pub struct IterMut<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m mut TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<K, V>>,
+    raw_iter: Option<TreeIterator<'m, K, V>>,
     size: usize,
 }
 
@@ -161,7 +161,7 @@ impl_ref_mut_iterator!(IterMut<'m, K, V>, (&'m K, &'m mut V) ; items_are_sorted)
 /// [`keys`]: TreeMap::keys
 pub struct Keys<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<K, V>>,
+    raw_iter: Option<TreeIterator<'m, K, V>>,
     size: usize,
 }
 
@@ -202,7 +202,7 @@ impl_ref_mut_iterator!(Keys<'m, K, V>, &'m K ; items_are_sorted);
 /// [`values`]: TreeMap::values
 pub struct Values<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<K, V>>,
+    raw_iter: Option<TreeIterator<'m, K, V>>,
     size: usize,
 }
 
@@ -241,7 +241,7 @@ impl_ref_mut_iterator!(Values<'m, K, V>, &'m V);
 /// [`values_mut`]: TreeMap::values_mut
 pub struct ValuesMut<'m, K: AsBytes, V> {
     _marker: PhantomData<&'m mut TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<K, V>>,
+    raw_iter: Option<TreeIterator<'m, K, V>>,
     size: usize,
 }
 

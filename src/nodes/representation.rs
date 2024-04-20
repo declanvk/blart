@@ -1,6 +1,6 @@
 //! Trie node representation
 
-pub use self::iterators::*;
+// pub use self::iterators::*;
 use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
 use std::{
     arch::x86_64::{__m128i, _mm_movemask_epi8},
@@ -12,6 +12,7 @@ use std::{
     hash::Hash,
     hint::unreachable_unchecked,
     intrinsics::{assume, likely},
+    iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip},
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
     ops::Range,
@@ -20,9 +21,10 @@ use std::{
         cmp::{SimdPartialEq, SimdPartialOrd},
         u8x16, u8x64, usizex64, Simd,
     },
+    slice::Iter,
 };
 
-mod iterators;
+// mod iterators;
 
 #[cfg(test)]
 mod tests;
@@ -675,13 +677,15 @@ pub trait InnerNode: Node + HeaderNode + Sized {
     type ShrunkNode: InnerNode<Key = <Self as Node>::Key, Value = <Self as Node>::Value>;
 
     /// The type of the iterator over all children of the inner node
-    type Iter: Iterator<
+    type Iter<'a>: Iterator<
             Item = (
                 u8,
                 OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
             ),
         > + DoubleEndedIterator
-        + Into<InnerNodeIter<<Self as Node>::Key, <Self as Node>::Value>>;
+        + FusedIterator
+    where
+        Self: 'a;
 
     fn empty() -> Self {
         Self::from_header(Header::empty())
@@ -749,16 +753,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
     /// The iterator type does not carry any lifetime, so the caller of this
     /// function must enforce that the lifetime of the iterator does not overlap
     /// with any mutating operations on the node.
-    unsafe fn iter(&self) -> Self::Iter;
-
-    fn iter_1(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            u8,
-            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
-        ),
-    >;
+    fn iter<'a>(&'a self) -> Self::Iter<'a>;
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
@@ -896,6 +891,8 @@ impl<K: AsBytes, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, 
     }
 }
 
+pub type InnerNodeCompressedIter<'a, K, V> =
+    Zip<Copied<Iter<'a, u8>>, Copied<Iter<'a, OpaqueNodePtr<K, V>>>>;
 impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     /// Return the initialized portions of the keys and child pointer arrays.
     pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<K, V>]) {
@@ -1109,6 +1106,11 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
             child_pointers,
         }
     }
+
+    fn inner_iter<'a>(&'a self) -> InnerNodeCompressedIter<'a, K, V> {
+        let (keys, nodes) = self.initialized_portion();
+        keys.iter().copied().zip(nodes.iter().copied())
+    }
 }
 
 impl<K: AsBytes, V, const SIZE: usize> HeaderNode for InnerNodeCompressed<K, V, SIZE> {
@@ -1157,7 +1159,7 @@ impl<K: AsBytes, V> Node for InnerNode4<K, V> {
 
 impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
     type GrownNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
-    type Iter = InnerNodeCompressedIter<<Self as Node>::Key, <Self as Node>::Value>;
+    type Iter<'a> = InnerNodeCompressedIter<'a, K, V> where Self: 'a;
     type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
 
     fn from_header(header: Header) -> Self {
@@ -1191,27 +1193,13 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         panic!("unable to shrink a Node4, something went wrong!")
     }
 
-    unsafe fn iter(&self) -> Self::Iter {
-        // SAFETY: The safety requirements on the `iter` function match the `new`
-        // function
-        unsafe { InnerNodeCompressedIter::new(self) }
+    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+        self.inner_iter()
     }
 
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         let (_, children) = self.initialized_portion();
         children.first().copied()
-    }
-
-    fn iter_1(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            u8,
-            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
-        ),
-    > {
-        let (keys, nodes) = self.initialized_portion();
-        keys.iter().copied().zip(nodes.iter().copied())
     }
 }
 
@@ -1262,7 +1250,7 @@ impl<K: AsBytes, V> Node for InnerNode16<K, V> {
 
 impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
     type GrownNode = InnerNode48<<Self as Node>::Key, <Self as Node>::Value>;
-    type Iter = InnerNodeCompressedIter<<Self as Node>::Key, <Self as Node>::Value>;
+    type Iter<'a> = InnerNodeCompressedIter<'a, K, V> where Self: 'a;
     type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
 
     fn from_header(header: Header) -> Self {
@@ -1296,27 +1284,13 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         self.change_block_size()
     }
 
-    unsafe fn iter(&self) -> Self::Iter {
-        // SAFETY: The safety requirements on the `iter` function match the `new`
-        // function
-        unsafe { InnerNodeCompressedIter::new(self) }
+    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+        self.inner_iter()
     }
 
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
         let (_, children) = self.initialized_portion();
         children.first().copied()
-    }
-
-    fn iter_1(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            u8,
-            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
-        ),
-    > {
-        let (keys, nodes) = self.initialized_portion();
-        keys.iter().copied().zip(nodes.iter().copied())
     }
 }
 
@@ -1461,7 +1435,7 @@ impl<K: AsBytes, V> HeaderNode for InnerNode48<K, V> {
 
 impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     type GrownNode = InnerNode256<<Self as Node>::Key, <Self as Node>::Value>;
-    type Iter = InnerNode48Iter<<Self as Node>::Key, <Self as Node>::Value>;
+    type Iter<'a> = Map<FilterMap<Enumerate<Iter<'a, RestrictedNodeIndex<48>>>, impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>>, impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V>)> where Self: 'a;
     type ShrunkNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
 
     fn from_header(header: Header) -> Self {
@@ -1614,12 +1588,8 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         let header = self.header.clone();
 
         let mut key_and_child_ptrs = MaybeUninit::uninit_array::<16>();
-        // SAFETY: The lifetime of this iterator is bounded to this function, and will
-        // not overlap with any mutating operations on the node because it of the shared
-        // reference that this function uses.
-        let iter = unsafe { InnerNode48Iter::new(self) };
 
-        for (idx, value) in iter.enumerate() {
+        for (idx, value) in self.iter().enumerate() {
             key_and_child_ptrs[idx].write(value);
         }
 
@@ -1651,10 +1621,13 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         }
     }
 
-    unsafe fn iter(&self) -> Self::Iter {
-        // SAFETY: The safety requirements on the `iter` function match the `new`
-        // function
-        unsafe { InnerNode48Iter::new(self) }
+    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+        let child_pointers = self.initialized_child_pointers();
+        self.child_indices
+            .iter()
+            .enumerate()
+            .filter_map(|(key, idx)| (!idx.is_empty()).then_some((key as u8, usize::from(*idx))))
+            .map(|(key, idx)| unsafe { (key, *child_pointers.get_unchecked(idx)) })
     }
 
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
@@ -1693,24 +1666,6 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         self.initialized_child_pointers()
             .get(usize::from(self.child_indices[idx]))
             .copied()
-    }
-
-    fn iter_1(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            u8,
-            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
-        ),
-    > {
-        unsafe {
-            let child_pointers = self.initialized_child_pointers();
-            self.child_indices
-                .iter()
-                .enumerate()
-                .filter_map(|(key, idx)| (!idx.is_empty()).then_some((key as u8, usize::from(*idx))))
-                .map(|(key, idx)| (key, *child_pointers.get_unchecked(idx)))
-        }
     }
 }
 
@@ -1756,7 +1711,7 @@ impl<K: AsBytes, V> HeaderNode for InnerNode256<K, V> {
 
 impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     type GrownNode = Self;
-    type Iter = InnerNode256Iter<K, V>;
+    type Iter<'a> = FilterMap<Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V>>>>, impl FnMut((usize, &'a Option<OpaqueNodePtr<K, V>>)) -> Option<(u8, OpaqueNodePtr<K, V>)>> where Self: 'a;
     type ShrunkNode = InnerNode48<K, V>;
 
     fn from_header(header: Header) -> Self {
@@ -1815,11 +1770,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
         let mut child_pointers = MaybeUninit::uninit_array();
 
-        // SAFETY: This iterator lives only for the lifetime of this function, which
-        // does not mutate the `InnerNode256` (guaranteed by reference).
-        let iter = unsafe { InnerNode256Iter::new(self) };
-
-        for (child_index, (key_byte, child_ptr)) in iter.enumerate() {
+        for (child_index, (key_byte, child_ptr)) in self.iter().enumerate() {
             // PANIC SAFETY: This `try_from` will not panic because the `next_index` value
             // is guaranteed to be 48 or less by the `assert!(num_children < 48)` at the
             // start of the function.
@@ -1835,10 +1786,11 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         }
     }
 
-    unsafe fn iter(&self) -> Self::Iter {
-        // SAFETY: The safety requirements on the `iter` function match the `new`
-        // function
-        unsafe { InnerNode256Iter::new(self) }
+    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+        self.child_pointers
+            .iter()
+            .enumerate()
+            .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
     }
 
     fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
@@ -1868,20 +1820,6 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         } as usize;
 
         self.child_pointers.get(idx).copied().flatten()
-    }
-
-    fn iter_1(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            u8,
-            OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
-        ),
-    > {
-        self.child_pointers
-            .iter()
-            .enumerate()
-            .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
     }
 }
 

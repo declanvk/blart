@@ -5,7 +5,8 @@ mod tree_stats;
 mod well_formed;
 
 use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode16, InnerNode256, InnerNode256Iter, InnerNode4, InnerNode48, InnerNode48Iter, InnerNodeCompressedIter, LeafNode, Node, NodePtr, OpaqueNodePtr
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48,
+    LeafNode, Node, NodePtr, OpaqueNodePtr,
 };
 pub use pretty_printer::*;
 pub use tree_stats::*;
@@ -67,12 +68,7 @@ impl<K: AsBytes, T, N: Node + Visitable<K, T>> Visitable<K, T> for NodePtr<N> {
 
 impl<K: AsBytes, T> Visitable<K, T> for InnerNode4<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
-        // SAFETY: This iterator lives for a subset of the lifetime of this function,
-        // which is entirely covered by the lifetime of reference to the
-        // `InnerNodeCompressed`. The invariants of the shared references mean that
-        // no other mutation of the node will happen.
-        let iter = unsafe { InnerNodeCompressedIter::new(self) };
-        combine_inner_node_child_output(iter, visitor)
+        combine_inner_node_child_output(self.iter(), visitor)
     }
 
     fn visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
@@ -82,12 +78,7 @@ impl<K: AsBytes, T> Visitable<K, T> for InnerNode4<K, T> {
 
 impl<K: AsBytes, T> Visitable<K, T> for InnerNode16<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
-        // SAFETY: This iterator lives for a subset of the lifetime of this function,
-        // which is entirely covered by the lifetime of reference to the
-        // `InnerNodeCompressed`. The invariants of the shared references mean that
-        // no other mutation of the node will happen.
-        let iter = unsafe { InnerNodeCompressedIter::new(self) };
-        combine_inner_node_child_output(iter, visitor)
+        combine_inner_node_child_output(self.iter(), visitor)
     }
 
     fn visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
@@ -97,12 +88,7 @@ impl<K: AsBytes, T> Visitable<K, T> for InnerNode16<K, T> {
 
 impl<K: AsBytes, T> Visitable<K, T> for InnerNode48<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
-        // SAFETY: This iterator lives for a subset of the lifetime of this function,
-        // which is entirely covered by the lifetime of reference to the `InnerNode48`.
-        // The invariants of the shared references mean that no other mutation of the
-        // node will happen.
-        let iter = unsafe { InnerNode48Iter::new(self) };
-        combine_inner_node_child_output(iter, visitor)
+        combine_inner_node_child_output(self.iter(), visitor)
     }
 
     fn visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
@@ -112,12 +98,7 @@ impl<K: AsBytes, T> Visitable<K, T> for InnerNode48<K, T> {
 
 impl<K: AsBytes, T> Visitable<K, T> for InnerNode256<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
-        // SAFETY: This iterator lives for a subset of the lifetime of this function,
-        // which is entirely covered by the lifetime of reference to the `InnerNode256`.
-        // The invariants of the shared references mean that no other mutation of the
-        // node will happen.
-        let iter = unsafe { InnerNode256Iter::new(self) };
-        combine_inner_node_child_output(iter, visitor)
+        combine_inner_node_child_output(self.iter(), visitor)
     }
 
     fn visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
