@@ -27,7 +27,7 @@ fn iter_node<M: Measurement, N: InnerNode>(
 
         group.bench_function(format!("{size}").as_str(), |b| {
             b.iter(|| unsafe {
-                node.iter().for_each(|(k, n)| {
+                node.iter_1().for_each(|(k, n)| {
                     std::hint::black_box((k, n));
                 });
             });
