@@ -586,3 +586,130 @@ fn header_ltrim_prefix_non_stored_bytes_panic() {
 
     h.ltrim_by(0);
 }
+
+// --------------------------------------- ITERATORS ---------------------------------------
+
+type FixtureReturn<Node, const N: usize> = (
+    Node,
+    [LeafNode<Box<[u8]>, ()>; N],
+    [OpaqueNodePtr<Box<[u8]>, ()>; N],
+);
+
+fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, ()>, 4> {
+    let mut n4 = InnerNode4::empty();
+    let mut l1 = LeafNode::new(vec![].into(), ());
+    let mut l2 = LeafNode::new(vec![].into(), ());
+    let mut l3 = LeafNode::new(vec![].into(), ());
+    let mut l4 = LeafNode::new(vec![].into(), ());
+    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+    n4.write_child(3, l1_ptr);
+    n4.write_child(255, l2_ptr);
+    n4.write_child(0u8, l3_ptr);
+    n4.write_child(85, l4_ptr);
+
+    (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
+}
+
+#[test]
+fn node4_iterate() {
+    let (n4, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node4_fixture();
+
+    assert_eq!(
+        [(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr)]
+            .into_iter()
+            .collect::<Vec<(u8, _)>>(),
+        n4.iter().collect::<Vec<_>>(),
+        "expected values did not match for range [{:?}]",
+        ..
+    );
+}
+
+fn node16_fixture() -> FixtureReturn<InnerNode16<Box<[u8]>, ()>, 4> {
+    let mut n4 = InnerNode16::empty();
+    let mut l1 = LeafNode::new(vec![].into(), ());
+    let mut l2 = LeafNode::new(vec![].into(), ());
+    let mut l3 = LeafNode::new(vec![].into(), ());
+    let mut l4 = LeafNode::new(vec![].into(), ());
+    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+    n4.write_child(3, l1_ptr);
+    n4.write_child(255, l2_ptr);
+    n4.write_child(0u8, l3_ptr);
+    n4.write_child(85, l4_ptr);
+
+    (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
+}
+
+#[test]
+fn node16_iterate() {
+    let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node16_fixture();
+
+    let pairs = node.iter().collect::<Vec<_>>();
+    assert_eq!(
+        pairs,
+        &[(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr),]
+    )
+}
+
+fn node48_fixture() -> FixtureReturn<InnerNode48<Box<[u8]>, ()>, 4> {
+    let mut n4 = InnerNode48::empty();
+    let mut l1 = LeafNode::new(vec![].into(), ());
+    let mut l2 = LeafNode::new(vec![].into(), ());
+    let mut l3 = LeafNode::new(vec![].into(), ());
+    let mut l4 = LeafNode::new(vec![].into(), ());
+    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+    n4.write_child(3, l1_ptr);
+    n4.write_child(255, l2_ptr);
+    n4.write_child(0u8, l3_ptr);
+    n4.write_child(85, l4_ptr);
+
+    (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
+}
+
+#[test]
+fn node48_iterate() {
+    let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node48_fixture();
+
+    assert!(node
+        .iter()
+        .any(|(key_fragment, ptr)| key_fragment == 3 && ptr == l1_ptr));
+    assert!(node
+        .iter()
+        .any(|(key_fragment, ptr)| key_fragment == 255 && ptr == l2_ptr));
+    assert!(node
+        .iter()
+        .any(|(key_fragment, ptr)| key_fragment == 0u8 && ptr == l3_ptr));
+    assert!(node
+        .iter()
+        .any(|(key_fragment, ptr)| key_fragment == 85 && ptr == l4_ptr));
+}
+
+fn node256_fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, ()>, 4> {
+    let mut n4 = InnerNode256::empty();
+    let mut l1 = LeafNode::new(vec![].into(), ());
+    let mut l2 = LeafNode::new(vec![].into(), ());
+    let mut l3 = LeafNode::new(vec![].into(), ());
+    let mut l4 = LeafNode::new(vec![].into(), ());
+    let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+    let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+    let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+    let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+    n4.write_child(3, l1_ptr);
+    n4.write_child(255, l2_ptr);
+    n4.write_child(0u8, l3_ptr);
+    n4.write_child(85, l4_ptr);
+
+    (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
+}

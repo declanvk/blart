@@ -6,6 +6,8 @@
 #![feature(portable_simd)]
 #![feature(core_intrinsics)]
 #![feature(new_uninit)]
+#![feature(impl_trait_in_assoc_type)]
+#![feature(inherent_associated_types)]
 
 #![cfg_attr(
     feature = "nightly",
