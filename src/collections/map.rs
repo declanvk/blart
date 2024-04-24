@@ -19,9 +19,11 @@ use std::{
 mod entry;
 mod entry_ref;
 mod iterators;
+// mod iterators1;
 pub use entry::*;
 pub use entry_ref::*;
 pub use iterators::*;
+// pub use iterators1::*;
 
 /// An ordered map based on an adaptive radix tree.
 pub struct TreeMap<K: AsBytes, V> {
@@ -977,6 +979,10 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// ```
     pub fn iter(&self) -> iterators::Iter<'_, K, V> {
         iterators::Iter::new(self)
+    }
+
+    pub fn iter_1(&self) -> iterators::Iter1<'_, K, V> {
+        iterators::Iter1::new(self)
     }
 
     /// Gets a mutable iterator over the entries of the map, sorted by key.

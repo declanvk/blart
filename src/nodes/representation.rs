@@ -1,7 +1,7 @@
 //! Trie node representation
 
 // pub use self::iterators::*;
-use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
+use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes};
 use std::{
     arch::x86_64::{__m128i, _mm_movemask_epi8},
     array::from_fn,

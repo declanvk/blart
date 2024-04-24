@@ -17,6 +17,9 @@ pub use fuzzy_search::*;
 mod iterator;
 pub use iterator::*;
 
+mod iterator1;
+pub use iterator1::*;
+
 mod delete;
 pub use delete::*;
 

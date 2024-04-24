@@ -36,10 +36,10 @@ fn iter_node<M: Measurement, N: InnerNode>(
 }
 
 fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
-    iter_node::<_, InnerNode4<CString, usize>>(c, prefix, "n4", &[1, 4]);
-    iter_node::<_, InnerNode16<CString, usize>>(c, prefix, "n16", &[5, 12, 16]);
-    iter_node::<_, InnerNode48<CString, usize>>(c, prefix, "n48", &[17, 32, 48]);
-    iter_node::<_, InnerNode256<CString, usize>>(c, prefix, "n256", &[49, 100, 152, 204, 256]);
+    // iter_node::<_, InnerNode4<CString, usize>>(c, prefix, "n4", &[1, 4]);
+    // iter_node::<_, InnerNode16<CString, usize>>(c, prefix, "n16", &[5, 12, 16]);
+    // iter_node::<_, InnerNode48<CString, usize>>(c, prefix, "n48", &[17, 32, 48]);
+    // iter_node::<_, InnerNode256<CString, usize>>(c, prefix, "n256", &[49, 100, 152, 204, 256]);
 
     let words = include_str!("dict.txt");
     let mut tree: TreeMap<_, _> = words
@@ -48,11 +48,20 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         .collect();
 
     let mut group = c.benchmark_group(format!("{prefix}/tree"));
-    group.warm_up_time(std::time::Duration::from_secs(5));
-    group.measurement_time(std::time::Duration::from_secs(15));
+    group.warm_up_time(std::time::Duration::from_secs(60));
+    group.measurement_time(std::time::Duration::from_secs(240));
+
     group.bench_function("dict", |b| {
         b.iter(|| {
             tree.iter().for_each(|(k, v)| {
+                std::hint::black_box((k, v));
+            });
+        });
+    });
+
+    group.bench_function("dict1", |b| {
+        b.iter(|| {
+            tree.iter_1().for_each(|(k, v)| {
                 std::hint::black_box((k, v));
             });
         });
