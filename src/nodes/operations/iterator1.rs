@@ -16,21 +16,33 @@ use std::{
 ///
 /// This iterator maintains pointers to internal nodes from the trie. No
 /// mutating operation can occur while this an instance of the iterator is live.
-pub struct TreeIterator1<'a, K: AsBytes, V> {
+pub struct TreeIterator1<'a, K, V, F, R>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
     nodes: VecDeque<OpaqueNodePtr<K, V>>,
+    size: usize,
+    f: F,
     _marker: PhantomData<&'a TreeMap<K, V>>,
 }
 
-impl<'a, K: AsBytes, V> TreeIterator1<'a, K, V> {
+impl<'a, K, V, F, R> TreeIterator1<'a, K, V, F, R>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
     /// Create a new iterator that will visit all leaf nodes descended from the
     /// given node.
     ///
     /// # Safety
     ///
     /// See safety requirements on type [`InnerNodeTreeIterator`].
-    pub unsafe fn new(root: OpaqueNodePtr<K, V>) -> Self {
+    pub unsafe fn new(tree: &TreeMap<K, V>, f: F) -> Self {
         Self {
-            nodes: VecDeque::from([root]),
+            nodes: tree.root.into_iter().collect(),
+            size: tree.num_entries,
+            f,
             _marker: PhantomData,
         }
     }
@@ -61,8 +73,12 @@ impl<'a, K: AsBytes, V> TreeIterator1<'a, K, V> {
     }
 }
 
-impl<'a, K: AsBytes, V> Iterator for TreeIterator1<'a, K, V> {
-    type Item = NodePtr<LeafNode<K, V>>;
+impl<'a, K, V, F, R> Iterator for TreeIterator1<'a, K, V, F, R>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
+    type Item = R;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(node) = self.nodes.pop_back() {
@@ -71,15 +87,34 @@ impl<'a, K: AsBytes, V> Iterator for TreeIterator1<'a, K, V> {
                 ConcreteNodePtr::Node16(inner) => self.push_back_rev_iter(inner),
                 ConcreteNodePtr::Node48(inner) => self.push_back_rev_iter(inner),
                 ConcreteNodePtr::Node256(inner) => self.push_back_rev_iter(inner),
-                ConcreteNodePtr::LeafNode(inner) => return Some(inner),
+                ConcreteNodePtr::LeafNode(inner) => {
+                    self.size -= 1;
+                    return Some((self.f)(inner));
+                },
             }
         }
 
         None
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.size, Some(self.size))
+    }
+
+    fn last(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.next_back()
+    }
+
 }
 
-impl<'a, K: AsBytes, V> DoubleEndedIterator for TreeIterator1<'a, K, V> {
+impl<'a, K, V, F, R> DoubleEndedIterator for TreeIterator1<'a, K, V, F, R>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some(node) = self.nodes.pop_front() {
             match node.to_node_ptr() {
@@ -87,7 +122,10 @@ impl<'a, K: AsBytes, V> DoubleEndedIterator for TreeIterator1<'a, K, V> {
                 ConcreteNodePtr::Node16(inner) => self.push_front(inner),
                 ConcreteNodePtr::Node48(inner) => self.push_front(inner),
                 ConcreteNodePtr::Node256(inner) => self.push_front(inner),
-                ConcreteNodePtr::LeafNode(inner) => return Some(inner),
+                ConcreteNodePtr::LeafNode(inner) => {
+                    self.size -= 1;
+                    return Some((self.f)(inner));
+                },
             }
         }
 
@@ -95,7 +133,22 @@ impl<'a, K: AsBytes, V> DoubleEndedIterator for TreeIterator1<'a, K, V> {
     }
 }
 
-impl<'a, K: AsBytes, V> FusedIterator for TreeIterator1<'a, K, V> {}
+impl<'a, K: AsBytes, V, F, R> FusedIterator for TreeIterator1<'a, K, V, F, R>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
+}
+
+impl<'a, K: AsBytes, V, F, R> ExactSizeIterator for TreeIterator1<'a, K, V, F, R>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
+    fn len(&self) -> usize {
+        self.size
+    }
+}
 
 // #[cfg(test)]
 // mod tests;

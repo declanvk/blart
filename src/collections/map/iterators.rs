@@ -111,40 +111,40 @@ impl<'m, K: AsBytes, V> Iter<'m, K, V> {
 
 impl_ref_mut_iterator!(Iter<'m, K, V>, (&'m K, &'m V) ; items_are_sorted);
 
-pub struct Iter1<'m, K: AsBytes, V> {
-    _marker: PhantomData<&'m TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator1<'m, K, V>>,
-    size: usize,
-}
+// pub struct Iter1<'m, K: AsBytes, V> {
+//     _marker: PhantomData<&'m TreeMap<K, V>>,
+//     raw_iter: Option<TreeIterator1<'m, K, V>>,
+//     size: usize,
+// }
 
-impl<'m, K: AsBytes, V> Iter1<'m, K, V> {
-    pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
-        Self {
-            _marker: PhantomData,
-            raw_iter: tree.root.map(|root| unsafe {
-                // SAFETY: We have an immutable reference to the `TreeMap` which guarantees that
-                // there are not mutable references to the same `TreeMap` and no mutating
-                // operations on the nodes of this tree.
-                TreeIterator1::new(root)
-            }),
-            size: tree.num_entries,
-        }
-    }
+// impl<'m, K: AsBytes, V> Iter1<'m, K, V> {
+//     pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
+//         Self {
+//             _marker: PhantomData,
+//             raw_iter: tree.root.map(|root| unsafe {
+//                 // SAFETY: We have an immutable reference to the `TreeMap` which guarantees that
+//                 // there are not mutable references to the same `TreeMap` and no mutating
+//                 // operations on the nodes of this tree.
+//                 TreeIterator1::new(root)
+//             }),
+//             size: tree.num_entries,
+//         }
+//     }
 
-    fn map_leaf_ptr_to_item(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> <Self as Iterator>::Item {
-        // SAFETY: The reference pointing to this leaf will be bounded to the
-        // lifetime of the iterator, which itself is bounded to the lifetime of
-        // the `TreeMap` it is derived from. Further, the original `TreeMap`
-        // reference was an immutable reference, meaning that no mutable reference
-        //  currently exists, and will not exist while this immutable reference to the
-        // leaf is present.
-        let (key, value) = unsafe { leaf_node_ptr.as_key_value_ref() };
+//     fn map_leaf_ptr_to_item(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> <Self as Iterator>::Item {
+//         // SAFETY: The reference pointing to this leaf will be bounded to the
+//         // lifetime of the iterator, which itself is bounded to the lifetime of
+//         // the `TreeMap` it is derived from. Further, the original `TreeMap`
+//         // reference was an immutable reference, meaning that no mutable reference
+//         //  currently exists, and will not exist while this immutable reference to the
+//         // leaf is present.
+//         let (key, value) = unsafe { leaf_node_ptr.as_key_value_ref() };
 
-        (key, value)
-    }
-}
+//         (key, value)
+//     }
+// }
 
-impl_ref_mut_iterator!(Iter1<'m, K, V>, (&'m K, &'m V) ; items_are_sorted);
+// impl_ref_mut_iterator!(Iter1<'m, K, V>, (&'m K, &'m V) ; items_are_sorted);
 
 /// An iterator over the entries of a `TreeMap` producing shared reference to
 /// the key and mutable reference to the value.
