@@ -6,7 +6,7 @@ use crate::{
     maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked,
     visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzySearch, InsertPoint,
     InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
-    NodePtr, OpaqueNodePtr, StackArena,
+    NodePtr, OpaqueNodePtr, StackArena, TreeIterator1,
 };
 use std::{
     borrow::Borrow,
@@ -28,9 +28,9 @@ pub use iterators::*;
 /// An ordered map based on an adaptive radix tree.
 pub struct TreeMap<K: AsBytes, V> {
     /// The number of entries present in the tree.
-    num_entries: usize,
+    pub num_entries: usize,
     /// A pointer to the tree root, if present.
-    root: Option<OpaqueNodePtr<K, V>>,
+    pub root: Option<OpaqueNodePtr<K, V>>,
 }
 
 impl<K: AsBytes, V> TreeMap<K, V> {
@@ -981,8 +981,11 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         iterators::Iter::new(self)
     }
 
-    pub fn iter_1(&self) -> iterators::Iter1<'_, K, V> {
-        iterators::Iter1::new(self)
+    pub fn iter_1<'a>(
+        &self,
+    ) -> TreeIterator1<'a, K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a V), (&'a K, &'a V)>
+    {
+        unsafe { TreeIterator1::new(self, |l| l.as_key_value_ref()) }
     }
 
     /// Gets a mutable iterator over the entries of the map, sorted by key.
