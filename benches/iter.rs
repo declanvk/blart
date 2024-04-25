@@ -48,12 +48,20 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         .collect();
 
     let mut group = c.benchmark_group(format!("{prefix}/tree"));
-    group.warm_up_time(std::time::Duration::from_secs(30));
-    group.measurement_time(std::time::Duration::from_secs(60));
+    group.warm_up_time(std::time::Duration::from_secs(5));
+    group.measurement_time(std::time::Duration::from_secs(15));
 
-    group.bench_function("dict", |b| {
+    group.bench_function("dict/foward", |b| {
         b.iter(|| {
             tree.iter().for_each(|(k, v)| {
+                std::hint::black_box((k, v));
+            });
+        });
+    });
+
+    group.bench_function("dict/rev", |b| {
+        b.iter(|| {
+            tree.iter().rev().for_each(|(k, v)| {
                 std::hint::black_box((k, v));
             });
         });
