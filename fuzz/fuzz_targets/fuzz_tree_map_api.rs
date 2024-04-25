@@ -1,3 +1,4 @@
+#![feature(is_sorted)]
 #![no_main]
 
 use blart::map::TreeMap;
@@ -97,6 +98,10 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 tree.iter_mut().for_each(|(_, value)| {
                     *value = value.saturating_sub(1);
                 });
+
+                let l = tree.len();
+                assert!(tree.keys().is_sorted());
+                assert!(tree.iter().count() == l);
             },
             Action::Remove(key) => {
                 if let Some(value) = tree.remove(key.as_ref()) {
