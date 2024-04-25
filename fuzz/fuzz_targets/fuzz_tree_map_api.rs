@@ -99,6 +99,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert!(tree.keys().is_sorted());
                 assert!(tree.keys().rev().is_sorted_by(|a, b| a >= b));
                 assert!(tree.iter().count() == tree.len());
+                assert!(tree.iter().rev().count() == tree.len());
             },
             Action::Remove(key) => {
                 if let Some(value) = tree.remove(key.as_ref()) {
