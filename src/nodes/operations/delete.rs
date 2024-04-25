@@ -46,7 +46,9 @@ where
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn delete_minimum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> DeleteResult<K, V> {
+pub unsafe fn delete_minimum_unchecked<K: AsBytes, V>(
+    root: OpaqueNodePtr<K, V>,
+) -> DeleteResult<K, V> {
     // SAFETY: Requirements covered by containing function
     unsafe {
         let delete_search_result = find_minimum_to_delete(root);
@@ -70,7 +72,9 @@ pub unsafe fn delete_minimum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>)
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
-pub unsafe fn delete_maximum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> DeleteResult<K, V> {
+pub unsafe fn delete_maximum_unchecked<K: AsBytes, V>(
+    root: OpaqueNodePtr<K, V>,
+) -> DeleteResult<K, V> {
     // SAFETY: Requirements covered by containing function
     unsafe {
         let delete_search_result = find_maximum_to_delete(root);
@@ -176,13 +180,15 @@ unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
         // references to this child node. The reference only lasts for the scope of this
         // `if` block.
         if let Some(child_header) = unsafe { child_node_ptr.header_mut() } {
-            // Construct the new prefix, by concatenating the parent header, child_key_byte, child header
-            // Here we can use the fact that the header of both the child and the parent can hold up
-            // to NUM_PREFIX_BYTES, so if for example the parent header len >= NUM_PREFIX_BYTES, the
-            // new child header will hold only this bytes since the size is alredy greater than the capacity
-            // so we can "clear" the child prefix, by setting the len to 0 and repopulate by pushing the parent
-            // header, child_key_byte, child prefix. If the header if alredy full we don't copy, just increment
-            // the len by the size
+            // Construct the new prefix, by concatenating the parent header, child_key_byte,
+            // child header Here we can use the fact that the header of both the
+            // child and the parent can hold up to NUM_PREFIX_BYTES, so if for
+            // example the parent header len >= NUM_PREFIX_BYTES, the
+            // new child header will hold only this bytes since the size is alredy greater
+            // than the capacity so we can "clear" the child prefix, by setting
+            // the len to 0 and repopulate by pushing the parent
+            // header, child_key_byte, child prefix. If the header if alredy full we don't
+            // copy, just increment the len by the size
             let parent_header = inner_node.header();
             let parent_prefix = parent_header.read_prefix();
             let parent_len = parent_header.prefix_len();
@@ -347,7 +353,10 @@ pub struct DeletePoint<K: AsBytes, V> {
 impl<K: AsBytes, V> std::fmt::Debug for DeletePoint<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeleteSearchResult")
-            .field("grandparent_node", &self.grandparent_ptr_and_parent_key_byte)
+            .field(
+                "grandparent_node",
+                &self.grandparent_ptr_and_parent_key_byte,
+            )
             .field("parent_node", &self.parent_ptr_and_child_key_byte)
             .field("leaf_node", &self.leaf_node_ptr)
             .finish()
@@ -439,59 +448,18 @@ where
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
+#[inline(always)]
 unsafe fn find_minimum_to_delete<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> DeletePoint<K, V> {
-    unsafe fn get_next_node<N: InnerNode>(
-        inner_node: NodePtr<N>,
-        current_depth: &mut usize,
-    ) -> (u8, OpaqueNodePtr<N::Key, N::Value>) {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `minimum_to_delete` function.
-        let inner_node = unsafe { inner_node.as_ref() };
-
-        // SAFETY: The iterator is limited to the lifetime of this function call and
-        // does not escape. No other code mutates the referenced node, guaranteed by the
-        // `minimum_to_delete` safey requirements and the reference.
-        let mut iter = unsafe { inner_node.iter() };
-
-        let child = iter
-            .next()
-            .expect("an inner node must always have at least one child");
-
-        // increment current depth with header size and child key byte
-        *current_depth += inner_node.header().num_children() + 1;
-
-        child
-    }
-
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;
-    let mut current_depth = 0;
 
     loop {
         let (last_key_byte, next_node) = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                get_next_node(inner_ptr, &mut current_depth)
-            },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                get_next_node(inner_ptr, &mut current_depth)
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                get_next_node(inner_ptr, &mut current_depth)
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                get_next_node(inner_ptr, &mut current_depth)
-            },
+            ConcreteNodePtr::Node4(inner_node) => unsafe { inner_node.as_ref().min() },
+            ConcreteNodePtr::Node16(inner_node) => unsafe { inner_node.as_ref().min() },
+            ConcreteNodePtr::Node48(inner_node) => unsafe { inner_node.as_ref().min() },
+            ConcreteNodePtr::Node256(inner_node) => unsafe { inner_node.as_ref().min() },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 return DeletePoint {
                     grandparent_ptr_and_parent_key_byte: current_grandparent,
@@ -515,59 +483,18 @@ unsafe fn find_minimum_to_delete<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> De
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
+#[inline(always)]
 unsafe fn find_maximum_to_delete<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> DeletePoint<K, V> {
-    unsafe fn get_next_node<N: InnerNode>(
-        inner_node: NodePtr<N>,
-        current_depth: &mut usize,
-    ) -> (u8, OpaqueNodePtr<N::Key, N::Value>) {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `minimum_to_delete` function.
-        let inner_node = unsafe { inner_node.as_ref() };
-
-        // SAFETY: The iterator is limited to the lifetime of this function call and
-        // does not escape. No other code mutates the referenced node, guaranteed by the
-        // `minimum_to_delete` safey requirements and the reference.
-        let mut iter = unsafe { inner_node.iter() };
-
-        let child = iter
-            .next_back()
-            .expect("an inner node must always have at least one child");
-
-        // increment current depth with header size and child key byte
-        *current_depth += inner_node.header().num_children() + 1;
-
-        child
-    }
-
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;
-    let mut current_depth = 0;
 
     loop {
         let (last_key_byte, next_node) = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                get_next_node(inner_ptr, &mut current_depth)
-            },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                get_next_node(inner_ptr, &mut current_depth)
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                get_next_node(inner_ptr, &mut current_depth)
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                get_next_node(inner_ptr, &mut current_depth)
-            },
+            ConcreteNodePtr::Node4(inner_node) => unsafe { inner_node.as_ref().max() },
+            ConcreteNodePtr::Node16(inner_node) => unsafe { inner_node.as_ref().max() },
+            ConcreteNodePtr::Node48(inner_node) => unsafe { inner_node.as_ref().max() },
+            ConcreteNodePtr::Node256(inner_node) => unsafe { inner_node.as_ref().max() },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 return DeletePoint {
                     grandparent_ptr_and_parent_key_byte: current_grandparent,

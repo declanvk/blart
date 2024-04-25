@@ -26,8 +26,8 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         })
         .collect();
 
-    for (idx, node) in nodes48 {
-        let mut group = c.benchmark_group(format!("{prefix}/n48"));
+    for (idx, node) in nodes48.clone() {
+        let mut group = c.benchmark_group(format!("{prefix}/min/n48"));
         group.warm_up_time(Duration::from_secs(3));
         group.measurement_time(Duration::from_secs(5));
         group.bench_function(format!("{idx}").as_str(), |b| {
@@ -35,12 +35,30 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         });
     }
 
-    for (idx, node) in nodes256 {
-        let mut group = c.benchmark_group(format!("{prefix}/n256"));
+    for (idx, node) in nodes48.clone() {
+        let mut group = c.benchmark_group(format!("{prefix}/max/n48"));
+        group.warm_up_time(Duration::from_secs(3));
+        group.measurement_time(Duration::from_secs(5));
+        group.bench_function(format!("{idx}").as_str(), |b| {
+            b.iter(|| std::hint::black_box(node.max()));
+        });
+    }
+
+    for (idx, node) in nodes256.clone() {
+        let mut group = c.benchmark_group(format!("{prefix}/min/n256"));
         group.warm_up_time(Duration::from_secs(3));
         group.measurement_time(Duration::from_secs(5));
         group.bench_function(format!("{idx}").as_str(), |b| {
             b.iter(|| std::hint::black_box(node.min()));
+        });
+    }
+
+    for (idx, node) in nodes256.clone() {
+        let mut group = c.benchmark_group(format!("{prefix}/max/n256"));
+        group.warm_up_time(Duration::from_secs(3));
+        group.measurement_time(Duration::from_secs(5));
+        group.bench_function(format!("{idx}").as_str(), |b| {
+            b.iter(|| std::hint::black_box(node.max()));
         });
     }
 }

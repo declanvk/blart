@@ -14,12 +14,6 @@ pub use lookup::*;
 mod fuzzy_search;
 pub use fuzzy_search::*;
 
-mod iterator;
-pub use iterator::*;
-
-mod iterator1;
-pub use iterator1::*;
-
 mod delete;
 pub use delete::*;
 
@@ -32,8 +26,10 @@ pub use delete::*;
 ///  - This function must only be called once for this root node and all
 ///    descendants, otherwise a double-free could result.
 pub unsafe fn deallocate_tree<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) {
-    fn deallocate_inner_node<K: AsBytes, V, N>(stack: &mut Vec<OpaqueNodePtr<K, V>>, inner_ptr: NodePtr<N>)
-    where
+    fn deallocate_inner_node<K: AsBytes, V, N>(
+        stack: &mut Vec<OpaqueNodePtr<K, V>>,
+        inner_ptr: NodePtr<N>,
+    ) where
         N: InnerNode<Key = K, Value = V>,
     {
         {

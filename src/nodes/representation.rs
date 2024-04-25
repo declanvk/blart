@@ -813,7 +813,7 @@ pub trait InnerNode: Node + HeaderNode + Sized {
             // collapsed, so a InnserNode must have >= 2 childs, so it's safe
             // to search for the minium. And the same applies to the `minimum_unchecked`
             // function
-            let min_child = unsafe { self.min().unwrap_unchecked() };
+            let (_, min_child) = self.min();
             let leaf_ptr = unsafe { minimum_unchecked(min_child) };
             let leaf = unsafe { leaf_ptr.as_ref() };
             let leaf = leaf.key_ref().as_bytes();
@@ -836,7 +836,37 @@ pub trait InnerNode: Node + HeaderNode + Sized {
         }
     }
 
-    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>>;
+    /// Returns the minimum child pointer from this node and it's key
+    ///
+    /// # Safety
+    ///
+    /// Since this is a [`InnerNode`] we assume that the we hava at least one
+    /// child, (more strictly we have 2, because with one child the node
+    /// would have collapsed) so in this way we can avoid the [`Option`].
+    /// This is safe because if we had, no childs this current node should
+    /// have been deleted.
+    fn min(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    );
+
+    /// Returns the maximum child pointer from this node and it's key
+    ///
+    /// # Safety
+    ///
+    /// Since this is a [`InnerNode`] we assume that the we hava at least one
+    /// child, (more strictly we have 2, because with one child the node
+    /// would have collapsed) so in this way we can avoid the [`Option`].
+    /// This is safe because if we had, no childs this current node should
+    /// have been deleted.
+    fn max(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    );
 }
 
 enum WritePoint {
@@ -1197,9 +1227,34 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         self.inner_iter()
     }
 
-    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
-        let (_, children) = self.initialized_portion();
-        children.first().copied()
+    fn min(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
+        let (keys, children) = self.initialized_portion();
+        unsafe {
+            (
+                keys.first().copied().unwrap_unchecked(),
+                children.first().copied().unwrap_unchecked(),
+            )
+        }
+    }
+
+    fn max(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
+        let (keys, children) = self.initialized_portion();
+        unsafe {
+            (
+                keys.last().copied().unwrap_unchecked(),
+                children.last().copied().unwrap_unchecked(),
+            )
+        }
     }
 }
 
@@ -1288,9 +1343,34 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         self.inner_iter()
     }
 
-    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
-        let (_, children) = self.initialized_portion();
-        children.first().copied()
+    fn min(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
+        let (keys, children) = self.initialized_portion();
+        unsafe {
+            (
+                keys.first().copied().unwrap_unchecked(),
+                children.first().copied().unwrap_unchecked(),
+            )
+        }
+    }
+
+    fn max(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
+        let (keys, children) = self.initialized_portion();
+        unsafe {
+            (
+                keys.last().copied().unwrap_unchecked(),
+                children.last().copied().unwrap_unchecked(),
+            )
+        }
     }
 }
 
@@ -1630,7 +1710,12 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             .map(|(key, idx)| unsafe { (key, *child_pointers.get_unchecked(idx)) })
     }
 
-    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+    fn min(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
         let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
         let empty = u8x64::splat(48);
         let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
@@ -1646,7 +1731,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             .simd_eq(empty)
             .to_bitmask();
 
-        let idx = if r0 != u64::MAX {
+        let key = if r0 != u64::MAX {
             r0.trailing_ones()
         } else if r1 != u64::MAX {
             r1.trailing_ones() + 64
@@ -1657,15 +1742,78 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         } as usize;
 
         unsafe {
-            // SAFETY: idx can be at up to 256, but if we have a inner node
+            // SAFETY: key can be at up to 256, but we are in a inner node
             // this means that this node has at least 1 child (it's even more
             // strict since, if we have 1 child the node would collapse), so we
             // know that exists at least one idx where != 48
-            assume(idx < self.child_indices.len());
+            assume(key < self.child_indices.len());
         }
-        self.initialized_child_pointers()
-            .get(usize::from(self.child_indices[idx]))
-            .copied()
+
+        let idx = usize::from(self.child_indices[key]);
+        let child_pointers = self.initialized_child_pointers();
+
+        unsafe {
+            // SAFETY: We know that idx is in bounds, because the value can't be
+            // constructed if it >= 48 and also it has to be < num children, since
+            // it's constructed from the num children before being incremented during
+            // insertion process
+            assume(idx < child_pointers.len());
+        }
+
+        (key as u8, child_pointers[idx])
+    }
+
+    fn max(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
+        let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
+        let empty = u8x64::splat(48);
+        let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r1 = u8x64::from_array(child_indices[64..128].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r2 = u8x64::from_array(child_indices[128..192].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r3 = u8x64::from_array(child_indices[192..256].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+
+        let key = if r3 != u64::MAX {
+            255 - r3.leading_ones()
+        } else if r2 != u64::MAX {
+            191 - r2.leading_ones()
+        } else if r1 != u64::MAX {
+            127 - r1.leading_ones()
+        } else {
+            // SAFETY: This subtraction can't fail, because we know that
+            // we have at least one child, so the number of leading ones
+            // in this last case is <= 63
+            63 - r0.leading_ones()
+        } as usize;
+
+        unsafe {
+            // SAFETY: idx can be at up to 255 so it's in bounds
+            assume(key < self.child_indices.len());
+        }
+
+        let idx = usize::from(self.child_indices[key]);
+        let child_pointers = self.initialized_child_pointers();
+
+        unsafe {
+            // SAFETY: We know that idx is in bounds, because the value can't be
+            // constructed if it >= 48 and also it has to be < num children, since
+            // it's constructed from the num children before being incremented during
+            // insertion process
+            assume(idx < child_pointers.len());
+        }
+
+        (key as u8, child_pointers[idx])
     }
 }
 
@@ -1793,7 +1941,12 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
             .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
     }
 
-    fn min(&self) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+    fn min(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
         let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
         let empty = usizex64::splat(0);
         let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
@@ -1809,7 +1962,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
             .simd_eq(empty)
             .to_bitmask();
 
-        let idx = if r0 != u64::MAX {
+        let key = if r0 != u64::MAX {
             r0.trailing_ones()
         } else if r1 != u64::MAX {
             r1.trailing_ones() + 64
@@ -1819,7 +1972,59 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
             r3.trailing_ones() + 192
         } as usize;
 
-        self.child_pointers.get(idx).copied().flatten()
+        unsafe {
+            // SAFETY: key can be at up to 256, but we know that we have
+            // at least one inner child, it's guarentee to be in bounds
+            assume(key < self.child_pointers.len());
+        }
+
+        (key as u8, unsafe {
+            self.child_pointers[key].unwrap_unchecked()
+        })
+    }
+
+    fn max(
+        &self,
+    ) -> (
+        u8,
+        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+    ) {
+        let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
+        let empty = usizex64::splat(0);
+        let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r1 = usizex64::from_array(child_pointers[64..128].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r2 = usizex64::from_array(child_pointers[128..192].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+        let r3 = usizex64::from_array(child_pointers[192..256].try_into().unwrap())
+            .simd_eq(empty)
+            .to_bitmask();
+
+        let key = if r3 != u64::MAX {
+            255 - r3.leading_ones()
+        } else if r2 != u64::MAX {
+            191 - r2.leading_ones()
+        } else if r1 != u64::MAX {
+            127 - r1.leading_ones()
+        } else {
+            // SAFETY: This subtraction can't fail, because we know that
+            // we have at least one child, so the number of leading ones
+            // in this last case is <= 63
+            63 - r0.leading_ones()
+        } as usize;
+
+        unsafe {
+            // SAFETY: idx can be at up to 255, so it's in bounds
+            assume(key < self.child_pointers.len());
+        }
+
+        (key as u8, unsafe {
+            self.child_pointers[key].unwrap_unchecked()
+        })
     }
 }
 

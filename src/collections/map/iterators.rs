@@ -1,312 +1,164 @@
-use crate::{AsBytes, LeafNode, NodePtr, TreeIterator, TreeIterator1, TreeMap};
-use std::marker::PhantomData;
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
+use std::{collections::VecDeque, iter::FusedIterator, marker::PhantomData};
 
-macro_rules! impl_ref_mut_iterator {
-    ($iter_name:ty, $item:ty $(; $flag:tt)?) => {
-        impl<'m, K: AsBytes, V: 'm> Iterator for $iter_name {
-            type Item = $item;
+/// An iterator over all the [`LeafNode`]s in a non-singleton tree.
+///
+/// Non-singleton here means that the tree has at least one [`InnerNode`].
+///
+/// # Safety
+///
+/// This iterator maintains pointers to internal nodes from the trie. No
+/// mutating operation can occur while this an instance of the iterator is live.
+pub struct TreeIterator<K, V, F, R, T>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
+    nodes: VecDeque<OpaqueNodePtr<K, V>>,
+    size: usize,
+    f: F,
+    _marker: PhantomData<T>,
+}
 
-            fn next(&mut self) -> Option<Self::Item> {
-                self.raw_iter.as_mut()?.next().map(|leaf_node_ptr| {
+impl<K, V, F, R, T> TreeIterator<K, V, F, R, T>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
+    /// Create a new iterator that will visit all leaf nodes descended from the
+    /// given node.
+    ///
+    /// # Safety
+    ///
+    /// See safety requirements on type [`InnerNodeTreeIterator`].
+    pub fn new(tree: &TreeMap<K, V>, f: F) -> Self {
+        Self {
+            nodes: tree.root.into_iter().collect(),
+            size: tree.num_entries,
+            f,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Create a new iterator that will visit all leaf nodes descended from the
+    /// given node.
+    ///
+    /// # Safety
+    ///
+    /// See safety requirements on type [`InnerNodeTreeIterator`].
+    pub fn new_mut(tree: &mut TreeMap<K, V>, f: F) -> Self {
+        Self {
+            nodes: tree.root.into_iter().collect(),
+            size: tree.num_entries,
+            f,
+            _marker: PhantomData,
+        }
+    }
+
+    fn push_back_rev_iter<N>(&mut self, inner: NodePtr<N>)
+    where
+        N: InnerNode<Key = K, Value = V>
+    {
+        unsafe {
+            inner
+                .as_ref()
+                .iter()
+                .rev()
+                .for_each(|(_, n)| self.nodes.push_back(n))
+        };
+    }
+
+    fn push_front<N>(&mut self, inner: NodePtr<N>)
+    where
+        N: InnerNode<Key = K, Value = V>
+    {
+        unsafe {
+            inner
+                .as_ref()
+                .iter()
+                .for_each(|(_, n)| self.nodes.push_front(n))
+        };
+    }
+}
+
+impl<K, V, F, R, T> Iterator for TreeIterator<K, V, F, R, T>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
+    type Item = R;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(node) = self.nodes.pop_back() {
+            match node.to_node_ptr() {
+                ConcreteNodePtr::Node4(inner) => self.push_back_rev_iter(inner),
+                ConcreteNodePtr::Node16(inner) => self.push_back_rev_iter(inner),
+                ConcreteNodePtr::Node48(inner) => self.push_back_rev_iter(inner),
+                ConcreteNodePtr::Node256(inner) => self.push_back_rev_iter(inner),
+                ConcreteNodePtr::LeafNode(inner) => {
                     self.size -= 1;
-
-                    Self::map_leaf_ptr_to_item(leaf_node_ptr)
-                })
+                    return Some((self.f)(inner));
+                },
             }
-
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                (self.size, Some(self.size))
-            }
-
-            fn last(mut self) -> Option<Self::Item>
-            where
-                Self: Sized,
-            {
-                self.next_back()
-            }
-
-            $(
-                impl_ref_mut_iterator!($flag);
-            )?
         }
 
-        impl<'m, K: AsBytes, V: 'm> DoubleEndedIterator for $iter_name {
-            fn next_back(&mut self) -> Option<Self::Item> {
-                self.raw_iter.as_mut()?.next_back().map(|leaf_node_ptr| {
+        None
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.size, Some(self.size))
+    }
+
+    fn last(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.next_back()
+    }
+
+}
+
+impl<K, V, F, R, T> DoubleEndedIterator for TreeIterator<K, V, F, R, T>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        while let Some(node) = self.nodes.pop_front() {
+            match node.to_node_ptr() {
+                ConcreteNodePtr::Node4(inner) => self.push_front(inner),
+                ConcreteNodePtr::Node16(inner) => self.push_front(inner),
+                ConcreteNodePtr::Node48(inner) => self.push_front(inner),
+                ConcreteNodePtr::Node256(inner) => self.push_front(inner),
+                ConcreteNodePtr::LeafNode(inner) => {
                     self.size -= 1;
-
-                    Self::map_leaf_ptr_to_item(leaf_node_ptr)
-                })
+                    return Some((self.f)(inner));
+                },
             }
         }
-    };
 
-    (items_are_sorted) => {
-        fn max(mut self) -> Option<Self::Item>
-            where
-                Self: Sized,
-                Self::Item: Ord,
-        {
-            self.next()
-        }
-
-        fn min(mut self) -> Option<Self::Item>
-            where
-                Self: Sized,
-                Self::Item: Ord,
-        {
-            self.next_back()
-        }
-
-        #[cfg(feature = "nightly")]
-        fn is_sorted(self) -> bool
-        where
-            Self: Sized,
-            Self::Item: PartialOrd,
-        {
-            true
-        }
-    };
-}
-
-/// An iterator over the entries of a `TreeMap` producing shared references to
-/// the key and value.
-///
-/// This `struct` is created by the [`iter`] method on `TreeMap`. See its
-/// documentation for more.
-///
-/// [`iter`]: TreeMap::iter
-pub struct Iter<'m, K: AsBytes, V> {
-    _marker: PhantomData<&'m TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<'m, K, V>>,
-    size: usize,
-}
-
-impl<'m, K: AsBytes, V> Iter<'m, K, V> {
-    pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
-        Self {
-            _marker: PhantomData,
-            raw_iter: tree.root.map(|root| unsafe {
-                // SAFETY: We have an immutable reference to the `TreeMap` which guarantees that
-                // there are not mutable references to the same `TreeMap` and no mutating
-                // operations on the nodes of this tree.
-                TreeIterator::new(root)
-            }),
-            size: tree.num_entries,
-        }
-    }
-
-    fn map_leaf_ptr_to_item(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> <Self as Iterator>::Item {
-        // SAFETY: The reference pointing to this leaf will be bounded to the
-        // lifetime of the iterator, which itself is bounded to the lifetime of
-        // the `TreeMap` it is derived from. Further, the original `TreeMap`
-        // reference was an immutable reference, meaning that no mutable reference
-        //  currently exists, and will not exist while this immutable reference to the
-        // leaf is present.
-        let (key, value) = unsafe { leaf_node_ptr.as_key_value_ref() };
-
-        (key, value)
+        None
     }
 }
 
-impl_ref_mut_iterator!(Iter<'m, K, V>, (&'m K, &'m V) ; items_are_sorted);
-
-// pub struct Iter1<'m, K: AsBytes, V> {
-//     _marker: PhantomData<&'m TreeMap<K, V>>,
-//     raw_iter: Option<TreeIterator1<'m, K, V>>,
-//     size: usize,
-// }
-
-// impl<'m, K: AsBytes, V> Iter1<'m, K, V> {
-//     pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
-//         Self {
-//             _marker: PhantomData,
-//             raw_iter: tree.root.map(|root| unsafe {
-//                 // SAFETY: We have an immutable reference to the `TreeMap` which guarantees that
-//                 // there are not mutable references to the same `TreeMap` and no mutating
-//                 // operations on the nodes of this tree.
-//                 TreeIterator1::new(root)
-//             }),
-//             size: tree.num_entries,
-//         }
-//     }
-
-//     fn map_leaf_ptr_to_item(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> <Self as Iterator>::Item {
-//         // SAFETY: The reference pointing to this leaf will be bounded to the
-//         // lifetime of the iterator, which itself is bounded to the lifetime of
-//         // the `TreeMap` it is derived from. Further, the original `TreeMap`
-//         // reference was an immutable reference, meaning that no mutable reference
-//         //  currently exists, and will not exist while this immutable reference to the
-//         // leaf is present.
-//         let (key, value) = unsafe { leaf_node_ptr.as_key_value_ref() };
-
-//         (key, value)
-//     }
-// }
-
-// impl_ref_mut_iterator!(Iter1<'m, K, V>, (&'m K, &'m V) ; items_are_sorted);
-
-/// An iterator over the entries of a `TreeMap` producing shared reference to
-/// the key and mutable reference to the value.
-///
-/// This `struct` is created by the [`iter_mut`] method on `TreeMap`. See its
-/// documentation for more.
-///
-/// [`iter_mut`]: TreeMap::iter_mut
-pub struct IterMut<'m, K: AsBytes, V> {
-    _marker: PhantomData<&'m mut TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<'m, K, V>>,
-    size: usize,
+impl<K, V, F, R, T> FusedIterator for TreeIterator<K, V, F, R, T>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
 }
 
-impl<'m, K: AsBytes, V> IterMut<'m, K, V> {
-    pub(crate) fn new(tree: &'m mut TreeMap<K, V>) -> Self {
-        Self {
-            _marker: PhantomData,
-            raw_iter: tree.root.map(|root| unsafe {
-                // SAFETY: We have a mutable reference to the `TreeMap` which guarantees that
-                // there are no other references (mutable or immutable) to the same `TreeMap`
-                // and thus no mutating operations on the nodes of this tree.
-                TreeIterator::new(root)
-            }),
-            size: tree.num_entries,
-        }
-    }
-
-    fn map_leaf_ptr_to_item(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> <Self as Iterator>::Item {
-        // SAFETY: The reference pointing to this leaf will be bounded to the
-        // lifetime of the iterator, which itself is bounded to the lifetime of
-        // the `TreeMap` it is derived from. Further, the original `TreeMap`
-        // reference was a mutable reference, meaning that no other reference
-        // (mutable or immutable) currently exists, and will not exist while
-        // this mutable reference to the leaf is present.
-        let (key, value) = unsafe { leaf_node_ptr.as_key_ref_value_mut() };
-
-        (key, value)
+impl<K, V, F, R, T> ExactSizeIterator for TreeIterator<K, V, F, R, T>
+where
+    K: AsBytes,
+    F: Fn(NodePtr<LeafNode<K, V>>) -> R,
+{
+    fn len(&self) -> usize {
+        self.size
     }
 }
 
-impl_ref_mut_iterator!(IterMut<'m, K, V>, (&'m K, &'m mut V) ; items_are_sorted);
-
-/// An iterator over the keys of a `TreeMap`.
-///
-/// This `struct` is created by the [`keys`] method on `TreeMap`. See its
-/// documentation for more.
-///
-/// [`keys`]: TreeMap::keys
-pub struct Keys<'m, K: AsBytes, V> {
-    _marker: PhantomData<&'m TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<'m, K, V>>,
-    size: usize,
-}
-
-impl<'m, K: AsBytes, V> Keys<'m, K, V> {
-    pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
-        Self {
-            _marker: PhantomData,
-            raw_iter: tree.root.map(|root| unsafe {
-                // SAFETY: We have an immutable reference to the `TreeMap` which guarantees that
-                // there are not mutable references to the same `TreeMap` and no mutating
-                // operations on the nodes of this tree.
-                TreeIterator::new(root)
-            }),
-            size: tree.num_entries,
-        }
-    }
-
-    fn map_leaf_ptr_to_item(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> <Self as Iterator>::Item {
-        // SAFETY: The reference pointing to this leaf key will be bounded to the
-        // lifetime of the iterator, which itself is bounded to the lifetime of
-        // the `TreeMap` it is derived from. Further, the original `TreeMap`
-        // reference was an immutable reference, meaning that no mutable reference
-        //  currently exists, and will not exist while this immutable reference to the
-        // leaf key is present.
-        let key = unsafe { leaf_node_ptr.as_key_ref() };
-
-        key
-    }
-}
-
-impl_ref_mut_iterator!(Keys<'m, K, V>, &'m K ; items_are_sorted);
-
-/// An iterator that produces references to the values of a `TreeMap`.
-///
-/// This `struct` is created by the [`values`] method on `TreeMap`. See its
-/// documentation for more.
-///
-/// [`values`]: TreeMap::values
-pub struct Values<'m, K: AsBytes, V> {
-    _marker: PhantomData<&'m TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<'m, K, V>>,
-    size: usize,
-}
-
-impl<'m, K: AsBytes, V> Values<'m, K, V> {
-    pub(crate) fn new(tree: &'m TreeMap<K, V>) -> Self {
-        Self {
-            _marker: PhantomData,
-            raw_iter: tree.root.map(|root| unsafe {
-                // SAFETY: We have an immutable reference to the `TreeMap` which guarantees that
-                // there are not mutable references to the same `TreeMap` and no mutating
-                // operations on the nodes of this tree.
-                TreeIterator::new(root)
-            }),
-            size: tree.num_entries,
-        }
-    }
-
-    fn map_leaf_ptr_to_item(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> <Self as Iterator>::Item {
-        // SAFETY: The reference pointing to this leaf value will be bounded to the
-        // lifetime of the iterator, which itself is bounded to the lifetime of
-        // the `TreeMap` it is derived from. Further, the original `TreeMap`
-        // reference was an immutable reference, meaning that no mutable reference
-        //  currently exists, and will not exist while this immutable reference to the
-        // leaf value is present.
-        unsafe { leaf_node_ptr.as_value_ref() }
-    }
-}
-
-impl_ref_mut_iterator!(Values<'m, K, V>, &'m V);
-
-/// An iterator that produces mutable references to the values of a `TreeMap`.
-///
-/// This `struct` is created by the [`values_mut`] method on `TreeMap`. See
-/// its documentation for more.
-///
-/// [`values_mut`]: TreeMap::values_mut
-pub struct ValuesMut<'m, K: AsBytes, V> {
-    _marker: PhantomData<&'m mut TreeMap<K, V>>,
-    raw_iter: Option<TreeIterator<'m, K, V>>,
-    size: usize,
-}
-
-impl<'m, K: AsBytes, V> ValuesMut<'m, K, V> {
-    pub(crate) fn new(tree: &'m mut TreeMap<K, V>) -> Self {
-        Self {
-            _marker: PhantomData,
-            raw_iter: tree.root.map(|root| unsafe {
-                // SAFETY: We have a mutable reference to the `TreeMap` which guarantees that
-                // there are no other references (mutable or immutable) to the same `TreeMap`
-                // and thus no mutating operations on the nodes of this tree.
-                TreeIterator::new(root)
-            }),
-            size: tree.num_entries,
-        }
-    }
-
-    fn map_leaf_ptr_to_item(leaf_node_ptr: NodePtr<LeafNode<K, V>>) -> <Self as Iterator>::Item {
-        // SAFETY: The reference pointing to this leaf value will be bounded to the
-        // lifetime of the iterator, which itself is bounded to the lifetime of
-        // the `TreeMap` it is derived from. Further, the original `TreeMap`
-        // reference was a mutable reference, meaning that no other reference
-        // (mutable or immutable) currently exists, and will not exist while
-        // this mutable reference to the leaf value is present.
-        unsafe { leaf_node_ptr.as_value_mut() }
-    }
-}
-
-impl_ref_mut_iterator!(ValuesMut<'m, K, V>, &'m mut V);
-
+/*
 /// An iterator over a sub-range of entries in a `TreeMap`.
 ///
 /// This `struct` is created by the [`range`] method on `TreeMap`. See its
@@ -466,6 +318,7 @@ impl<K, V> DoubleEndedIterator for DrainFilter<K, V> {
         todo!()
     }
 }
+*/
 
 /// An owning iterator over the keys of a `TreeMap`.
 ///
@@ -555,5 +408,127 @@ impl<K: AsBytes, V> Iterator for IntoIter<K, V> {
 impl<K: AsBytes, V> DoubleEndedIterator for IntoIter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.0.pop_last()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{
+        deallocate_tree, tests_common::{generate_key_fixed_length, insert_unchecked}, AsBytes, LeafNode, NodePtr
+    };
+
+    #[test]
+    fn small_tree_iterator_front_and_back() {
+        let keys: [Box<[u8]>; 9] = [
+            vec![114, 159, 30].into_boxed_slice(),  // 0
+            vec![30, 159, 204].into_boxed_slice(),  // 1
+            vec![92, 39, 116].into_boxed_slice(),   // 2
+            vec![58, 7, 66].into_boxed_slice(),     // 3
+            vec![70, 30, 139].into_boxed_slice(),   // 4
+            vec![220, 78, 94].into_boxed_slice(),   // 5
+            vec![52, 231, 124].into_boxed_slice(),  // 6
+            vec![173, 226, 147].into_boxed_slice(), // 7
+            vec![6, 193, 187].into_boxed_slice(),   // 8
+        ];
+
+        let mut tree = TreeMap::new();
+        for (v, k) in  keys.into_iter().enumerate() {
+            tree.try_insert(k, v).unwrap();
+        }
+
+        let mut iter = tree.iter();
+    
+        assert_eq!(
+            iter.next(),
+            Some((&[6, 193, 187].into(), &8))
+        );
+        assert_eq!(
+            iter.next(),
+            Some((&[30, 159, 204].into(), &1))
+        );
+        assert_eq!(
+            iter.next_back(),
+            Some((&[220, 78, 94].into(), &5))
+        );
+        assert_eq!(
+            iter.next_back(),
+            Some((&[173, 226, 147].into(), &7))
+        );
+    
+        let rest = iter.collect::<Vec<_>>();
+        assert_eq!(rest.len(), 5);
+        assert_eq!(
+            rest,
+            vec![
+                (&[52, 231, 124].into(), &6),
+                (&[58, 7, 66].into(), &3),
+                (&[70, 30, 139].into(), &4),
+                (&[92, 39, 116].into(), &2),
+                (&[114, 159, 30].into(), &0),
+            ]
+        );
+    }
+    
+    #[test]
+    fn large_fixed_length_key_iterator_front_back() {
+        struct TestValues {
+            value_stops: u8,
+            half_len: usize,
+            first_half_last: [u8; 3],
+            last_half_last: [u8; 3],
+        }
+    
+        #[cfg(not(miri))]
+        const TEST_PARAMS: TestValues = TestValues {
+            value_stops: 5,
+            half_len: 108,
+            first_half_last: [102, 255, 255],
+            last_half_last: [153, 0, 0],
+        };
+        #[cfg(miri)]
+        const TEST_PARAMS: TestValues = TestValues {
+            value_stops: 3,
+            half_len: 32,
+            first_half_last: [85, 255, 255],
+            last_half_last: [170, 0, 0],
+        };
+    
+        let mut keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
+    
+        let mut tree = TreeMap::new();
+        for (v, k) in  keys.into_iter().enumerate() {
+            tree.try_insert(k, v).unwrap();
+        }
+
+        let mut iter = tree.keys();
+        
+        let first_remaining_half = iter
+            .by_ref()
+            .take(TEST_PARAMS.half_len)
+            .collect::<Vec<_>>();
+        let last_remaining_half = iter
+            .by_ref()
+            .rev()
+            .take(TEST_PARAMS.half_len)
+            .collect::<Vec<_>>();
+    
+        assert!(iter.next().is_none());
+    
+        assert_eq!(first_remaining_half.len(), TEST_PARAMS.half_len);
+        assert_eq!(last_remaining_half.len(), TEST_PARAMS.half_len);
+    
+        assert_eq!(first_remaining_half[0], &[0, 0, 0].into());
+        assert_eq!(
+            first_remaining_half[first_remaining_half.len() - 1],
+            &TEST_PARAMS.first_half_last.into()
+        );
+        assert_eq!(last_remaining_half[0], &[255, 255, 255].into());
+        assert_eq!(
+            last_remaining_half[last_remaining_half.len() - 1],
+            &TEST_PARAMS.last_half_last.into()
+        );
     }
 }

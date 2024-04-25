@@ -15,24 +15,17 @@ use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePt
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
 #[inline(always)]
-pub unsafe fn minimum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
-    fn get_next_node<N: InnerNode>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Key, N::Value> {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `minimum_unchecked` function.
-        let inner_node = unsafe { inner_node.as_ref() };
-        unsafe { inner_node.min().unwrap_unchecked() }
-    }
-
+pub unsafe fn minimum_unchecked<K: AsBytes, V>(
+    root: OpaqueNodePtr<K, V>,
+) -> NodePtr<LeafNode<K, V>> {
     let mut current_node = root;
 
     loop {
         current_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_node) => get_next_node(inner_node),
-            ConcreteNodePtr::Node16(inner_node) => get_next_node(inner_node),
-            ConcreteNodePtr::Node48(inner_node) => get_next_node(inner_node),
-            ConcreteNodePtr::Node256(inner_node) => get_next_node(inner_node),
+            ConcreteNodePtr::Node4(inner_node) => unsafe { inner_node.as_ref().min().1 },
+            ConcreteNodePtr::Node16(inner_node) => unsafe { inner_node.as_ref().min().1 },
+            ConcreteNodePtr::Node48(inner_node) => unsafe { inner_node.as_ref().min().1 },
+            ConcreteNodePtr::Node256(inner_node) => unsafe { inner_node.as_ref().min().1 },
             ConcreteNodePtr::LeafNode(inner_node) => {
                 return inner_node;
             },
@@ -54,35 +47,18 @@ pub unsafe fn minimum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> Nod
 ///    tree:
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
-pub unsafe fn maximum_unchecked<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> NodePtr<LeafNode<K, V>> {
-    fn get_next_node<N>(inner_node: NodePtr<N>) -> OpaqueNodePtr<N::Key, N::Value>
-    where
-        N: InnerNode,
-    {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `maximum_unchecked` function.
-        let inner_node = unsafe { inner_node.as_ref() };
-
-        // SAFETY: The iterator is limited to the lifetime of this function call and
-        // does not escape. No other code mutates the referenced node, guaranteed by the
-        // `minimum_unchecked` safey requirements and the reference.
-        let mut iter = unsafe { inner_node.iter() };
-
-        iter.next_back()
-            .expect("an inner node must always have at least one child")
-            .1
-    }
-
+#[inline(always)]
+pub unsafe fn maximum_unchecked<K: AsBytes, V>(
+    root: OpaqueNodePtr<K, V>,
+) -> NodePtr<LeafNode<K, V>> {
     let mut current_node = root;
 
     loop {
         current_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_node) => get_next_node(inner_node),
-            ConcreteNodePtr::Node16(inner_node) => get_next_node(inner_node),
-            ConcreteNodePtr::Node48(inner_node) => get_next_node(inner_node),
-            ConcreteNodePtr::Node256(inner_node) => get_next_node(inner_node),
+            ConcreteNodePtr::Node4(inner_node) => unsafe { inner_node.as_ref().max().1 },
+            ConcreteNodePtr::Node16(inner_node) => unsafe { inner_node.as_ref().max().1 },
+            ConcreteNodePtr::Node48(inner_node) => unsafe { inner_node.as_ref().max().1 },
+            ConcreteNodePtr::Node256(inner_node) => unsafe { inner_node.as_ref().max().1 },
             ConcreteNodePtr::LeafNode(inner_node) => {
                 return inner_node;
             },
