@@ -88,20 +88,17 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert!((tree.is_empty() && tree.len() == 0) || tree.len() > 0);
             },
             Action::CheckIter => {
-                let zipped_key_value = tree.keys().zip(tree.values());
-                let regular_iter = tree.iter();
-
-                assert!(zipped_key_value
-                    .zip(regular_iter)
-                    .all(|(elt_zipped, elt_regular)| { elt_zipped == elt_regular }));
-
                 tree.iter_mut().for_each(|(_, value)| {
+                    *value = value.saturating_add(1);
+                });
+
+                tree.iter_mut().rev().for_each(|(_, value)| {
                     *value = value.saturating_sub(1);
                 });
 
-                let l = tree.len();
                 assert!(tree.keys().is_sorted());
-                assert!(tree.iter().count() == l);
+                assert!(tree.keys().rev().is_sorted_by(|a, b| a >= b));
+                assert!(tree.iter().count() == tree.len());
             },
             Action::Remove(key) => {
                 if let Some(value) = tree.remove(key.as_ref()) {
