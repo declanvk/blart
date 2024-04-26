@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
-    inner_delete_unchecked, AsBytes, DeletePoint, DeleteResult, InsertPoint, LeafNode,
-    NoPrefixesBytes, NodePtr, OpaqueNodePtr, TreeMap,
+    AsBytes, DeletePoint, DeleteResult, InsertPoint, LeafNode, NoPrefixesBytes, NodePtr,
+    OpaqueNodePtr, TreeMap,
 };
 
 pub struct OccupiedEntry<'a, K, V>
@@ -56,14 +56,8 @@ where
             leaf_node_ptr: self.leaf_node_ptr,
         };
 
-        let DeleteResult {
-            deleted_leaf,
-            new_root,
-        } = unsafe { inner_delete_unchecked(self.map.root.unwrap_unchecked(), delete_point) };
-
-        self.map.num_entries -= 1;
-        self.map.root = new_root;
-        deleted_leaf.into_entry()
+        let delete_result = self.map.apply_delete_point(delete_point);
+        delete_result.deleted_leaf.into_entry()
     }
 
     pub fn remove(self) -> K {
@@ -201,7 +195,6 @@ where
             },
         }
     }
-
 
     pub fn or_default_entry(self) -> OccupiedEntry<'a, K, V>
     where

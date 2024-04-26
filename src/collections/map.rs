@@ -2,11 +2,11 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked,
-    maximum_unchecked, minimum_unchecked, search_for_insert_point, search_unchecked,
-    visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeleteResult, FuzzySearch, InsertPoint,
-    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
-    NodePtr, OpaqueNodePtr, StackArena,
+    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
+    minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked,
+    visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch,
+    InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode,
+    NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
     borrow::Borrow,
@@ -433,14 +433,9 @@ impl<K: AsBytes, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let DeleteResult {
-                deleted_leaf,
-                new_root,
-            } = unsafe { delete_minimum_unchecked(root) };
-
-            self.root = new_root;
-            self.num_entries -= 1;
-            Some(deleted_leaf.into_entry())
+            let delete_point = unsafe { find_minimum_to_delete(root) };
+            let delete_result = self.apply_delete_point(delete_point);
+            Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
         }
@@ -506,14 +501,9 @@ impl<K: AsBytes, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let DeleteResult {
-                deleted_leaf,
-                new_root,
-            } = unsafe { delete_maximum_unchecked(root) };
-
-            self.root = new_root;
-            self.num_entries -= 1;
-            Some(deleted_leaf.into_entry())
+            let delete_point = unsafe { find_maximum_to_delete(root) };
+            let delete_result = self.apply_delete_point(delete_point);
+            Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
         }
@@ -546,6 +536,19 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
 
         insert_result
+    }
+
+    fn apply_delete_point(&mut self, delete_point: DeletePoint<K, V>) -> DeleteResult<K, V>
+    where
+        K: AsBytes,
+    {
+        let delete_result = delete_point.apply(unsafe { self.root.unwrap_unchecked() });
+
+        self.root = delete_result.new_root;
+
+        self.num_entries -= 1;
+
+        delete_result
     }
 
     /// Insert a key-value pair into the map.
@@ -650,17 +653,9 @@ impl<K: AsBytes, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let DeleteResult {
-                deleted_leaf,
-                new_root,
-            } = unsafe { delete_unchecked(root, key)? };
-
-            // The `delete_unchecked` returns early if the key was not found, we are
-            // guaranteed at this point that the leaf has been removed from the tree.
-            self.num_entries -= 1;
-
-            self.root = new_root;
-            Some(deleted_leaf.into_entry())
+            let delete_point = unsafe { search_for_delete_point(root, key)? };
+            let delete_result = self.apply_delete_point(delete_point);
+            Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
         }
