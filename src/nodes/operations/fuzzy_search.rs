@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    AsBytes, HeaderNode, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
+    AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
     OpaqueNodePtr,
 };
 
