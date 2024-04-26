@@ -980,13 +980,13 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next(), None);
     /// ```
     pub fn iter<'a>(
-        &self,
+        &'a self,
     ) -> TreeIterator<
+        'a,
         K,
         V,
         impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a V),
-        (&'a K, &'a V),
-        &'a Self,
+        (&'a K, &'a V)
     > {
         TreeIterator::new(self, |l| unsafe { l.as_key_value_ref() })
     }
@@ -1013,13 +1013,13 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(map[&4], 'Z');
     /// ```
     pub fn iter_mut<'a>(
-        &mut self,
+        &'a mut self,
     ) -> TreeIterator<
+        'a,
         K,
         V,
         impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a mut V),
-        (&'a K, &'a mut V),
-        &'a mut Self,
+        (&'a K, &'a mut V)
     > {
         TreeIterator::new_mut(self, |l| unsafe { l.as_key_ref_value_mut() })
     }
@@ -1045,8 +1045,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next(), None);
     /// ```
     pub fn keys<'a>(
-        &self,
-    ) -> TreeIterator<K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a K, &'a K, &'a Self> {
+        &'a self,
+    ) -> TreeIterator<'a, K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a K, &'a K> {
         TreeIterator::new(self, |l| unsafe { l.as_key_ref() })
     }
 
@@ -1071,8 +1071,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next(), None);
     /// ```
     pub fn values<'a>(
-        &self,
-    ) -> TreeIterator<K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a V, &'a V, &'a Self> {
+        &'a self,
+    ) -> TreeIterator<'a, K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a V, &'a V> {
         TreeIterator::new(self, |l| unsafe { l.as_value_ref() })
     }
 
@@ -1098,8 +1098,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(map[&4], 'Z');
     /// ```
     pub fn values_mut<'a>(
-        &mut self,
-    ) -> TreeIterator<K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a mut V, &'a mut V, &'a mut Self>
+        &'a mut self,
+    ) -> TreeIterator<'a, K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a mut V, &'a mut V>
     {
         TreeIterator::new_mut(self, |l| unsafe { l.as_value_mut() })
     }
@@ -1335,11 +1335,11 @@ where
 
 impl<'a, K: AsBytes, V> IntoIterator for &'a TreeMap<K, V> {
     type IntoIter = TreeIterator<
+        'a,
         K,
         V,
         impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a V),
-        (&'a K, &'a V),
-        &'a Self,
+        (&'a K, &'a V)
     >;
     type Item = (&'a K, &'a V);
 
@@ -1350,11 +1350,11 @@ impl<'a, K: AsBytes, V> IntoIterator for &'a TreeMap<K, V> {
 
 impl<'a, K: AsBytes, V> IntoIterator for &'a mut TreeMap<K, V> {
     type IntoIter = TreeIterator<
+        'a,
         K,
         V,
         impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a mut V),
-        (&'a K, &'a mut V),
-        &'a mut Self,
+        (&'a K, &'a mut V)
     >;
     type Item = (&'a K, &'a mut V);
 

@@ -9,7 +9,7 @@ use std::{collections::VecDeque, iter::FusedIterator, marker::PhantomData};
 ///
 /// This iterator maintains pointers to internal nodes from the trie. No
 /// mutating operation can occur while this an instance of the iterator is live.
-pub struct TreeIterator<K, V, F, R, T>
+pub struct TreeIterator<'a, K, V, F, R>
 where
     K: AsBytes,
     F: Fn(NodePtr<LeafNode<K, V>>) -> R,
@@ -17,10 +17,10 @@ where
     nodes: VecDeque<OpaqueNodePtr<K, V>>,
     size: usize,
     f: F,
-    _marker: PhantomData<T>,
+    _marker: PhantomData<&'a TreeMap<K, V>>,
 }
 
-impl<K, V, F, R, T> TreeIterator<K, V, F, R, T>
+impl<'a, K, V, F, R> TreeIterator<'a, K, V, F, R>
 where
     K: AsBytes,
     F: Fn(NodePtr<LeafNode<K, V>>) -> R,
@@ -81,7 +81,7 @@ where
     }
 }
 
-impl<K, V, F, R, T> Iterator for TreeIterator<K, V, F, R, T>
+impl<'a, K, V, F, R> Iterator for TreeIterator<'a, K, V, F, R>
 where
     K: AsBytes,
     F: Fn(NodePtr<LeafNode<K, V>>) -> R,
@@ -118,7 +118,7 @@ where
 
 }
 
-impl<K, V, F, R, T> DoubleEndedIterator for TreeIterator<K, V, F, R, T>
+impl<'a, K, V, F, R> DoubleEndedIterator for TreeIterator<'a, K, V, F, R>
 where
     K: AsBytes,
     F: Fn(NodePtr<LeafNode<K, V>>) -> R,
@@ -141,14 +141,14 @@ where
     }
 }
 
-impl<K, V, F, R, T> FusedIterator for TreeIterator<K, V, F, R, T>
+impl<'a, K, V, F, R> FusedIterator for TreeIterator<'a, K, V, F, R>
 where
     K: AsBytes,
     F: Fn(NodePtr<LeafNode<K, V>>) -> R,
 {
 }
 
-impl<K, V, F, R, T> ExactSizeIterator for TreeIterator<K, V, F, R, T>
+impl<'a, K, V, F, R> ExactSizeIterator for TreeIterator<'a, K, V, F, R>
 where
     K: AsBytes,
     F: Fn(NodePtr<LeafNode<K, V>>) -> R,
@@ -266,59 +266,21 @@ impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
         todo!()
     }
 }
+*/
 
 /// An iterator produced by calling [`drain_filter`] on `TreeMap`. See its
 /// documentation for more.
 ///
 /// [`drain_filter`]: TreeMap::range_mut
-pub struct DrainFilter<K, V>(PhantomData<(K, V)>);
+pub struct ExtractIf<K, V>(PhantomData<(K, V)>);
 
-impl<K, V> Iterator for DrainFilter<K, V> {
+impl<K, V> Iterator for ExtractIf<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
         todo!()
     }
-
-    fn last(mut self) -> Option<Self::Item>
-    where
-        Self: Sized,
-    {
-        self.next_back()
-    }
-
-    fn min(mut self) -> Option<Self::Item>
-    where
-        Self: Sized,
-        Self::Item: Ord,
-    {
-        self.next()
-    }
-
-    fn max(mut self) -> Option<Self::Item>
-    where
-        Self: Sized,
-        Self::Item: Ord,
-    {
-        self.next_back()
-    }
-
-    #[cfg(feature = "nightly")]
-    fn is_sorted(self) -> bool
-    where
-        Self: Sized,
-        Self::Item: PartialOrd,
-    {
-        true
-    }
 }
-
-impl<K, V> DoubleEndedIterator for DrainFilter<K, V> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
-}
-*/
 
 /// An owning iterator over the keys of a `TreeMap`.
 ///
