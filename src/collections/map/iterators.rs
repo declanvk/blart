@@ -1,9 +1,8 @@
 use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 use std::{collections::VecDeque, iter::FusedIterator, marker::PhantomData};
 
-
 macro_rules! gen_iter {
-    ($name:ident, $tree:ty) => {
+    ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the [`LeafNode`]s in a non-singleton tree.
         ///
         /// Non-singleton here means that the tree has at least one [`InnerNode`].
@@ -12,40 +11,30 @@ macro_rules! gen_iter {
         ///
         /// This iterator maintains pointers to internal nodes from the trie. No
         /// mutating operation can occur while this an instance of the iterator is live.
-        pub struct $name<'a, K, V, F, R>
-        where
-            K: AsBytes,
-            F: Fn(NodePtr<LeafNode<K, V>>) -> R,
-        {
+        pub struct $name<'a, K: AsBytes, V> {
             nodes: VecDeque<OpaqueNodePtr<K, V>>,
             size: usize,
-            f: F,
             _tree: $tree,
         }
 
-        impl<'a, K, V, F, R> $name<'a, K, V, F, R>
-        where
-            K: AsBytes,
-            F: Fn(NodePtr<LeafNode<K, V>>) -> R,
-        {
+        impl<'a, K: AsBytes, V> $name<'a, K, V> {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
             ///
             /// # Safety
             ///
             /// See safety requirements on type [`InnerNodeTreeIterator`].
-            pub fn new(tree: $tree, f: F) -> Self {
+            pub fn new(tree: $tree) -> Self {
                 Self {
                     nodes: tree.root.into_iter().collect(),
                     size: tree.num_entries,
-                    f,
                     _tree: tree,
                 }
             }
 
             fn push_back_rev_iter<N>(&mut self, inner: NodePtr<N>)
             where
-                N: InnerNode<Key = K, Value = V>
+                N: InnerNode<Key = K, Value = V>,
             {
                 unsafe {
                     inner
@@ -58,7 +47,7 @@ macro_rules! gen_iter {
 
             fn push_front<N>(&mut self, inner: NodePtr<N>)
             where
-                N: InnerNode<Key = K, Value = V>
+                N: InnerNode<Key = K, Value = V>,
             {
                 unsafe {
                     inner
@@ -69,12 +58,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K, V, F, R> Iterator for $name<'a, K, V, F, R>
-        where
-            K: AsBytes,
-            F: Fn(NodePtr<LeafNode<K, V>>) -> R,
-        {
-            type Item = R;
+        impl<'a, K: AsBytes, V> Iterator for $name<'a, K, V> {
+            type Item = $ret;
 
             fn next(&mut self) -> Option<Self::Item> {
                 while let Some(node) = self.nodes.pop_back() {
@@ -85,7 +70,7 @@ macro_rules! gen_iter {
                         ConcreteNodePtr::Node256(inner) => self.push_back_rev_iter(inner),
                         ConcreteNodePtr::LeafNode(inner) => {
                             self.size -= 1;
-                            return Some((self.f)(inner));
+                            return unsafe { Some(inner.$op()) };
                         },
                     }
                 }
@@ -103,14 +88,9 @@ macro_rules! gen_iter {
             {
                 self.next_back()
             }
-
         }
 
-        impl<'a, K, V, F, R> DoubleEndedIterator for $name<'a, K, V, F, R>
-        where
-            K: AsBytes,
-            F: Fn(NodePtr<LeafNode<K, V>>) -> R,
-        {
+        impl<'a, K: AsBytes, V> DoubleEndedIterator for $name<'a, K, V> {
             fn next_back(&mut self) -> Option<Self::Item> {
                 while let Some(node) = self.nodes.pop_front() {
                     match node.to_node_ptr() {
@@ -120,7 +100,7 @@ macro_rules! gen_iter {
                         ConcreteNodePtr::Node256(inner) => self.push_front(inner),
                         ConcreteNodePtr::LeafNode(inner) => {
                             self.size -= 1;
-                            return Some((self.f)(inner));
+                            return unsafe { Some(inner.$op()) };
                         },
                     }
                 }
@@ -129,18 +109,9 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K, V, F, R> FusedIterator for $name<'a, K, V, F, R>
-        where
-            K: AsBytes,
-            F: Fn(NodePtr<LeafNode<K, V>>) -> R,
-        {
-        }
+        impl<'a, K: AsBytes, V> FusedIterator for $name<'a, K, V> {}
 
-        impl<'a, K, V, F, R> ExactSizeIterator for $name<'a, K, V, F, R>
-        where
-            K: AsBytes,
-            F: Fn(NodePtr<LeafNode<K, V>>) -> R,
-        {
+        impl<'a, K: AsBytes, V> ExactSizeIterator for $name<'a, K, V> {
             fn len(&self) -> usize {
                 self.size
             }
@@ -148,8 +119,21 @@ macro_rules! gen_iter {
     };
 }
 
-gen_iter!(TreeIterator, &'a TreeMap<K, V>);
-gen_iter!(TreeIteratorMut, &'a mut TreeMap<K, V>);
+gen_iter!(
+    TreeIterator,
+    &'a TreeMap<K, V>,
+    (&'a K, &'a V),
+    as_key_value_ref
+);
+gen_iter!(
+    TreeIteratorMut,
+    &'a mut TreeMap<K, V>,
+    (&'a K, &'a mut V),
+    as_key_ref_value_mut
+);
+gen_iter!(Keys, &'a TreeMap<K, V>, &'a K, as_key_ref);
+gen_iter!(Values, &'a TreeMap<K, V>, &'a V, as_value_ref);
+gen_iter!(ValuesMut, &'a mut TreeMap<K, V>, &'a mut V, as_value_mut);
 
 /*
 /// An iterator over a sub-range of entries in a `TreeMap`.
@@ -366,13 +350,14 @@ impl<K: AsBytes, V> DoubleEndedIterator for IntoIter<K, V> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use crate::{
-        deallocate_tree, tests_common::{generate_key_fixed_length, insert_unchecked}, AsBytes, LeafNode, NodePtr
+        deallocate_tree,
+        tests_common::{generate_key_fixed_length, insert_unchecked},
+        AsBytes, LeafNode, NodePtr,
     };
 
     #[test]
@@ -390,29 +375,17 @@ mod tests {
         ];
 
         let mut tree = TreeMap::new();
-        for (v, k) in  keys.into_iter().enumerate() {
+        for (v, k) in keys.into_iter().enumerate() {
             tree.try_insert(k, v).unwrap();
         }
 
         let mut iter = tree.iter();
-    
-        assert_eq!(
-            iter.next(),
-            Some((&[6, 193, 187].into(), &8))
-        );
-        assert_eq!(
-            iter.next(),
-            Some((&[30, 159, 204].into(), &1))
-        );
-        assert_eq!(
-            iter.next_back(),
-            Some((&[220, 78, 94].into(), &5))
-        );
-        assert_eq!(
-            iter.next_back(),
-            Some((&[173, 226, 147].into(), &7))
-        );
-    
+
+        assert_eq!(iter.next(), Some((&[6, 193, 187].into(), &8)));
+        assert_eq!(iter.next(), Some((&[30, 159, 204].into(), &1)));
+        assert_eq!(iter.next_back(), Some((&[220, 78, 94].into(), &5)));
+        assert_eq!(iter.next_back(), Some((&[173, 226, 147].into(), &7)));
+
         let rest = iter.collect::<Vec<_>>();
         assert_eq!(rest.len(), 5);
         assert_eq!(
@@ -426,7 +399,7 @@ mod tests {
             ]
         );
     }
-    
+
     #[test]
     fn large_fixed_length_key_iterator_front_back() {
         struct TestValues {
@@ -435,7 +408,7 @@ mod tests {
             first_half_last: [u8; 3],
             last_half_last: [u8; 3],
         }
-    
+
         #[cfg(not(miri))]
         const TEST_PARAMS: TestValues = TestValues {
             value_stops: 5,
@@ -450,31 +423,28 @@ mod tests {
             first_half_last: [85, 255, 255],
             last_half_last: [170, 0, 0],
         };
-    
+
         let mut keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
-    
+
         let mut tree = TreeMap::new();
-        for (v, k) in  keys.into_iter().enumerate() {
+        for (v, k) in keys.into_iter().enumerate() {
             tree.try_insert(k, v).unwrap();
         }
 
         let mut iter = tree.keys();
-        
-        let first_remaining_half = iter
-            .by_ref()
-            .take(TEST_PARAMS.half_len)
-            .collect::<Vec<_>>();
+
+        let first_remaining_half = iter.by_ref().take(TEST_PARAMS.half_len).collect::<Vec<_>>();
         let last_remaining_half = iter
             .by_ref()
             .rev()
             .take(TEST_PARAMS.half_len)
             .collect::<Vec<_>>();
-    
+
         assert!(iter.next().is_none());
-    
+
         assert_eq!(first_remaining_half.len(), TEST_PARAMS.half_len);
         assert_eq!(last_remaining_half.len(), TEST_PARAMS.half_len);
-    
+
         assert_eq!(first_remaining_half[0], &[0, 0, 0].into());
         assert_eq!(
             first_remaining_half[first_remaining_half.len() - 1],

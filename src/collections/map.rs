@@ -979,16 +979,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), (&4, &'z'));
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn iter<'a>(
-        &'a self,
-    ) -> TreeIterator<
-        'a,
-        K,
-        V,
-        impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a V),
-        (&'a K, &'a V)
-    > {
-        TreeIterator::new(self, |l| unsafe { l.as_key_value_ref() })
+    pub fn iter<'a>(&'a self) -> TreeIterator<'a, K, V> {
+        TreeIterator::new(self)
     }
 
     /// Gets a mutable iterator over the entries of the map, sorted by key.
@@ -1012,16 +1004,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn iter_mut<'a>(
-        &'a mut self,
-    ) -> TreeIteratorMut<
-        'a,
-        K,
-        V,
-        impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a mut V),
-        (&'a K, &'a mut V)
-    > {
-        TreeIteratorMut::new(self, |l| unsafe { l.as_key_ref_value_mut() })
+    pub fn iter_mut<'a>(&'a mut self) -> TreeIteratorMut<'a, K, V> {
+        TreeIteratorMut::new(self)
     }
 
     /// Gets an iterator over the keys of the map, in sorted order.
@@ -1044,10 +1028,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), &4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn keys<'a>(
-        &'a self,
-    ) -> TreeIterator<'a, K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a K, &'a K> {
-        TreeIterator::new(self, |l| unsafe { l.as_key_ref() })
+    pub fn keys<'a>(&'a self) -> Keys<'a, K, V> {
+        Keys::new(self)
     }
 
     /// Gets an iterator over the values of the map, in order by key.
@@ -1070,10 +1052,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), &'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn values<'a>(
-        &'a self,
-    ) -> TreeIterator<'a, K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a V, &'a V> {
-        TreeIterator::new(self, |l| unsafe { l.as_value_ref() })
+    pub fn values<'a>(&'a self) -> Values<'a, K, V> {
+        Values::new(self)
     }
 
     /// Gets a mutable iterator over the values of the map, in order by key.
@@ -1097,11 +1077,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn values_mut<'a>(
-        &'a mut self,
-    ) -> TreeIteratorMut<'a, K, V, impl Fn(NodePtr<LeafNode<K, V>>) -> &'a mut V, &'a mut V>
-    {
-        TreeIteratorMut::new(self, |l| unsafe { l.as_value_mut() })
+    pub fn values_mut<'a>(&'a mut self) -> ValuesMut<'a, K, V> {
+        ValuesMut::new(self)
     }
 
     /// Returns the number of elements in the map.
@@ -1334,32 +1311,20 @@ where
 }
 
 impl<'a, K: AsBytes, V> IntoIterator for &'a TreeMap<K, V> {
-    type IntoIter = TreeIterator<
-        'a,
-        K,
-        V,
-        impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a V),
-        (&'a K, &'a V)
-    >;
+    type IntoIter = TreeIterator<'a, K, V>;
     type Item = (&'a K, &'a V);
 
     fn into_iter(self) -> Self::IntoIter {
-        TreeIterator::new(self, |l| unsafe { l.as_key_value_ref() })
+        self.iter()
     }
 }
 
 impl<'a, K: AsBytes, V> IntoIterator for &'a mut TreeMap<K, V> {
-    type IntoIter = TreeIteratorMut<
-        'a,
-        K,
-        V,
-        impl Fn(NodePtr<LeafNode<K, V>>) -> (&'a K, &'a mut V),
-        (&'a K, &'a mut V)
-    >;
+    type IntoIter = TreeIteratorMut<'a, K, V>;
     type Item = (&'a K, &'a mut V);
 
     fn into_iter(self) -> Self::IntoIter {
-        TreeIteratorMut::new(self, |l| unsafe { l.as_key_ref_value_mut() })
+        self.iter_mut()
     }
 }
 
