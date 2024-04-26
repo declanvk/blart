@@ -650,11 +650,6 @@ pub trait Node: private::Sealed {
     type Value;
 }
 
-pub trait HeaderNode {
-    /// Access the header information for this node.
-    fn header(&self) -> &Header;
-}
-
 #[derive(Debug)]
 pub enum MatchPrefix<K: AsBytes, V> {
     Mismatch { mismatch: Mismatch<K, V> },
@@ -669,7 +664,7 @@ pub struct Mismatch<K: AsBytes, V> {
 }
 
 /// Common methods implemented by all inner node.
-pub trait InnerNode: Node + HeaderNode + Sized {
+pub trait InnerNode: Node + Sized {
     /// The type of the next larger node type.
     type GrownNode: InnerNode<Key = <Self as Node>::Key, Value = <Self as Node>::Value>;
 
@@ -696,6 +691,8 @@ pub trait InnerNode: Node + HeaderNode + Sized {
     }
 
     fn from_header(header: Header) -> Self;
+
+    fn header(&self) -> &Header;
 
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
@@ -1143,12 +1140,6 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 }
 
-impl<K: AsBytes, V, const SIZE: usize> HeaderNode for InnerNodeCompressed<K, V, SIZE> {
-    fn header(&self) -> &Header {
-        &self.header
-    }
-}
-
 /// Node that references between 2 and 4 children
 pub type InnerNode4<K, V> = InnerNodeCompressed<K, V, 4>;
 
@@ -1191,6 +1182,10 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
     type GrownNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
     type Iter<'a> = InnerNodeCompressedIter<'a, K, V> where Self: 'a;
     type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
+
+    fn header(&self) -> &Header {
+        &self.header
+    }
 
     fn from_header(header: Header) -> Self {
         InnerNodeCompressed {
@@ -1307,6 +1302,11 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
     type GrownNode = InnerNode48<<Self as Node>::Key, <Self as Node>::Value>;
     type Iter<'a> = InnerNodeCompressedIter<'a, K, V> where Self: 'a;
     type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
+
+    fn header(&self) -> &Header {
+        &self.header
+    }
+
 
     fn from_header(header: Header) -> Self {
         InnerNodeCompressed {
@@ -1507,16 +1507,15 @@ impl<K: AsBytes, V> Node for InnerNode48<K, V> {
     const TYPE: NodeType = NodeType::Node48;
 }
 
-impl<K: AsBytes, V> HeaderNode for InnerNode48<K, V> {
-    fn header(&self) -> &Header {
-        &self.header
-    }
-}
-
 impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     type GrownNode = InnerNode256<<Self as Node>::Key, <Self as Node>::Value>;
     type Iter<'a> = Map<FilterMap<Enumerate<Iter<'a, RestrictedNodeIndex<48>>>, impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>>, impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V>)> where Self: 'a;
     type ShrunkNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
+
+    fn header(&self) -> &Header {
+        &self.header
+    }
+
 
     fn from_header(header: Header) -> Self {
         InnerNode48 {
@@ -1851,16 +1850,15 @@ impl<K: AsBytes, V> Node for InnerNode256<K, V> {
     const TYPE: NodeType = NodeType::Node256;
 }
 
-impl<K: AsBytes, V> HeaderNode for InnerNode256<K, V> {
-    fn header(&self) -> &Header {
-        &self.header
-    }
-}
-
 impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     type GrownNode = Self;
     type Iter<'a> = FilterMap<Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V>>>>, impl FnMut((usize, &'a Option<OpaqueNodePtr<K, V>>)) -> Option<(u8, OpaqueNodePtr<K, V>)>> where Self: 'a;
     type ShrunkNode = InnerNode48<K, V>;
+
+    fn header(&self) -> &Header {
+        &self.header
+    }
+
 
     fn from_header(header: Header) -> Self {
         InnerNode256 {
