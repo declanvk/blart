@@ -5,10 +5,12 @@ use crate::{
     deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
     minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked,
     visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch,
-    InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode,
-    NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena,
+    Header, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, InsertPoint,
+    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
+    Node, NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
+    array::from_fn,
     borrow::Borrow,
     fmt::Debug,
     hash::{Hash, Hasher},
@@ -625,6 +627,116 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         } else {
             self.init_tree(key, value);
             Ok(None)
+        }
+    }
+
+    #[inline(always)]
+    fn write_partitions<N, F>(
+        header: Header,
+        partitions: [Vec<(K, V)>; 256],
+        depth: usize,
+        f: F,
+    ) -> OpaqueNodePtr<K, V>
+    where
+        N: InnerNode<Key = K, Value = V>,
+        F: Fn(&mut N, u8, OpaqueNodePtr<K, V>),
+    {
+        let mut node = N::from_header(header);
+        for (idx, partition) in partitions.into_iter().enumerate() {
+            if partition.is_empty() {
+                continue;
+            }
+
+            let child = if partition.len() == 1 {
+                let (key, value) = partition.into_iter().next().unwrap();
+                NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()
+            } else {
+                Self::inner_bulk_insert(partition, depth + 1)
+            };
+            f(&mut node, idx as u8, child);
+        }
+        return NodePtr::allocate_node_ptr(node).to_opaque();
+    }
+
+    fn inner_bulk_insert(entries: Vec<(K, V)>, mut depth: usize) -> OpaqueNodePtr<K, V>
+    where
+        K: AsBytes,
+    {
+        let first = entries.first().unwrap().0.as_bytes();
+        let last = entries.last().unwrap().0.as_bytes();
+        let lcp = first[depth..]
+            .iter()
+            .zip(&last[depth..])
+            .take_while(|(a, b)| **a == **b)
+            .count();
+
+        let header = Header::new(&first[depth..depth + lcp], lcp);
+        depth += lcp;
+
+        let mut num_keys = 0;
+        let mut partitions: [_; 256] = from_fn(|_| Vec::new());
+        let mut used: [_; 256] = from_fn(|_| false);
+        for entry in entries {
+            let idx = entry.0.as_bytes()[depth] as usize;
+            partitions[idx].push(entry);
+            num_keys += !used[idx] as usize;
+            used[idx] = true;
+        }
+
+        if num_keys <= 4 {
+            Self::write_partitions::<InnerNode4<K, V>, _>(
+                header,
+                partitions,
+                depth,
+                |node, idx, child| unsafe { node.write_child_unchecked(idx, child) },
+            )
+        } else if num_keys <= 16 {
+            Self::write_partitions::<InnerNode16<K, V>, _>(
+                header,
+                partitions,
+                depth,
+                |node, idx, child| unsafe { node.write_child_unchecked(idx, child) },
+            )
+        } else if num_keys <= 48 {
+            Self::write_partitions::<InnerNode48<K, V>, _>(
+                header,
+                partitions,
+                depth,
+                |node, idx, child| node.write_child(idx, child),
+            )
+        } else {
+            Self::write_partitions::<InnerNode256<K, V>, _>(
+                header,
+                partitions,
+                depth,
+                |node, idx, child| node.write_child(idx, child),
+            )
+        }
+    }
+
+    #[inline(never)]
+    pub fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
+    where
+        K: AsBytes,
+    {
+        if entries.is_empty() {
+            return Self::new();
+        }
+
+        if entries.len() == 1 {
+            let (key, value) = entries.into_iter().next().unwrap();
+            return Self {
+                num_entries: 1,
+                root: Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()),
+            };
+        }
+
+        let num_entries = entries.len();
+        entries.sort_by(|l1, l2| l1.0.as_bytes().cmp(l2.0.as_bytes()));
+        let root = Self::inner_bulk_insert(entries, 0);
+        Self {
+            num_entries,
+            root: Some(root),
         }
     }
 
