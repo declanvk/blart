@@ -10,12 +10,7 @@ use crate::{
     Node, NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
-    array::from_fn,
-    borrow::Borrow,
-    fmt::Debug,
-    hash::{Hash, Hasher},
-    mem::ManuallyDrop,
-    ops::{Index, RangeBounds},
+    array::from_fn, borrow::Borrow, fmt::Debug, hash::{Hash, Hasher}, intrinsics::assume, mem::ManuallyDrop, ops::{Index, RangeBounds}
 };
 
 mod entry;
@@ -662,13 +657,27 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     where
         K: AsBytes,
     {
+        unsafe {
+            assume(entries.len() >= 2);
+        }
         let first = entries.first().unwrap().0.as_bytes();
         let last = entries.last().unwrap().0.as_bytes();
+
+        unsafe {
+            assume(depth <= first.len());
+            assume(depth <= last.len());
+        }
+
         let lcp = first[depth..]
             .iter()
             .zip(&last[depth..])
             .take_while(|(a, b)| **a == **b)
             .count();
+
+        unsafe {
+            assume(depth + lcp <= first.len());
+            assume(depth <= depth + lcp);
+        }
 
         let header = Header::new(&first[depth..depth + lcp], lcp);
         depth += lcp;
@@ -677,10 +686,12 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         let mut partitions: [_; 256] = from_fn(|_| Vec::new());
         let mut used: [_; 256] = from_fn(|_| false);
         for entry in entries {
-            let idx = entry.0.as_bytes()[depth] as usize;
-            partitions[idx].push(entry);
-            num_keys += !used[idx] as usize;
-            used[idx] = true;
+            unsafe {
+                let idx = *entry.0.as_bytes().get_unchecked(depth) as usize;
+                partitions.get_unchecked_mut(idx).push(entry);
+                num_keys += !(*used.get_unchecked(idx)) as usize;
+                *used.get_unchecked_mut(idx) = true;
+            }
         }
 
         if num_keys <= 4 {
@@ -714,6 +725,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
+    #[inline(never)]
     pub fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
     where
         K: AsBytes,
