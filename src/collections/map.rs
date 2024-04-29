@@ -714,7 +714,6 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
-    #[inline(never)]
     pub fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
     where
         K: AsBytes,
@@ -733,6 +732,30 @@ impl<K: AsBytes, V> TreeMap<K, V> {
 
         let num_entries = entries.len();
         entries.sort_by(|l1, l2| l1.0.as_bytes().cmp(l2.0.as_bytes()));
+        let root = Self::inner_bulk_insert(entries, 0);
+        Self {
+            num_entries,
+            root: Some(root),
+        }
+    }
+
+    pub fn bulk_insert_unchecked(mut entries: Vec<(K, V)>) -> Self
+    where
+        K: AsBytes,
+    {
+        if entries.is_empty() {
+            return Self::new();
+        }
+
+        if entries.len() == 1 {
+            let (key, value) = entries.into_iter().next().unwrap();
+            return Self {
+                num_entries: 1,
+                root: Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()),
+            };
+        }
+
+        let num_entries = entries.len();
         let root = Self::inner_bulk_insert(entries, 0);
         Self {
             num_entries,

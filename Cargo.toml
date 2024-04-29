@@ -84,6 +84,11 @@ name = "iter"
 harness = false
 required-features = ["gen-benches-macro"]
 
+[[bench]]
+name = "bulk_insert"
+harness = false
+required-features = ["gen-benches-macro"]
+
 [profile.release]
 codegen-units = 1
 lto = "fat"
