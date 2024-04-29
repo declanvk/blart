@@ -895,11 +895,11 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     // assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
     // ```
     #[allow(dead_code)]
-    pub(crate) fn drain_filter<F>(&mut self, _pred: F) -> iterators::DrainFilter<K, V>
+    pub fn extract_if<'a, F>(&'a mut self, pred: F) -> ExtractIf<'a, K, V, F>
     where
         F: FnMut(&K, &mut V) -> bool,
     {
-        todo!()
+        ExtractIf::new(self, pred)
     }
     */
 

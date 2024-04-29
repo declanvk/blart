@@ -294,7 +294,7 @@ where
 
         // update running key prefix with inner node partial prefix
         // TODO: Fix this, here the we should return the full reconstructed prefix if prefix len > NUM_PREFIX_BYTES
-        self.current_key_prefix.extend(inner_node.header().read_prefix());
+        self.current_key_prefix.extend(inner_node.read_full_prefix(original_key_prefix_len).0);
 
         // SAFETY: The `child_it` does not live beyond the following loop and will not
         // overlap with any mutating access or operation, which is guaranteed by the
@@ -398,11 +398,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CString;
+
     use super::*;
     use crate::{
         deallocate_tree,
         tests_common::{generate_key_fixed_length, setup_tree_from_entries},
-        InnerNode16, InnerNode4, LeafNode, NodePtr,
+        InnerNode16, InnerNode4, LeafNode, NodePtr, TreeMap,
     };
 
     #[test]
@@ -422,6 +424,17 @@ mod tests {
         assert_eq!(unsafe { WellFormedChecker::check_tree(root) }, Ok(41));
 
         unsafe { deallocate_tree(root) };
+    }
+
+    #[test]
+    fn check_well_formed_tree_long_prefix() {
+        let mut tree = TreeMap::new();
+        tree.insert(CString::new("1").unwrap(), 1);
+        tree.insert(CString::new("2XX1XXXXXXXXXXXXXXXXXXXXXX1").unwrap(), 2);
+        tree.insert(CString::new("2XX1XXXXXXXXXXXXXXXXXXXXXX2").unwrap(), 3);
+        tree.insert(CString::new("2XX2").unwrap(), 4);
+
+        assert_eq!(unsafe { WellFormedChecker::check_tree(tree.root.unwrap()) }, Ok(7));
     }
 
     #[test]
