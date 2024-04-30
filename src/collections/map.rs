@@ -10,7 +10,14 @@ use crate::{
     Node, NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
-    array::from_fn, borrow::Borrow, fmt::Debug, hash::{Hash, Hasher}, intrinsics::assume, mem::ManuallyDrop, ops::{Index, RangeBounds}
+    array::from_fn,
+    borrow::Borrow,
+    collections::HashMap,
+    fmt::Debug,
+    hash::{Hash, Hasher},
+    intrinsics::assume,
+    mem::ManuallyDrop,
+    ops::{Index, RangeBounds},
 };
 
 mod entry;
@@ -628,7 +635,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     #[inline(always)]
     fn write_partitions<N, F>(
         header: Header,
-        partitions: [Vec<(K, V)>; 256],
+        partitions: HashMap<u8, Vec<(K, V)>>,
         depth: usize,
         f: F,
     ) -> OpaqueNodePtr<K, V>
@@ -637,18 +644,14 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         F: Fn(&mut N, u8, OpaqueNodePtr<K, V>),
     {
         let mut node = N::from_header(header);
-        for (idx, partition) in partitions.into_iter().enumerate() {
-            if partition.is_empty() {
-                continue;
-            }
-
+        for (idx, partition) in partitions {
             let child = if partition.len() == 1 {
                 let (key, value) = partition.into_iter().next().unwrap();
                 NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()
             } else {
                 Self::inner_bulk_insert(partition, depth + 1)
             };
-            f(&mut node, idx as u8, child);
+            f(&mut node, idx, child);
         }
         return NodePtr::allocate_node_ptr(node).to_opaque();
     }
@@ -682,18 +685,15 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         let header = Header::new(&first[depth..depth + lcp], lcp);
         depth += lcp;
 
-        let mut num_keys = 0;
-        let mut partitions: [_; 256] = from_fn(|_| Vec::new());
-        let mut used: [_; 256] = from_fn(|_| false);
+        let mut partitions = HashMap::<u8, Vec<(K, V)>>::new();
         for entry in entries {
             unsafe {
-                let idx = *entry.0.as_bytes().get_unchecked(depth) as usize;
-                partitions.get_unchecked_mut(idx).push(entry);
-                num_keys += !(*used.get_unchecked(idx)) as usize;
-                *used.get_unchecked_mut(idx) = true;
+                let idx = *entry.0.as_bytes().get_unchecked(depth);
+                partitions.entry(idx).or_default().push(entry);
             }
         }
 
+        let num_keys = partitions.len();
         if num_keys <= 4 {
             Self::write_partitions::<InnerNode4<K, V>, _>(
                 header,
