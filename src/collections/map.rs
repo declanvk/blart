@@ -1966,6 +1966,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn clone_tree_skewed() {
         let mut tree = TreeMap::new();
@@ -1976,6 +1977,7 @@ mod tests {
         assert!(tree == new_tree);
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn clone_tree_fixed_length() {
         let mut tree = TreeMap::new();
@@ -1986,6 +1988,7 @@ mod tests {
         assert!(tree == new_tree);
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn clone_tree_with_prefix() {
         let mut tree = TreeMap::new();
