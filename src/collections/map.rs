@@ -1350,15 +1350,14 @@ where
     V: Clone,
 {
     fn clone(&self) -> Self {
-        let mut new_tree = TreeMap::new();
-
-        for (key, value) in self {
-            // This `panic!` should never happen because the previous tree was constructed
-            // with no prefixes, so putting it into a new tree will also have no prefixes
-            let _ = new_tree.try_insert(key.clone(), value.clone()).unwrap();
+        if let Some(root) = self.root {
+            Self {
+                root: Some(root.deep_clone()),
+                num_entries: self.num_entries,
+            }
+        } else {
+            Self::new()
         }
-
-        new_tree
     }
 }
 
@@ -1512,7 +1511,7 @@ where
     V: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.iter().eq(other.iter())
+        self.iter().eq(other.iter()) && self.num_entries == other.num_entries
     }
 }
 
@@ -1533,6 +1532,10 @@ where
 #[cfg(test)]
 mod tests {
     use std::{cmp::Ordering, collections::hash_map::RandomState, ffi::CString, hash::BuildHasher};
+
+    use crate::tests_common::{
+        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
+    };
 
     use super::*;
 
@@ -1961,5 +1964,49 @@ mod tests {
                 assert_eq!(k, &s);
             }
         }
+    }
+
+    #[test]
+    fn clone_tree_skewed() {
+        let mut tree = TreeMap::new();
+        for (v, k) in generate_keys_skewed(u8::MAX as usize).enumerate() {
+            tree.try_insert(k, v).unwrap();
+        }
+        let new_tree = tree.clone();
+        assert!(tree == new_tree);
+    }
+
+    #[test]
+    fn clone_tree_fixed_length() {
+        let mut tree = TreeMap::new();
+        for (v, k) in generate_key_fixed_length([2; 8]).enumerate() {
+            tree.try_insert(k, v).unwrap();
+        }
+        let new_tree = tree.clone();
+        assert!(tree == new_tree);
+    }
+
+    #[test]
+    fn clone_tree_with_prefix() {
+        let mut tree = TreeMap::new();
+        for (v, k) in generate_key_with_prefix(
+            [2; 8],
+            [
+                PrefixExpansion {
+                    base_index: 1,
+                    expanded_length: 12,
+                },
+                PrefixExpansion {
+                    base_index: 5,
+                    expanded_length: 8,
+                },
+            ],
+        )
+        .enumerate()
+        {
+            tree.try_insert(k, v).unwrap();
+        }
+        let new_tree = tree.clone();
+        assert!(tree == new_tree);
     }
 }
