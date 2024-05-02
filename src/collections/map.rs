@@ -1349,6 +1349,7 @@ where
     K: Clone + AsBytes,
     V: Clone,
 {
+    #[inline(never)]
     fn clone(&self) -> Self {
         if let Some(root) = self.root {
             Self {
