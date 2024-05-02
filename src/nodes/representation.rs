@@ -370,18 +370,10 @@ impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
         V: Clone,
     {
         match self.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner) => unsafe {
-                NodePtr::allocate_node_ptr(inner.as_ref().deep_clone()).to_opaque()
-            },
-            ConcreteNodePtr::Node16(inner) => unsafe {
-                NodePtr::allocate_node_ptr(inner.as_ref().deep_clone()).to_opaque()
-            },
-            ConcreteNodePtr::Node48(inner) => unsafe {
-                NodePtr::allocate_node_ptr(inner.as_ref().deep_clone()).to_opaque()
-            },
-            ConcreteNodePtr::Node256(inner) => unsafe {
-                NodePtr::allocate_node_ptr(inner.as_ref().deep_clone()).to_opaque()
-            },
+            ConcreteNodePtr::Node4(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
+            ConcreteNodePtr::Node16(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
+            ConcreteNodePtr::Node48(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
+            ConcreteNodePtr::Node256(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
             ConcreteNodePtr::LeafNode(inner) => unsafe {
                 NodePtr::allocate_node_ptr(inner.as_ref().clone()).to_opaque()
             },
@@ -516,6 +508,13 @@ impl<N: Node> NodePtr<N> {
     /// Acquires the underlying *mut pointer.
     pub fn to_ptr(self) -> *mut N {
         self.0.as_ptr()
+    }
+
+    fn as_mut_safe<'a>(&'a mut self) -> &'a mut N {
+        // SAFETY: The pointer is properly aligned and points to a initialized instance
+        // of N that is dereferenceable. The lifetime safety requirements are passed up
+        // to the invoked of this function.
+        unsafe { self.0.as_mut() }
     }
 }
 
@@ -889,7 +888,7 @@ pub trait InnerNode: Node + Sized {
         OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
     );
 
-    fn deep_clone(&self) -> Self
+    fn deep_clone(&self) -> NodePtr<Self>
     where
         <Self as Node>::Key: Clone,
         <Self as Node>::Value: Clone;
@@ -1173,16 +1172,17 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         keys.iter().copied().zip(nodes.iter().copied())
     }
 
-    fn inner_deep_clone(&self) -> Self
+    fn inner_deep_clone(&self) -> NodePtr<Self>
     where
         K: Clone,
         V: Clone,
         Self: InnerNode<Key = K, Value = V>,
     {
-        let mut node = Self::from_header(self.header.clone());
+        let mut node = NodePtr::allocate_node_ptr(Self::from_header(self.header.clone()));
+        let node_ref = node.as_mut_safe();
         for (idx, (key_fragment, child_pointer)) in self.iter().enumerate() {
             let child_pointer = child_pointer.deep_clone();
-            unsafe { node.write_child_at(idx, key_fragment, child_pointer) };
+            unsafe { node_ref.write_child_at(idx, key_fragment, child_pointer) };
         }
 
         node
@@ -1302,7 +1302,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
     }
 
     #[inline(always)]
-    fn deep_clone(&self) -> Self
+    fn deep_clone(&self) -> NodePtr<Self>
     where
         K: Clone,
         V: Clone,
@@ -1431,7 +1431,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
     }
 
     #[inline(always)]
-    fn deep_clone(&self) -> Self
+    fn deep_clone(&self) -> NodePtr<Self>
     where
         K: Clone,
         V: Clone,
@@ -1881,20 +1881,21 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     }
 
     #[inline(always)]
-    fn deep_clone(&self) -> Self
+    fn deep_clone(&self) -> NodePtr<Self>
     where
         K: Clone,
         V: Clone,
     {
-        let mut node = Self::from_header(self.header.clone());
+        let mut node = NodePtr::allocate_node_ptr(Self::from_header(self.header.clone()));
+        let node_ref = node.as_mut_safe();
         for (idx, (key_fragment, child_pointer)) in self.iter().enumerate() {
             let child_pointer = child_pointer.deep_clone();
-            node.child_indices[usize::from(key_fragment)] =
+            node_ref.child_indices[usize::from(key_fragment)] =
                 unsafe { RestrictedNodeIndex::try_from(idx).unwrap_unchecked() };
             unsafe {
-                assume(idx < node.child_pointers.len());
+                assume(idx < node_ref.child_pointers.len());
             }
-            node.child_pointers[idx].write(child_pointer);
+            node_ref.child_pointers[idx].write(child_pointer);
         }
 
         node
@@ -2110,14 +2111,15 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     }
 
     #[inline(always)]
-    fn deep_clone(&self) -> Self
+    fn deep_clone(&self) -> NodePtr<Self>
     where
         K: Clone,
         V: Clone,
     {
-        let mut node = Self::from_header(self.header.clone());
+        let mut node = NodePtr::allocate_node_ptr(Self::from_header(self.header.clone()));
+        let node_ref = node.as_mut_safe();
         for (key_fragment, child_pointer) in self.iter() {
-            node.child_pointers[usize::from(key_fragment)] = Some(child_pointer.deep_clone());
+            node_ref.child_pointers[usize::from(key_fragment)] = Some(child_pointer.deep_clone());
         }
 
         node
