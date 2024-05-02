@@ -363,6 +363,30 @@ impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
     pub(crate) unsafe fn header_mut_uncheked<'h>(self) -> &'h mut Header {
         unsafe { &mut *self.0.cast::<Header>().to_ptr() }
     }
+
+    pub fn deep_clone(&self) -> Self
+    where
+        K: Clone,
+        V: Clone,
+    {
+        match self.to_node_ptr() {
+            ConcreteNodePtr::Node4(inner) => unsafe {
+                NodePtr::allocate_node_ptr(inner.as_ref().deep_clone()).to_opaque()
+            },
+            ConcreteNodePtr::Node16(inner) => unsafe {
+                NodePtr::allocate_node_ptr(inner.as_ref().deep_clone()).to_opaque()
+            },
+            ConcreteNodePtr::Node48(inner) => unsafe {
+                NodePtr::allocate_node_ptr(inner.as_ref().deep_clone()).to_opaque()
+            },
+            ConcreteNodePtr::Node256(inner) => unsafe {
+                NodePtr::allocate_node_ptr(inner.as_ref().deep_clone()).to_opaque()
+            },
+            ConcreteNodePtr::LeafNode(inner) => unsafe {
+                NodePtr::allocate_node_ptr(inner.as_ref().clone()).to_opaque()
+            },
+        }
+    }
 }
 
 /// An enum that encapsulates pointers to every type of Node
@@ -864,6 +888,11 @@ pub trait InnerNode: Node + Sized {
         u8,
         OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
     );
+
+    fn deep_clone(&self) -> Self
+    where
+        <Self as Node>::Key: Clone,
+        <Self as Node>::Value: Clone;
 }
 
 enum WritePoint {
@@ -966,7 +995,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         Self: SearchInnerNodeCompressed,
     {
         let num_children = self.header.num_children();
-        let child_index = match self.find_write_point(key_fragment) {
+        let idx = match self.find_write_point(key_fragment) {
             WritePoint::Existing(child_index) => child_index,
             WritePoint::Last(child_index) => {
                 self.header.num_children += 1;
@@ -999,11 +1028,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
             // SAFETY: The check for a full node is done previsouly to the call
             // of this function, so it's safe to assume that the new child index is
             // in bounds
-            assume(child_index < self.keys.len());
-            self.keys.get_unchecked_mut(child_index).write(key_fragment);
-            self.child_pointers
-                .get_unchecked_mut(child_index)
-                .write(child_pointer);
+            self.write_child_at(idx, key_fragment, child_pointer);
         }
     }
 
@@ -1019,15 +1044,24 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         key_fragment: u8,
         child_pointer: OpaqueNodePtr<K, V>,
     ) {
-        let i = self.header.num_children as usize;
+        let idx = self.header.num_children as usize;
+        unsafe { self.write_child_at(idx, key_fragment, child_pointer) };
+        self.header.num_children += 1;
+    }
+
+    unsafe fn write_child_at(
+        &mut self,
+        idx: usize,
+        key_fragment: u8,
+        child_pointer: OpaqueNodePtr<K, V>,
+    ) {
         unsafe {
-            assume(i < self.keys.len());
-            self.keys.get_unchecked_mut(i).write(key_fragment);
+            assume(idx < self.keys.len());
+            self.keys.get_unchecked_mut(idx).write(key_fragment);
             self.child_pointers
-                .get_unchecked_mut(i)
+                .get_unchecked_mut(idx)
                 .write(child_pointer);
         }
-        self.header.num_children += 1;
     }
 
     fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>>
@@ -1138,6 +1172,21 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         let (keys, nodes) = self.initialized_portion();
         keys.iter().copied().zip(nodes.iter().copied())
     }
+
+    fn inner_deep_clone(&self) -> Self
+    where
+        K: Clone,
+        V: Clone,
+        Self: InnerNode<Key = K, Value = V>,
+    {
+        let mut node = Self::from_header(self.header.clone());
+        for (idx, (key_fragment, child_pointer)) in self.iter().enumerate() {
+            let child_pointer = child_pointer.deep_clone();
+            unsafe { node.write_child_at(idx, key_fragment, child_pointer) };
+        }
+
+        node
+    }
 }
 
 /// Node that references between 2 and 4 children
@@ -1188,7 +1237,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
     }
 
     fn from_header(header: Header) -> Self {
-        InnerNodeCompressed {
+        Self {
             header,
             child_pointers: MaybeUninit::uninit_array(),
             keys: MaybeUninit::uninit_array(),
@@ -1251,6 +1300,14 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
             )
         }
     }
+
+    fn deep_clone(&self) -> Self
+    where
+        K: Clone,
+        V: Clone,
+    {
+        self.inner_deep_clone()
+    }
 }
 
 /// Node that references between 5 and 16 children
@@ -1307,9 +1364,8 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         &self.header
     }
 
-
     fn from_header(header: Header) -> Self {
-        InnerNodeCompressed {
+        Self {
             header,
             child_pointers: MaybeUninit::uninit_array(),
             keys: [MaybeUninit::new(0); 16],
@@ -1371,6 +1427,14 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
                 children.last().copied().unwrap_unchecked(),
             )
         }
+    }
+
+    fn deep_clone(&self) -> Self
+    where
+        K: Clone,
+        V: Clone,
+    {
+        self.inner_deep_clone()
     }
 }
 
@@ -1515,7 +1579,6 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     fn header(&self) -> &Header {
         &self.header
     }
-
 
     fn from_header(header: Header) -> Self {
         InnerNode48 {
@@ -1814,6 +1877,25 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
 
         (key as u8, child_pointers[idx])
     }
+
+    fn deep_clone(&self) -> Self
+    where
+        K: Clone,
+        V: Clone,
+    {
+        let mut node = Self::from_header(self.header.clone());
+        for (idx, (key_fragment, child_pointer)) in self.iter().enumerate() {
+            let child_pointer = child_pointer.deep_clone();
+            node.child_indices[usize::from(key_fragment)] =
+                unsafe { RestrictedNodeIndex::try_from(idx).unwrap_unchecked() };
+            unsafe {
+                assume(idx < node.child_pointers.len());
+            }
+            node.child_pointers[idx].write(child_pointer);
+        }
+
+        node
+    }
 }
 
 /// Node that references between 49 and 256 children
@@ -1858,7 +1940,6 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     fn header(&self) -> &Header {
         &self.header
     }
-
 
     fn from_header(header: Header) -> Self {
         InnerNode256 {
@@ -2023,6 +2104,19 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         (key as u8, unsafe {
             self.child_pointers[key].unwrap_unchecked()
         })
+    }
+
+    fn deep_clone(&self) -> Self
+    where
+        K: Clone,
+        V: Clone,
+    {
+        let mut node = Self::from_header(self.header.clone());
+        for (key_fragment, child_pointer) in self.iter() {
+            node.child_pointers[usize::from(key_fragment)] = Some(child_pointer.deep_clone());
+        }
+
+        node
     }
 }
 
