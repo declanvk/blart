@@ -1301,6 +1301,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         }
     }
 
+    #[inline(always)]
     fn deep_clone(&self) -> Self
     where
         K: Clone,
@@ -1429,6 +1430,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         }
     }
 
+    #[inline(always)]
     fn deep_clone(&self) -> Self
     where
         K: Clone,
@@ -1878,6 +1880,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         (key as u8, child_pointers[idx])
     }
 
+    #[inline(always)]
     fn deep_clone(&self) -> Self
     where
         K: Clone,
@@ -2106,6 +2109,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         })
     }
 
+    #[inline(always)]
     fn deep_clone(&self) -> Self
     where
         K: Clone,
