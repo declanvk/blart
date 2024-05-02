@@ -725,7 +725,6 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
-    #[inline(never)]
     pub fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
     where
         K: AsBytes,
@@ -1349,7 +1348,6 @@ where
     K: Clone + AsBytes,
     V: Clone,
 {
-    #[inline(never)]
     fn clone(&self) -> Self {
         if let Some(root) = self.root {
             Self {
