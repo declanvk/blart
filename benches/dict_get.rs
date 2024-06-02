@@ -27,7 +27,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
 
     let tree: TreeMap<_, _> = words.into_iter().map(|s| (s, 0usize)).collect();
 
-    let mut group = c.benchmark_group(format!("{prefix}"));
+    let mut group = c.benchmark_group(prefix.to_string());
     group.throughput(criterion::Throughput::Bytes(bytes as u64));
     group.warm_up_time(Duration::from_secs(10));
     group.measurement_time(Duration::from_secs(30));

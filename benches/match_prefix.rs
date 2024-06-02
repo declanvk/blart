@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use blart::{
-    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, NodePtr, TreeMap,
+    InnerNode, InnerNode256, InnerNode48, LeafNode, NodePtr,
     VariableKeyHeader,
 };
 use criterion::{measurement::Measurement, Criterion};

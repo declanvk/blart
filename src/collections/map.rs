@@ -1037,7 +1037,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     ///
     /// It is unspecified how many more elements will be subjected to the
     /// closure if a panic occurs in the closure, or a panic occurs while
-    /// dropping an element, or if the DrainFilter value is leaked.
+    /// dropping an element, or if the [`DrainFilter`] value is leaked.
     //
     // # Examples
     //

@@ -1,7 +1,7 @@
 use std::{ffi::CString, ptr::NonNull};
 
 use blart::{
-    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, Node, NodePtr, TreeMap,
+    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr, TreeMap,
     VariableKeyHeader,
 };
 use criterion::{measurement::Measurement, Criterion};
