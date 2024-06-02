@@ -78,7 +78,7 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
             )
         };
 
-        InnerNodeCompressedIter {
+        Self {
             keys_start,
             keys_end,
             child_pointers_start,
@@ -412,7 +412,7 @@ impl<K, V> InnerNode48Iter<K, V> {
             }
         };
 
-        InnerNode48Iter {
+        Self {
             original_child_indices_start: child_indices_range.start,
             child_pointers_ptr,
             child_indices_range,
@@ -710,7 +710,7 @@ impl<K, V> InnerNode256Iter<K, V> {
             }
         };
 
-        InnerNode256Iter {
+        Self {
             original_child_pointers_start: child_pointers_range.start,
             child_pointers_range,
         }

@@ -117,6 +117,26 @@ For further details please take a look at the following [link][superuser-run-per
 [cargo-criterion]: https://github.com/bheisler/cargo-criterion
 [superuser-run-perf]: https://superuser.com/questions/980632/run-perf-without-root-rights
 
+## Profiling
+
+I use a somewhat realistic benchmark: counting words in a text file. To get started, download a text file like:
+
+```bash
+curl -o data/Ulysses.txt https://www.gutenberg.org/cache/epub/4300/pg4300.txt
+```
+
+Then build the word count example using the `profiling` profile:
+
+```bash
+cargo build --profile profiling --exampleps
+```
+
+Then run the count words workload on the downloaded data while profiling:
+
+```bash
+samply record ./target/profiling/examples/count_words blart data/book-chapters-combined.txt
+```
+
 ## License
 
 Licensed under either of

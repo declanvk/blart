@@ -12,7 +12,8 @@ use std::{
 /// # Safety
 ///
 /// This iterator maintains pointers to internal nodes from the trie. No
-/// mutating operation can occur while this an instance of the iterator is live.
+/// mutating operation on inner nodes can occur while this an instance of the
+/// iterator is live.
 pub enum TreeIterator<K, V> {
     /// An iterator over a tree with only a single entry.
     Singleton(iter::Once<NodePtr<LeafNode<K, V>>>),

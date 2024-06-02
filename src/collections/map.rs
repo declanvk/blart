@@ -781,7 +781,7 @@ impl<K, V> TreeMap<K, V> {
     ///
     /// It is unspecified how many more elements will be subjected to the
     /// closure if a panic occurs in the closure, or a panic occurs while
-    /// dropping an element, or if the DrainFilter value is leaked.
+    /// dropping an element, or if the [`DrainFilter`] value is leaked.
     //
     // # Examples
     //
