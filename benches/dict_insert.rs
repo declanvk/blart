@@ -55,21 +55,21 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         group.bench_function("insert/asc", |b| {
             b.iter_batched(
                 || words.clone(),
-                |words| insert(words),
+                insert,
                 criterion::BatchSize::SmallInput,
             )
         });
         group.bench_function("insert/desc", |b| {
             b.iter_batched(
                 || rev_words.clone(),
-                |words| insert(words),
+                insert,
                 criterion::BatchSize::SmallInput,
             )
         });
         group.bench_function("insert/rand", |b| {
             b.iter_batched(
                 || rand_words.clone(),
-                |words| insert(words),
+                insert,
                 criterion::BatchSize::SmallInput,
             )
         });
@@ -82,21 +82,21 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         group.bench_function("insert/asc", |b| {
             b.iter_batched(
                 || part_words.clone(),
-                |words| insert(words),
+                insert,
                 criterion::BatchSize::SmallInput,
             )
         });
         group.bench_function("insert/desc", |b| {
             b.iter_batched(
                 || rev_part_words.clone(),
-                |words| insert(words),
+                insert,
                 criterion::BatchSize::SmallInput,
             )
         });
         group.bench_function("insert/rand", |b| {
             b.iter_batched(
                 || rand_part_words.clone(),
-                |words| insert(words),
+                insert,
                 criterion::BatchSize::SmallInput,
             )
         });

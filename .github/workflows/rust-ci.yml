@@ -40,11 +40,11 @@ jobs:
 
       - name: Test
         if: matrix.rust != 'nightly'
-        run: cargo test
+        run: cargo test --all-targets
 
       - name: Test with 'nightly' feature
         if: matrix.rust == 'nightly'
-        run: cargo test --features nightly
+        run: cargo test --all-targets --features nightly
 
   format:
     runs-on: ubuntu-latest
