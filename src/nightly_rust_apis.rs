@@ -113,40 +113,6 @@ pub fn maybe_uninit_slice_as_ptr<T>(this: &[std::mem::MaybeUninit<T>]) -> *const
     }
 }
 
-/// Creates a non-null raw slice from a thin pointer and a length.
-///
-/// The `len` argument is the number of **elements**, not the number of
-/// bytes.
-///
-/// This function is safe, but dereferencing the return value is unsafe.
-/// See the documentation of [`std::slice::from_raw_parts`] for slice safety
-/// requirements.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#71941][issue-71941]**
-///
-/// [issue-71941]: https://github.com/rust-lang/rust/issues/71941
-pub fn non_null_slice_from_raw_parts<T>(
-    data: std::ptr::NonNull<T>,
-    len: usize,
-) -> std::ptr::NonNull<[T]> {
-    #[cfg(feature = "nightly")]
-    {
-        std::ptr::NonNull::slice_from_raw_parts(data, len)
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        // SAFETY: `data` is a `NonNull` pointer which is necessarily non-null
-        unsafe {
-            std::ptr::NonNull::<[T]>::new_unchecked(std::ptr::slice_from_raw_parts_mut(
-                data.as_ptr(),
-                len,
-            ))
-        }
-    }
-}
-
 /// Returns a raw pointer to an element, without doing bounds checking.
 ///
 /// Calling this method with an out-of-bounds index or when `data` is not

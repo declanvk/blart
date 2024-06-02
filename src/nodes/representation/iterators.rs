@@ -396,7 +396,7 @@ impl<K, V> InnerNode48Iter<K, V> {
         let child_pointers_ptr = {
             let child_pointers_slice = node.initialized_child_pointers();
 
-            crate::nightly_rust_apis::non_null_slice_from_raw_parts(
+            NonNull::slice_from_raw_parts(
                 // PANIC SAFETY: The pointer is known to be non-null because it is derived from a
                 // slice
                 NonNull::new(child_pointers_slice.as_ptr() as *mut _).unwrap(),
