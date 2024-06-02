@@ -307,7 +307,7 @@ impl<P, const MIN_BITS: u32> Ord for TaggedPointer<P, MIN_BITS> {
 
 impl<P, const MIN_BITS: u32> PartialOrd for TaggedPointer<P, MIN_BITS> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
+        Some(self.cmp(other))
     }
 }
 
@@ -321,7 +321,7 @@ impl<P, const MIN_BITS: u32> PartialEq for TaggedPointer<P, MIN_BITS> {
 
 impl<P, const MIN_BITS: u32> Clone for TaggedPointer<P, MIN_BITS> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 
@@ -361,7 +361,9 @@ mod tests {
         assert_eq!(p.to_data(), 3);
         assert_eq!(unsafe { *p.to_ptr() }, 10);
 
-        unsafe { Box::from_raw(p.to_ptr()) };
+        unsafe {
+            let _ = Box::from_raw(p.to_ptr());
+        }
     }
 
     #[test]
@@ -376,7 +378,9 @@ mod tests {
         assert_eq!(unsafe { *p.to_ptr() }, 30);
         assert_eq!(p.to_data(), 0);
 
-        unsafe { Box::from_raw(p.to_ptr()) };
+        unsafe {
+            let _ = Box::from_raw(p.to_ptr());
+        }
     }
 
     #[test]
@@ -511,35 +515,17 @@ mod tests {
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
         );
 
-        // Something weird about the representation of u128 on intel architectures:
-        // https://github.com/rust-lang/rust/issues/54341
-        if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
-            assert_eq!(
-                TaggedPointer::<u128, 3>::ALIGNMENT,
-                8,
-                "Target architecture [{}]",
-                std::env::consts::ARCH
-            );
-            assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 3);
-
-            assert_eq!(
-                TaggedPointer::<u128, 3>::POINTER_MASK,
-                0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
-            );
-        } else {
-            assert_eq!(
-                TaggedPointer::<u128, 3>::ALIGNMENT,
-                16,
-                "Target architecture [{}]",
-                std::env::consts::ARCH
-            );
-            assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 4);
-
-            assert_eq!(
-                TaggedPointer::<u128, 3>::POINTER_MASK,
-                0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
-            );
-        }
+        assert_eq!(
+            TaggedPointer::<u128, 3>::ALIGNMENT,
+            16,
+            "Target architecture [{}]",
+            std::env::consts::ARCH
+        );
+        assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 4);
+        assert_eq!(
+            TaggedPointer::<u128, 3>::POINTER_MASK,
+            0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
+        );
     }
 
     #[test]

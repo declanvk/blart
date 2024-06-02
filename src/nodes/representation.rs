@@ -194,7 +194,7 @@ impl<K, V> Copy for OpaqueNodePtr<K, V> {}
 
 impl<K, V> Clone for OpaqueNodePtr<K, V> {
     fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
+        *self
     }
 }
 
@@ -297,22 +297,30 @@ impl<K, V> OpaqueNodePtr<K, V> {
             NodeType::Node4 => {
                 let node_ptr = self.0.cast::<InnerNode4<K, V>>().to_ptr();
 
-                ptr::addr_of_mut!((*node_ptr).header)
+                // SAFETY: Safety conditions of pointer dereference are covered by safety
+                // requirements of this function
+                unsafe { ptr::addr_of_mut!((*node_ptr).header) }
             },
             NodeType::Node16 => {
                 let node_ptr = self.0.cast::<InnerNode16<K, V>>().to_ptr();
 
-                ptr::addr_of_mut!((*node_ptr).header)
+                // SAFETY: Safety conditions of pointer dereference are covered by safety
+                // requirements of this function
+                unsafe { ptr::addr_of_mut!((*node_ptr).header) }
             },
             NodeType::Node48 => {
                 let node_ptr = self.0.cast::<InnerNode48<K, V>>().to_ptr();
 
-                ptr::addr_of_mut!((*node_ptr).header)
+                // SAFETY: Safety conditions of pointer dereference are covered by safety
+                // requirements of this function
+                unsafe { ptr::addr_of_mut!((*node_ptr).header) }
             },
             NodeType::Node256 => {
                 let node_ptr = self.0.cast::<InnerNode256<K, V>>().to_ptr();
 
-                ptr::addr_of_mut!((*node_ptr).header)
+                // SAFETY: Safety conditions of pointer dereference are covered by safety
+                // requirements of this function
+                unsafe { ptr::addr_of_mut!((*node_ptr).header) }
             },
             NodeType::Leaf => {
                 return None;
@@ -552,7 +560,7 @@ impl<K, V> NodePtr<LeafNode<K, V>> {
 
 impl<N: Node> Clone for NodePtr<N> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 impl<N: Node> Copy for NodePtr<N> {}
@@ -908,7 +916,7 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
 
         // Create new split node with a copy of the key prefix
         let mut split_node = Self::empty();
-        split_node.header.prefix = self.header.prefix.clone();
+        split_node.header.prefix.clone_from(&self.header.prefix);
 
         let split_num_children = self.header.num_children() - split_index;
 
@@ -1372,7 +1380,7 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
 
         // Create new split node with a copy of the key prefix
         let mut split_node = Self::empty();
-        split_node.header.prefix = self.header.prefix.clone();
+        split_node.header.prefix.clone_from(&self.header.prefix);
 
         // Move the split off child pointers to the second half of the new node
         split_node.child_indices[split_index..].copy_from_slice(split_child_indices);
@@ -1593,7 +1601,7 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
 
         // Create new split node with a copy of the key prefix
         let mut split_node = Self::empty();
-        split_node.header.prefix = self.header.prefix.clone();
+        split_node.header.prefix.clone_from(&self.header.prefix);
 
         // Move the split off child pointers to the second half of the new node
         split_node.child_pointers[split_index..].copy_from_slice(split_child_pointers);

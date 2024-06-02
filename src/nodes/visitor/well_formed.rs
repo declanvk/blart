@@ -241,8 +241,8 @@ impl<K, V> Error for MalformedTreeError<K, V> where K: AsBytes {}
 ///
 /// In this context, well-formed means that in the tree:
 ///  1. there are no loops between nodes
-///  2. every inner node has a number of children that is in range for the
-///     inner node type. For example, InnerNode16 has between 5 and 16 children.
+///  2. every inner node has a number of children that is in range for the inner
+///     node type. For example, InnerNode16 has between 5 and 16 children.
 ///  3. the elements of the key (as part of inner node prefixes and child
 ///     pointers) combine to match the leaf node key prefix
 ///
@@ -490,12 +490,14 @@ mod tests {
         // We can't just call `deallocate_tree(root)` because the deallocate function
         // assumes no loops, if we did use `deallocate_tree` it would hit a
         // use-after-free error
-        unsafe { NodePtr::deallocate_node_ptr(root) };
-        unsafe { NodePtr::deallocate_node_ptr(n4_left_ptr) };
-        unsafe { NodePtr::deallocate_node_ptr(n4_right_ptr) };
-        unsafe { NodePtr::deallocate_node_ptr(l1_ptr) };
-        unsafe { NodePtr::deallocate_node_ptr(l2_ptr) };
-        unsafe { NodePtr::deallocate_node_ptr(l3_ptr) };
+        unsafe {
+            let _ = NodePtr::deallocate_node_ptr(root);
+            let _ = NodePtr::deallocate_node_ptr(n4_left_ptr);
+            let _ = NodePtr::deallocate_node_ptr(n4_right_ptr);
+            let _ = NodePtr::deallocate_node_ptr(l1_ptr);
+            let _ = NodePtr::deallocate_node_ptr(l2_ptr);
+            let _ = NodePtr::deallocate_node_ptr(l3_ptr);
+        };
     }
 
     #[test]

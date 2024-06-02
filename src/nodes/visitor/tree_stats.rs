@@ -208,7 +208,7 @@ mod tests {
                 leaf_count: 16,
                 empty_capacity: 30,
                 total_key_bytes: 64,
-                total_inner_node_bytes: 1200
+                total_inner_node_bytes: 1080
             }
         );
 
@@ -234,7 +234,7 @@ mod tests {
                 leaf_count: 64,
                 empty_capacity: 0,
                 total_key_bytes: 128,
-                total_inner_node_bytes: 1464,
+                total_inner_node_bytes: 1328,
             }
         );
 

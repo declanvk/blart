@@ -68,7 +68,7 @@ fn opaque_node_ptr_is_correct() {
 #[test]
 #[cfg(target_pointer_width = "64")]
 fn node_sizes() {
-    const EXPECTED_HEADER_SIZE: usize = 40;
+    const EXPECTED_HEADER_SIZE: usize = 32;
 
     assert_eq!(mem::size_of::<Header>(), EXPECTED_HEADER_SIZE);
     // key map: 4 * (1 byte) = 4 bytes

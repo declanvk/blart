@@ -33,7 +33,7 @@ pub trait Visitable<K, T> {
     /// ```rust,compile_fail
     /// impl<K, T> Visitable<K, T> for InnerNode4<K, T> {
     ///     ...
-    ///  
+    ///
     ///     fn visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
     ///         visitor.visit_node4(self)
     ///     }

@@ -65,8 +65,8 @@ where
                 // single time. The uniqueness requirement is passed up to the
                 // `insert_unchecked` safety requirements.
                 unsafe {
-                    #[allow(clippy::drop_ref)]
-                    drop(inner_node);
+                    // Do not use the `inner_node` mutable reference after this point in this block,
+                    // since the node has been deallocated
                     drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
                 };
 
@@ -189,8 +189,6 @@ where
             if leaf_node.matches_full_key(&key) {
                 // This means that the key provided exactly matched the existing leaf key, so we
                 // will simply replace the contents of the leaf node.
-                #[allow(clippy::undropped_manually_drops)]
-                drop(leaf_node);
 
                 let new_leaf_node = LeafNode::new(key, value);
                 // SAFETY: The leaf node will not be accessed concurrently because of the safety
