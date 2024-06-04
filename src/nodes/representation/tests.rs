@@ -1,3 +1,4 @@
+use super::header::tests::EXPECTED_HEADER_SIZE;
 use super::*;
 use std::mem;
 
@@ -68,8 +69,6 @@ fn opaque_node_ptr_is_correct() {
 #[test]
 #[cfg(target_pointer_width = "64")]
 fn node_sizes() {
-    const EXPECTED_HEADER_SIZE: usize = 32;
-
     assert_eq!(mem::size_of::<Header>(), EXPECTED_HEADER_SIZE);
     // key map: 4 * (1 byte) = 4 bytes
     // child map: 4 * (8 bytes (on 64-bit platform)) = 32
@@ -110,7 +109,6 @@ fn node_alignment() {
     assert_eq!(mem::align_of::<InnerNode48<Box<[u8]>, u8>>(), 8);
     assert_eq!(mem::align_of::<InnerNode256<Box<[u8]>, u8>>(), 8);
     assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8>>(), 8);
-    assert_eq!(mem::align_of::<Header>(), 8);
 
     assert_eq!(
         mem::align_of::<InnerNode4<Box<[u8]>, u8>>(),
@@ -258,7 +256,10 @@ fn inner_node_split_at_on_test_keys_moved(
 
     let split_node = node.split_at(split_key_fragment);
 
-    assert_eq!(node.header().prefix, split_node.header().prefix);
+    assert_eq!(
+        node.header().read_prefix(),
+        split_node.header().read_prefix()
+    );
 
     for (idx, key_fragment) in children_key_fragments.iter().copied().enumerate() {
         let leaf_pointer = NodePtr::from(&mut leaves[idx]).to_opaque();
@@ -292,7 +293,7 @@ fn node4_lookup() {
 
     assert!(n.lookup_child(123).is_none());
 
-    n.header.num_children = 3;
+    n.header.set_num_children(3);
     n.keys[0].write(3);
     n.keys[1].write(123);
     n.keys[2].write(1);
@@ -394,7 +395,7 @@ fn node16_lookup() {
 
     assert!(n.lookup_child(123).is_none());
 
-    n.header.num_children = 3;
+    n.header.set_num_children(3);
     n.keys[0].write(3);
     n.keys[1].write(123);
     n.keys[2].write(1);
@@ -499,7 +500,7 @@ fn node48_lookup() {
 
     assert!(n.lookup_child(123).is_none());
 
-    n.header.num_children = 3;
+    n.header.set_num_children(3);
 
     n.child_indices[1] = 2usize.try_into().unwrap();
     n.child_indices[3] = 0usize.try_into().unwrap();
@@ -604,7 +605,7 @@ fn node256_lookup() {
 
     assert!(n.lookup_child(123).is_none());
 
-    n.header.num_children = 3;
+    n.header.set_num_children(3);
 
     n.child_pointers[1] = Some(l1_ptr);
     n.child_pointers[123] = Some(l2_ptr);
@@ -675,159 +676,4 @@ fn node256_split_at_both_empty_ends() {
         keys.as_ref(),
         255,
     );
-}
-
-#[test]
-fn header_read_write_prefix() {
-    let mut h = Header::empty();
-
-    assert_eq!(h.prefix_size(), 0);
-    assert_eq!(h.read_prefix(), &[]);
-
-    h.extend_prefix(&[1, 2, 3]);
-
-    assert_eq!(h.prefix_size(), 3);
-    assert_eq!(h.read_prefix(), &[1, 2, 3]);
-
-    h.extend_prefix(&[4, 5, 6]);
-
-    assert_eq!(h.prefix_size(), 6);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6]);
-
-    h.extend_prefix(&[7, 8]);
-
-    assert_eq!(h.prefix_size(), 8);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-
-    h.extend_prefix(&[9, 10, 11, 12]);
-
-    assert_eq!(h.prefix_size(), 12);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-
-    h.extend_prefix(&[]);
-
-    assert_eq!(h.prefix_size(), 12);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-}
-
-#[test]
-fn header_prepend_prefix() {
-    let mut h = Header::default();
-
-    assert_eq!(h.prefix_size(), 0);
-    assert_eq!(h.read_prefix(), &[]);
-
-    h.prepend_prefix(&[]);
-
-    assert_eq!(h.prefix_size(), 0);
-    assert_eq!(h.read_prefix(), &[]);
-
-    h.prepend_prefix(&[1, 2, 3]);
-
-    assert_eq!(h.prefix_size(), 3);
-    assert_eq!(h.read_prefix(), &[1, 2, 3]);
-
-    h.prepend_prefix(&[4, 5, 6]);
-
-    assert_eq!(h.prefix_size(), 6);
-    assert_eq!(h.read_prefix(), &[4, 5, 6, 1, 2, 3]);
-
-    h.extend_prefix(&[7, 8, 9]);
-
-    assert_eq!(h.prefix_size(), 9);
-    assert_eq!(h.read_prefix(), &[4, 5, 6, 1, 2, 3, 7, 8, 9]);
-}
-
-#[test]
-fn header_check_prefix() {
-    let mut h = Header::empty();
-
-    h.extend_prefix(&[1, 2, 3]);
-
-    assert_eq!(h.match_prefix(&[1, 2, 3]), 3);
-    assert_eq!(h.match_prefix(&[0, 1, 2]), 0);
-    assert_eq!(h.match_prefix(&[1, 2]), 2);
-    assert_eq!(h.match_prefix(&[]), 0);
-
-    h.extend_prefix(&[4, 5, 6, 7, 8, 9, 10, 11, 12]);
-
-    assert_eq!(h.match_prefix(&[1, 2, 3]), 3);
-    assert_eq!(h.match_prefix(&[0, 1, 2]), 0);
-    assert_eq!(h.match_prefix(&[1, 2]), 2);
-    assert_eq!(h.match_prefix(&[]), 0);
-
-    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]), 8);
-    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 12);
-    assert_eq!(
-        h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]),
-        12
-    );
-    assert_eq!(
-        h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 100, 200, 254, 255]),
-        8
-    );
-}
-
-#[test]
-fn empty_prefix_bytes_match() {
-    let mut h = Header::empty();
-
-    h.extend_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
-    h.ltrim_prefix(NUM_PREFIX_BYTES);
-    // 6 bytes are represented
-
-    assert_eq!(h.match_prefix(&[1, 2, 3]), 0);
-    assert_eq!(h.match_prefix(&[0]), 0);
-    assert_eq!(h.match_prefix(&[]), 0);
-    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6]), 0);
-    assert_eq!(h.match_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), 0);
-
-    assert_eq!(h.match_prefix(&[9, 10, 11, 12]), 4);
-    assert_eq!(h.match_prefix(&[9, 10, 11, 12, 13, 14]), 6);
-}
-
-#[test]
-fn header_delete_prefix() {
-    let mut h = Header::empty();
-    h.extend_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size(), 8);
-
-    h.ltrim_prefix(0);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size(), 8);
-
-    h.ltrim_prefix(3);
-    assert_eq!(h.read_prefix(), &[4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size(), 5);
-
-    h.ltrim_prefix(1);
-    assert_eq!(h.read_prefix(), &[5, 6, 7, 8]);
-    assert_eq!(h.prefix_size(), 4);
-
-    h.ltrim_prefix(4);
-    assert_eq!(h.read_prefix(), &[]);
-    assert_eq!(h.prefix_size(), 0);
-}
-
-#[test]
-#[should_panic]
-fn header_ltrim_prefix_too_many_bytes_panic() {
-    let mut h = Header::empty();
-    h.extend_prefix(&[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size(), 8);
-
-    h.ltrim_prefix(10);
-}
-
-#[test]
-#[should_panic]
-fn header_ltrim_prefix_non_stored_bytes_panic() {
-    let mut h = Header::empty();
-    h.extend_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
-    assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-    assert_eq!(h.prefix_size(), 8);
-
-    h.ltrim_prefix(0);
 }

@@ -1,5 +1,8 @@
 use argh::FromArgs;
-use blart::TreeMap;
+use blart::{
+    visitor::{TreeStats, TreeStatsCollector},
+    TreeMap,
+};
 use std::{collections::BTreeMap, error::Error, fs::OpenOptions, io::Read, path::PathBuf};
 
 /// Count words in file
@@ -43,18 +46,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         other => panic!("unknown map impl '{other}'"),
     };
 
-    println!("STATS: {stats:?}");
+    println!("STATS: {stats:#?}");
 
     Ok(())
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // the fields are used for the debug impl
 struct WordStats<'b> {
     num_unique: u64,
     first_word: &'b [u8],
     first_word_count: u64,
     last_word: &'b [u8],
     last_word_count: u64,
+    tree_stats: Option<TreeStats>,
 }
 
 fn count_words_blart(contents: &[u8]) -> WordStats {
@@ -67,6 +72,18 @@ fn count_words_blart(contents: &[u8]) -> WordStats {
             map.try_insert(word, 1).unwrap();
         }
     }
+
+    let root_node = map.into_raw().expect("tree should have at least 1 node");
+
+    let tree_stats = unsafe {
+        // SAFETY: No other operation is happening to this tree while this visitor is traversing it
+        TreeStatsCollector::collect(root_node)
+    };
+
+    let map = unsafe {
+        // SAFETY: The root pointer came directly from a `TreeMap::into_raw` call, was not modified, and is used no-where else.
+        TreeMap::from_raw(Some(root_node))
+    };
 
     let (first_word, first_word_count) = map
         .first_key_value()
@@ -82,6 +99,7 @@ fn count_words_blart(contents: &[u8]) -> WordStats {
         last_word_count: *last_word_count,
         first_word,
         first_word_count: *first_word_count,
+        tree_stats: Some(tree_stats),
     }
 }
 
@@ -112,5 +130,6 @@ fn count_words_std(contents: &[u8]) -> WordStats {
         last_word_count: *last_word_count,
         first_word,
         first_word_count: *first_word_count,
+        tree_stats: None,
     }
 }

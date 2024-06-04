@@ -84,7 +84,7 @@ where
     let inner_node = unsafe { inner_ptr.as_ref() };
     let header = inner_node.header();
     let matched_prefix_size = header.match_prefix(&key.as_bytes()[*current_depth..]);
-    if matched_prefix_size != header.prefix_size() {
+    if matched_prefix_size != header.prefix_len() {
         return None;
     }
 

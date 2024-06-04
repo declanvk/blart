@@ -293,7 +293,8 @@ where
         let original_key_prefix_len = self.current_key_prefix.len();
 
         // update running key prefix with inner node partial prefix
-        self.current_key_prefix.extend(&inner_node.header().prefix);
+        self.current_key_prefix
+            .extend_from_slice(inner_node.header().read_prefix());
 
         // SAFETY: The `child_it` does not live beyond the following loop and will not
         // overlap with any mutating access or operation, which is guaranteed by the

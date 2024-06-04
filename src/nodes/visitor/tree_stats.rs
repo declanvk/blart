@@ -1,6 +1,6 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, NodeType, OpaqueNodePtr,
+    AsBytes, Header, NodeType, OpaqueNodePtr,
 };
 use std::mem;
 
@@ -128,12 +128,8 @@ where
         let mut output = t.super_visit_with(self);
         output.node4_count += 1;
         output.empty_capacity += NodeType::Node4.upper_capacity() - t.header.num_children();
-        output.total_inner_node_bytes += mem::size_of_val(t)
-            + if t.header.prefix.is_heap() {
-                t.header.prefix.len()
-            } else {
-                0
-            };
+        output.total_inner_node_bytes +=
+            mem::size_of_val(t) + header_extra_allocated_size(&t.header);
         output
     }
 
@@ -141,12 +137,8 @@ where
         let mut output = t.super_visit_with(self);
         output.node16_count += 1;
         output.empty_capacity += NodeType::Node16.upper_capacity() - t.header.num_children();
-        output.total_inner_node_bytes += mem::size_of_val(t)
-            + if t.header.prefix.is_heap() {
-                t.header.prefix.len()
-            } else {
-                0
-            };
+        output.total_inner_node_bytes +=
+            mem::size_of_val(t) + header_extra_allocated_size(&t.header);
         output
     }
 
@@ -154,12 +146,8 @@ where
         let mut output = t.super_visit_with(self);
         output.node48_count += 1;
         output.empty_capacity += NodeType::Node48.upper_capacity() - t.header.num_children();
-        output.total_inner_node_bytes += mem::size_of_val(t)
-            + if t.header.prefix.is_heap() {
-                t.header.prefix.len()
-            } else {
-                0
-            };
+        output.total_inner_node_bytes +=
+            mem::size_of_val(t) + header_extra_allocated_size(&t.header);
         output
     }
 
@@ -167,12 +155,8 @@ where
         let mut output = t.super_visit_with(self);
         output.node256_count += 1;
         output.empty_capacity += NodeType::Node256.upper_capacity() - t.header.num_children();
-        output.total_inner_node_bytes += mem::size_of_val(t)
-            + if t.header.prefix.is_heap() {
-                t.header.prefix.len()
-            } else {
-                0
-            };
+        output.total_inner_node_bytes +=
+            mem::size_of_val(t) + header_extra_allocated_size(&t.header);
         output
     }
 
@@ -181,6 +165,14 @@ where
         output.leaf_count += 1;
         output.total_key_bytes += t.key_ref().as_bytes().len();
         output
+    }
+}
+
+fn header_extra_allocated_size(header: &Header) -> usize {
+    if header.is_prefix_on_heap() {
+        header.prefix_len()
+    } else {
+        0
     }
 }
 

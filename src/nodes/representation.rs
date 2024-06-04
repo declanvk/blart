@@ -1,6 +1,5 @@
 //! Trie node representation
 
-pub use self::iterators::*;
 use crate::{tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
 use std::{
     borrow::Borrow,
@@ -13,15 +12,15 @@ use std::{
     ops::Range,
     ptr::{self, NonNull},
 };
-use tinyvec::TinyVec;
 
+pub use self::header::Header;
+pub use self::iterators::*;
+
+mod header;
 mod iterators;
 
 #[cfg(test)]
 mod tests;
-
-/// The number of bytes stored for path compression in the node header.
-pub const NUM_PREFIX_BYTES: usize = 8;
 
 /// The representation of inner nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,83 +95,6 @@ impl NodeType {
             },
             NodeType::Leaf => Range { start: 0, end: 0 },
         }
-    }
-}
-
-/// The common header for all inner nodes
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Header {
-    /// Number of children of this inner node. This field has no meaning for
-    /// a leaf node.
-    pub num_children: u16,
-    /// The key prefix for this node.
-    pub prefix: TinyVec<[u8; NUM_PREFIX_BYTES]>,
-}
-
-impl Header {
-    /// Create a new `Header` for an empty node.
-    pub fn empty() -> Self {
-        Header {
-            num_children: 0,
-            prefix: TinyVec::new(),
-        }
-    }
-
-    /// Write prefix bytes to this header, appending to existing bytes if
-    /// present.
-    pub fn extend_prefix(&mut self, new_bytes: &[u8]) {
-        self.prefix.extend(new_bytes.iter().copied());
-    }
-
-    /// Write bytes to the start of the key prefix.
-    pub fn prepend_prefix(&mut self, new_bytes: &[u8]) {
-        self.prefix
-            .splice(0..0, new_bytes.iter().copied())
-            .for_each(|_| ());
-    }
-
-    /// Remove the specified number of bytes from the start of the prefix.
-    ///
-    /// # Panics
-    ///
-    ///  - Panics if the number of bytes to remove is greater than the prefix
-    ///    size.
-    pub fn ltrim_prefix(&mut self, num_bytes: usize) {
-        // this is an explicit match instead of a direct `self.prefix.drain` because it
-        // is more efficient. See `TinyVec::drain` documentation.
-        match self.prefix {
-            TinyVec::Inline(ref mut vec) => {
-                vec.drain(..num_bytes).for_each(|_| ());
-            },
-            TinyVec::Heap(ref mut vec) => {
-                vec.drain(..num_bytes).for_each(|_| ());
-            },
-        }
-    }
-
-    /// Read the initialized portion of the prefix present in the header.
-    pub fn read_prefix(&self) -> &[u8] {
-        self.prefix.as_ref()
-    }
-
-    /// Return the number of bytes in the prefix.
-    pub fn prefix_size(&self) -> usize {
-        self.prefix.len()
-    }
-
-    /// Compares the compressed path of a node with the key and returns the
-    /// number of equal bytes.
-    pub fn match_prefix(&self, possible_key: &[u8]) -> usize {
-        self.read_prefix()
-            .iter()
-            .zip(possible_key)
-            .take_while(|(a, b)| **a == **b)
-            .count()
-    }
-
-    /// Return the number of children of this node.
-    pub fn num_children(&self) -> usize {
-        usize::from(self.num_children)
     }
 }
 
@@ -666,6 +588,11 @@ pub trait InnerNode: Node {
 
     /// Grow this node into the next larger class, copying over children and
     /// prefix information.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if there is no larger size class or if the new
+    /// node size does not have enough capacity to hold all the children.
     fn grow(&self) -> Self::GrownNode;
 
     /// Shrink this node into the next smaller class, copying over children and
@@ -674,7 +601,7 @@ pub trait InnerNode: Node {
     /// # Panics
     ///
     /// Panics if the new, smaller node size does not have enough capacity to
-    /// hold all the children.
+    /// hold all the children. Will also panic if there is no smaller node size.
     fn shrink(&self) -> Self::ShrunkNode;
 
     /// Access the header information for this node.
@@ -828,7 +755,7 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
                 self.keys[child_index].write(key_fragment);
                 self.child_pointers[child_index].write(child_pointer);
 
-                self.header.num_children += 1;
+                self.header.increment_num_children();
             },
         }
     }
@@ -850,7 +777,7 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
                 self.keys
                     .copy_within((child_index + 1)..self.header.num_children(), child_index);
 
-                self.header.num_children -= 1;
+                self.header.decrement_num_children();
                 // SAFETY: This child pointer value is initialized because we got it by
                 // searching through the initialized keys and got the `Ok(index)` value.
                 Some(unsafe { MaybeUninit::assume_init(child_ptr) })
@@ -867,7 +794,7 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
             SIZE,
             NEW_SIZE,
             NEW_SIZE,
-            self.header.num_children
+            self.header.num_children()
         );
 
         let header = self.header.clone();
@@ -916,20 +843,21 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
 
         // Create new split node with a copy of the key prefix
         let mut split_node = Self::empty();
-        split_node.header.prefix.clone_from(&self.header.prefix);
+        split_node.header.copy_prefix_from(&self.header);
 
-        let split_num_children = self.header.num_children() - split_index;
+        let original_num_children = self.header.num_children();
+        let split_num_children = original_num_children - split_index;
 
         // move the keys and child_pointers from the split point over to the new node
         split_node.keys[..split_num_children]
-            .copy_from_slice(&self.keys[split_index..self.header.num_children()]);
+            .copy_from_slice(&self.keys[split_index..original_num_children]);
         split_node.child_pointers[..split_num_children]
-            .copy_from_slice(&self.child_pointers[split_index..self.header.num_children()]);
+            .copy_from_slice(&self.child_pointers[split_index..original_num_children]);
 
         // update number of children on both sides of the split
-        split_node.header.num_children = u16::try_from(split_num_children)
-            .expect("this number should be derived from something that fit in a u16");
-        self.header.num_children -= split_node.header.num_children;
+        split_node.header.set_num_children(split_num_children);
+        self.header
+            .set_num_children(original_num_children - split_num_children);
 
         split_node
     }
@@ -1238,7 +1166,7 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
 
             self.child_indices[key_fragment_idx] =
                 RestrictedNodeIndex::<48>::try_from(child_index).unwrap();
-            self.header.num_children += 1;
+            self.header.increment_num_children();
             child_index
         } else {
             // overwrite existing
@@ -1283,7 +1211,7 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
             }
 
             self.child_indices[usize::from(key_fragment)] = RestrictedNodeIndex::EMPTY;
-            self.header.num_children -= 1;
+            self.header.decrement_num_children();
             // SAFETY: This child pointer value is initialized because we got it by using a
             // non-`RestrictedNodeIndex::<>::EMPTY` index from the child indices array.
             Some(unsafe { MaybeUninit::assume_init(child_ptr) })
@@ -1311,10 +1239,10 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
 
     fn shrink(&self) -> Self::ShrunkNode {
         assert!(
-            self.header.num_children <= 16,
+            self.header.num_children() <= 16,
             "Cannot shrink a Node48 when it has more than 16 children. Currently has [{}] \
              children.",
-            self.header.num_children
+            self.header.num_children()
         );
 
         let header = self.header.clone();
@@ -1380,7 +1308,7 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
 
         // Create new split node with a copy of the key prefix
         let mut split_node = Self::empty();
-        split_node.header.prefix.clone_from(&self.header.prefix);
+        split_node.header.copy_prefix_from(&self.header);
 
         // Move the split off child pointers to the second half of the new node
         split_node.child_indices[split_index..].copy_from_slice(split_child_indices);
@@ -1390,24 +1318,23 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
         //
         // This step also compact the child pointers that belong to the split node into
         // the start of the `split_node.child_pointers` array
-        let mut split_node_num_children = 0u16;
+        let mut split_node_num_children = 0;
         for (original_child_index, new_child_index) in split_child_indices
             .iter_mut()
             .zip(&mut split_node.child_indices[split_index..])
         {
             if original_child_index.is_not_empty() {
                 // Copy the child pointer from the original node to the new split node
-                let new_child_index_value = usize::from(split_node_num_children);
-                split_node.child_pointers[new_child_index_value] =
+                split_node.child_pointers[split_node_num_children] =
                     self.child_pointers[usize::from(u8::from(*original_child_index))];
 
                 // Clear out original child index and replace new child index with updated value
                 *original_child_index = RestrictedNodeIndex::<48>::EMPTY;
-                // PANIC SAFETY: The value of `keep_child_index_value` is limited to the range
+                // PANIC SAFETY: The value of `split_node_num_children` is limited to the range
                 // 0..(max number of children present in InnerNode48), so this conversion will
                 // not panic
                 *new_child_index =
-                    RestrictedNodeIndex::<48>::try_from(new_child_index_value).unwrap();
+                    RestrictedNodeIndex::<48>::try_from(split_node_num_children).unwrap();
 
                 // PANIC SAFETY: This will not overflow because the number of children cannot
                 // exceed 256, which is less than u16::MAX
@@ -1415,25 +1342,24 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
             }
         }
 
-        split_node.header.num_children = split_node_num_children;
+        split_node.header.set_num_children(split_node_num_children);
 
         // Now we need to compact the original array of child pointers and update the
         // `keep_child_indices` list. We need a new child pointers array so we don't
         // overwrite the existing one
         let mut new_keep_child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
-        let mut keep_node_num_children = 0u16;
+        let mut keep_node_num_children = 0;
         for keep_child_index in keep_child_indices {
             if keep_child_index.is_not_empty() {
-                let keep_child_index_value = usize::from(keep_node_num_children);
                 // Move the child pointer from currently location to start of new child pointers
                 // array and update child index
-                new_keep_child_pointers[keep_child_index_value] =
+                new_keep_child_pointers[keep_node_num_children] =
                     self.child_pointers[usize::from(u8::from(*keep_child_index))];
-                // PANIC SAFETY: The value of `keep_child_index_value` is limited to the range
+                // PANIC SAFETY: The value of `keep_node_num_children` is limited to the range
                 // 0..(max number of children present in InnerNode48), so this conversion will
                 // not panic
                 *keep_child_index =
-                    RestrictedNodeIndex::<48>::try_from(keep_child_index_value).unwrap();
+                    RestrictedNodeIndex::<48>::try_from(keep_node_num_children).unwrap();
 
                 // PANIC SAFETY: This will not overflow because the number of children cannot
                 // exceed 256, which is less than u16::MAX
@@ -1442,7 +1368,7 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
         }
 
         self.child_pointers = new_keep_child_pointers;
-        self.header.num_children = keep_node_num_children;
+        self.header.set_num_children(keep_node_num_children);
 
         split_node
     }
@@ -1528,7 +1454,7 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
         let existing_pointer = self.child_pointers[key_fragment_idx];
         self.child_pointers[key_fragment_idx] = Some(child_pointer);
         if existing_pointer.is_none() {
-            self.header.num_children += 1;
+            self.header.increment_num_children();
         }
     }
 
@@ -1539,7 +1465,7 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
         let removed_child = self.child_pointers[usize::from(key_fragment)].take();
 
         if removed_child.is_some() {
-            self.header.num_children -= 1;
+            self.header.decrement_num_children();
         }
 
         removed_child
@@ -1551,10 +1477,10 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
 
     fn shrink(&self) -> Self::ShrunkNode {
         assert!(
-            self.header.num_children <= 48,
+            self.header.num_children() <= 48,
             "Cannot shrink a Node256 when it has more than 48 children. Currently has [{}] \
              children.",
-            self.header.num_children
+            self.header.num_children()
         );
 
         let header = self.header.clone();
@@ -1601,14 +1527,14 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
 
         // Create new split node with a copy of the key prefix
         let mut split_node = Self::empty();
-        split_node.header.prefix.clone_from(&self.header.prefix);
+        split_node.header.copy_prefix_from(&self.header);
 
         // Move the split off child pointers to the second half of the new node
         split_node.child_pointers[split_index..].copy_from_slice(split_child_pointers);
 
         // clear the contents of the original second half and count the number of filled
         // child nodes
-        let mut split_child_pointer_count = 0u16;
+        let mut split_child_pointer_count = 0;
         for child_pointer in split_child_pointers {
             if child_pointer.is_some() {
                 // PANIC SAFETY: This will not overflow because the number of children cannot
@@ -1619,8 +1545,12 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
         }
 
         // Update the number of children in each split node
-        self.header.num_children -= split_child_pointer_count;
-        split_node.header.num_children = split_child_pointer_count;
+        let original_num_children = self.header.num_children();
+        self.header
+            .set_num_children(original_num_children - split_child_pointer_count);
+        split_node
+            .header
+            .set_num_children(split_child_pointer_count);
 
         split_node
     }

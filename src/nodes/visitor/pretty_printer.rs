@@ -82,7 +82,7 @@ impl<O: Write> DotPrinter<O> {
                 "{{<h0> {:p}}}  | {{{:?} | {:?} | {:?}}} | {{",
                 inner_node as *const _,
                 N::TYPE,
-                header.prefix_size(),
+                header.prefix_len(),
                 header.read_prefix()
             )?;
         } else {
@@ -90,7 +90,7 @@ impl<O: Write> DotPrinter<O> {
                 self.output,
                 "{{<h0> {:?} | {:?} | {:?}}} | {{",
                 N::TYPE,
-                header.prefix_size(),
+                header.prefix_len(),
                 header.read_prefix()
             )?;
         }

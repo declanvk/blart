@@ -69,11 +69,11 @@ impl<K, V> InnerNodeCompressedIter<K, V> {
             (
                 NonNull::new_unchecked(<*mut u8>::add(
                     keys_start.as_ptr(),
-                    usize::from(node.header.num_children),
+                    node.header.num_children(),
                 )),
                 NonNull::new_unchecked(<*mut OpaqueNodePtr<K, V>>::add(
                     child_pointers_start.as_ptr(),
-                    usize::from(node.header.num_children),
+                    node.header.num_children(),
                 )),
             )
         };
