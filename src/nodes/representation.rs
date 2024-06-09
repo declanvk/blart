@@ -86,7 +86,7 @@ impl NodeType {
     /// Return the range of number of children that each node type accepts.
     pub const fn capacity_range(self) -> Range<usize> {
         match self {
-            NodeType::Node4 => Range { start: 1, end: 5 },
+            NodeType::Node4 => Range { start: 2, end: 5 },
             NodeType::Node16 => Range { start: 5, end: 17 },
             NodeType::Node48 => Range { start: 17, end: 49 },
             NodeType::Node256 => Range {

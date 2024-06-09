@@ -19,6 +19,7 @@ exclude = [
 ]
 
 [dependencies]
+hdrhistogram = "7.5.4"
 sptr = "0.3.2"
 
 [dependencies.tinyvec]

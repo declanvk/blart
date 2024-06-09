@@ -40,13 +40,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         "should have read entire file into memory"
     );
 
-    let stats = match args.map_impl.as_str() {
-        "std" => count_words_std(&contents),
-        "blart" => count_words_blart(&contents),
+    let (word_stats, tree_stats) = match args.map_impl.as_str() {
+        "std" => (count_words_std(&contents), None),
+        "blart" => {
+            let (word_stats, tree_stats) = count_words_blart(&contents);
+            (word_stats, Some(tree_stats))
+        },
         other => panic!("unknown map impl '{other}'"),
     };
 
-    println!("STATS: {stats:#?}");
+    println!("WORD STATS: {word_stats:#?}");
+
+    if let Some(tree_stats) = tree_stats {
+        println!("TREE STATS: {tree_stats:#}");
+    }
 
     Ok(())
 }
@@ -59,10 +66,9 @@ struct WordStats<'b> {
     first_word_count: u64,
     last_word: &'b [u8],
     last_word_count: u64,
-    tree_stats: Option<TreeStats>,
 }
 
-fn count_words_blart(contents: &[u8]) -> WordStats {
+fn count_words_blart(contents: &[u8]) -> (WordStats, TreeStats) {
     let mut map = TreeMap::<&[u8], u64>::new();
 
     for word in contents.split_inclusive(|b| *b == SPLIT_BYTE) {
@@ -77,7 +83,7 @@ fn count_words_blart(contents: &[u8]) -> WordStats {
 
     let tree_stats = unsafe {
         // SAFETY: No other operation is happening to this tree while this visitor is traversing it
-        TreeStatsCollector::collect(root_node)
+        TreeStatsCollector::collect(&root_node)
     };
 
     let map = unsafe {
@@ -93,14 +99,15 @@ fn count_words_blart(contents: &[u8]) -> WordStats {
         .last_key_value()
         .expect("there should be at least 1 word in the map");
 
-    WordStats {
+    let word_stats = WordStats {
         num_unique: map.len() as u64,
         last_word,
         last_word_count: *last_word_count,
         first_word,
         first_word_count: *first_word_count,
-        tree_stats: Some(tree_stats),
-    }
+    };
+
+    (word_stats, tree_stats)
 }
 
 const SPLIT_BYTE: u8 = ' ' as u8;
@@ -130,6 +137,5 @@ fn count_words_std(contents: &[u8]) -> WordStats {
         last_word_count: *last_word_count,
         first_word,
         first_word_count: *first_word_count,
-        tree_stats: None,
     }
 }
