@@ -58,8 +58,8 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_blocks, 0);
         dhat::assert_eq!(stats.curr_bytes, 0);
 
-        dhat::assert_eq!(stats.max_blocks, 360);
-        dhat::assert_eq!(stats.max_bytes, 17225);
+        dhat::assert_eq!(stats.max_blocks, 366);
+        dhat::assert_eq!(stats.max_bytes, 17273);
 
         let num_keys = KEY_LEVEL_WIDTH
             .iter()

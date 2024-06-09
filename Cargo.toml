@@ -22,10 +22,6 @@ exclude = [
 hdrhistogram = "7.5.4"
 sptr = "0.3.2"
 
-[dependencies.tinyvec]
-version = "1.6.0"
-features = ["std", "rustc_1_57"]
-
 [dependencies.bytemuck]
 version = "1.13.0"
 features = ["min_const_generics"]

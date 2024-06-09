@@ -1,6 +1,5 @@
-use tinyvec::TinyVec;
-
 /// The number of bytes stored for path compression in the node header.
+#[cfg(test)]
 pub const NUM_PREFIX_BYTES: usize = 8;
 
 /// The common header for all inner nodes
@@ -9,7 +8,7 @@ pub struct Header {
     /// Number of children of this inner node and number of bytes populated in prefix array.
     num_children: u16,
     /// The key prefix for this node.
-    prefix: TinyVec<[u8; NUM_PREFIX_BYTES]>,
+    prefix: Vec<u8>,
 }
 
 impl Header {
@@ -17,7 +16,7 @@ impl Header {
     pub fn empty() -> Self {
         Header {
             num_children: 0,
-            prefix: TinyVec::new(),
+            prefix: Vec::new(),
         }
     }
 
@@ -41,16 +40,7 @@ impl Header {
     ///  - Panics if the number of bytes to remove is greater than the prefix
     ///    size.
     pub fn ltrim_prefix(&mut self, num_bytes: usize) {
-        // this is an explicit match instead of a direct `self.prefix.drain` because it
-        // is more efficient. See `TinyVec::drain` documentation.
-        match self.prefix {
-            TinyVec::Inline(ref mut vec) => {
-                vec.drain(..num_bytes).for_each(|_| ());
-            },
-            TinyVec::Heap(ref mut vec) => {
-                vec.drain(..num_bytes).for_each(|_| ());
-            },
-        }
+        self.prefix.drain(..num_bytes).for_each(|_| ())
     }
 
     /// Read the initialized portion of the prefix present in the header.
@@ -61,11 +51,15 @@ impl Header {
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
     pub fn match_prefix(&self, possible_key: &[u8]) -> usize {
-        self.read_prefix()
-            .iter()
-            .zip(possible_key)
-            .take_while(|(a, b)| **a == **b)
-            .count()
+        let min_len = self.prefix.len().min(possible_key.len());
+
+        for idx in 0..min_len {
+            if self.prefix[idx] != possible_key[idx] {
+                return idx;
+            }
+        }
+
+        min_len
     }
 
     /// Return the number of children of this node.
@@ -124,7 +118,7 @@ impl Header {
 
     /// Return true if the prefix has spilled to the heap
     pub fn is_prefix_on_heap(&self) -> bool {
-        self.prefix.is_heap()
+        true
     }
 
     /// Overwrite the prefix of this header with the prefix from `other`.
