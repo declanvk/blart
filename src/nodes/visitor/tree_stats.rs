@@ -89,7 +89,7 @@ impl fmt::Display for TreeStats {
 
         impl<'a, T: fmt::Display> fmt::Debug for DisplayAsDebug<'a, T> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                <T as fmt::Display>::fmt(&self.0, f)
+                <T as fmt::Display>::fmt(self.0, f)
             }
         }
 
@@ -246,13 +246,9 @@ where
 {
     type Output = ();
 
-    fn default_output(&self) -> Self::Output {
-        ()
-    }
+    fn default_output(&self) -> Self::Output {}
 
-    fn combine_output(&self, _: Self::Output, _: Self::Output) -> Self::Output {
-        ()
-    }
+    fn combine_output(&self, _: Self::Output, _: Self::Output) -> Self::Output {}
 
     fn visit_node4(&mut self, t: &crate::InnerNode4<K, V>) -> Self::Output {
         t.super_visit_with(self);

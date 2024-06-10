@@ -130,12 +130,14 @@ where
         }
     }
 
+    let key_bytes = key.as_bytes();
+
     // SAFETY: Requirements covered by containing function
     let InsertSearchResult {
         parent_ptr_and_child_key_byte,
         insert_type,
         mut key_bytes_used,
-    } = unsafe { search_for_insert_point(root, &key)? };
+    } = unsafe { search_for_insert_point(root, key_bytes)? };
 
     let new_inner_node = match insert_type {
         InsertSearchResultType::MismatchPrefix {
@@ -152,16 +154,16 @@ where
             // prefix, implying that the header is present.
             let header = unsafe { mismatched_inner_node_ptr.header_mut().unwrap() };
 
-            if (key_bytes_used + matched_prefix_size) >= key.as_bytes().len() {
+            if (key_bytes_used + matched_prefix_size) >= key_bytes.len() {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key
 
                 return Err(InsertPrefixError {
-                    byte_repr: key.as_bytes().into(),
+                    byte_repr: key_bytes.into(),
                 });
             }
 
-            let new_leaf_key_byte = key.as_bytes()[key_bytes_used + matched_prefix_size];
+            let new_leaf_key_byte = key_bytes[key_bytes_used + matched_prefix_size];
 
             let new_leaf_pointer =
                 NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque();
@@ -206,26 +208,26 @@ where
             let mut new_n4 = InnerNode4::empty();
             let prefix_size = leaf_node.key_ref().as_bytes()[key_bytes_used..]
                 .iter()
-                .zip(key.as_bytes()[key_bytes_used..].iter())
+                .zip(key_bytes[key_bytes_used..].iter())
                 .take_while(|(k1, k2)| k1 == k2)
                 .count();
             new_n4
                 .header
-                .extend_prefix(&key.as_bytes()[key_bytes_used..(key_bytes_used + prefix_size)]);
+                .extend_prefix(&key_bytes[key_bytes_used..(key_bytes_used + prefix_size)]);
             key_bytes_used += prefix_size;
 
-            if key_bytes_used >= key.as_bytes().len()
+            if key_bytes_used >= key_bytes.len()
                 || key_bytes_used >= leaf_node.key_ref().as_bytes().len()
             {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key OR an existing key is a prefix of it
 
                 return Err(InsertPrefixError {
-                    byte_repr: key.as_bytes().into(),
+                    byte_repr: key_bytes.into(),
                 });
             }
 
-            let new_leaf_key_byte = key.as_bytes()[key_bytes_used];
+            let new_leaf_key_byte = key_bytes[key_bytes_used];
             let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
 
             new_n4.write_child(
@@ -398,14 +400,14 @@ impl<K, V> fmt::Debug for InsertSearchResultType<K, V> {
 /// an error.
 pub unsafe fn search_for_insert_point<K, V>(
     root: OpaqueNodePtr<K, V>,
-    key: &K,
+    key_bytes: &[u8],
 ) -> Result<InsertSearchResult<K, V>, InsertPrefixError>
 where
     K: AsBytes,
 {
     fn test_prefix_identify_insert<K, V, N>(
         inner_ptr: NodePtr<N>,
-        key: &K,
+        key_bytes: &[u8],
         current_depth: &mut usize,
     ) -> Result<ControlFlow<usize, Option<OpaqueNodePtr<K, V>>>, InsertPrefixError>
     where
@@ -418,7 +420,7 @@ where
         // `search_unchecked` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
         let header = inner_node.header();
-        let matched_prefix_size = header.match_prefix(&key.as_bytes()[*current_depth..]);
+        let matched_prefix_size = header.match_prefix(&key_bytes[*current_depth..]);
         if matched_prefix_size != header.prefix_len() {
             return Ok(ControlFlow::Break(matched_prefix_size));
         }
@@ -426,14 +428,14 @@ where
         // Since the prefix matched, advance the depth by the size of the prefix
         *current_depth += matched_prefix_size;
 
-        let next_key_fragment = if *current_depth < key.as_bytes().len() {
-            key.as_bytes()[*current_depth]
+        let next_key_fragment = if *current_depth < key_bytes.len() {
+            key_bytes[*current_depth]
         } else {
             // then the key has insufficient bytes to be unique. It must be
             // a prefix of an existing key
 
             return Err(InsertPrefixError {
-                byte_repr: key.as_bytes().into(),
+                byte_repr: key_bytes.into(),
             });
         };
 
@@ -449,16 +451,16 @@ where
     loop {
         let lookup_result = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node16(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node48(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node256(inner_ptr) => {
-                test_prefix_identify_insert(inner_ptr, key, &mut current_depth)
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 return Ok(InsertSearchResult {
@@ -473,7 +475,7 @@ where
             ControlFlow::Continue(next_child_node) => {
                 match next_child_node {
                     Some(next_child_node) => {
-                        current_parent = Some((current_node, key.as_bytes()[current_depth]));
+                        current_parent = Some((current_node, key_bytes[current_depth]));
                         current_node = next_child_node;
                         // Increment by a single byte
                         current_depth += 1;

@@ -53,8 +53,8 @@ impl Header {
     pub fn match_prefix(&self, possible_key: &[u8]) -> usize {
         let min_len = self.prefix.len().min(possible_key.len());
 
-        for idx in 0..min_len {
-            if self.prefix[idx] != possible_key[idx] {
+        for (idx, byte) in possible_key.iter().enumerate().take(min_len) {
+            if self.prefix[idx] != *byte {
                 return idx;
             }
         }

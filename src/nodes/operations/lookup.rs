@@ -77,13 +77,15 @@ where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
 {
+    let key_bytes = key.as_bytes();
+
     // SAFETY: The lifetime produced from this is bounded to this scope and does not
     // escape. Further, no other code mutates the node referenced, which is further
     // enforced the "no concurrent reads or writes" requirement on the
     // `search_unchecked` function.
     let inner_node = unsafe { inner_ptr.as_ref() };
     let header = inner_node.header();
-    let matched_prefix_size = header.match_prefix(&key.as_bytes()[*current_depth..]);
+    let matched_prefix_size = header.match_prefix(&key_bytes[*current_depth..]);
     if matched_prefix_size != header.prefix_len() {
         return None;
     }
@@ -91,8 +93,8 @@ where
     // Since the prefix matched, advance the depth by the size of the prefix
     *current_depth += matched_prefix_size;
 
-    let next_key_fragment = if *current_depth < key.as_bytes().len() {
-        key.as_bytes()[*current_depth]
+    let next_key_fragment = if *current_depth < key_bytes.len() {
+        key_bytes[*current_depth]
     } else {
         // the key has insufficient bytes, it is a prefix of an existing key. Thus, the
         // key must not exist in the tree by the requirements of the insert function
