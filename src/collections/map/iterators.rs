@@ -20,10 +20,6 @@ macro_rules! gen_iter {
         impl<'a, K: AsBytes, V> $name<'a, K, V> {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
-            ///
-            /// # Safety
-            ///
-            /// See safety requirements on type [`InnerNodeTreeIterator`].
             pub fn new(tree: $tree) -> Self {
                 Self {
                     nodes: tree.root.into_iter().collect(),
@@ -245,26 +241,24 @@ impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
 }
 */
 
-/// An iterator produced by calling [`drain_filter`] on `TreeMap`. See its
-/// documentation for more.
-///
-/// [`drain_filter`]: TreeMap::range_mut
-pub struct ExtractIf<K, V>(PhantomData<(K, V)>);
+// /// An iterator produced by calling [`drain_filter`] on `TreeMap`. See its
+// /// documentation for more.
+// ///
+// /// [`drain_filter`]: TreeMap::range_mut
+// pub struct ExtractIf<K, V>(PhantomData<(K, V)>);
 
-impl<K, V> Iterator for ExtractIf<K, V> {
-    type Item = (K, V);
+// impl<K, V> Iterator for ExtractIf<K, V> {
+//     type Item = (K, V);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
-}
+//     fn next(&mut self) -> Option<Self::Item> {
+//         todo!()
+//     }
+// }
 
 /// An owning iterator over the keys of a `TreeMap`.
 ///
-/// This `struct` is created by the [`into_keys`] method on `TreeMap`.
+/// This `struct` is created by the [`TreeMap::into_keys`] method on `TreeMap`.
 /// See its documentation for more.
-///
-/// [`into_keys`]: TreeMap::into_keys
 pub struct IntoKeys<K: AsBytes, V>(IntoIter<K, V>);
 
 impl<K: AsBytes, V> IntoKeys<K, V> {

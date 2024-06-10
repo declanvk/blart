@@ -155,7 +155,7 @@ impl Header {
         usize::from(self.num_children)
     }
 
-    /// Left trim by [`len`], copies the remaining data to the beging of the
+    /// Left trim by `len`, copies the remaining data to the beging of the
     /// prefix
     ///
     /// # Panics
@@ -179,9 +179,9 @@ impl Header {
         self.prefix.copy_within(begin..end, 0);
     }
 
-    /// Left trim by [`len`], copies the remaining data to the beging of the
+    /// Left trim by `len`, copies the remaining data to the beging of the
     /// prefix, in this case we use a leaf to achieve this, we also need the
-    /// [`depth`] (a.k.a how many bytes of the leaf have already been used)
+    /// `depth` (a.k.a how many bytes of the leaf have already been used)
     pub fn ltrim_by_with_leaf<K: AsBytes, V>(
         &mut self,
         len: usize,
