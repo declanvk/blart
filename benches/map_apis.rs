@@ -1,12 +1,10 @@
-use std::collections::BTreeMap;
-
 use blart::{
     tests_common::{
         generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
     },
     TreeMap,
 };
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 type Measurement = criterion_perf_events::Perf;
@@ -16,8 +14,7 @@ type Measurement = criterion::measurement::WallTime;
 fn run_benchmarks(
     group: &mut BenchmarkGroup<Measurement>,
     key_vec: &[Box<[u8]>],
-    blart_map: &TreeMap<Box<[u8]>, usize>,
-    std_map: &BTreeMap<Box<[u8]>, usize>,
+    map: &TreeMap<Box<[u8]>, usize>,
 ) {
     let (first_key, middle_key, last_key) = (
         Box::from(key_vec[0].as_ref()),
@@ -26,28 +23,11 @@ fn run_benchmarks(
     );
     // Run benchmarks on blart map
 
-    macro_rules! benchmarks {
-        ($map:ident, $name:literal) => {
-            group.bench_function(BenchmarkId::new("first_key", $name), |b| {
-                b.iter(|| $map.get(&first_key).unwrap())
-            });
-            group.bench_function(BenchmarkId::new("middle_key", $name), |b| {
-                b.iter(|| $map.get(&middle_key).unwrap())
-            });
-            group.bench_function(BenchmarkId::new("last_key", $name), |b| {
-                b.iter(|| $map.get(&last_key).unwrap())
-            });
-            group.bench_function(BenchmarkId::new("minimum", $name), |b| {
-                b.iter(|| $map.first_key_value().unwrap())
-            });
-            group.bench_function(BenchmarkId::new("maximum", $name), |b| {
-                b.iter(|| $map.last_key_value().unwrap())
-            });
-        };
-    }
-
-    benchmarks!(blart_map, "blart");
-    benchmarks!(std_map, "std");
+    group.bench_function("first_key", |b| b.iter(|| map.get(&first_key).unwrap()));
+    group.bench_function("middle_key", |b| b.iter(|| map.get(&middle_key).unwrap()));
+    group.bench_function("last_key", |b| b.iter(|| map.get(&last_key).unwrap()));
+    group.bench_function("minimum", |b| b.iter(|| map.first_key_value().unwrap()));
+    group.bench_function("maximum", |b| b.iter(|| map.last_key_value().unwrap()));
 
     // TODO(#3): Add more benchmarks for:
     //   - insert new keys into:
@@ -69,16 +49,9 @@ fn setup_tree_run_benches_cleanup(
         let _ = blart_tree.try_insert(key.clone(), idx).unwrap();
     }
 
-    let mut std_tree = BTreeMap::new();
-
-    for (idx, key) in keys.iter().enumerate() {
-        let prev = std_tree.insert(key.clone(), idx);
-        assert!(prev.is_none(), "{key:?} {std_tree:?}");
-    }
-
     {
         let mut group = c.benchmark_group(group_name);
-        run_benchmarks(&mut group, keys.as_ref(), &blart_tree, &std_tree);
+        run_benchmarks(&mut group, keys.as_ref(), &blart_tree);
     }
 }
 
