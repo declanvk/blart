@@ -5,6 +5,8 @@ use crate::{
     OpaqueNodePtr,
 };
 use crate::AsBytes;
+use crate::InsertResult;
+use crate::InsertPrefixError;
 use std::{collections::HashSet, fmt, io, iter};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a

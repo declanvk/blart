@@ -61,6 +61,7 @@ pub mod benches_common;
 pub use bytes::*;
 pub use collections::*;
 pub(crate) use nodes::*;
+pub use nodes::visitor::*;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]
