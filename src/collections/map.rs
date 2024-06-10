@@ -22,18 +22,16 @@ use std::{
 mod entry;
 mod entry_ref;
 mod iterators;
-// mod iterators1;
 pub use entry::*;
 pub use entry_ref::*;
 pub use iterators::*;
-// pub use iterators1::*;
 
 /// An ordered map based on an adaptive radix tree.
 pub struct TreeMap<K: AsBytes, V> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
-    root: Option<OpaqueNodePtr<K, V>>,
+    pub(crate) root: Option<OpaqueNodePtr<K, V>>,
 }
 
 impl<K: AsBytes, V> TreeMap<K, V> {
