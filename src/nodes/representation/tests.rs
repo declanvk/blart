@@ -1,5 +1,4 @@
-use super::header::tests::EXPECTED_HEADER_SIZE;
-use super::*;
+use super::{header::tests::EXPECTED_HEADER_SIZE, *};
 use std::mem;
 
 #[cfg(not(feature = "nightly"))]
@@ -53,7 +52,7 @@ fn opaque_node_ptr_is_correct() {
     let mut n4 = InnerNode4::<Box<[u8]>, usize>::empty();
     let mut n16 = InnerNode16::<Box<[u8]>, usize>::empty();
     let mut n48 = InnerNode48::<Box<[u8]>, usize>::empty();
-    let mut n256 = InnerNode256::<Box<[u8]>, usize>::empty();
+    let mut n256 = InnerNodeUncompressed::<Box<[u8]>, usize>::empty();
 
     let n4_ptr = NodePtr::from(&mut n4).to_opaque();
     let n16_ptr = NodePtr::from(&mut n16).to_opaque();
@@ -63,7 +62,7 @@ fn opaque_node_ptr_is_correct() {
     assert!(n4_ptr.is::<InnerNode4<Box<[u8]>, usize>>());
     assert!(n16_ptr.is::<InnerNode16<Box<[u8]>, usize>>());
     assert!(n48_ptr.is::<InnerNode48<Box<[u8]>, usize>>());
-    assert!(n256_ptr.is::<InnerNode256<Box<[u8]>, usize>>());
+    assert!(n256_ptr.is::<InnerNodeUncompressed<Box<[u8]>, usize>>());
 }
 
 #[test]
@@ -93,7 +92,7 @@ fn node_sizes() {
     );
     // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
     assert_eq!(
-        mem::size_of::<InnerNode256<Box<[u8]>, usize>>(),
+        mem::size_of::<InnerNodeUncompressed<Box<[u8]>, usize>>(),
         EXPECTED_HEADER_SIZE + 2048
     );
 
@@ -107,7 +106,7 @@ fn node_alignment() {
     assert_eq!(mem::align_of::<InnerNode4<Box<[u8]>, u8>>(), 8);
     assert_eq!(mem::align_of::<InnerNode16<Box<[u8]>, u8>>(), 8);
     assert_eq!(mem::align_of::<InnerNode48<Box<[u8]>, u8>>(), 8);
-    assert_eq!(mem::align_of::<InnerNode256<Box<[u8]>, u8>>(), 8);
+    assert_eq!(mem::align_of::<InnerNodeUncompressed<Box<[u8]>, u8>>(), 8);
     assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8>>(), 8);
 
     assert_eq!(
@@ -123,7 +122,7 @@ fn node_alignment() {
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<InnerNode256<Box<[u8]>, u8>>(),
+        mem::align_of::<InnerNodeUncompressed<Box<[u8]>, u8>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
@@ -595,7 +594,7 @@ fn node48_split_at_both_empty_ends() {
 
 #[test]
 fn node256_lookup() {
-    let mut n = InnerNode256::<Box<[u8]>, ()>::empty();
+    let mut n = InnerNodeUncompressed::<Box<[u8]>, ()>::empty();
     let mut l1 = LeafNode::new(Box::from([]), ());
     let mut l2 = LeafNode::new(Box::from([]), ());
     let mut l3 = LeafNode::new(Box::from([]), ());
@@ -616,38 +615,38 @@ fn node256_lookup() {
 
 #[test]
 fn node256_write_child() {
-    inner_node_write_child_test(InnerNode256::empty(), 256)
+    inner_node_write_child_test(InnerNodeUncompressed::empty(), 256)
 }
 
 #[test]
 fn node256_remove_child() {
-    inner_node_remove_child_test(InnerNode256::empty(), 256)
+    inner_node_remove_child_test(InnerNodeUncompressed::empty(), 256)
 }
 
 #[test]
 #[should_panic]
 fn node256_grow() {
-    let n = InnerNode256::<Box<[u8]>, ()>::empty();
+    let n = InnerNodeUncompressed::<Box<[u8]>, ()>::empty();
 
     n.grow();
 }
 
 #[test]
 fn node256_shrink() {
-    inner_node_shrink_test(InnerNode256::empty(), 48);
+    inner_node_shrink_test(InnerNodeUncompressed::empty(), 48);
 }
 
 #[test]
 #[should_panic]
 fn node256_shrink_too_many_children_panic() {
-    inner_node_shrink_test(InnerNode256::empty(), 49);
+    inner_node_shrink_test(InnerNodeUncompressed::empty(), 49);
 }
 
 #[test]
 fn node256_split_at_on_existing_key() {
     let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
     inner_node_split_at_on_test_keys_moved(
-        InnerNode256::<Box<[u8]>, ()>::empty(),
+        InnerNodeUncompressed::<Box<[u8]>, ()>::empty(),
         keys.as_ref(),
         82,
     );
@@ -657,7 +656,7 @@ fn node256_split_at_on_existing_key() {
 fn node256_split_at_on_non_existent_key() {
     let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
     inner_node_split_at_on_test_keys_moved(
-        InnerNode256::<Box<[u8]>, ()>::empty(),
+        InnerNodeUncompressed::<Box<[u8]>, ()>::empty(),
         keys.as_ref(),
         65,
     );
@@ -667,12 +666,12 @@ fn node256_split_at_on_non_existent_key() {
 fn node256_split_at_both_empty_ends() {
     let keys = (0..=255u8).filter(|key| key % 2 == 0).collect::<Vec<_>>();
     inner_node_split_at_on_test_keys_moved(
-        InnerNode256::<Box<[u8]>, ()>::empty(),
+        InnerNodeUncompressed::<Box<[u8]>, ()>::empty(),
         keys.as_ref(),
         0,
     );
     inner_node_split_at_on_test_keys_moved(
-        InnerNode256::<Box<[u8]>, ()>::empty(),
+        InnerNodeUncompressed::<Box<[u8]>, ()>::empty(),
         keys.as_ref(),
         255,
     );

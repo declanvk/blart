@@ -1,6 +1,6 @@
 use crate::{
-    nodes::NodePtr, search_unchecked, InnerNode, InnerNode16, InnerNode256, InnerNode4,
-    InnerNode48, LeafNode,
+    nodes::NodePtr, search_unchecked, InnerNode, InnerNode16, InnerNode4, InnerNodeKeyCompressed,
+    InnerNodeUncompressed, LeafNode,
 };
 
 #[test]
@@ -119,8 +119,8 @@ fn lookup_on_full_node4() {
 fn lookup_on_empty_nodes() {
     let mut n4 = InnerNode4::<Box<[u8]>, ()>::empty();
     let mut n16 = InnerNode16::empty();
-    let mut n48 = InnerNode48::empty();
-    let mut n256 = InnerNode256::empty();
+    let mut n48 = InnerNodeKeyCompressed::empty();
+    let mut n256 = InnerNodeUncompressed::empty();
 
     let roots = vec![
         NodePtr::from(&mut n4).to_opaque(),
@@ -220,7 +220,7 @@ fn lookup_on_node48() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode48::empty();
+    let mut inner_node = InnerNodeKeyCompressed::empty();
 
     // Update inner node prefix and child slots
     inner_node.header.extend_prefix(&[1, 2]);
@@ -283,7 +283,7 @@ fn lookup_on_node256() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode256::empty();
+    let mut inner_node = InnerNodeUncompressed::empty();
 
     // Update inner node prefix and child slots
     inner_node.header.extend_prefix(&[1, 2]);
@@ -543,7 +543,7 @@ fn lookup_on_n256_n4_layer_tree() {
 
     let mut n4_left = InnerNode4::empty();
     let mut n4_right = InnerNode4::empty();
-    let mut n256 = InnerNode256::empty();
+    let mut n256 = InnerNodeUncompressed::empty();
 
     // Update inner node prefix and child slots
     n4_left.header.extend_prefix(&[5, 6]);

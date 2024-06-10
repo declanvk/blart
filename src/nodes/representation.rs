@@ -2,7 +2,6 @@
 
 use crate::{tagged_pointer::TaggedPointer, AsBytes, InnerNodeIter};
 use std::{
-    borrow::Borrow,
     cmp::Ordering,
     error::Error,
     fmt,
@@ -13,8 +12,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
-pub use self::header::Header;
-pub use self::iterators::*;
+pub use self::{header::Header, iterators::*};
 
 mod header;
 mod iterators;
@@ -91,7 +89,7 @@ impl NodeType {
             NodeType::Node48 => Range { start: 17, end: 49 },
             NodeType::Node256 => Range {
                 start: 49,
-                end: 256,
+                end: 257,
             },
             NodeType::Leaf => Range { start: 0, end: 0 },
         }
@@ -189,9 +187,9 @@ impl<K, V> OpaqueNodePtr<K, V> {
             NodeType::Node48 => {
                 ConcreteNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<K, V>>().into()))
             },
-            NodeType::Node256 => {
-                ConcreteNodePtr::Node256(NodePtr(self.0.cast::<InnerNode256<K, V>>().into()))
-            },
+            NodeType::Node256 => ConcreteNodePtr::Node256(NodePtr(
+                self.0.cast::<InnerNodeUncompressed<K, V>>().into(),
+            )),
             NodeType::Leaf => {
                 ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<K, V>>().into()))
             },
@@ -238,7 +236,7 @@ impl<K, V> OpaqueNodePtr<K, V> {
                 unsafe { ptr::addr_of_mut!((*node_ptr).header) }
             },
             NodeType::Node256 => {
-                let node_ptr = self.0.cast::<InnerNode256<K, V>>().to_ptr();
+                let node_ptr = self.0.cast::<InnerNodeUncompressed<K, V>>().to_ptr();
 
                 // SAFETY: Safety conditions of pointer dereference are covered by safety
                 // requirements of this function
@@ -265,7 +263,7 @@ pub enum ConcreteNodePtr<K, V> {
     /// Node that references between 17 and 49 children
     Node48(NodePtr<InnerNode48<K, V>>),
     /// Node that references between 49 and 256 children
-    Node256(NodePtr<InnerNode256<K, V>>),
+    Node256(NodePtr<InnerNodeUncompressed<K, V>>),
     /// Node that contains a single value
     LeafNode(NodePtr<LeafNode<K, V>>),
 }
@@ -523,7 +521,7 @@ pub(crate) mod private {
     impl<K, V> Sealed for super::InnerNode4<K, V> {}
     impl<K, V> Sealed for super::InnerNode16<K, V> {}
     impl<K, V> Sealed for super::InnerNode48<K, V> {}
-    impl<K, V> Sealed for super::InnerNode256<K, V> {}
+    impl<K, V> Sealed for super::InnerNodeUncompressed<K, V> {}
     impl<K, V> Sealed for super::LeafNode<K, V> {}
 }
 
@@ -691,8 +689,8 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     pub fn empty() -> Self {
         InnerNodeCompressed {
             header: Header::default(),
-            child_pointers: crate::nightly_rust_apis::maybe_uninit_uninit_array(),
-            keys: crate::nightly_rust_apis::maybe_uninit_uninit_array(),
+            child_pointers: [std::mem::MaybeUninit::uninit(); SIZE],
+            keys: [std::mem::MaybeUninit::uninit(); SIZE],
         }
     }
 
@@ -798,8 +796,8 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         );
 
         let header = self.header.clone();
-        let mut keys = crate::nightly_rust_apis::maybe_uninit_uninit_array();
-        let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
+        let mut keys = [std::mem::MaybeUninit::uninit(); NEW_SIZE];
+        let mut child_pointers = [std::mem::MaybeUninit::uninit(); NEW_SIZE];
 
         keys[..header.num_children()].copy_from_slice(&self.keys[..header.num_children()]);
         child_pointers[..header.num_children()]
@@ -815,7 +813,7 @@ impl<K, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     fn grow_node48(&self) -> InnerNode48<K, V> {
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
+        let mut child_pointers = [std::mem::MaybeUninit::uninit(); 48];
 
         let (n16_keys, _) = self.initialized_portion();
 
@@ -997,11 +995,15 @@ impl<K, V> InnerNode for InnerNode16<K, V> {
 /// A restricted index only valid from 0 to LIMIT - 1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct RestrictedNodeIndex<const LIMIT: u8>(u8);
+pub struct RestrictedNodeIndex<const LIMIT: usize>(u8);
 
-impl<const LIMIT: u8> RestrictedNodeIndex<LIMIT> {
+impl<const LIMIT: usize> RestrictedNodeIndex<LIMIT> {
     /// A placeholder index value that indicates that the index is not occupied
-    pub const EMPTY: Self = RestrictedNodeIndex(LIMIT);
+    pub const EMPTY: Self = RestrictedNodeIndex(LIMIT as u8);
+    // This const is an assertion that `LIMIT` can never be larger than a `u8`
+    const _ASSERT: () = {
+        assert!(LIMIT <= (u8::MAX as usize));
+    };
 
     /// Return true if the given index is not the empty sentinel value
     pub fn is_not_empty(self) -> bool {
@@ -1009,45 +1011,45 @@ impl<const LIMIT: u8> RestrictedNodeIndex<LIMIT> {
     }
 }
 
-impl<const LIMIT: u8> From<RestrictedNodeIndex<LIMIT>> for u8 {
+impl<const LIMIT: usize> From<RestrictedNodeIndex<LIMIT>> for u8 {
     fn from(src: RestrictedNodeIndex<LIMIT>) -> Self {
         src.0
     }
 }
 
-impl<const LIMIT: u8> From<RestrictedNodeIndex<LIMIT>> for usize {
+impl<const LIMIT: usize> From<RestrictedNodeIndex<LIMIT>> for usize {
     fn from(src: RestrictedNodeIndex<LIMIT>) -> Self {
         usize::from(src.0)
     }
 }
 
-impl<const LIMIT: u8> TryFrom<usize> for RestrictedNodeIndex<LIMIT> {
+impl<const LIMIT: usize> TryFrom<usize> for RestrictedNodeIndex<LIMIT> {
     type Error = TryFromByteError;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        if value < usize::from(LIMIT) {
+        if value < LIMIT {
             Ok(RestrictedNodeIndex(value as u8))
         } else {
-            Err(TryFromByteError(LIMIT, value))
+            Err(TryFromByteError(LIMIT as u8, value))
         }
     }
 }
 
-impl<const LIMIT: u8> TryFrom<u8> for RestrictedNodeIndex<LIMIT> {
+impl<const LIMIT: usize> TryFrom<u8> for RestrictedNodeIndex<LIMIT> {
     type Error = TryFromByteError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value < LIMIT {
+        if value < LIMIT as u8 {
             Ok(RestrictedNodeIndex(value))
         } else {
-            Err(TryFromByteError(LIMIT, usize::from(value)))
+            Err(TryFromByteError(LIMIT as u8, usize::from(value)))
         }
     }
 }
 
-impl<const LIMIT: u8> PartialOrd for RestrictedNodeIndex<LIMIT> {
+impl<const LIMIT: usize> PartialOrd for RestrictedNodeIndex<LIMIT> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.0 == LIMIT || other.0 == LIMIT {
+        if self.0 == (LIMIT as u8) || other.0 == (LIMIT as u8) {
             None
         } else {
             Some(self.0.cmp(&other.0))
@@ -1073,23 +1075,27 @@ impl fmt::Display for TryFromByteError {
 impl Error for TryFromByteError {}
 
 /// Node that references between 17 and 49 children
-pub struct InnerNode48<K, V> {
+pub type InnerNode48<K, V> = InnerNodeKeyCompressed<K, V, 48>;
+
+/// Inner node type that references up to `MAX_CHILDREN` children, while
+/// maintaining key bytes in a compressed array.
+pub struct InnerNodeKeyCompressed<K, V, const MAX_CHILDREN: usize> {
     /// The common node fields.
     pub header: Header,
     /// An array that maps key bytes (as the index) to the index value in the
     /// `child_pointers` array.
     ///
     /// All the `child_indices` values are guaranteed to be
-    /// `PartialNodeIndex<48>::EMPTY` when the node is constructed.
-    pub child_indices: [RestrictedNodeIndex<48>; 256],
+    /// `PartialNodeIndex<MAX_CHILDREN>::EMPTY` when the node is constructed.
+    pub child_indices: [RestrictedNodeIndex<MAX_CHILDREN>; 256],
     /// For each element in this array, it is assumed to be initialized if there
     /// is a index in the `child_indices` array that points to it
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V>>; 48],
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V>>; MAX_CHILDREN],
 }
 
-impl<K, V> fmt::Debug for InnerNode48<K, V> {
+impl<K, V, const MAX_CHILDREN: usize> fmt::Debug for InnerNodeKeyCompressed<K, V, MAX_CHILDREN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("InnerNode48")
+        f.debug_struct("InnerNodeKeyCompressed")
             .field("header", &self.header)
             .field("child_indices", &self.child_indices)
             .field("child_pointers", &self.child_pointers)
@@ -1097,7 +1103,7 @@ impl<K, V> fmt::Debug for InnerNode48<K, V> {
     }
 }
 
-impl<K, V> Clone for InnerNode48<K, V> {
+impl<K, V, const MAX_CHILDREN: usize> Clone for InnerNodeKeyCompressed<K, V, MAX_CHILDREN> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -1107,13 +1113,13 @@ impl<K, V> Clone for InnerNode48<K, V> {
     }
 }
 
-impl<K, V> InnerNode48<K, V> {
+impl<K, V, const MAX_CHILDREN: usize> InnerNodeKeyCompressed<K, V, MAX_CHILDREN> {
     /// Create an empty `Node48`.
     pub fn empty() -> Self {
-        InnerNode48 {
+        InnerNodeKeyCompressed {
             header: Header::default(),
-            child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
-            child_pointers: crate::nightly_rust_apis::maybe_uninit_uninit_array(),
+            child_indices: [RestrictedNodeIndex::<MAX_CHILDREN>::EMPTY; 256],
+            child_pointers: [std::mem::MaybeUninit::uninit(); MAX_CHILDREN],
         }
     }
 
@@ -1137,8 +1143,8 @@ impl<K, V> Node for InnerNode48<K, V> {
 }
 
 impl<K, V> InnerNode for InnerNode48<K, V> {
-    type GrownNode = InnerNode256<<Self as Node>::Key, <Self as Node>::Value>;
-    type Iter = InnerNode48Iter<<Self as Node>::Key, <Self as Node>::Value>;
+    type GrownNode = InnerNodeUncompressed<<Self as Node>::Key, <Self as Node>::Value>;
+    type Iter = InnerNodeKeyCompressedIter<<Self as Node>::Key, <Self as Node>::Value, 48>;
     type ShrunkNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
 
     fn lookup_child(
@@ -1225,13 +1231,13 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
         let mut child_pointers = [None; 256];
         // SAFETY: This iterator lives only for the lifetime of this function, which
         // does not mutate the `InnerNode48` (guaranteed by reference).
-        let iter = unsafe { InnerNode48Iter::new(self) };
+        let iter = unsafe { InnerNodeKeyCompressedIter::new(self) };
 
         for (key_fragment, child_pointer) in iter {
             child_pointers[usize::from(key_fragment)] = Some(child_pointer);
         }
 
-        InnerNode256 {
+        InnerNodeUncompressed {
             header,
             child_pointers,
         }
@@ -1247,11 +1253,11 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
 
         let header = self.header.clone();
 
-        let mut key_and_child_ptrs = crate::nightly_rust_apis::maybe_uninit_uninit_array::<16, _>();
+        let mut key_and_child_ptrs = [std::mem::MaybeUninit::uninit(); 16];
         // SAFETY: The lifetime of this iterator is bounded to this function, and will
         // not overlap with any mutating operations on the node because it of the shared
         // reference that this function uses.
-        let iter = unsafe { InnerNode48Iter::new(self) };
+        let iter = unsafe { InnerNodeKeyCompressedIter::new(self) };
 
         for (idx, value) in iter.enumerate() {
             key_and_child_ptrs[idx].write(value);
@@ -1272,8 +1278,8 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
             init_key_and_child_ptrs
         };
 
-        let mut keys = crate::nightly_rust_apis::maybe_uninit_uninit_array();
-        let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
+        let mut keys = [std::mem::MaybeUninit::uninit(); 16];
+        let mut child_pointers = [std::mem::MaybeUninit::uninit(); 16];
 
         for (idx, (key_byte, child_ptr)) in init_key_and_child_ptrs.iter().copied().enumerate() {
             keys[idx].write(key_byte);
@@ -1298,7 +1304,7 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
     unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
-        unsafe { InnerNode48Iter::new(self) }
+        unsafe { InnerNodeKeyCompressedIter::new(self) }
     }
 
     fn split_at(&mut self, key_fragment: u8) -> Self {
@@ -1347,7 +1353,7 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
         // Now we need to compact the original array of child pointers and update the
         // `keep_child_indices` list. We need a new child pointers array so we don't
         // overwrite the existing one
-        let mut new_keep_child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
+        let mut new_keep_child_pointers = [std::mem::MaybeUninit::uninit(); 48];
         let mut keep_node_num_children = 0;
         for keep_child_index in keep_child_indices {
             if keep_child_index.is_not_empty() {
@@ -1390,24 +1396,24 @@ impl<K, V> InnerNode for InnerNode48<K, V> {
     }
 }
 
-/// Node that references between 49 and 256 children
-pub struct InnerNode256<K, V> {
+/// Node that contains up to 256 children
+pub struct InnerNodeUncompressed<K, V> {
     /// The common node fields.
     pub header: Header,
     /// An array that directly maps a key byte (as index) to a child node.
     pub child_pointers: [Option<OpaqueNodePtr<K, V>>; 256],
 }
 
-impl<K, V> fmt::Debug for InnerNode256<K, V> {
+impl<K, V> fmt::Debug for InnerNodeUncompressed<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("InnerNode256")
+        f.debug_struct("InnerNodeUncompressed")
             .field("header", &self.header)
             .field("child_pointers", &self.child_pointers)
             .finish()
     }
 }
 
-impl<K, V> Clone for InnerNode256<K, V> {
+impl<K, V> Clone for InnerNodeUncompressed<K, V> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -1416,26 +1422,26 @@ impl<K, V> Clone for InnerNode256<K, V> {
     }
 }
 
-impl<K, V> InnerNode256<K, V> {
-    /// Create an empty `InnerNode256`.
+impl<K, V> InnerNodeUncompressed<K, V> {
+    /// Create an empty [`InnerNodeUncompressed`].
     pub fn empty() -> Self {
-        InnerNode256 {
+        InnerNodeUncompressed {
             header: Header::default(),
             child_pointers: [None; 256],
         }
     }
 }
 
-impl<K, V> Node for InnerNode256<K, V> {
+impl<K, V> Node for InnerNodeUncompressed<K, V> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node256;
 }
 
-impl<K, V> InnerNode for InnerNode256<K, V> {
+impl<K, V> InnerNode for InnerNodeUncompressed<K, V> {
     type GrownNode = Self;
-    type Iter = InnerNode256Iter<K, V>;
+    type Iter = InnerNodeUncompressedIter<K, V>;
     type ShrunkNode = InnerNode48<K, V>;
 
     fn lookup_child(
@@ -1485,11 +1491,11 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
 
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = crate::nightly_rust_apis::maybe_uninit_uninit_array();
+        let mut child_pointers = [std::mem::MaybeUninit::uninit(); 48];
 
         // SAFETY: This iterator lives only for the lifetime of this function, which
-        // does not mutate the `InnerNode256` (guaranteed by reference).
-        let iter = unsafe { InnerNode256Iter::new(self) };
+        // does not mutate the `InnerNodeUncompressed` (guaranteed by reference).
+        let iter = unsafe { InnerNodeUncompressedIter::new(self) };
 
         for (child_index, (key_byte, child_ptr)) in iter.enumerate() {
             // PANIC SAFETY: This `try_from` will not panic because the `next_index` value
@@ -1500,7 +1506,7 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
             child_pointers[child_index].write(child_ptr);
         }
 
-        InnerNode48 {
+        InnerNodeKeyCompressed {
             header,
             child_indices,
             child_pointers,
@@ -1518,7 +1524,7 @@ impl<K, V> InnerNode for InnerNode256<K, V> {
     unsafe fn iter(&self) -> Self::Iter {
         // SAFETY: The safety requirements on the `iter` function match the `new`
         // function
-        unsafe { InnerNode256Iter::new(self) }
+        unsafe { InnerNodeUncompressedIter::new(self) }
     }
 
     fn split_at(&mut self, key_fragment: u8) -> Self {
@@ -1623,10 +1629,10 @@ impl<K, V> LeafNode<K, V> {
     /// Check that the provided full key is the same one as the stored key.
     pub fn matches_full_key<Q>(&self, possible_key: &Q) -> bool
     where
-        K: Borrow<Q> + AsBytes,
+        K: AsBytes,
         Q: AsBytes + ?Sized,
     {
-        self.key.borrow().as_bytes().eq(possible_key.as_bytes())
+        self.key.as_bytes().eq(possible_key.as_bytes())
     }
 }
 

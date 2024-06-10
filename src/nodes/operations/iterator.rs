@@ -1,6 +1,6 @@
 use crate::{
-    ConcreteNodePtr, InnerNode, InnerNode256Iter, InnerNode48Iter, InnerNodeCompressedIter,
-    LeafNode, NodePtr, OpaqueNodePtr,
+    ConcreteNodePtr, InnerNode, InnerNodeCompressedIter, InnerNodeKeyCompressedIter,
+    InnerNodeUncompressedIter, LeafNode, NodePtr, OpaqueNodePtr,
 };
 use std::{
     collections::VecDeque,
@@ -190,10 +190,11 @@ pub enum InnerNodeIter<K, V> {
     InnerNodeCompressed(InnerNodeCompressedIter<K, V>),
     /// An iterator over the childen of an [`InnerNode48`][crate::InnerNode48]
     /// node.
-    InnerNode48(InnerNode48Iter<K, V>),
+    // TODO: Generalize this to any length, not just 48
+    InnerNode48(InnerNodeKeyCompressedIter<K, V, 48>),
     /// An iterator over the childen of an [`InnerNode256`][crate::InnerNode256]
     /// node.
-    InnerNode256(InnerNode256Iter<K, V>),
+    InnerNode256(InnerNodeUncompressedIter<K, V>),
 }
 
 impl<K, V> Iterator for InnerNodeIter<K, V> {
@@ -256,14 +257,14 @@ impl<K, V> From<InnerNodeCompressedIter<K, V>> for InnerNodeIter<K, V> {
     }
 }
 
-impl<K, V> From<InnerNode48Iter<K, V>> for InnerNodeIter<K, V> {
-    fn from(src: InnerNode48Iter<K, V>) -> Self {
+impl<K, V> From<InnerNodeKeyCompressedIter<K, V, 48>> for InnerNodeIter<K, V> {
+    fn from(src: InnerNodeKeyCompressedIter<K, V, 48>) -> Self {
         InnerNodeIter::InnerNode48(src)
     }
 }
 
-impl<K, V> From<InnerNode256Iter<K, V>> for InnerNodeIter<K, V> {
-    fn from(src: InnerNode256Iter<K, V>) -> Self {
+impl<K, V> From<InnerNodeUncompressedIter<K, V>> for InnerNodeIter<K, V> {
+    fn from(src: InnerNodeUncompressedIter<K, V>) -> Self {
         InnerNodeIter::InnerNode256(src)
     }
 }

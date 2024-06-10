@@ -150,7 +150,7 @@ where
         self.write_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNodeUncompressed<K, T>) -> Self::Output {
         self.write_inner_node(t)
     }
 

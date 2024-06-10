@@ -5,7 +5,8 @@ pub const NUM_PREFIX_BYTES: usize = 8;
 /// The common header for all inner nodes
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Header {
-    /// Number of children of this inner node and number of bytes populated in prefix array.
+    /// Number of children of this inner node and number of bytes populated in
+    /// prefix array.
     num_children: u16,
     /// The key prefix for this node.
     prefix: Vec<u8>,

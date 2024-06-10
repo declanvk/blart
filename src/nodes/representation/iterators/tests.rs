@@ -1,4 +1,4 @@
-use crate::{InnerNode, InnerNode16, InnerNode4, LeafNode, NodePtr};
+use crate::{InnerNode, InnerNode16, InnerNode4, InnerNode48, LeafNode, NodePtr};
 
 use super::*;
 
@@ -95,7 +95,7 @@ fn node48_fixture() -> FixtureReturn<InnerNode48<Box<[u8]>, ()>, 4> {
 fn node48_iterate() {
     let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node48_fixture();
 
-    let pairs = unsafe { InnerNode48Iter::new(&node).collect::<Vec<_>>() };
+    let pairs = unsafe { InnerNodeKeyCompressedIter::new(&node).collect::<Vec<_>>() };
     assert!(pairs
         .iter()
         .any(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr));
@@ -110,8 +110,8 @@ fn node48_iterate() {
         .any(|(key_fragment, ptr)| *key_fragment == 85 && *ptr == l4_ptr));
 }
 
-fn node256_fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, ()>, 4> {
-    let mut n4 = InnerNode256::empty();
+fn node256_fixture() -> FixtureReturn<InnerNodeUncompressed<Box<[u8]>, ()>, 4> {
+    let mut n4 = InnerNodeUncompressed::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -133,7 +133,7 @@ fn node256_fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, ()>, 4> {
 fn node256_iterate() {
     let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node256_fixture();
 
-    let pairs = unsafe { InnerNode256Iter::new(&node).collect::<Vec<_>>() };
+    let pairs = unsafe { InnerNodeUncompressedIter::new(&node).collect::<Vec<_>>() };
     assert!(pairs
         .iter()
         .any(|(key_fragment, ptr)| *key_fragment == 3 && *ptr == l1_ptr));
@@ -242,10 +242,10 @@ fn node16_iter_ranges() {
 
 #[test]
 fn node48_iter_ranges() {
-    node_range_test_cases!(node48_fixture; InnerNode48Iter<Box<[u8]>, ()>);
+    node_range_test_cases!(node48_fixture; InnerNodeKeyCompressedIter<Box<[u8]>, (), 48>);
 }
 
 #[test]
 fn node256_iter_ranges() {
-    node_range_test_cases!(node256_fixture; InnerNode256Iter<Box<[u8]>, ()>);
+    node_range_test_cases!(node256_fixture; InnerNodeUncompressedIter<Box<[u8]>, ()>);
 }

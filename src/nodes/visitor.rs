@@ -5,8 +5,9 @@ mod tree_stats;
 mod well_formed;
 
 use crate::{
-    ConcreteNodePtr, InnerNode16, InnerNode256, InnerNode256Iter, InnerNode4, InnerNode48,
-    InnerNode48Iter, InnerNodeCompressedIter, LeafNode, Node, NodePtr, OpaqueNodePtr,
+    ConcreteNodePtr, InnerNode16, InnerNode4, InnerNode48, InnerNodeCompressedIter,
+    InnerNodeKeyCompressedIter, InnerNodeUncompressed, InnerNodeUncompressedIter, LeafNode, Node,
+    NodePtr, OpaqueNodePtr,
 };
 pub use pretty_printer::*;
 pub use tree_stats::*;
@@ -102,7 +103,7 @@ impl<K, T> Visitable<K, T> for InnerNode48<K, T> {
         // which is entirely covered by the lifetime of reference to the `InnerNode48`.
         // The invariants of the shared references mean that no other mutation of the
         // node will happen.
-        let iter = unsafe { InnerNode48Iter::new(self) };
+        let iter = unsafe { InnerNodeKeyCompressedIter::new(self) };
         combine_inner_node_child_output(iter, visitor)
     }
 
@@ -111,13 +112,13 @@ impl<K, T> Visitable<K, T> for InnerNode48<K, T> {
     }
 }
 
-impl<K, T> Visitable<K, T> for InnerNode256<K, T> {
+impl<K, T> Visitable<K, T> for InnerNodeUncompressed<K, T> {
     fn super_visit_with<V: Visitor<K, T>>(&self, visitor: &mut V) -> V::Output {
         // SAFETY: This iterator lives for a subset of the lifetime of this function,
         // which is entirely covered by the lifetime of reference to the `InnerNode256`.
         // The invariants of the shared references mean that no other mutation of the
         // node will happen.
-        let iter = unsafe { InnerNode256Iter::new(self) };
+        let iter = unsafe { InnerNodeUncompressedIter::new(self) };
         combine_inner_node_child_output(iter, visitor)
     }
 
@@ -164,7 +165,7 @@ pub trait Visitor<K, V>: Sized {
     }
 
     /// Visit a [`InnerNode256`].
-    fn visit_node256(&mut self, t: &InnerNode256<K, V>) -> Self::Output {
+    fn visit_node256(&mut self, t: &InnerNodeUncompressed<K, V>) -> Self::Output {
         t.super_visit_with(self)
     }
 

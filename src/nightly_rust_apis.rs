@@ -37,31 +37,6 @@ pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
     }
 }
 
-/// Create a new array of `MaybeUninit<T>` items, in an uninitialized state.
-///
-/// Note: in a future Rust version this method may become unnecessary
-/// when Rust allows
-/// [inline const expressions](https://github.com/rust-lang/rust/issues/76001).
-/// The example below could then use `let mut buf = [const {
-/// MaybeUninit::<u8>::uninit() }; 32];`.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#96097][issue-96097]**
-///
-/// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
-pub fn maybe_uninit_uninit_array<const N: usize, T>() -> [std::mem::MaybeUninit<T>; N] {
-    #[cfg(feature = "nightly")]
-    {
-        std::mem::MaybeUninit::uninit_array()
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
-        unsafe { std::mem::MaybeUninit::<[std::mem::MaybeUninit<T>; N]>::uninit().assume_init() }
-    }
-}
-
 /// Assuming all the elements are initialized, get a mutable slice to them.
 ///
 /// # Safety

@@ -82,12 +82,14 @@ fn count_words_blart(contents: &[u8]) -> (WordStats, TreeStats) {
     let root_node = map.into_raw().expect("tree should have at least 1 node");
 
     let tree_stats = unsafe {
-        // SAFETY: No other operation is happening to this tree while this visitor is traversing it
+        // SAFETY: No other operation is happening to this tree while this visitor is
+        // traversing it
         TreeStatsCollector::collect(&root_node)
     };
 
     let map = unsafe {
-        // SAFETY: The root pointer came directly from a `TreeMap::into_raw` call, was not modified, and is used no-where else.
+        // SAFETY: The root pointer came directly from a `TreeMap::into_raw` call, was
+        // not modified, and is used no-where else.
         TreeMap::from_raw(Some(root_node))
     };
 

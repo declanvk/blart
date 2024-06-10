@@ -286,7 +286,7 @@ where
             mem::size_of_val(t) + header_extra_allocated_size(&t.header);
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNodeUncompressed<K, V>) -> Self::Output {
         t.super_visit_with(self);
         self.stats.node256_num_children_dist.record(
             t.header
@@ -320,7 +320,8 @@ fn header_extra_allocated_size(header: &Header) -> usize {
     }
 }
 
-/// This represents a discrete distribution of data with exactly `NUM_VALUES` unique values.
+/// This represents a discrete distribution of data with exactly `NUM_VALUES`
+/// unique values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExactHistogram<const NUM_VALUES: usize>
 where
@@ -395,7 +396,8 @@ impl<const NUM_VALUES: usize> ExactHistogram<NUM_VALUES> {
     ///
     /// # Panics
     ///
-    /// This method will panic if the given value is not in the `value_range` that this histogram was created with.
+    /// This method will panic if the given value is not in the `value_range`
+    /// that this histogram was created with.
     pub fn record(&mut self, value: u64) {
         assert!(
             self.value_range.contains(&value),
@@ -410,7 +412,8 @@ impl<const NUM_VALUES: usize> ExactHistogram<NUM_VALUES> {
         self.total_count += 1;
     }
 
-    /// Return an iterator over the pairs of `(value, count)`, including `count`s of 0.
+    /// Return an iterator over the pairs of `(value, count)`, including
+    /// `count`s of 0.
     pub fn entries(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
         self.counts.iter().enumerate().map(move |(idx, count)| {
             let value = u64::try_from(idx).expect("should be able to fit index into u64")
