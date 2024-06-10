@@ -3,14 +3,11 @@
 // pub use self::iterators::*;
 use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes};
 use std::{
-    arch::x86_64::{__m128i, _mm_movemask_epi8},
-    array::from_fn,
     borrow::Borrow,
     cmp::Ordering,
     error::Error,
     fmt,
     hash::Hash,
-    hint::unreachable_unchecked,
     intrinsics::{assume, likely},
     iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip},
     marker::PhantomData,
@@ -19,7 +16,7 @@ use std::{
     ptr::{self, NonNull},
     simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
-        u8x16, u8x64, usizex64, Simd,
+        u8x16, u8x64, usizex64,
     },
     slice::Iter,
 };
@@ -510,7 +507,7 @@ impl<N: Node> NodePtr<N> {
         self.0.as_ptr()
     }
 
-    fn as_mut_safe<'a>(&'a mut self) -> &'a mut N {
+    fn as_mut_safe(&mut self) -> &mut N {
         // SAFETY: The pointer is properly aligned and points to a initialized instance
         // of N that is dereferenceable. The lifetime safety requirements are passed up
         // to the invoked of this function.
@@ -773,7 +770,7 @@ pub trait InnerNode: Node + Sized {
     /// The iterator type does not carry any lifetime, so the caller of this
     /// function must enforce that the lifetime of the iterator does not overlap
     /// with any mutating operations on the node.
-    fn iter<'a>(&'a self) -> Self::Iter<'a>;
+    fn iter(&self) -> Self::Iter<'_>;
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
@@ -1167,7 +1164,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         }
     }
 
-    fn inner_iter<'a>(&'a self) -> InnerNodeCompressedIter<'a, K, V> {
+    fn inner_iter(&self) -> InnerNodeCompressedIter<'_, K, V> {
         let (keys, nodes) = self.initialized_portion();
         keys.iter().copied().zip(nodes.iter().copied())
     }
@@ -1267,7 +1264,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         panic!("unable to shrink a Node4, something went wrong!")
     }
 
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+    fn iter(&self) -> Self::Iter<'_> {
         self.inner_iter()
     }
 
@@ -1396,7 +1393,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         self.change_block_size()
     }
 
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+    fn iter(&self) -> Self::Iter<'_> {
         self.inner_iter()
     }
 
@@ -1712,7 +1709,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
                 assume(idx < initialized_child_pointers.len());
             }
             let child_pointer = initialized_child_pointers[idx];
-            child_pointers[usize::from(key_fragment)] = Some(child_pointer);
+            child_pointers[key_fragment] = Some(child_pointer);
         }
 
         InnerNode256 {
@@ -1765,7 +1762,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         }
     }
 
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+    fn iter(&self) -> Self::Iter<'_> {
         let child_pointers = self.initialized_child_pointers();
         self.child_indices
             .iter()
@@ -2017,7 +2014,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         }
     }
 
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+    fn iter(&self) -> Self::Iter<'_> {
         self.child_pointers
             .iter()
             .enumerate()

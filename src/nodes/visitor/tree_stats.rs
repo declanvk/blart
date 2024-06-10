@@ -1,8 +1,7 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, NodeType, OpaqueNodePtr,
+    AsBytes, OpaqueNodePtr,
 };
-use std::mem;
 
 /// A visitor of the radix tree which collects statistics about the tree, like
 /// how many inner nodes of each type, how many leaves

@@ -1,12 +1,10 @@
 use std::{
     borrow::Borrow,
-    default,
-    marker::PhantomData,
-    mem::{replace, swap},
+    mem::replace,
 };
 
 use crate::{
-    AsBytes, DeletePoint, DeleteResult, InsertPoint, LeafNode, NoPrefixesBytes, NodePtr,
+    AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr,
     OpaqueNodePtr, TreeMap,
 };
 
@@ -114,7 +112,7 @@ where
     }
 
     pub fn key(&self) -> &Q {
-        &self.key
+        self.key
     }
 }
 

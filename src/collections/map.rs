@@ -10,7 +10,6 @@ use crate::{
     Node, NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
-    array::from_fn,
     borrow::Borrow,
     collections::HashMap,
     fmt::Debug,
@@ -653,7 +652,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
             };
             f(&mut node, idx, child);
         }
-        return NodePtr::allocate_node_ptr(node).to_opaque();
+        NodePtr::allocate_node_ptr(node).to_opaque()
     }
 
     fn inner_bulk_insert(entries: Vec<(K, V)>, mut depth: usize) -> OpaqueNodePtr<K, V>
@@ -750,7 +749,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
-    fn bulk_insert_unchecked(mut entries: Vec<(K, V)>) -> Self
+    fn bulk_insert_unchecked(entries: Vec<(K, V)>) -> Self
     where
         K: AsBytes,
     {
@@ -1120,7 +1119,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), (&4, &'z'));
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn iter<'a>(&'a self) -> TreeIterator<'a, K, V> {
+    pub fn iter(&self) -> TreeIterator<'_, K, V> {
         TreeIterator::new(self)
     }
 
@@ -1145,7 +1144,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn iter_mut<'a>(&'a mut self) -> TreeIteratorMut<'a, K, V> {
+    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V> {
         TreeIteratorMut::new(self)
     }
 
@@ -1169,7 +1168,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), &4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn keys<'a>(&'a self) -> Keys<'a, K, V> {
+    pub fn keys(&self) -> Keys<'_, K, V> {
         Keys::new(self)
     }
 
@@ -1193,7 +1192,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), &'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn values<'a>(&'a self) -> Values<'a, K, V> {
+    pub fn values(&self) -> Values<'_, K, V> {
         Values::new(self)
     }
 
@@ -1218,7 +1217,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn values_mut<'a>(&'a mut self) -> ValuesMut<'a, K, V> {
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V> {
         ValuesMut::new(self)
     }
 
@@ -1296,7 +1295,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     {
         let entry = match self.root {
             Some(root) => {
-                let insert_point = unsafe { search_for_insert_point(root, &key)? };
+                let insert_point = unsafe { search_for_insert_point(root, key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
                         map: self,
@@ -1321,7 +1320,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         Ok(entry)
     }
 
-    pub fn entry<'a>(&'a mut self, key: K) -> Entry<'a, K, V>
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V>
     where
         K: NoPrefixesBytes,
     {

@@ -1,5 +1,5 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
-use std::{collections::VecDeque, iter::FusedIterator, marker::PhantomData};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, TreeMap};
+use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
