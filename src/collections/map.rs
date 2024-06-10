@@ -32,9 +32,9 @@ pub use iterators::*;
 /// An ordered map based on an adaptive radix tree.
 pub struct TreeMap<K: AsBytes, V> {
     /// The number of entries present in the tree.
-    pub num_entries: usize,
+    num_entries: usize,
     /// A pointer to the tree root, if present.
-    pub root: Option<OpaqueNodePtr<K, V>>,
+    root: Option<OpaqueNodePtr<K, V>>,
 }
 
 impl<K: AsBytes, V> TreeMap<K, V> {
@@ -75,7 +75,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// // SAFETY: No other operation are access or mutating tree while dealloc happens
     /// unsafe { deallocate_tree(root) }
     /// ```
-    pub fn into_raw(self) -> Option<OpaqueNodePtr<K, V>> {
+    fn into_raw(self) -> Option<OpaqueNodePtr<K, V>> {
         let drop_prevent = ManuallyDrop::new(self);
 
         drop_prevent.root
@@ -108,7 +108,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     ///
     /// assert_eq!(map2[[1, 2, 3].as_ref()], 'a');
     /// ```
-    pub unsafe fn from_raw(root: Option<OpaqueNodePtr<K, V>>) -> Self {
+    unsafe fn from_raw(root: Option<OpaqueNodePtr<K, V>>) -> Self {
         let num_entries = if let Some(root) = root {
             // SAFETY: The safety requirements on this function cover this call
             unsafe { TreeStatsCollector::count_leaf_nodes(root) }
@@ -725,7 +725,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
-    pub fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
+    fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
     where
         K: AsBytes,
     {
@@ -750,7 +750,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
-    pub fn bulk_insert_unchecked(mut entries: Vec<(K, V)>) -> Self
+    fn bulk_insert_unchecked(mut entries: Vec<(K, V)>) -> Self
     where
         K: AsBytes,
     {

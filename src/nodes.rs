@@ -2,7 +2,7 @@
 
 mod operations;
 mod representation;
-pub mod visitor;
+pub(crate) mod visitor;
 
-pub use operations::*;
-pub use representation::*;
+pub(crate) use operations::*;
+pub(crate) use representation::*;

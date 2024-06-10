@@ -50,7 +50,7 @@
 mod bytes;
 mod collections;
 mod nodes;
-pub mod tagged_pointer;
+mod tagged_pointer;
 #[doc(hidden)]
 pub mod tests_common;
 
@@ -60,7 +60,7 @@ pub mod benches_common;
 
 pub use bytes::*;
 pub use collections::*;
-pub use nodes::*;
+pub(crate) use nodes::*;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

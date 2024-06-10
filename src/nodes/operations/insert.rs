@@ -30,7 +30,7 @@ pub struct InsertResult<'a, K: AsBytes, V> {
 /// the tree.
 #[derive(Clone, PartialEq, Eq)]
 pub struct InsertPrefixError {
-    /// The key that was the input to the [`insert_unchecked`] operation
+    /// The inserted key
     pub byte_repr: Box<[u8]>,
 }
 
@@ -113,8 +113,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                 V: 'a,
             {
                 // SAFETY: The `inner_node` reference lasts only for the duration of this
-                // function, and the node will not be read or written via any other source
-                // because of the safety requirements on `insert_unchecked`.
+                // function, and the node will not be read or written via any other source.
                 let inner_node = unsafe { inner_node_ptr.as_mut() };
                 let new_leaf_key_byte = new_leaf_node.key_ref().as_bytes()[key_bytes_used];
                 let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node);
@@ -128,9 +127,8 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
 
                     let new_inner_node = NodePtr::allocate_node_ptr(new_node).to_opaque();
 
-                    // SAFETY: The `deallocate_node` function is only called a
-                    // single time. The uniqueness requirement is passed up to the
-                    // `insert_unchecked` safety requirements.
+                    // SAFETY: The `deallocate_node_ptr` function is only called a
+                    // single time.
                     unsafe {
                         #[allow(clippy::drop_ref)]
                         drop(inner_node);

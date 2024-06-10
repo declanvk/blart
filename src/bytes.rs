@@ -13,7 +13,6 @@ use std::{
 };
 
 mod ordered;
-pub use ordered::*;
 
 /// Any type implementing `AsBytes` can be decomposed into bytes.
 ///

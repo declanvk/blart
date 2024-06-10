@@ -3,19 +3,19 @@
 use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
 
 mod insert;
-pub use insert::*;
+pub(crate) use insert::*;
 
 mod minmax;
-pub use minmax::*;
+pub(crate) use minmax::*;
 
 mod lookup;
-pub use lookup::*;
+pub(crate) use lookup::*;
 
 mod fuzzy_search;
-pub use fuzzy_search::*;
+pub(crate) use fuzzy_search::*;
 
 mod delete;
-pub use delete::*;
+pub(crate) use delete::*;
 
 /// Deallocate the given node and all children of the given node.
 ///
