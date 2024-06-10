@@ -3,9 +3,9 @@ use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
-        /// An iterator over all the [`LeafNode`]s in a non-singleton tree.
+        /// An iterator over all the `LeafNode`s in a non-singleton tree.
         ///
-        /// Non-singleton here means that the tree has at least one [`InnerNode`].
+        /// Non-singleton here means that the tree has at least one `InnerNode`.
         ///
         /// # Safety
         ///
