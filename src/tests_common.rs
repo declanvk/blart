@@ -4,7 +4,7 @@ use crate::{
     visitor::{DotPrinter, DotPrinterSettings},
     OpaqueNodePtr,
 };
-use crate::{AsBytes, InsertResult, InsertPrefixError};
+use crate::AsBytes;
 use std::{collections::HashSet, fmt, io, iter};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a

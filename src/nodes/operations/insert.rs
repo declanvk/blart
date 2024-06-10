@@ -1,15 +1,13 @@
 use crate::{
-    AsBytes, ConcreteNodePtr, Header, InnerNode, InnerNode4, LeafNode, MatchPrefix, Mismatch,
-    NodePtr, OpaqueNodePtr, TreeMap,
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefix, Mismatch,
+    NodePtr, OpaqueNodePtr,
 };
 use std::{
     borrow::Borrow,
     error::Error,
     fmt,
-    hint::unreachable_unchecked,
     intrinsics::{assume, likely, unlikely},
     marker::PhantomData,
-    mem::ManuallyDrop,
     ops::ControlFlow,
 };
 
@@ -130,7 +128,7 @@ impl<K: AsBytes, V> InsertPoint<K, V> {
                     // SAFETY: The `deallocate_node_ptr` function is only called a
                     // single time.
                     unsafe {
-                        #[allow(clippy::drop_ref)]
+                        #[allow(dropping_references)]
                         drop(inner_node);
                         drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
                     };
@@ -518,7 +516,7 @@ where
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 let leaf_node = leaf_node_ptr.read();
 
-                if leaf_node.matches_full_key(&key) {
+                if leaf_node.matches_full_key(key) {
                     return Ok(InsertPoint {
                         key_bytes_used: current_depth,
                         grandparent_ptr_and_parent_key_byte: current_grandparent,

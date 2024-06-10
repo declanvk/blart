@@ -1,12 +1,7 @@
-use std::{
-    borrow::Borrow,
-    default,
-    marker::PhantomData,
-    mem::{replace, swap},
-};
+use std::mem::replace;
 
 use crate::{
-    AsBytes, DeletePoint, DeleteResult, InsertPoint, LeafNode, NoPrefixesBytes, NodePtr,
+    AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr,
     OpaqueNodePtr, TreeMap,
 };
 

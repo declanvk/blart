@@ -1,5 +1,5 @@
 use std::{
-    intrinsics::{assume, likely, unlikely},
+    intrinsics::assume,
     mem::MaybeUninit,
 };
 
@@ -40,7 +40,7 @@ impl StackArena {
             assume(self.data.len() % self.n == 0);
         }
 
-        if self.data.len() == 0 {
+        if self.data.is_empty() {
             return None;
         }
 
@@ -147,7 +147,7 @@ pub trait FuzzySearch<K: AsBytes, V> {
         let (prefix, _) = unsafe { self.read_full_prefix(*old_row.first().unwrap_unchecked()) };
         let mut keep = true;
         for k in prefix {
-            keep &= edit_dist(key, *k, *old_row, *new_row, max_edit_dist);
+            keep &= edit_dist(key, *k, old_row, new_row, max_edit_dist);
             unsafe { swap(old_row, new_row) };
         }
         keep
@@ -175,7 +175,7 @@ where
         let (keys, nodes) = self.initialized_portion();
         for (k, node) in keys.iter().zip(nodes) {
             let new_row = arena.push();
-            if edit_dist(key, *k, *old_row, new_row, max_edit_dist) {
+            if edit_dist(key, *k, old_row, new_row, max_edit_dist) {
                 nodes_to_search.push(*node);
             } else {
                 arena.pop();
@@ -205,7 +205,7 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode48<K, V> {
                 continue;
             }
             let new_row = arena.push();
-            if edit_dist(key, k as u8, *old_row, new_row, max_edit_dist) {
+            if edit_dist(key, k as u8, old_row, new_row, max_edit_dist) {
                 let node = unsafe { *child_pointers.get_unchecked(usize::from(*index)) };
                 nodes_to_search.push(node);
             } else {
@@ -235,7 +235,7 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for InnerNode256<K, V> {
                 continue;
             };
             let new_row = arena.push();
-            if edit_dist(key, k as u8, *old_row, new_row, max_edit_dist) {
+            if edit_dist(key, k as u8, old_row, new_row, max_edit_dist) {
                 nodes_to_search.push(*node);
             } else {
                 arena.pop()
@@ -258,7 +258,7 @@ impl<K: AsBytes, V> FuzzySearch<K, V> for LeafNode<K, V> {
         let current_len = old_row[0];
         let remaining_key = unsafe { self.key_ref().as_bytes().get_unchecked(current_len..) };
         for k in remaining_key {
-            edit_dist(key, *k, *old_row, *new_row, max_edit_dist);
+            edit_dist(key, *k, old_row, new_row, max_edit_dist);
             unsafe { swap(old_row, new_row) };
         }
         let edit_dist = unsafe { *old_row.last().unwrap_unchecked() };
