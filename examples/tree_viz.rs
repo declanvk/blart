@@ -60,6 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(args.output_location)?;
 
         let mut buffer = BufWriter::new(file);

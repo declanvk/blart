@@ -3,22 +3,10 @@
 // pub use self::iterators::*;
 use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes};
 use std::{
-    borrow::Borrow,
-    cmp::Ordering,
-    error::Error,
-    fmt,
-    hash::Hash,
-    intrinsics::{assume, likely},
-    iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip},
-    marker::PhantomData,
-    mem::{self, ManuallyDrop, MaybeUninit},
-    ops::Range,
-    ptr::{self, NonNull},
-    simd::{
+    borrow::Borrow, cmp::Ordering, error::Error, fmt, hash::Hash, intrinsics::{assume, likely}, iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip}, marker::PhantomData, mem::{self, ManuallyDrop, MaybeUninit}, ops::Range, ptr::{self, NonNull}, simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
         u8x16, u8x64, usizex64,
-    },
-    slice::Iter,
+    }, slice::Iter
 };
 
 // mod iterators;
@@ -243,7 +231,7 @@ impl<K: AsBytes, V> Copy for OpaqueNodePtr<K, V> {}
 
 impl<K: AsBytes, V> Clone for OpaqueNodePtr<K, V> {
     fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
+        *self
     }
 }
 
@@ -611,7 +599,7 @@ impl<K: AsBytes, V> NodePtr<LeafNode<K, V>> {
 
 impl<N: Node> Clone for NodePtr<N> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 impl<N: Node> Copy for NodePtr<N> {}
@@ -816,7 +804,8 @@ pub trait InnerNode: Node + Sized {
     fn read_full_prefix(
         &self,
         current_depth: usize,
-    ) -> (
+    ) -> 
+    (
         &[u8],
         Option<NodePtr<LeafNode<<Self as Node>::Key, <Self as Node>::Value>>>,
     ) {
@@ -1030,7 +1019,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
 
     /// Writes a child to the node without bounds check or order
     ///
-    /// # Panics
+    /// # Safety
     ///
     /// This functions assumes that the write is gonna be inbound
     /// (i.e the check for a full node is done previously to the call of this
@@ -1206,6 +1195,7 @@ impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode4<K, V> {
 
         let mut child_index = 0;
         for key in keys {
+            #[allow(clippy::comparison_chain)]
             if key_fragment < *key {
                 return WritePoint::Shift(child_index);
             } else if key_fragment == *key {

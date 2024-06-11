@@ -1,6 +1,5 @@
 use crate::{
-    visitor::{Visitable, Visitor},
-    AsBytes, OpaqueNodePtr, TreeMap,
+    visitor::{Visitable, Visitor}, AsBytes, TreeMap
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -182,8 +181,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::deallocate_tree;
+    
+    
 
     // #[test]
     // fn mostly_empty_tree_stats_fixed_length_tree() {

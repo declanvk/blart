@@ -10,9 +10,6 @@
 
 use std::{fmt, mem::align_of, ptr::NonNull};
 
-#[cfg(not(feature = "nightly"))]
-use sptr::Strict;
-
 /// A non-null pointer type which carries several bits of metadata.
 ///
 /// The `MIN_BITS` constant is used to ensure that any type that is used with
@@ -234,7 +231,7 @@ impl<P, const MIN_BITS: u32> Ord for TaggedPointer<P, MIN_BITS> {
 
 impl<P, const MIN_BITS: u32> PartialOrd for TaggedPointer<P, MIN_BITS> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
+        Some(self.0.cmp(&other.0))
     }
 }
 
@@ -248,7 +245,7 @@ impl<P, const MIN_BITS: u32> PartialEq for TaggedPointer<P, MIN_BITS> {
 
 impl<P, const MIN_BITS: u32> Clone for TaggedPointer<P, MIN_BITS> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 
@@ -333,7 +330,7 @@ mod tests {
         assert_eq!(p.to_data(), 3);
         assert_eq!(unsafe { *p.to_ptr() }, 10);
 
-        unsafe { Box::from_raw(p.to_ptr()) };
+        unsafe { let _ = Box::from_raw(p.to_ptr()); };
     }
 
     #[test]
@@ -348,7 +345,7 @@ mod tests {
         assert_eq!(unsafe { *p.to_ptr() }, 30);
         assert_eq!(p.to_data(), 0);
 
-        unsafe { Box::from_raw(p.to_ptr()) };
+        unsafe { let _ = Box::from_raw(p.to_ptr()); };
     }
 
     // #[test]

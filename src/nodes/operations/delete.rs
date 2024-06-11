@@ -37,7 +37,7 @@ unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
         // SAFETY: The iterator only lasts until the remaining child is pulled out, then
         // dropped. The scope does not overlap with any mutating operations on the inner
         // node.
-        let mut children = unsafe { inner_node.iter() };
+        let mut children = inner_node.iter();
         let (child_key_byte, child_node_ptr) = children.next().expect("expected single child");
         assert!(
             children.next().is_none(),

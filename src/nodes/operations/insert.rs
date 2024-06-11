@@ -447,6 +447,7 @@ where
     K: AsBytes + Borrow<Q>,
     Q: AsBytes + ?Sized,
 {
+    #[allow(clippy::type_complexity)]
     fn test_prefix_identify_insert<K, V, N>(
         inner_ptr: NodePtr<N>,
         key: &[u8],
