@@ -1217,6 +1217,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
 }
 
 impl<K: AsBytes, V> TreeMap<K, V> {
+    /// Tries to get the given key’s corresponding entry in the map for in-place manipulation.
     pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V>, InsertPrefixError>
     where
         K: AsBytes,
@@ -1248,6 +1249,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         Ok(entry)
     }
 
+    /// Tries to get the given key’s corresponding entry in the map for in-place manipulation.
     pub fn try_entry_ref<'a, 'b, Q>(
         &'a mut self,
         key: &'b Q,
@@ -1283,6 +1285,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         Ok(entry)
     }
 
+    /// Gets the given key’s corresponding entry in the map for in-place manipulation.
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V>
     where
         K: NoPrefixesBytes,
@@ -1290,6 +1293,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         unsafe { self.try_entry(key).unwrap_unchecked() }
     }
 
+    /// Gets the given key’s corresponding entry in the map for in-place manipulation.
     pub fn entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> EntryRef<'a, 'b, K, V, Q>
     where
         K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,

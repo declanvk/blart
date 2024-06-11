@@ -11,7 +11,7 @@
 #![feature(strict_provenance)]
 #![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
 #![deny(
-    // missing_docs,
+    missing_docs,
     clippy::missing_safety_doc,
     unsafe_op_in_unsafe_fn,
     deprecated_in_future,
