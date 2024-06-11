@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefix, NodePtr, OpaqueNodePtr};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr};
 
 /// Search in the given tree for the value stored with the given key.
 ///
@@ -84,8 +84,8 @@ where
     let inner_node = unsafe { inner_ptr.as_ref() };
     let match_prefix = inner_node.match_prefix(key.as_bytes(), *current_depth);
     match match_prefix {
-        MatchPrefix::Mismatch { .. } => None,
-        MatchPrefix::Match { matched_bytes } => {
+        MatchPrefixResult::Mismatch { .. } => None,
+        MatchPrefixResult::Match { matched_bytes } => {
             // Since the prefix matched, advance the depth by the size of the prefix
             *current_depth += matched_bytes;
 

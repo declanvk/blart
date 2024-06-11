@@ -1,5 +1,5 @@
 use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefix, Mismatch, NodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch, NodePtr,
     OpaqueNodePtr,
 };
 use std::{
@@ -464,8 +464,8 @@ where
         let inner_node = unsafe { inner_ptr.as_ref() };
         let match_prefix = inner_node.match_prefix(key, *current_depth);
         match match_prefix {
-            MatchPrefix::Mismatch { mismatch } => Ok(ControlFlow::Break(mismatch)),
-            MatchPrefix::Match { matched_bytes } => {
+            MatchPrefixResult::Mismatch { mismatch } => Ok(ControlFlow::Break(mismatch)),
+            MatchPrefixResult::Match { matched_bytes } => {
                 // Since the prefix matched, advance the depth by the size of the prefix
                 *current_depth += matched_bytes;
 
