@@ -12,7 +12,7 @@ macro_rules! gen_benches {
                     $bench(c, stringify!($target));
                 }
 
-                
+
                 criterion_group! {
                     name = [<group_ $target>];
                     config = Criterion::default()

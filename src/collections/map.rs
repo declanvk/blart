@@ -3,13 +3,18 @@
 
 use crate::{
     deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
-    minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked,
-    AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch,
-    Header, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, InsertPoint,
-    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena,
+    minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes,
+    ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch, Header, InnerNode, InnerNode16,
+    InnerNode256, InnerNode4, InnerNode48, InsertPoint, InsertPrefixError, InsertResult,
+    InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
-    borrow::Borrow, collections::HashMap, fmt::Debug, hash::{Hash, Hasher}, intrinsics::assume, ops::Index
+    borrow::Borrow,
+    collections::HashMap,
+    fmt::Debug,
+    hash::{Hash, Hasher},
+    intrinsics::assume,
+    ops::Index,
 };
 
 mod entry;
@@ -1747,8 +1752,6 @@ mod tests {
     }
 
     fn hash_one(hasher_builder: &impl BuildHasher, value: impl Hash) -> u64 {
-        
-        
         hasher_builder.hash_one(&value)
     }
 

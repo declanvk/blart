@@ -1,11 +1,7 @@
-use std::{
-    intrinsics::assume,
-    mem::MaybeUninit,
-};
+use std::{intrinsics::assume, mem::MaybeUninit};
 
 use crate::{
-    AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
-    OpaqueNodePtr,
+    AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, OpaqueNodePtr,
 };
 
 pub struct StackArena {
@@ -56,7 +52,11 @@ impl StackArena {
 
         self.pop();
 
-        Some(unsafe { std::mem::transmute::<&mut &mut [std::mem::MaybeUninit<usize>], &mut &mut [usize]>(buffer) })
+        Some(unsafe {
+            std::mem::transmute::<&mut &mut [std::mem::MaybeUninit<usize>], &mut &mut [usize]>(
+                buffer,
+            )
+        })
     }
 
     pub fn pop(&mut self) {
@@ -112,7 +112,9 @@ fn edit_dist(
 
 #[inline(always)]
 unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize>]) {
-    let temp = unsafe { std::mem::transmute::<&mut &mut [usize], &mut &mut [std::mem::MaybeUninit<usize>]>(old_row) };
+    let temp = unsafe {
+        std::mem::transmute::<&mut &mut [usize], &mut &mut [std::mem::MaybeUninit<usize>]>(old_row)
+    };
     std::mem::swap(temp, new_row);
 }
 

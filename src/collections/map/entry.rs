@@ -1,9 +1,6 @@
 use std::mem::replace;
 
-use crate::{
-    AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr,
-    OpaqueNodePtr, TreeMap,
-};
+use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 
 pub struct OccupiedEntry<'a, K, V>
 where

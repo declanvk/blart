@@ -2,7 +2,7 @@ use std::{ffi::CString, time::Duration};
 
 use blart::TreeMap;
 use criterion::{measurement::Measurement, Criterion};
-use rand::{rngs::StdRng, SeedableRng, seq::SliceRandom};
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
 fn insert(words: Vec<CString>) -> TreeMap<CString, usize> {
     let mut art = TreeMap::new();
@@ -32,7 +32,6 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
 
     let mut rand_words = words.clone();
     rand_words.shuffle(&mut rng);
-
 
     let mut part_words: Vec<_> = words.choose_multiple(&mut rng, 50_000).cloned().collect();
     part_words.sort();

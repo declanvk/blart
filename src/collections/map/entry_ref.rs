@@ -1,12 +1,6 @@
-use std::{
-    borrow::Borrow,
-    mem::replace,
-};
+use std::{borrow::Borrow, mem::replace};
 
-use crate::{
-    AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr,
-    OpaqueNodePtr, TreeMap,
-};
+use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 
 pub struct OccupiedEntryRef<'a, K, V>
 where

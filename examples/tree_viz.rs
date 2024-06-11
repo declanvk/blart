@@ -75,7 +75,6 @@ fn write_tree(
     output: &mut dyn Write,
     tree: TreeMap<Box<[u8]>, String>,
 ) -> Result<(), Box<dyn Error>> {
-
     // SAFETY: There are no concurrent mutation to the tree node or its children
     unsafe {
         DotPrinter::print(
