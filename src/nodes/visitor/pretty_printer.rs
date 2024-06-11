@@ -114,7 +114,7 @@ impl<O: Write> DotPrinter<O> {
         // SAFETY: The `child_it` does not live beyond the following loop and will not
         // overlap with any mutating access or operation, which is guaranteed by the
         // `print_tree` caller requirements.
-        let child_it = unsafe { inner_node.iter() };
+        let child_it = inner_node.iter();
         for (idx, (key_fragment, _)) in child_it.enumerate() {
             if idx == 0 {
                 write!(self.output, "<c{idx}> {key_fragment}")?;
@@ -127,7 +127,7 @@ impl<O: Write> DotPrinter<O> {
         // SAFETY: The `child_it` does not live beyond the following loop and will not
         // overlap with any mutating access or operation, which is guaranteed by the
         // `print_tree` caller requirements.
-        let child_it = unsafe { inner_node.iter() };
+        let child_it = inner_node.iter();
         for (key_frag_id, (_, child)) in child_it.enumerate() {
             let child_id = child.visit_with(self)?;
 

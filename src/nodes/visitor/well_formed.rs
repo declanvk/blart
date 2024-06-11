@@ -336,7 +336,7 @@ where
         // SAFETY: The `child_it` does not live beyond the following loop and will not
         // overlap with any mutating access or operation, which is guaranteed by the
         // `check_tree` caller requirements.
-        let child_it = unsafe { inner_node.iter() };
+        let child_it = inner_node.iter();
 
         let mut running_node_count = 0;
         let mut num_children: usize = 0;
@@ -538,12 +538,12 @@ mod tests {
         // We can't just call `deallocate_tree(root)` because the deallocate function
         // assumes no loops, if we did use `deallocate_tree` it would hit a
         // use-after-free error
-        unsafe { NodePtr::deallocate_node_ptr(root) };
-        unsafe { NodePtr::deallocate_node_ptr(n4_left_ptr) };
-        unsafe { NodePtr::deallocate_node_ptr(n4_right_ptr) };
-        unsafe { NodePtr::deallocate_node_ptr(l1_ptr) };
-        unsafe { NodePtr::deallocate_node_ptr(l2_ptr) };
-        unsafe { NodePtr::deallocate_node_ptr(l3_ptr) };
+        unsafe { let _ = NodePtr::deallocate_node_ptr(root); };
+        unsafe { let _ = NodePtr::deallocate_node_ptr(n4_left_ptr); };
+        unsafe { let _ = NodePtr::deallocate_node_ptr(n4_right_ptr); };
+        unsafe { let _ = NodePtr::deallocate_node_ptr(l1_ptr); };
+        unsafe { let _ = NodePtr::deallocate_node_ptr(l2_ptr); };
+        unsafe { let _ = NodePtr::deallocate_node_ptr(l3_ptr); };
     }
 
     #[test]

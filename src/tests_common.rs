@@ -1,13 +1,8 @@
 //! Helper function for writing tests
 
-use crate::{
-    visitor::{DotPrinter, DotPrinterSettings},
-    OpaqueNodePtr,
-};
-use crate::AsBytes;
-use crate::InsertResult;
-use crate::InsertPrefixError;
-use std::{collections::HashSet, fmt, io, iter};
+use std::{collections::HashSet, iter};
+
+use crate::{AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a
 /// maximum value.
@@ -324,7 +319,7 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
 }
 
 
-#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) unsafe fn insert_unchecked<'a, K, V>(
     root: OpaqueNodePtr<K, V>,
     key: K,
@@ -339,7 +334,7 @@ where
     Ok(insert_point.apply(key, value))
 }
 
-#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn setup_tree_from_entries<V>(
     mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
 ) -> OpaqueNodePtr<Box<[u8]>, V> {

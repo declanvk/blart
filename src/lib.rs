@@ -4,24 +4,13 @@
 #![feature(slice_ptr_get)]
 #![feature(hasher_prefixfree_extras)]
 #![feature(portable_simd)]
-#![feature(core_intrinsics)]
 #![feature(new_uninit)]
 #![feature(impl_trait_in_assoc_type)]
-#![feature(inherent_associated_types)]
+#![feature(core_intrinsics)]
+#![feature(is_sorted)]
+#![feature(strict_provenance)]
 
-#![cfg_attr(
-    feature = "nightly",
-    feature(
-        hasher_prefixfree_extras,
-        is_sorted,
-        maybe_uninit_slice,
-        maybe_uninit_uninit_array,
-        nonnull_slice_from_raw_parts,
-        slice_ptr_get,
-        strict_provenance,
-    )
-)]
-#![allow(unstable_name_collisions)]
+#![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
 #![deny(
     // missing_docs,
     clippy::missing_safety_doc,

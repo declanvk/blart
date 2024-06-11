@@ -43,7 +43,7 @@ pub unsafe fn deallocate_tree<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) {
             // lifetime of the `inner_node` variable. By the safety requirements of the
             // `deallocate_tree` function, no other mutation of this node can happen while
             // this iterator is live.
-            let iter = unsafe { inner_node.iter() };
+            let iter = inner_node.iter();
             stack.extend(iter.map(|(_, child)| child));
         }
 

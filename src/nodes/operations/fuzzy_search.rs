@@ -56,7 +56,7 @@ impl StackArena {
 
         self.pop();
 
-        Some(unsafe { std::mem::transmute(buffer) })
+        Some(unsafe { std::mem::transmute::<&mut &mut [std::mem::MaybeUninit<usize>], &mut &mut [usize]>(buffer) })
     }
 
     pub fn pop(&mut self) {
@@ -74,7 +74,7 @@ fn edit_dist(
 ) -> bool {
     unsafe {
         assume(old.len() == new.len());
-        assume(old.len() >= 1);
+        assume(!old.is_empty());
         assume(key.len() + 1 == old.len());
     }
 
@@ -112,11 +112,12 @@ fn edit_dist(
 
 #[inline(always)]
 unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize>]) {
-    let temp = unsafe { std::mem::transmute(old_row) };
+    let temp = unsafe { std::mem::transmute::<&mut &mut [usize], &mut &mut [std::mem::MaybeUninit<usize>]>(old_row) };
     std::mem::swap(temp, new_row);
 }
 
 pub trait FuzzySearch<K: AsBytes, V> {
+    #[allow(clippy::too_many_arguments)]
     fn fuzzy_search<'s>(
         &'s self,
         arena: &mut StackArena,

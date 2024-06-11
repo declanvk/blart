@@ -243,11 +243,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        ffi::CString,
-        mem::ManuallyDrop,
-        ptr::{read, NonNull},
-    };
+    use std::ffi::CString;
 
     use super::*;
 

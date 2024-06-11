@@ -348,11 +348,7 @@ impl<K: AsBytes, V> DoubleEndedIterator for IntoIter<K, V> {
 mod tests {
     use super::*;
 
-    use crate::{
-        deallocate_tree,
-        tests_common::{generate_key_fixed_length, insert_unchecked},
-        AsBytes, LeafNode, NodePtr,
-    };
+    use crate::tests_common::generate_key_fixed_length;
 
     #[test]
     fn small_tree_iterator_front_and_back() {
@@ -418,10 +414,10 @@ mod tests {
             last_half_last: [170, 0, 0],
         };
 
-        let mut keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
+        let keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
 
         let mut tree = TreeMap::new();
-        for (v, k) in keys.into_iter().enumerate() {
+        for (v, k) in keys.enumerate() {
             tree.try_insert(k, v).unwrap();
         }
 

@@ -6,17 +6,10 @@ use crate::{
     minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked,
     AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch,
     Header, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, InsertPoint,
-    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
-    Node, NodePtr, OpaqueNodePtr, StackArena,
+    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
-    borrow::Borrow,
-    collections::HashMap,
-    fmt::Debug,
-    hash::{Hash, Hasher},
-    intrinsics::assume,
-    mem::ManuallyDrop,
-    ops::{Index, RangeBounds},
+    borrow::Borrow, collections::HashMap, fmt::Debug, hash::{Hash, Hasher}, intrinsics::assume, ops::Index
 };
 
 mod entry;
@@ -214,6 +207,8 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         let mut arena = StackArena::new(key.len() + 1);
         let n = arena.size();
         let s = arena.push();
+
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             s[i].write(i);
         }
@@ -569,6 +564,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     }
 
     #[inline(always)]
+    #[allow(dead_code)]
     fn write_partitions<N, F>(
         header: Header,
         partitions: HashMap<u8, Vec<(K, V)>>,
@@ -592,6 +588,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         NodePtr::allocate_node_ptr(node).to_opaque()
     }
 
+    #[allow(dead_code)]
     fn inner_bulk_insert(entries: Vec<(K, V)>, mut depth: usize) -> OpaqueNodePtr<K, V>
     where
         K: AsBytes,
@@ -661,6 +658,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
+    #[allow(dead_code)]
     fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
     where
         K: AsBytes,
@@ -686,6 +684,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
+    #[allow(dead_code)]
     fn bulk_insert_unchecked(entries: Vec<(K, V)>) -> Self
     where
         K: AsBytes,
@@ -1748,9 +1747,9 @@ mod tests {
     }
 
     fn hash_one(hasher_builder: &impl BuildHasher, value: impl Hash) -> u64 {
-        let mut hasher = hasher_builder.build_hasher();
-        value.hash(&mut hasher);
-        hasher.finish()
+        
+        
+        hasher_builder.hash_one(&value)
     }
 
     #[test]

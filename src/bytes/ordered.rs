@@ -129,7 +129,7 @@ where
     B: BytesMapping,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.repr.as_ref().partial_cmp(other.repr.as_ref())
+        Some(self.repr.as_ref().cmp(other.repr.as_ref()))
     }
 }
 

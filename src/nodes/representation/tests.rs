@@ -1,8 +1,5 @@
 use super::*;
-use std::{ffi::CString, mem};
-
-#[cfg(not(feature = "nightly"))]
-use sptr::Strict;
+use std::mem;
 
 // This test is important because it verifies that we can transform a tagged
 // pointer to a type with large and small alignment and back without issues.
@@ -65,8 +62,8 @@ fn opaque_node_ptr_is_correct() {
     assert!(n256_ptr.is::<InnerNode256<Box<[u8]>, usize>>());
 }
 
-#[test]
-#[cfg(target_pointer_width = "64")]
+// #[test]
+// #[cfg(target_pointer_width = "64")]
 // fn node_sizes() {
 //     const EXPECTED_HEADER_SIZE: usize = 40;
 
