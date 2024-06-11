@@ -275,17 +275,18 @@ mod tests {
         let pointee = "Hello world!";
         let pointer = Box::into_raw(Box::new(pointee));
         let tag_data = 0b101usize;
-    
-        let mut tagged_pointer = TaggedPointer::<&str, 3>::new_with_data(pointer, tag_data).unwrap();
-    
+
+        let mut tagged_pointer =
+            TaggedPointer::<&str, 3>::new_with_data(pointer, tag_data).unwrap();
+
         assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
         assert_eq!(tagged_pointer.to_data(), 0b101);
-    
+
         tagged_pointer.set_data(0b010);
-    
+
         assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
         assert_eq!(tagged_pointer.to_data(), 0b010);
-    
+
         // Collecting the data into `Box` to safely drop it
         unsafe {
             drop(Box::from_raw(tagged_pointer.to_ptr()));
@@ -297,19 +298,19 @@ mod tests {
         let pointee = u64::MAX;
         let pointer = Box::into_raw(Box::new(pointee));
         let tag_data = 0b010usize;
-    
+
         let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, tag_data).unwrap();
-    
+
         assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);
         assert_eq!(tagged_pointer.to_data(), 0b010);
-    
+
         tagged_pointer.set_data(0b101);
-    
+
         let new_tagged_pointer = tagged_pointer.cast::<i64>();
-    
+
         assert_eq!(unsafe { *new_tagged_pointer.to_ptr() }, -1);
         assert_eq!(new_tagged_pointer.to_data(), 0b101);
-    
+
         unsafe {
             drop(Box::from_raw(tagged_pointer.to_ptr()));
         }
@@ -330,7 +331,9 @@ mod tests {
         assert_eq!(p.to_data(), 3);
         assert_eq!(unsafe { *p.to_ptr() }, 10);
 
-        unsafe { let _ = Box::from_raw(p.to_ptr()); };
+        unsafe {
+            let _ = Box::from_raw(p.to_ptr());
+        };
     }
 
     #[test]
@@ -345,7 +348,9 @@ mod tests {
         assert_eq!(unsafe { *p.to_ptr() }, 30);
         assert_eq!(p.to_data(), 0);
 
-        unsafe { let _ = Box::from_raw(p.to_ptr()); };
+        unsafe {
+            let _ = Box::from_raw(p.to_ptr());
+        };
     }
 
     // #[test]

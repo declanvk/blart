@@ -59,8 +59,9 @@ pub enum MalformedTreeError<K: AsBytes, V> {
         /// The entire key
         entire_key: K,
     },
-    /// The length of the tree is not 0, even though the root is [`Option::None`]
-    EmptyTreeWithLen
+    /// The length of the tree is not 0, even though the root is
+    /// [`Option::None`]
+    EmptyTreeWithLen,
 }
 
 impl<K, V> fmt::Debug for MalformedTreeError<K, V>
@@ -97,11 +98,7 @@ where
                 .field("expected_prefix", expected_prefix)
                 .field("entire_key", &entire_key.as_bytes() as &dyn fmt::Debug)
                 .finish(),
-            Self::EmptyTreeWithLen => {
-                f
-                .debug_struct("EmptyTreeWithLen")
-                .finish()
-            }
+            Self::EmptyTreeWithLen => f.debug_struct("EmptyTreeWithLen").finish(),
         }
     }
 }
@@ -189,7 +186,7 @@ where
                 expected_prefix: expected_prefix.clone(),
                 entire_key: entire_key.clone(),
             },
-            Self::EmptyTreeWithLen => Self::EmptyTreeWithLen
+            Self::EmptyTreeWithLen => Self::EmptyTreeWithLen,
         }
     }
 }
@@ -255,8 +252,8 @@ impl<K, V> Error for MalformedTreeError<K, V> where K: AsBytes {}
 ///
 /// In this context, well-formed means that in the tree:
 ///  1. there are no loops between nodes
-///  2. every inner node has a number of children that is in range for the
-///     inner node type. For example, InnerNode16 has between 5 and 16 children.
+///  2. every inner node has a number of children that is in range for the inner
+///     node type. For example, InnerNode16 has between 5 and 16 children.
 ///  3. the elements of the key (as part of inner node prefixes and child
 ///     pointers) combine to match the leaf node key prefix
 ///
@@ -290,14 +287,14 @@ where
     /// Returns an error if the given tree is not well-formed.
     pub unsafe fn check(tree: &TreeMap<K, V>) -> Result<usize, MalformedTreeError<K, V>> {
         tree.root
-        .map(|root| unsafe { Self::check_tree(root) })
-        .unwrap_or_else(|| {
-            if tree.is_empty() {
-                Ok(0)
-            } else {
-                Err(MalformedTreeError::EmptyTreeWithLen)
-            }
-        })
+            .map(|root| unsafe { Self::check_tree(root) })
+            .unwrap_or_else(|| {
+                if tree.is_empty() {
+                    Ok(0)
+                } else {
+                    Err(MalformedTreeError::EmptyTreeWithLen)
+                }
+            })
     }
 
     /// Traverse the given tree and check that it is well-formed. Returns the
@@ -330,8 +327,10 @@ where
         let original_key_prefix_len = self.current_key_prefix.len();
 
         // update running key prefix with inner node partial prefix
-        // TODO: Fix this, here the we should return the full reconstructed prefix if prefix len > NUM_PREFIX_BYTES
-        self.current_key_prefix.extend(inner_node.read_full_prefix(original_key_prefix_len).0);
+        // TODO: Fix this, here the we should return the full reconstructed prefix if
+        // prefix len > NUM_PREFIX_BYTES
+        self.current_key_prefix
+            .extend(inner_node.read_full_prefix(original_key_prefix_len).0);
 
         // SAFETY: The `child_it` does not live beyond the following loop and will not
         // overlap with any mutating access or operation, which is guaranteed by the
@@ -471,7 +470,10 @@ mod tests {
         tree.insert(CString::new("2XX1XXXXXXXXXXXXXXXXXXXXXX2").unwrap(), 3);
         tree.insert(CString::new("2XX2").unwrap(), 4);
 
-        assert_eq!(unsafe { WellFormedChecker::check_tree(tree.root.unwrap()) }, Ok(7));
+        assert_eq!(
+            unsafe { WellFormedChecker::check_tree(tree.root.unwrap()) },
+            Ok(7)
+        );
     }
 
     #[test]
@@ -538,12 +540,24 @@ mod tests {
         // We can't just call `deallocate_tree(root)` because the deallocate function
         // assumes no loops, if we did use `deallocate_tree` it would hit a
         // use-after-free error
-        unsafe { let _ = NodePtr::deallocate_node_ptr(root); };
-        unsafe { let _ = NodePtr::deallocate_node_ptr(n4_left_ptr); };
-        unsafe { let _ = NodePtr::deallocate_node_ptr(n4_right_ptr); };
-        unsafe { let _ = NodePtr::deallocate_node_ptr(l1_ptr); };
-        unsafe { let _ = NodePtr::deallocate_node_ptr(l2_ptr); };
-        unsafe { let _ = NodePtr::deallocate_node_ptr(l3_ptr); };
+        unsafe {
+            let _ = NodePtr::deallocate_node_ptr(root);
+        };
+        unsafe {
+            let _ = NodePtr::deallocate_node_ptr(n4_left_ptr);
+        };
+        unsafe {
+            let _ = NodePtr::deallocate_node_ptr(n4_right_ptr);
+        };
+        unsafe {
+            let _ = NodePtr::deallocate_node_ptr(l1_ptr);
+        };
+        unsafe {
+            let _ = NodePtr::deallocate_node_ptr(l2_ptr);
+        };
+        unsafe {
+            let _ = NodePtr::deallocate_node_ptr(l3_ptr);
+        };
     }
 
     #[test]

@@ -233,16 +233,16 @@ impl<K: AsBytes, V> std::fmt::Debug for DeletePoint<K, V> {
 }
 
 impl<K: AsBytes, V> DeletePoint<K, V> {
-    /// Handle the logic of deleting a leaf node from the tree, after it has been
-    /// found.
+    /// Handle the logic of deleting a leaf node from the tree, after it has
+    /// been found.
     ///
     /// # Safety
     ///
-    ///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
-    ///    tree
-    ///  - This function cannot be called concurrently to any reads or writes of the
-    ///    `root` node or any child node of `root`. This function will arbitrarily
-    ///    read or write to any child in the given tree.
+    ///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the
+    ///    underlying tree
+    ///  - This function cannot be called concurrently to any reads or writes of
+    ///    the `root` node or any child node of `root`. This function will
+    ///    arbitrarily read or write to any child in the given tree.
     pub fn apply(self, root: OpaqueNodePtr<K, V>) -> DeleteResult<K, V> {
         let DeletePoint {
             grandparent_ptr_and_parent_key_byte: grandparent_node_ptr,
@@ -252,12 +252,12 @@ impl<K: AsBytes, V> DeletePoint<K, V> {
         match (parent_node_ptr, grandparent_node_ptr) {
             (None, None) => {
                 // The leaf node was also the root node
-    
+
                 // SAFETY: The original `root` node pointer is a unique pointer to the tree
                 // (required by safety doc), which means that leaf_node_ptr is also unique and
                 // can be deallocated.
                 let leaf_node = unsafe { NodePtr::deallocate_node_ptr(leaf_node_ptr) };
-    
+
                 DeleteResult {
                     new_root: None,
                     deleted_leaf: leaf_node,
@@ -266,8 +266,8 @@ impl<K: AsBytes, V> DeletePoint<K, V> {
             (None, Some(granparent_node_ptr)) => {
                 // search_for_node_to_delete should maintain this invariant
                 panic!(
-                    "This should be impossible, to have missing parent node and present grandparent \
-                     node [{granparent_node_ptr:?}]",
+                    "This should be impossible, to have missing parent node and present \
+                     grandparent node [{granparent_node_ptr:?}]",
                 );
             },
             (Some(parent_node_ptr), grandparent_node_ptr) => unsafe {
@@ -371,7 +371,9 @@ where
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn find_minimum_to_delete<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> DeletePoint<K, V> {
+pub unsafe fn find_minimum_to_delete<K: AsBytes, V>(
+    root: OpaqueNodePtr<K, V>,
+) -> DeletePoint<K, V> {
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;
@@ -406,7 +408,9 @@ pub unsafe fn find_minimum_to_delete<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn find_maximum_to_delete<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> DeletePoint<K, V> {
+pub unsafe fn find_maximum_to_delete<K: AsBytes, V>(
+    root: OpaqueNodePtr<K, V>,
+) -> DeletePoint<K, V> {
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;

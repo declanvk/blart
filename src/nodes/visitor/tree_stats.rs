@@ -1,5 +1,6 @@
 use crate::{
-    visitor::{Visitable, Visitor}, AsBytes, TreeMap
+    visitor::{Visitable, Visitor},
+    AsBytes, TreeMap,
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -46,7 +47,9 @@ impl TreeStatsCollector {
 
         let mut counter = LeafNodeCounter;
 
-        tree.root.map(|root| root.visit_with(&mut counter)).unwrap_or(0)
+        tree.root
+            .map(|root| root.visit_with(&mut counter))
+            .unwrap_or(0)
     }
 }
 
@@ -181,8 +184,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    
-    
 
     // #[test]
     // fn mostly_empty_tree_stats_fixed_length_tree() {

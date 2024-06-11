@@ -1,5 +1,7 @@
 use crate::{
-    deallocate_tree, search_unchecked, tests_common::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries}, AsBytes, InnerNode, InnerNode4, InsertPrefixError, LeafNode, NodePtr, NodeType
+    deallocate_tree, search_unchecked,
+    tests_common::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
+    AsBytes, InnerNode, InnerNode4, InsertPrefixError, LeafNode, NodePtr, NodeType,
 };
 
 #[test]

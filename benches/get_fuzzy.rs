@@ -7,13 +7,13 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let words = include_str!("dict.txt");
     let mut bytes = 0;
     let mut tree: TreeMap<_, _> = words
-    .lines()
-    .map(|s| {
-        let s = CString::new(s).unwrap();
-        bytes += s.as_bytes_with_nul().len();
-        (s, 0usize)
-    })
-    .collect();
+        .lines()
+        .map(|s| {
+            let s = CString::new(s).unwrap();
+            bytes += s.as_bytes_with_nul().len();
+            (s, 0usize)
+        })
+        .collect();
 
     let searches = [
         CString::new("house").unwrap(),
@@ -33,9 +33,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         group.measurement_time(Duration::from_secs(10));
         for search in &searches {
             group.bench_function(search.to_str().unwrap(), |b| {
-                b.iter(
-                    || std::hint::black_box(tree.get_fuzzy(search, cost))
-                );
+                b.iter(|| std::hint::black_box(tree.get_fuzzy(search, cost)));
             });
         }
     }

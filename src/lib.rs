@@ -9,7 +9,6 @@
 #![feature(core_intrinsics)]
 #![feature(is_sorted)]
 #![feature(strict_provenance)]
-
 #![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
 #![deny(
     // missing_docs,
@@ -50,8 +49,7 @@ pub mod benches_common;
 
 pub use bytes::*;
 pub use collections::*;
-pub use nodes::*;
-pub use nodes::visitor;
+pub use nodes::{visitor, *};
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

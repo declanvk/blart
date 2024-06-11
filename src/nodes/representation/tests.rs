@@ -584,7 +584,8 @@ fn header_ltrim_prefix_non_stored_bytes_panic() {
     h.ltrim_by(0);
 }
 
-// --------------------------------------- ITERATORS ---------------------------------------
+// --------------------------------------- ITERATORS
+// ---------------------------------------
 
 type FixtureReturn<Node, const N: usize> = (
     Node,

@@ -3,10 +3,22 @@
 // pub use self::iterators::*;
 use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes};
 use std::{
-    borrow::Borrow, cmp::Ordering, error::Error, fmt, hash::Hash, intrinsics::{assume, likely}, iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip}, marker::PhantomData, mem::{self, ManuallyDrop, MaybeUninit}, ops::Range, ptr::{self, NonNull}, simd::{
+    borrow::Borrow,
+    cmp::Ordering,
+    error::Error,
+    fmt,
+    hash::Hash,
+    intrinsics::{assume, likely},
+    iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip},
+    marker::PhantomData,
+    mem::{self, ManuallyDrop, MaybeUninit},
+    ops::Range,
+    ptr::{self, NonNull},
+    simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
         u8x16, u8x64, usizex64,
-    }, slice::Iter
+    },
+    slice::Iter,
 };
 
 // mod iterators;
@@ -804,8 +816,7 @@ pub trait InnerNode: Node + Sized {
     fn read_full_prefix(
         &self,
         current_depth: usize,
-    ) -> 
-    (
+    ) -> (
         &[u8],
         Option<NodePtr<LeafNode<<Self as Node>::Key, <Self as Node>::Value>>>,
     ) {

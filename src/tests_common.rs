@@ -318,7 +318,6 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
         .map(move |key| apply_expansions_to_key(&key, &full_key_template, &sorted_expansions))
 }
 
-
 #[allow(dead_code)]
 pub(crate) unsafe fn insert_unchecked<'a, K, V>(
     root: OpaqueNodePtr<K, V>,
