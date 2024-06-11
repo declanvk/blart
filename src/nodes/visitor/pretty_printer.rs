@@ -1,5 +1,5 @@
 use crate::{
-    visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr
+    visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap
 };
 use std::{
     fmt::Debug,
@@ -29,7 +29,24 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn print_tree<K, V>(
+    pub unsafe fn print<K, V>(
+        output: O,
+        tree: &TreeMap<K, V>,
+        settings: DotPrinterSettings,
+    ) -> Option<io::Result<()>>
+    where
+        K: Debug + AsBytes,
+        V: Debug,
+    {
+        tree.root.map(|root| unsafe { Self::print_tree(output, &root, settings) })
+    }
+    
+    /// Write the dot-format of the given tree to the given output.
+    ///
+    /// # Safety
+    ///  - For the duration of this function, the given node and all its
+    ///    children nodes must not get mutated.
+    unsafe fn print_tree<K, V>(
         output: O,
         tree: &OpaqueNodePtr<K, V>,
         settings: DotPrinterSettings,

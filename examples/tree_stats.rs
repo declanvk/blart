@@ -41,14 +41,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn collect_and_output_stats(tree: TreeMap<Box<[u8]>, ()>) -> Result<(), Box<dyn Error>> {
-    let root = tree.into_raw();
-
     // SAFETY: There are no concurrent mutation to the tree node or its children
-    let stats = unsafe { TreeStatsCollector::collect(root.unwrap()) };
-
-    // SAFETY: This root pointer was created from earlier invocation of
-    // `TreeMap::into_raw`, it is safe. No other tree is using this root.
-    let _tree = unsafe { TreeMap::from_raw(root) };
+    let stats = unsafe { TreeStatsCollector::collect(&tree).unwrap() };
 
     println!("{stats:#?}");
 

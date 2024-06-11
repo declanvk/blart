@@ -1,6 +1,6 @@
 use crate::{
     nodes::visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr,
+    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
 };
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -59,6 +59,8 @@ pub enum MalformedTreeError<K: AsBytes, V> {
         /// The entire key
         entire_key: K,
     },
+    /// The length of the tree is not 0, even though the root is [`Option::None`]
+    EmptyTreeWithLen
 }
 
 impl<K, V> fmt::Debug for MalformedTreeError<K, V>
@@ -95,6 +97,11 @@ where
                 .field("expected_prefix", expected_prefix)
                 .field("entire_key", &entire_key.as_bytes() as &dyn fmt::Debug)
                 .finish(),
+            Self::EmptyTreeWithLen => {
+                f
+                .debug_struct("EmptyTreeWithLen")
+                .finish()
+            }
         }
     }
 }
@@ -141,6 +148,12 @@ where
                     entire_key.as_bytes()
                 )
             },
+            MalformedTreeError::EmptyTreeWithLen => {
+                write!(
+                    f,
+                    "The length of the tree is not 0, even though the root is None",
+                )
+            },
         }
     }
 }
@@ -176,6 +189,7 @@ where
                 expected_prefix: expected_prefix.clone(),
                 entire_key: entire_key.clone(),
             },
+            Self::EmptyTreeWithLen => Self::EmptyTreeWithLen
         }
     }
 }
@@ -274,7 +288,30 @@ where
     /// # Errors
     ///
     /// Returns an error if the given tree is not well-formed.
-    pub unsafe fn check_tree(tree: OpaqueNodePtr<K, V>) -> Result<usize, MalformedTreeError<K, V>> {
+    pub unsafe fn check(tree: &TreeMap<K, V>) -> Result<usize, MalformedTreeError<K, V>> {
+        tree.root
+        .map(|root| unsafe { Self::check_tree(root) })
+        .unwrap_or_else(|| {
+            if tree.is_empty() {
+                Ok(0)
+            } else {
+                Err(MalformedTreeError::EmptyTreeWithLen)
+            }
+        })
+    }
+
+    /// Traverse the given tree and check that it is well-formed. Returns the
+    /// number of nodes in the tree.
+    ///
+    /// # Safety
+    ///
+    ///  - For the duration of this function, the given node and all its
+    ///    children nodes must not get mutated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the given tree is not well-formed.
+    unsafe fn check_tree(tree: OpaqueNodePtr<K, V>) -> Result<usize, MalformedTreeError<K, V>> {
         let mut visitor = WellFormedChecker {
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
