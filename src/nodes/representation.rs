@@ -112,6 +112,15 @@ pub struct Header {
 }
 
 impl Header {
+    /// Create a new [`Header`] using 
+    /// `prefix` as the node prefix and
+    /// `prefix_len` as the node prefix length and
+    /// 
+    /// This is done because when a prefix mismatch happens
+    /// the length of the mismatch can be grater or equal to
+    /// prefix size, since we search for the first child of the
+    /// node to recreate the prefix, that's why we don't use
+    /// `prefix.len()` as the node prefix length
     pub fn new(prefix: &[u8], prefix_len: usize) -> Self {
         let mut header = Header {
             num_children: 0,
@@ -138,11 +147,12 @@ impl Header {
         &self.prefix[0..self.capped_prefix_len()]
     }
 
-    /// Return the number of bytes in the prefix.
+    /// Get the number of bytes in the prefix.
     pub fn prefix_len(&self) -> usize {
         self.prefix_len as usize
     }
 
+    /// Minimum between [`Self::prefix_len`] and [`NUM_PREFIX_BYTES`]
     pub fn capped_prefix_len(&self) -> usize {
         (self.prefix_len as usize).min(NUM_PREFIX_BYTES)
     }
@@ -208,6 +218,7 @@ impl Header {
         self.prefix[..len.min(NUM_PREFIX_BYTES)].copy_from_slice(leaf_key)
     }
 
+    /// Append `new` to the prefix and sums `new_len` to the prefix length
     pub fn push_prefix(&mut self, new: &[u8], new_len: usize) {
         let begin = self.capped_prefix_len();
         let end = (begin + new.len()).min(NUM_PREFIX_BYTES);
@@ -216,6 +227,8 @@ impl Header {
         self.prefix_len += new_len as u32;
     }
 
+    /// Set the length of the prefix to 0 and returns a copy of the
+    /// prefix, length and capped length
     pub fn clear_prefix(&mut self) -> ([u8; NUM_PREFIX_BYTES], usize, usize) {
         let len = self.prefix_len();
         let capped_len = self.capped_prefix_len();
@@ -361,6 +374,7 @@ impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
         unsafe { &mut *self.0.cast::<Header>().to_ptr() }
     }
 
+    /// Do a deep clone recursively, by allocating new nodes
     pub fn deep_clone(&self) -> Self
     where
         K: Clone,
@@ -670,16 +684,29 @@ pub trait Node: private::Sealed {
     type Value;
 }
 
+/// Result of prefix match
 #[derive(Debug)]
-pub enum MatchPrefix<K: AsBytes, V> {
-    Mismatch { mismatch: Mismatch<K, V> },
-    Match { matched_bytes: usize },
+pub enum MatchPrefixResult<K: AsBytes, V> {
+    /// If prefixes don't match
+    Mismatch {
+        /// Mismatch object
+        mismatch: Mismatch<K, V> 
+    },
+    /// If the prefixes match entirely
+    Match { 
+        /// How many bytes were matched
+        matched_bytes: usize 
+    },
 }
 
+/// Represents a prefix mismatch
 #[derive(Debug)]
 pub struct Mismatch<K: AsBytes, V> {
+    /// How many bytes were matched
     pub matched_bytes: usize,
+    /// Value of the byte that made it not match
     pub prefix_byte: u8,
+    /// Pointer to the leaf if the prefix was reconstructed
     pub leaf_ptr: Option<NodePtr<LeafNode<K, V>>>,
 }
 
@@ -702,16 +729,28 @@ pub trait InnerNode: Node + Sized {
     where
         Self: 'a;
 
+    /// Create an empty [`InnerNode`], with no children and no prefix
     fn empty() -> Self {
         Self::from_header(Header::empty())
     }
 
+    /// Create a new [`InnerNode`] using 
+    /// `prefix` as the node prefix and
+    /// `prefix_len` as the node prefix length and
+    /// 
+    /// This is done because when a prefix mismatch happens
+    /// the length of the mismatch can be grater or equal to
+    /// prefix size, since we search for the first child of the
+    /// node to recreate the prefix, that's why we don't use
+    /// `prefix.len()` as the node prefix length
     fn from_prefix(prefix: &[u8], prefix_len: usize) -> Self {
         Self::from_header(Header::new(prefix, prefix_len))
     }
 
+    /// Create a new [`InnerNode`] using a [`Header`]
     fn from_header(header: Header) -> Self;
 
+    /// Get the [`Header`] from the [`InnerNode`]
     fn header(&self) -> &Header;
 
     /// Search through this node for a child node that corresponds to the given
@@ -775,7 +814,7 @@ pub trait InnerNode: Node + Sized {
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
     ///
-    /// # Panics
+    /// # Safety
     ///
     /// `current_depth` > key len
     #[inline(always)]
@@ -783,7 +822,7 @@ pub trait InnerNode: Node + Sized {
         &self,
         key: &[u8],
         current_depth: usize,
-    ) -> MatchPrefix<<Self as Node>::Key, <Self as Node>::Value> {
+    ) -> MatchPrefixResult<<Self as Node>::Key, <Self as Node>::Value> {
         unsafe {
             // SAFETY: Since we are iterating the key and prefixes, we
             // expect that the depth never exceeds the key len.
@@ -800,7 +839,7 @@ pub trait InnerNode: Node + Sized {
             .take_while(|(a, b)| **a == **b)
             .count();
         if matched_bytes < prefix.len() {
-            MatchPrefix::Mismatch {
+            MatchPrefixResult::Mismatch {
                 mismatch: Mismatch {
                     matched_bytes,
                     prefix_byte: prefix[matched_bytes],
@@ -808,10 +847,11 @@ pub trait InnerNode: Node + Sized {
                 },
             }
         } else {
-            MatchPrefix::Match { matched_bytes }
+            MatchPrefixResult::Match { matched_bytes }
         }
     }
 
+    /// Read the prefix as a whole, by reconstructing it if necessary from a leaf
     #[inline(always)]
     fn read_full_prefix(
         &self,
@@ -885,20 +925,29 @@ pub trait InnerNode: Node + Sized {
         OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
     );
 
+    /// Deep clones the inner node by allocating memory to a new one
     fn deep_clone(&self) -> NodePtr<Self>
     where
         <Self as Node>::Key: Clone,
         <Self as Node>::Value: Clone;
 }
 
+/// Where a write should happen inside the node
 enum WritePoint {
+    /// In an already existing key fragment
     Existing(usize),
+    /// As the last key fragment
     Last(usize),
+    /// Shift the key fragments to the right
     Shift(usize),
 }
 
+/// Common methods for searching in an [`InnerNodeCompressed`]
 trait SearchInnerNodeCompressed {
+    /// Get the index of the child if it exists
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize>;
+
+    /// Find the write point for `key_fragment`
     fn find_write_point(&self, key_fragment: u8) -> WritePoint;
 }
 
@@ -943,6 +992,7 @@ impl<K: AsBytes, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, 
     }
 }
 
+/// Iterator type for an [`InnerNodeCompressed`]
 pub type InnerNodeCompressedIter<'a, K, V> =
     Zip<Copied<Iter<'a, u8>>, Copied<Iter<'a, OpaqueNodePtr<K, V>>>>;
 impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
@@ -962,6 +1012,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         }
     }
 
+    /// Generalized version of [`InnerNode::lookup_child`] for compressed nodes
     fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>>
     where
         Self: SearchInnerNodeCompressed,
@@ -1045,6 +1096,13 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         self.header.num_children += 1;
     }
 
+    /// Writes a child to the node without bounds check or order
+    /// 
+    /// # Safety
+    ///
+    /// This functions assumes that the write is gonna be inbound
+    /// (i.e the check for a full node is done previously to the call of this
+    /// function)
     unsafe fn write_child_at(
         &mut self,
         idx: usize,
@@ -1060,6 +1118,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         }
     }
 
+    /// Removes child if it exists
     fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>>
     where
         Self: SearchInnerNodeCompressed,
@@ -1079,6 +1138,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         Some(unsafe { MaybeUninit::assume_init(child_ptr) })
     }
 
+    /// Grows or shrinks the node
     fn change_block_size<const NEW_SIZE: usize>(&self) -> InnerNodeCompressed<K, V, NEW_SIZE> {
         debug_assert!(
             self.header.num_children() <= NEW_SIZE,
@@ -1122,6 +1182,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         }
     }
 
+    /// Transform node into a [`InnerNode48`]
     fn grow_node48(&self) -> InnerNode48<K, V> {
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
@@ -1164,11 +1225,13 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         }
     }
 
+    /// Get an iterator over the keys and values of the node
     fn inner_iter(&self) -> InnerNodeCompressedIter<'_, K, V> {
         let (keys, nodes) = self.initialized_portion();
         keys.iter().copied().zip(nodes.iter().copied())
     }
 
+    /// Deep clones the inner node by allocating memory to a new one
     fn inner_deep_clone(&self) -> NodePtr<Self>
     where
         K: Clone,
