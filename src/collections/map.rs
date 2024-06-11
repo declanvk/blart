@@ -4,7 +4,7 @@
 use crate::{
     deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
     minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked,
-    visitor::TreeStatsCollector, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch,
+    AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch,
     Header, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, InsertPoint,
     InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
     Node, NodePtr, OpaqueNodePtr, StackArena,
@@ -53,67 +53,6 @@ impl<K: AsBytes, V> TreeMap<K, V> {
             num_entries: 0,
             root: None,
         }
-    }
-
-    /// Convert tree into a pointer to pointer to the root node.
-    ///
-    /// If there are no elements in the tree, then returns `None`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::{TreeMap, deallocate_tree};
-    ///
-    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
-    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-    ///
-    /// let root = map.into_raw().unwrap();
-    ///
-    /// // SAFETY: No other operation are access or mutating tree while dealloc happens
-    /// unsafe { deallocate_tree(root) }
-    /// ```
-    fn into_raw(self) -> Option<OpaqueNodePtr<K, V>> {
-        let drop_prevent = ManuallyDrop::new(self);
-
-        drop_prevent.root
-    }
-
-    /// Constructs a tree from a pointer to the root node.
-    ///
-    /// If `None` is passed, it constructs an empty tree.
-    ///
-    /// # Safety
-    ///
-    /// The pointer passed to this function must not be used in a second call to
-    /// `from_raw`, otherwise multiple safety issues could occur.
-    ///
-    /// Similarly, no other function can mutate the content of the tree under
-    /// `root` while this function executes.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
-    ///
-    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-    ///
-    /// let root = map.into_raw();
-    /// // SAFETY: The tree root came from previous `into_raw` call
-    /// let map2 = unsafe { TreeMap::from_raw(root) };
-    ///
-    /// assert_eq!(map2[[1, 2, 3].as_ref()], 'a');
-    /// ```
-    unsafe fn from_raw(root: Option<OpaqueNodePtr<K, V>>) -> Self {
-        let num_entries = if let Some(root) = root {
-            // SAFETY: The safety requirements on this function cover this call
-            unsafe { TreeStatsCollector::count_leaf_nodes(root) }
-        } else {
-            0
-        };
-
-        TreeMap { num_entries, root }
     }
 
     /// Clear the map, removing all elements.

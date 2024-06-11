@@ -2,7 +2,10 @@
 
 mod operations;
 mod representation;
-pub(crate) mod visitor;
+
+pub mod visitor;
 
 pub(crate) use operations::*;
-pub(crate) use representation::*;
+
+#[doc(hidden)]
+pub use representation::*;

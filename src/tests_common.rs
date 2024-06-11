@@ -323,23 +323,6 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
         .map(move |key| apply_expansions_to_key(&key, &full_key_template, &sorted_expansions))
 }
 
-/// Convert the given tree into the DOT format so it can be displayed by the
-/// graphiz package.
-///
-/// # Safety
-///  - There must be no concurrent modifications to the tree while this function
-///    runs.
-pub fn convert_tree_to_dot_string<K: fmt::Debug + AsBytes, V: fmt::Debug>(
-    root: OpaqueNodePtr<K, V>,
-    settings: DotPrinterSettings,
-) -> io::Result<String> {
-    let mut buffer = Vec::new();
-
-    // SAFETY: There are no concurrent mutation to the tree node or its children
-    unsafe { DotPrinter::print_tree(&mut buffer, &root, settings)? };
-
-    Ok(String::from_utf8(buffer).unwrap())
-}
 
 #[cfg(test)]
 pub(crate) unsafe fn insert_unchecked<'a, K, V>(

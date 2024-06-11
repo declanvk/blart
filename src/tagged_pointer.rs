@@ -20,61 +20,6 @@ use sptr::Strict;
 /// bits. As a result, we can cast safely because we know that the
 /// const-evaluation process & type-checking will ensure that the number of bits
 /// is sufficient.
-///
-/// # Examples
-///
-/// Here is an example of successfully tagging a pointer and retrieving the
-/// data:
-///
-/// ```rust
-/// use blart::tagged_pointer::TaggedPointer;
-///
-/// let pointee = "Hello world!";
-/// let pointer = Box::into_raw(Box::new(pointee));
-/// let tag_data = 0b101usize;
-///
-/// let mut tagged_pointer = TaggedPointer::<&str, 3>::new_with_data(pointer, tag_data).unwrap();
-///
-/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
-/// assert_eq!(tagged_pointer.to_data(), 0b101);
-///
-/// tagged_pointer.set_data(0b010);
-///
-/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
-/// assert_eq!(tagged_pointer.to_data(), 0b010);
-///
-/// // Collecting the data into `Box` to safely drop it
-/// unsafe {
-///     drop(Box::from_raw(tagged_pointer.to_ptr()));
-/// }
-/// ```
-///
-/// Here is an example of tagging a pointer, then casting it to a different type
-/// and retrieving the same data:
-///
-/// ```rust
-/// use blart::tagged_pointer::TaggedPointer;
-///
-/// let pointee = u64::MAX;
-/// let pointer = Box::into_raw(Box::new(pointee));
-/// let tag_data = 0b010usize;
-///
-/// let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, tag_data).unwrap();
-///
-/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);
-/// assert_eq!(tagged_pointer.to_data(), 0b010);
-///
-/// tagged_pointer.set_data(0b101);
-///
-/// let new_tagged_pointer = tagged_pointer.cast::<i64>();
-///
-/// assert_eq!(unsafe { *new_tagged_pointer.to_ptr() }, -1);
-/// assert_eq!(new_tagged_pointer.to_data(), 0b101);
-///
-/// unsafe {
-///     drop(Box::from_raw(tagged_pointer.to_ptr()));
-/// }
-/// ```
 #[cfg_attr(
     not(miri),
     doc = "",
@@ -327,6 +272,51 @@ impl<P, const MIN_BITS: u32> fmt::Pointer for TaggedPointer<P, MIN_BITS> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn successful_tag() {
+        let pointee = "Hello world!";
+        let pointer = Box::into_raw(Box::new(pointee));
+        let tag_data = 0b101usize;
+    
+        let mut tagged_pointer = TaggedPointer::<&str, 3>::new_with_data(pointer, tag_data).unwrap();
+    
+        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
+        assert_eq!(tagged_pointer.to_data(), 0b101);
+    
+        tagged_pointer.set_data(0b010);
+    
+        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
+        assert_eq!(tagged_pointer.to_data(), 0b010);
+    
+        // Collecting the data into `Box` to safely drop it
+        unsafe {
+            drop(Box::from_raw(tagged_pointer.to_ptr()));
+        }
+    }
+
+    #[test]
+    fn cast_and_back() {
+        let pointee = u64::MAX;
+        let pointer = Box::into_raw(Box::new(pointee));
+        let tag_data = 0b010usize;
+    
+        let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, tag_data).unwrap();
+    
+        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);
+        assert_eq!(tagged_pointer.to_data(), 0b010);
+    
+        tagged_pointer.set_data(0b101);
+    
+        let new_tagged_pointer = tagged_pointer.cast::<i64>();
+    
+        assert_eq!(unsafe { *new_tagged_pointer.to_ptr() }, -1);
+        assert_eq!(new_tagged_pointer.to_data(), 0b101);
+    
+        unsafe {
+            drop(Box::from_raw(tagged_pointer.to_ptr()));
+        }
+    }
 
     #[test]
     fn create_pointer_set_and_retrieve_data() {

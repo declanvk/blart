@@ -1,6 +1,6 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, OpaqueNodePtr,
+    AsBytes, OpaqueNodePtr, TreeMap,
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -15,13 +15,10 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn collect<K, V>(root: OpaqueNodePtr<K, V>) -> TreeStats
-    where
-        K: AsBytes,
-    {
+    pub unsafe fn collect<K: AsBytes, V>(tree: &TreeMap<K, V>) -> Option<TreeStats> {
         let mut collector = TreeStatsCollector;
 
-        root.visit_with(&mut collector)
+        tree.root.map(|root| root.visit_with(&mut collector))
     }
 
     /// Iterate through the given tree and return the number of leaf nodes.
@@ -29,7 +26,7 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn count_leaf_nodes<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) -> usize {
+    pub unsafe fn count_leaf_nodes<K: AsBytes, V>(tree: &TreeMap<K, V>) -> usize {
         struct LeafNodeCounter;
 
         impl<K: AsBytes, V> Visitor<K, V> for LeafNodeCounter {
@@ -50,7 +47,7 @@ impl TreeStatsCollector {
 
         let mut counter = LeafNodeCounter;
 
-        root.visit_with(&mut counter)
+        tree.root.map(|root| root.visit_with(&mut counter)).unwrap_or(0)
     }
 }
 
