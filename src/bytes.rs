@@ -417,7 +417,13 @@ impl<'a> AsBytes for IoSliceMut<'a> {
     }
 }
 
-struct ConcatTypes<T>(Box<[u8]>, PhantomData<T>);
+/// Concats two or more types that implement [`AsBytes`]. The construction of this type will
+/// allocate memory, since the concatenated bytes need to be in a flat buffer.
+/// 
+/// If all of the types implement [`OrderedBytes`] then this type is also implements [`OrderedBytes`]
+/// 
+/// If all of the types implement [`NoPrefixesBytes`] then this type is also implements [`NoPrefixesBytes`]
+pub struct ConcatTypes<T>(Box<[u8]>, PhantomData<T>);
 
 macro_rules! as_bytes_for_concat_types {
     ($(($($n:tt $ty:ident)+))+) => {
