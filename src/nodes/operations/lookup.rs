@@ -1,6 +1,8 @@
 use std::borrow::Borrow;
 
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr};
+use crate::{
+    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr,
+};
 
 /// Search in the given tree for the value stored with the given key.
 ///
