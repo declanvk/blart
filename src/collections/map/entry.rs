@@ -27,8 +27,9 @@ where
     }
 
     /// Gets a mutable reference to the value in the entry.
-    /// 
-    /// If you need a reference to the [`OccupiedEntry`] which may outlive the destruction of the Entry value, see [`OccupiedEntry::into_mut`].
+    ///
+    /// If you need a reference to the [`OccupiedEntry`] which may outlive the
+    /// destruction of the Entry value, see [`OccupiedEntry::into_mut`].
     pub fn get_mut(&mut self) -> &mut V {
         unsafe { self.leaf_node_ptr.as_value_mut() }
     }
@@ -39,9 +40,11 @@ where
         replace(leaf_value, value)
     }
 
-    /// Converts the [`OccupiedEntry`] into a mutable reference to the value in the entry with a lifetime bound to the map itself.
-    /// 
-    /// If you need multiple references to the [`OccupiedEntry`], see [`OccupiedEntry::get_mut`].
+    /// Converts the [`OccupiedEntry`] into a mutable reference to the value in
+    /// the entry with a lifetime bound to the map itself.
+    ///
+    /// If you need multiple references to the [`OccupiedEntry`], see
+    /// [`OccupiedEntry::get_mut`].
     pub fn into_mut(self) -> &'a mut V {
         unsafe { self.leaf_node_ptr.as_value_mut() }
     }
@@ -51,7 +54,8 @@ where
         unsafe { self.leaf_node_ptr.as_key_ref() }
     }
 
-    /// Take the ownership of the key and value from the map. Keeps the allocated memory for reuse.
+    /// Take the ownership of the key and value from the map. Keeps the
+    /// allocated memory for reuse.
     pub fn remove_entry(self) -> (K, V) {
         let delete_point = DeletePoint {
             grandparent_ptr_and_parent_key_byte: self.grandparent_ptr_and_parent_key_byte,
@@ -63,7 +67,8 @@ where
         delete_result.deleted_leaf.into_entry()
     }
 
-    /// Takes the value out of the entry, and returns it. Keeps the allocated memory for reuse.
+    /// Takes the value out of the entry, and returns it. Keeps the allocated
+    /// memory for reuse.
     pub fn remove(self) -> K {
         self.remove_entry().0
     }
@@ -83,12 +88,14 @@ impl<'a, K, V> VacantEntry<'a, K, V>
 where
     K: AsBytes,
 {
-    /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns a mutable reference to it.
+    /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
+    /// a mutable reference to it.
     pub fn insert(self, value: V) -> &'a mut V {
         unsafe { self.insert_entry(value).leaf_node_ptr.as_value_mut() }
     }
 
-    /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns a [`OccupiedEntry`].
+    /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
+    /// a [`OccupiedEntry`].
     pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V> {
         let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
             match self.insert_point {
@@ -117,7 +124,8 @@ where
         self.key
     }
 
-    /// Gets a reference to the key that would be used when inserting a value through the [`VacantEntry`].
+    /// Gets a reference to the key that would be used when inserting a value
+    /// through the [`VacantEntry`].
     pub fn key(&self) -> &K {
         &self.key
     }
@@ -130,9 +138,11 @@ pub enum Entry<'a, K, V>
 where
     K: AsBytes,
 {
-    /// A view into an occupied entry in a HashMap. It is part of the [`Entry`] enum.
+    /// A view into an occupied entry in a HashMap. It is part of the [`Entry`]
+    /// enum.
     Occupied(OccupiedEntry<'a, K, V>),
-    /// A view into a vacant entry in a HashMap. It is part of the [`Entry`] enum.
+    /// A view into a vacant entry in a HashMap. It is part of the [`Entry`]
+    /// enum.
     Vacant(VacantEntry<'a, K, V>),
 }
 
@@ -140,7 +150,8 @@ impl<'a, K, V> Entry<'a, K, V>
 where
     K: AsBytes,
 {
-    /// Provides in-place mutable access to an occupied entry before any potential inserts into the map.
+    /// Provides in-place mutable access to an occupied entry before any
+    /// potential inserts into the map.
     pub fn and_modify<F>(self, f: F) -> Self
     where
         F: FnOnce(&mut V),
@@ -173,7 +184,8 @@ where
         }
     }
 
-    /// Ensures a value is in the entry by inserting the default value if empty, and returns a mutable reference to the value in the entry.
+    /// Ensures a value is in the entry by inserting the default value if empty,
+    /// and returns a mutable reference to the value in the entry.
     pub fn or_default(self) -> &'a mut V
     where
         V: Default,
@@ -184,7 +196,8 @@ where
         }
     }
 
-    /// Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.
+    /// Ensures a value is in the entry by inserting the default if empty, and
+    /// returns a mutable reference to the value in the entry.
     pub fn or_insert(self, value: V) -> &'a mut V {
         match self {
             Entry::Occupied(entry) => entry.into_mut(),
@@ -192,7 +205,9 @@ where
         }
     }
 
-    /// Ensures a value is in the entry by inserting the result of the default function if empty, and returns a mutable reference to the value in the entry.
+    /// Ensures a value is in the entry by inserting the result of the default
+    /// function if empty, and returns a mutable reference to the value in the
+    /// entry.
     pub fn or_insert_with<F>(self, f: F) -> &'a mut V
     where
         F: FnOnce() -> V,
@@ -203,9 +218,13 @@ where
         }
     }
 
-    /// Ensures a value is in the entry by inserting, if empty, the result of the default function. This method allows for generating key-derived values for insertion by providing the default function a reference to the key that was moved during the .entry(key) method call.
+    /// Ensures a value is in the entry by inserting, if empty, the result of
+    /// the default function. This method allows for generating key-derived
+    /// values for insertion by providing the default function a reference to
+    /// the key that was moved during the .entry(key) method call.
     ///
-    /// The reference to the moved key is provided so that cloning or copying the key is unnecessary, unlike with .or_insert_with(|| ... ).
+    /// The reference to the moved key is provided so that cloning or copying
+    /// the key is unnecessary, unlike with .or_insert_with(|| ... ).
     pub fn or_insert_with_key<F>(self, f: F) -> &'a mut V
     where
         F: FnOnce(&K) -> V,

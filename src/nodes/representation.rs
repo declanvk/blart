@@ -112,10 +112,10 @@ pub struct Header {
 }
 
 impl Header {
-    /// Create a new [`Header`] using 
+    /// Create a new [`Header`] using
     /// `prefix` as the node prefix and
     /// `prefix_len` as the node prefix length and
-    /// 
+    ///
     /// This is done because when a prefix mismatch happens
     /// the length of the mismatch can be grater or equal to
     /// prefix size, since we search for the first child of the
@@ -690,12 +690,12 @@ pub enum MatchPrefixResult<K: AsBytes, V> {
     /// If prefixes don't match
     Mismatch {
         /// Mismatch object
-        mismatch: Mismatch<K, V> 
+        mismatch: Mismatch<K, V>,
     },
     /// If the prefixes match entirely
-    Match { 
+    Match {
         /// How many bytes were matched
-        matched_bytes: usize 
+        matched_bytes: usize,
     },
 }
 
@@ -734,10 +734,10 @@ pub trait InnerNode: Node + Sized {
         Self::from_header(Header::empty())
     }
 
-    /// Create a new [`InnerNode`] using 
+    /// Create a new [`InnerNode`] using
     /// `prefix` as the node prefix and
     /// `prefix_len` as the node prefix length and
-    /// 
+    ///
     /// This is done because when a prefix mismatch happens
     /// the length of the mismatch can be grater or equal to
     /// prefix size, since we search for the first child of the
@@ -851,7 +851,8 @@ pub trait InnerNode: Node + Sized {
         }
     }
 
-    /// Read the prefix as a whole, by reconstructing it if necessary from a leaf
+    /// Read the prefix as a whole, by reconstructing it if necessary from a
+    /// leaf
     #[inline(always)]
     fn read_full_prefix(
         &self,
@@ -1097,7 +1098,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 
     /// Writes a child to the node without bounds check or order
-    /// 
+    ///
     /// # Safety
     ///
     /// This functions assumes that the write is gonna be inbound
