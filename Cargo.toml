@@ -21,6 +21,7 @@ exclude = [
 
 [dependencies]
 bytemuck = { version = "1.14.0", features = ["min_const_generics"] }
+paste = "1.0.15"
 
 [features]
 nightly = []
