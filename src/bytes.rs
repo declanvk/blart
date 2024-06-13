@@ -1,8 +1,17 @@
+use paste::paste;
 use std::{
-    borrow::Cow, ffi::{CStr, CString, OsStr, OsString}, io::{IoSlice, IoSliceMut}, marker::PhantomData, mem::ManuallyDrop, num::{
+    borrow::{Borrow, Cow},
+    ffi::{CStr, CString, OsStr, OsString},
+    io::{IoSlice, IoSliceMut},
+    marker::PhantomData,
+    mem::ManuallyDrop,
+    num::{
         NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
         NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
-    }, path::{Path, PathBuf}, rc::Rc, sync::Arc
+    },
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::Arc,
 };
 
 mod ordered;
@@ -308,7 +317,7 @@ unsafe impl<'a, T> OrderedBytes for &'a T where T: OrderedBytes + ?Sized {}
 // SAFETY: This trait is safe to implement because the underlying
 // type is already implements `NoPrefixesBytes`, and the wrapper type would not
 // change that property
-unsafe impl<'a, T> NoPrefixesBytes for &'a T where T: NoPrefixesBytes {}
+unsafe impl<'a, T> NoPrefixesBytes for &'a T where T: NoPrefixesBytes + ?Sized {}
 
 impl<'a, T> AsBytes for &'a mut T
 where
@@ -417,31 +426,54 @@ impl<'a> AsBytes for IoSliceMut<'a> {
     }
 }
 
-/// Concats two or more types that implement [`AsBytes`]. The construction of this type will
-/// allocate memory, since the concatenated bytes need to be in a flat buffer.
-/// 
-/// If all of the types implement [`OrderedBytes`] then this type is also implements [`OrderedBytes`]
-/// 
-/// If all of the types implement [`NoPrefixesBytes`] then this type is also implements [`NoPrefixesBytes`]
+/// Concats two or more types that implement [`AsBytes`]. The construction of
+/// this type will allocate memory, since the concatenated bytes need to be in a
+/// flat buffer.
+///
+/// If all of the types implement [`OrderedBytes`] then this type is also
+/// implements [`OrderedBytes`]
+///
+/// If all of the types implement [`NoPrefixesBytes`] then this type is also
+/// implements [`NoPrefixesBytes`]
+#[derive(Debug)]
 pub struct ConcatTypes<T>(Box<[u8]>, PhantomData<T>);
 
 macro_rules! as_bytes_for_concat_types {
     ($(($($n:tt $ty:ident)+))+) => {
         $(
-            impl<$($ty: AsBytes,)+> From<($($ty,)*)> for ConcatTypes<($($ty,)+)> {
-                fn from(t: ($($ty,)+)) -> Self {
-                    let mut sum = 0;
+            paste! {
+                impl<$($ty, [< Q $ty >],)+> From<($(&[< Q $ty >],)*)> for ConcatTypes<($($ty,)+)>
+                where
                     $(
-                        sum += t.$n.as_bytes().len();
+                        $ty: Borrow<[< Q $ty >]> + AsBytes,
+                        [< Q $ty >]: AsBytes + ?Sized,
                     )+
-    
-                    let mut v = Vec::with_capacity(sum);
-    
-                    $(
-                        v.extend_from_slice(t.$n.as_bytes());
-                    )+
-    
-                    Self(v.into_boxed_slice(), PhantomData)
+                {
+                    #[inline(always)]
+                    fn from(value: ($(&[< Q $ty >],)+)) -> Self {
+                        let mut sum = 0;
+                        $(
+                            sum += value.$n.as_bytes().len();
+                        )+
+
+                        let mut v = Box::new_uninit_slice(sum);
+
+                        let mut sum = 0;
+                        $(
+                            let new_sum = sum + value.$n.as_bytes().len();
+                            unsafe {
+                                v
+                                .get_unchecked_mut(sum..new_sum)
+                                .copy_from_slice(
+                                    std::mem::transmute::<&[u8], &[std::mem::MaybeUninit<u8>]>(value.$n.as_bytes()));
+                            }
+                            sum = new_sum;
+                        )+
+
+                        let _ = sum;
+
+                        Self(unsafe { v.assume_init() }, PhantomData)
+                    }
                 }
             }
 
@@ -456,15 +488,15 @@ macro_rules! as_bytes_for_concat_types {
                     self.0 == other.0
                 }
             }
-        
+
             impl<$($ty: AsBytes,)+> Eq for ConcatTypes<($($ty,)+)> {}
-        
+
             impl<$($ty: AsBytes,)+> PartialOrd for ConcatTypes<($($ty,)+)> {
                 fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
                     Some(self.cmp(other))
                 }
             }
-        
+
             impl<$($ty: AsBytes,)+> Ord for ConcatTypes<($($ty,)+)> {
                 fn cmp(&self, other: &Self) -> std::cmp::Ordering {
                     self.0.cmp(&other.0)
