@@ -27,17 +27,17 @@ use std::{
 /// ```
 ///
 /// And this implies that the `hash` implementations should also match, in line
-/// with the [`Hash` and `Eq` documentation].
+/// with the [`Hash`] and [`Eq`] documentation.
 ///
-/// [`Hash` and `Eq` documentation]: https://doc.rust-lang.org/1.68.2/std/hash/trait.Hash.html#hash-and-eq
+/// [`Hash`] and [`Eq`] [documentation](https://doc.rust-lang.org/1.68.2/std/hash/trait.Hash.html#hash-and-eq)
 ///
 /// # Safety
 ///
 /// This trait is unsafe because implementing it implies that the
 /// [`Mapped<Self>`] type will implement [`OrderedBytes`], so the safety
 /// requirements must be upheld. Namely, that the ordering of values of the
-/// [`Self::Domain`] type must be equal to the ordering of those same values
-/// translated to the the [`Self::Bytes`] type.
+/// [`BytesMapping::Domain`] type must be equal to the ordering of those same values
+/// translated to the the [`BytesMapping::Bytes`] type.
 pub unsafe trait BytesMapping {
     /// The unconverted type that has a specific ordering
     type Domain;
@@ -160,28 +160,28 @@ where
     }
 }
 
-/// This struct represents a conversion of unsigned integers to the [big endian
+/// This struct represents a conversion of **unsigned integers** to the [big endian
 /// format], so that the natural ordering of the numbers matches the
 /// lexicographic ordering of the bytes.
 ///
 /// [big endian format]: https://en.wikipedia.org/wiki/Endianness
-pub struct ToBE<N>(PhantomData<N>);
+pub struct ToUBE<N>(PhantomData<N>);
 
-/// This struct represents a conversion of signed integers to a format that
+/// This struct represents a conversion of **signed integers** to a format that
 /// allows the natural ordering of the numbers to match the lexicographic
 /// ordering of the bytes.
 ///
 /// This is done by converting the numbers to their unsigned equivalent using `x
 /// XOR (2 ^ (b - 1))` where `b` is the number of bits, then converting the
 /// unsigned value to a big endian format if needed.
-pub struct ToUIntBE<N>(PhantomData<N>);
+pub struct ToIBE<N>(PhantomData<N>);
 
 macro_rules! impl_ordered_bytes_ints {
     ($([$unsigned:ty, $signed:ty]),*) => {
         $(
             // SAFETY: This is safe to implement because the big endian conversion is reversible and
             // will guarantee that the byte string ordering is the same as the natural number ordering.
-            unsafe impl BytesMapping for ToBE<$unsigned> {
+            unsafe impl BytesMapping for ToUBE<$unsigned> {
                 type Domain = $unsigned;
                 type Bytes = [u8; std::mem::size_of::<$unsigned>()];
 
@@ -196,16 +196,16 @@ macro_rules! impl_ordered_bytes_ints {
 
             // SAFETY: Unsigned integers will have no byte prefixes when converted to their big endian
             // representation, also the byte number of bytes used is constant for all values of the type
-            unsafe impl NoPrefixesBytes for Mapped<ToBE<$unsigned>> {}
+            unsafe impl NoPrefixesBytes for Mapped<ToUBE<$unsigned>> {}
 
             // SAFETY: The big endian representation of unsigned integers is lexicographically ordered
             // and matches the natural ordering of the integer type
-            unsafe impl OrderedBytes for Mapped<ToBE<$unsigned>> {}
+            unsafe impl OrderedBytes for Mapped<ToUBE<$unsigned>> {}
 
             // SAFETY: This is safe to implement because the big endian conversion and XOR operation is
             // reversible and  will guarantee that the byte string ordering is the same as the integer
             // number ordering.
-            unsafe impl BytesMapping for ToUIntBE<$signed> {
+            unsafe impl BytesMapping for ToIBE<$signed> {
                 type Domain = $signed;
                 type Bytes = [u8; std::mem::size_of::<$unsigned>()];
 
@@ -218,16 +218,16 @@ macro_rules! impl_ordered_bytes_ints {
                 }
             }
 
-            // SAFETY: ToUintBE converts the transforms the signed integers, then converts them to the
+            // SAFETY: ToIBE converts the transforms the signed integers, then converts them to the
             // big endian byte representation, which is the same number of bytes for all values of the
             // type, thus there can be no prefixes
-            unsafe impl NoPrefixesBytes for Mapped<ToUIntBE<$signed>> {}
+            unsafe impl NoPrefixesBytes for Mapped<ToIBE<$signed>> {}
 
-            // SAFETY: The transformation that ToUIntBE does to the signed values converts them to unsigned
+            // SAFETY: The transformation that ToIBE does to the signed values converts them to unsigned
             // equivalents in a way that preserves the overall ordering of the type. The conversion from
             // uint to big endian bytes also preserves order, so that the lexicographic ordering of the bytes
             // matches the original ordering of the signed values.
-            unsafe impl OrderedBytes for Mapped<ToUIntBE<$signed>> {}
+            unsafe impl OrderedBytes for Mapped<ToIBE<$signed>> {}
         )*
     };
 }
@@ -246,7 +246,7 @@ macro_rules! impl_ordered_bytes_nonzero_ints {
         $(
             // SAFETY: This is safe to implement because the big endian conversion is reversible and
             // will guarantee that the byte string ordering is the same as the natural number ordering.
-            unsafe impl BytesMapping for ToBE<$nonzero_unsigned> {
+            unsafe impl BytesMapping for ToUBE<$nonzero_unsigned> {
                 type Domain = $nonzero_unsigned;
                 type Bytes = [u8; std::mem::size_of::<$unsigned>()];
 
@@ -262,16 +262,16 @@ macro_rules! impl_ordered_bytes_nonzero_ints {
 
             // SAFETY: The safety of the NonZero* version of the unsigned integer is the same as it
             // is for non-NonZero* variant
-            unsafe impl NoPrefixesBytes for Mapped<ToBE<$nonzero_unsigned>> {}
+            unsafe impl NoPrefixesBytes for Mapped<ToUBE<$nonzero_unsigned>> {}
 
             // SAFETY: The safety of the NonZero* version of the unsigned integer is the same as it
             // is for non-NonZero* variant
-            unsafe impl OrderedBytes for Mapped<ToBE<$nonzero_unsigned>> {}
+            unsafe impl OrderedBytes for Mapped<ToUBE<$nonzero_unsigned>> {}
 
             // SAFETY: This is safe to implement because the big endian conversion and XOR operation is
             // reversible and  will guarantee that the byte string ordering is the same as the integer
             // number ordering.
-            unsafe impl BytesMapping for ToUIntBE<$nonzero_signed> {
+            unsafe impl BytesMapping for ToIBE<$nonzero_signed> {
                 type Domain = $nonzero_signed;
                 type Bytes = [u8; std::mem::size_of::<$unsigned>()];
 
@@ -288,10 +288,10 @@ macro_rules! impl_ordered_bytes_nonzero_ints {
             }
 
             // SAFETY: This impl is safe for the same reasons as the non-NonZero* impl is
-            unsafe impl NoPrefixesBytes for Mapped<ToUIntBE<$nonzero_signed>> {}
+            unsafe impl NoPrefixesBytes for Mapped<ToIBE<$nonzero_signed>> {}
 
             // SAFETY: This impl is safe for the same reasons as the non-NonZero* impl is
-            unsafe impl OrderedBytes for Mapped<ToUIntBE<$nonzero_signed>> {}
+            unsafe impl OrderedBytes for Mapped<ToIBE<$nonzero_signed>> {}
         )*
     };
 }
@@ -396,23 +396,23 @@ mod tests {
                 #[test]
                 fn $test_fn() {
                     let mid = (<$unsigned>::MAX + <$unsigned>::MIN) / 2;
-                    assert_bytes_isomorphism_contract::<ToBE<$unsigned>>(
+                    assert_bytes_isomorphism_contract::<ToUBE<$unsigned>>(
                         <$unsigned>::MAX, <$unsigned>::MIN);
-                    assert_bytes_isomorphism_contract::<ToBE<$unsigned>>(
+                    assert_bytes_isomorphism_contract::<ToUBE<$unsigned>>(
                         mid, <$unsigned>::MAX);
-                    assert_bytes_isomorphism_contract::<ToBE<$unsigned>>(
+                    assert_bytes_isomorphism_contract::<ToUBE<$unsigned>>(
                         mid, <$unsigned>::MIN);
 
-                    check_is_ordered_bytes::<Mapped<ToBE<$unsigned>>>();
+                    check_is_ordered_bytes::<Mapped<ToUBE<$unsigned>>>();
 
-                    assert_bytes_isomorphism_contract::<ToUIntBE<$signed>>(
+                    assert_bytes_isomorphism_contract::<ToIBE<$signed>>(
                         0, <$signed>::MAX);
-                    assert_bytes_isomorphism_contract::<ToUIntBE<$signed>>(
+                    assert_bytes_isomorphism_contract::<ToIBE<$signed>>(
                         0, <$signed>::MIN);
-                    assert_bytes_isomorphism_contract::<ToUIntBE<$signed>>(
+                    assert_bytes_isomorphism_contract::<ToIBE<$signed>>(
                         <$signed>::MAX, <$signed>::MIN);
 
-                    check_is_ordered_bytes::<Mapped<ToUIntBE<$signed>>>();
+                    check_is_ordered_bytes::<Mapped<ToIBE<$signed>>>();
                 }
             )*
         }
@@ -433,27 +433,27 @@ mod tests {
                 #[test]
                 fn $test_fn() {
                     let mid = <$nonzero_unsigned>::new((<$unsigned>::MAX + <$unsigned>::MIN) / 2).unwrap();
-                    assert_bytes_isomorphism_contract::<ToBE<$nonzero_unsigned>>(
+                    assert_bytes_isomorphism_contract::<ToUBE<$nonzero_unsigned>>(
                         <$nonzero_unsigned>::new(1).unwrap(),
                         <$nonzero_unsigned>::new(<$unsigned>::MAX).unwrap());
-                    assert_bytes_isomorphism_contract::<ToBE<$nonzero_unsigned>>(
+                    assert_bytes_isomorphism_contract::<ToUBE<$nonzero_unsigned>>(
                         mid, <$nonzero_unsigned>::new(<$unsigned>::MAX).unwrap());
-                    assert_bytes_isomorphism_contract::<ToBE<$nonzero_unsigned>>(
+                    assert_bytes_isomorphism_contract::<ToUBE<$nonzero_unsigned>>(
                         mid, <$nonzero_unsigned>::new(<$unsigned>::MIN + 1).unwrap());
 
-                    check_is_ordered_bytes::<Mapped<ToBE<$nonzero_unsigned>>>();
+                    check_is_ordered_bytes::<Mapped<ToUBE<$nonzero_unsigned>>>();
 
-                    assert_bytes_isomorphism_contract::<ToUIntBE<$nonzero_signed>>(
+                    assert_bytes_isomorphism_contract::<ToIBE<$nonzero_signed>>(
                         <$nonzero_signed>::new(<$signed>::MIN).unwrap(),
                         <$nonzero_signed>::new(<$signed>::MAX).unwrap());
-                    assert_bytes_isomorphism_contract::<ToUIntBE<$nonzero_signed>>(
+                    assert_bytes_isomorphism_contract::<ToIBE<$nonzero_signed>>(
                         <$nonzero_signed>::new(1).unwrap(),
                         <$nonzero_signed>::new(<$signed>::MAX).unwrap());
-                    assert_bytes_isomorphism_contract::<ToUIntBE<$nonzero_signed>>(
+                    assert_bytes_isomorphism_contract::<ToIBE<$nonzero_signed>>(
                         <$nonzero_signed>::new(<$signed>::MIN).unwrap(),
                         <$nonzero_signed>::new(1).unwrap());
 
-                    check_is_ordered_bytes::<Mapped<ToUIntBE<$nonzero_signed>>>();
+                    check_is_ordered_bytes::<Mapped<ToIBE<$nonzero_signed>>>();
                 }
             )*
         }
