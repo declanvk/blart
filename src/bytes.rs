@@ -429,7 +429,7 @@ impl<'a> AsBytes for IoSliceMut<'a> {
 
 /// Concats two or more types that implement [`AsBytes`]. The construction of
 /// this type will allocate memory, since the concatenated bytes need to be in a
-/// flat buffer.
+/// flat buffer. If the types are [`Copy`] use tuple syntax which avoids allocating
 ///
 /// If all of the types implement [`OrderedBytes`] then this type is also
 /// implements [`OrderedBytes`]
@@ -465,7 +465,7 @@ impl<T> Ord for Concat<T> {
     }
 }
 
-macro_rules! as_bytes_for_concat_types {
+macro_rules! as_bytes_for_concat {
     ($(($($ty:ident)+))+) => {
         $(
             paste! {
@@ -523,7 +523,7 @@ macro_rules! as_bytes_for_concat_types {
     };
 }
 
-as_bytes_for_concat_types!(
+as_bytes_for_concat!(
     (T0 T1)
     (T0 T1 T2)
     (T0 T1 T2 T3)
@@ -535,10 +535,49 @@ as_bytes_for_concat_types!(
     (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9)
     (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10)
     (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11)
-    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12)
-    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13)
-    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14)
-    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
+);
+
+macro_rules! as_bytes_for_tuples {
+    ($(($($ty:ident)+))+) => {
+        $(
+            impl<$($ty: AsBytes + Copy,)+> AsBytes for ($($ty,)+)
+            {
+                #[inline(always)]
+                fn as_bytes(&self) -> &[u8] {
+                    unsafe { 
+                        std::slice::from_raw_parts(
+                            self as *const Self as *const u8,
+                            std::mem::size_of::<Self>()
+                        ) 
+                    }
+                }
+            }
+
+            // SAFETY: This trait is safe to implement because the underlying
+            // type is already implements `OrderedBytes`, and the `Ord` impl works the same
+            // way
+            unsafe impl<$($ty: OrderedBytes + Copy,)+> OrderedBytes for ($($ty,)+) {}
+
+            // SAFETY: This trait is safe to implement because the underlying
+            // type is already implements `NoPrefixesBytes`, and the wrapper type would not
+            // change that property
+            unsafe impl<$($ty: NoPrefixesBytes + Copy,)+> NoPrefixesBytes for ($($ty,)+) {}
+        )*
+    };
+}
+
+as_bytes_for_tuples!(
+    (T0 T1)
+    (T0 T1 T2)
+    (T0 T1 T2 T3)
+    (T0 T1 T2 T3 T4)
+    (T0 T1 T2 T3 T4 T5)
+    (T0 T1 T2 T3 T4 T5 T6)
+    (T0 T1 T2 T3 T4 T5 T6 T7)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11)
 );
 
 #[cfg(test)]
