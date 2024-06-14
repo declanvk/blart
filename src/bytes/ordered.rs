@@ -305,7 +305,7 @@ impl_ordered_bytes_nonzero_ints!(
     [NonZeroUsize; usize, NonZeroIsize; isize]
 );
 
-/// This struct represents a conversion of IP addresses (V4 and V6) into their
+/// This struct represents a conversion of **IP addresses** (V4 and V6) into their
 /// component bytes. The ordering of IP addresses is already the lexicographic
 /// ordering of the component bytes, so it will be preserved.
 pub struct ToOctets<IP>(PhantomData<IP>);
