@@ -28,8 +28,8 @@ where
 
     /// Gets a mutable reference to the value in the entry.
     ///
-    /// If you need a reference to the [`OccupiedEntry`] which may outlive the
-    /// destruction of the Entry value, see [`OccupiedEntry::into_mut`].
+    /// If you need a reference to the [`OccupiedEntryRef`] which may outlive the
+    /// destruction of the Entry value, see [`OccupiedEntryRef::into_mut`].
     pub fn get_mut(&mut self) -> &mut V {
         unsafe { self.leaf_node_ptr.as_value_mut() }
     }
@@ -40,11 +40,11 @@ where
         replace(leaf_value, value)
     }
 
-    /// Converts the [`OccupiedEntry`] into a mutable reference to the value in
+    /// Converts the [`OccupiedEntryRef`] into a mutable reference to the value in
     /// the entry with a lifetime bound to the map itself.
     ///
-    /// If you need multiple references to the [`OccupiedEntry`], see
-    /// [`OccupiedEntry::get_mut`].
+    /// If you need multiple references to the [`OccupiedEntryRef`], see
+    /// [`OccupiedEntryRef::get_mut`].
     pub fn into_mut(self) -> &'a mut V {
         unsafe { self.leaf_node_ptr.as_value_mut() }
     }
@@ -74,7 +74,7 @@ where
     }
 }
 
-/// A view into a vacant entry in a HashMap. It is part of the [`Entry`] enum.
+/// A view into a vacant entry in a HashMap. It is part of the [`EntryRef`] enum.
 pub struct VacantEntryRef<'a, 'b, K, V, Q>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
@@ -90,14 +90,14 @@ where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
 {
-    /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
+    /// Sets the value of the entry with the [`VacantEntryRef`]’s key, and returns
     /// a mutable reference to it.
     pub fn insert(self, value: V) -> &'a mut V {
         unsafe { self.insert_entry(value).leaf_node_ptr.as_value_mut() }
     }
 
-    /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
-    /// a [`OccupiedEntry`].
+    /// Sets the value of the entry with the [`VacantEntryRef`]’s key, and returns
+    /// a [`OccupiedEntryRef`].
     pub fn insert_entry(self, value: V) -> OccupiedEntryRef<'a, K, V> {
         let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
             match self.insert_point {
@@ -129,7 +129,7 @@ where
     }
 
     /// Gets a reference to the key that would be used when inserting a value
-    /// through the [`VacantEntry`].
+    /// through the [`VacantEntryRef`].
     pub fn key(&self) -> &Q {
         self.key
     }
@@ -143,10 +143,10 @@ where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
 {
-    /// A view into an occupied entry in a HashMap. It is part of the [`Entry`]
+    /// A view into an occupied entry in a HashMap. It is part of the [`EntryRef`]
     /// enum.
     Occupied(OccupiedEntryRef<'a, K, V>),
-    /// A view into a vacant entry in a HashMap. It is part of the [`Entry`]
+    /// A view into a vacant entry in a HashMap. It is part of the [`EntryRef`]
     /// enum.
     Vacant(VacantEntryRef<'a, 'b, K, V, Q>),
 }
@@ -171,7 +171,7 @@ where
         }
     }
 
-    /// Sets the value of the entry, and returns an [`OccupiedEntry`].
+    /// Sets the value of the entry, and returns an [`OccupiedEntryRef`].
     pub fn insert_entry(self, value: V) -> OccupiedEntryRef<'a, K, V> {
         match self {
             EntryRef::Occupied(mut entry) => {
@@ -244,7 +244,7 @@ where
         }
     }
 
-    /// Similar to [`Entry::or_default`] but yields an [`OccupiedEntry`]
+    /// Similar to [`EntryRef::or_default`] but yields an [`OccupiedEntryRef`]
     pub fn or_default_entry(self) -> OccupiedEntryRef<'a, K, V>
     where
         V: Default,
@@ -255,7 +255,7 @@ where
         }
     }
 
-    /// Similar to [`Entry::or_insert`] but yields an [`OccupiedEntry`]
+    /// Similar to [`EntryRef::or_insert`] but yields an [`OccupiedEntryRef`]
     pub fn or_insert_entry(self, value: V) -> OccupiedEntryRef<'a, K, V> {
         match self {
             EntryRef::Occupied(entry) => entry,
@@ -263,7 +263,7 @@ where
         }
     }
 
-    /// Similar to [`Entry::or_insert_with`] but yields an [`OccupiedEntry`]
+    /// Similar to [`EntryRef::or_insert_with`] but yields an [`OccupiedEntryRef`]
     pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntryRef<'a, K, V>
     where
         F: FnOnce() -> V,
@@ -274,7 +274,7 @@ where
         }
     }
 
-    /// Similar to [`Entry::or_insert_with_key`] but yields an [`OccupiedEntry`]
+    /// Similar to [`EntryRef::or_insert_with_key`] but yields an [`OccupiedEntryRef`]
     pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntryRef<'a, K, V>
     where
         F: FnOnce(&Q) -> V,

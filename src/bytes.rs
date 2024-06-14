@@ -15,6 +15,7 @@ use std::{
 };
 
 mod ordered;
+pub use ordered::*;
 
 /// Any type implementing `AsBytes` can be decomposed into bytes.
 ///
@@ -436,13 +437,39 @@ impl<'a> AsBytes for IoSliceMut<'a> {
 /// If all of the types implement [`NoPrefixesBytes`] then this type is also
 /// implements [`NoPrefixesBytes`]
 #[derive(Debug)]
-pub struct ConcatTypes<T>(Box<[u8]>, PhantomData<T>);
+pub struct Concat<T>(Box<[u8]>, PhantomData<T>);
+
+impl<T> AsBytes for Concat<T> {
+    fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl<T> PartialEq for Concat<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> Eq for Concat<T> {}
+
+impl<T> PartialOrd for Concat<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for Concat<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
 
 macro_rules! as_bytes_for_concat_types {
-    ($(($($n:tt $ty:ident)+))+) => {
+    ($(($($ty:ident)+))+) => {
         $(
             paste! {
-                impl<$($ty, [< Q $ty >],)+> From<($(&[< Q $ty >],)*)> for ConcatTypes<($($ty,)+)>
+                impl<$($ty, [< Q $ty >],)+> From<($(&[< Q $ty >],)*)> for Concat<($($ty,)+)>
                 where
                     $(
                         $ty: Borrow<[< Q $ty >]> + AsBytes,
@@ -451,21 +478,27 @@ macro_rules! as_bytes_for_concat_types {
                 {
                     #[inline(always)]
                     fn from(value: ($(&[< Q $ty >],)+)) -> Self {
-                        let mut sum = 0;
+                        #[allow(non_snake_case)]
+                        let ($($ty,)+) = value;
+
                         $(
-                            sum += value.$n.as_bytes().len();
+                            #[allow(non_snake_case)]
+                            let $ty = $ty.as_bytes();
                         )+
+
+                        let mut sum = 0;
+                        $(sum += $ty.len();)+
 
                         let mut v = Box::new_uninit_slice(sum);
 
                         let mut sum = 0;
                         $(
-                            let new_sum = sum + value.$n.as_bytes().len();
+                            let new_sum = sum + $ty.len();
                             unsafe {
                                 v
                                 .get_unchecked_mut(sum..new_sum)
                                 .copy_from_slice(
-                                    std::mem::transmute::<&[u8], &[std::mem::MaybeUninit<u8>]>(value.$n.as_bytes()));
+                                    std::mem::transmute::<&[u8], &[std::mem::MaybeUninit<u8>]>($ty));
                             }
                             sum = new_sum;
                         )+
@@ -477,61 +510,35 @@ macro_rules! as_bytes_for_concat_types {
                 }
             }
 
-            impl<$($ty: AsBytes,)+> AsBytes for ConcatTypes<($($ty,)+)> {
-                fn as_bytes(&self) -> &[u8] {
-                    self.0.as_bytes()
-                }
-            }
-
-            impl<$($ty: AsBytes,)+> PartialEq for ConcatTypes<($($ty,)+)> {
-                fn eq(&self, other: &Self) -> bool {
-                    self.0 == other.0
-                }
-            }
-
-            impl<$($ty: AsBytes,)+> Eq for ConcatTypes<($($ty,)+)> {}
-
-            impl<$($ty: AsBytes,)+> PartialOrd for ConcatTypes<($($ty,)+)> {
-                fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                    Some(self.cmp(other))
-                }
-            }
-
-            impl<$($ty: AsBytes,)+> Ord for ConcatTypes<($($ty,)+)> {
-                fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-                    self.0.cmp(&other.0)
-                }
-            }
-
             // SAFETY: This trait is safe to implement because the underlying
             // type is already implements `OrderedBytes`, and the `Ord` impl works the same
             // way
-            unsafe impl<$($ty: OrderedBytes,)+> OrderedBytes for ConcatTypes<($($ty,)+)> {}
+            unsafe impl<$($ty: OrderedBytes,)+> OrderedBytes for Concat<($($ty,)+)> {}
 
             // SAFETY: This trait is safe to implement because the underlying
             // type is already implements `NoPrefixesBytes`, and the wrapper type would not
             // change that property
-            unsafe impl<$($ty: NoPrefixesBytes,)+> NoPrefixesBytes for ConcatTypes<($($ty,)+)> {}
+            unsafe impl<$($ty: NoPrefixesBytes,)+> NoPrefixesBytes for Concat<($($ty,)+)> {}
         )*
     };
 }
 
 as_bytes_for_concat_types!(
-    (0 T0 1 T1)
-    (0 T0 1 T1 2 T2)
-    (0 T0 1 T1 2 T2 3 T3)
-    (0 T0 1 T1 2 T2 3 T3 4 T4)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14)
-    (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14 15 T15)
+    (T0 T1)
+    (T0 T1 T2)
+    (T0 T1 T2 T3)
+    (T0 T1 T2 T3 T4)
+    (T0 T1 T2 T3 T4 T5)
+    (T0 T1 T2 T3 T4 T5 T6)
+    (T0 T1 T2 T3 T4 T5 T6 T7)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15)
 );
 
 #[cfg(test)]
