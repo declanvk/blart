@@ -3,6 +3,8 @@
 mod operations;
 mod representation;
 
+mod header;
+
 pub mod visitor;
 
 pub(crate) use operations::*;
