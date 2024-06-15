@@ -21,13 +21,12 @@ use std::{
     slice::Iter,
 };
 
+use super::header::NodeHeader;
+
 // mod iterators;
 
 #[cfg(test)]
 mod tests;
-
-/// The number of bytes stored for path compression in the node header.
-pub const NUM_PREFIX_BYTES: usize = 16;
 
 /// The representation of inner nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,150 +93,6 @@ impl NodeType {
     }
 }
 
-/// The common header for all inner nodes
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[repr(align(8))]
-pub struct Header {
-    /// Number of children of this inner node. This field has no meaning for
-    /// a leaf node.
-    ///
-    /// This needs to be a [`u16`], since a node 256 can hold up to 256 children
-    /// if this was a [`u8`] (0-255) it would overflow when adding the last
-    /// element
-    pub num_children: u16,
-    /// Number of bytes used by the prefix
-    pub prefix_len: u32,
-    /// The key prefix for this node.
-    pub prefix: [u8; NUM_PREFIX_BYTES],
-}
-
-impl Header {
-    /// Create a new [`Header`] using
-    /// `prefix` as the node prefix and
-    /// `prefix_len` as the node prefix length and
-    ///
-    /// This is done because when a prefix mismatch happens
-    /// the length of the mismatch can be grater or equal to
-    /// prefix size, since we search for the first child of the
-    /// node to recreate the prefix, that's why we don't use
-    /// `prefix.len()` as the node prefix length
-    pub fn new(prefix: &[u8], prefix_len: usize) -> Self {
-        let mut header = Header {
-            num_children: 0,
-            prefix_len: prefix_len as u32,
-            prefix: [0; NUM_PREFIX_BYTES],
-        };
-        let len = prefix.len().min(NUM_PREFIX_BYTES);
-        header.prefix[..len].copy_from_slice(&prefix[..len]);
-
-        header
-    }
-
-    /// Create a new `Header` for an empty node.
-    pub fn empty() -> Self {
-        Header {
-            num_children: 0,
-            prefix_len: 0,
-            prefix: [0; NUM_PREFIX_BYTES],
-        }
-    }
-
-    /// Read the initialized portion of the prefix present in the header.
-    pub fn read_prefix(&self) -> &[u8] {
-        &self.prefix[0..self.capped_prefix_len()]
-    }
-
-    /// Get the number of bytes in the prefix.
-    pub fn prefix_len(&self) -> usize {
-        self.prefix_len as usize
-    }
-
-    /// Minimum between [`Self::prefix_len`] and [`NUM_PREFIX_BYTES`]
-    pub fn capped_prefix_len(&self) -> usize {
-        (self.prefix_len as usize).min(NUM_PREFIX_BYTES)
-    }
-
-    /// Return the number of children of this node.
-    pub fn num_children(&self) -> usize {
-        usize::from(self.num_children)
-    }
-
-    /// Left trim by `len`, copies the remaining data to the beging of the
-    /// prefix
-    ///
-    /// # Panics
-    ///
-    /// If `len` > length of the prefix
-    pub fn ltrim_by(&mut self, len: usize) {
-        self.prefix_len -= len as u32;
-
-        let begin = len;
-        let end = begin + self.capped_prefix_len();
-        unsafe {
-            // SAFETY: This function is called when mismatch happened and
-            // we used the node to match the number of bytes,
-            // by this we know that len < prefix len, but since we + 1,
-            // to skip the key byte we have that len <= prefix len
-            assume(end <= self.prefix.len());
-
-            // SAFETY: This is by construction end = begin + len
-            assume(begin <= end);
-        }
-        self.prefix.copy_within(begin..end, 0);
-    }
-
-    /// Left trim by `len`, copies the remaining data to the beging of the
-    /// prefix, in this case we use a leaf to achieve this, we also need the
-    /// `depth` (a.k.a how many bytes of the leaf have already been used)
-    pub fn ltrim_by_with_leaf<K: AsBytes, V>(
-        &mut self,
-        len: usize,
-        depth: usize,
-        leaf_ptr: NodePtr<LeafNode<K, V>>,
-    ) {
-        self.prefix_len -= len as u32;
-
-        let leaf_key = unsafe { leaf_ptr.as_key_ref().as_bytes() };
-
-        let begin = depth + len;
-        let end = begin + self.capped_prefix_len();
-        let len = end - begin;
-        unsafe {
-            // SAFETY: This function is called a mismatch happened and
-            // we used the leaf to match the number of matching bytes,
-            // by this we know that len < prefix len, but since we + 1,
-            // to skip the key byte we have that len <= prefix len
-            assume(end <= leaf_key.len());
-
-            // SAFETY: This is by construction end = begin + len
-            assume(begin <= end);
-        }
-
-        let leaf_key = &leaf_key[begin..end];
-        let leaf_key = &leaf_key[..leaf_key.len().min(NUM_PREFIX_BYTES)];
-        self.prefix[..len.min(NUM_PREFIX_BYTES)].copy_from_slice(leaf_key)
-    }
-
-    /// Append `new` to the prefix and sums `new_len` to the prefix length
-    pub fn push_prefix(&mut self, new: &[u8], new_len: usize) {
-        let begin = self.capped_prefix_len();
-        let end = (begin + new.len()).min(NUM_PREFIX_BYTES);
-        let len = end - begin;
-        self.prefix[begin..end].copy_from_slice(&new[..len]);
-        self.prefix_len += new_len as u32;
-    }
-
-    /// Set the length of the prefix to 0 and returns a copy of the
-    /// prefix, length and capped length
-    pub fn clear_prefix(&mut self) -> ([u8; NUM_PREFIX_BYTES], usize, usize) {
-        let len = self.prefix_len();
-        let capped_len = self.capped_prefix_len();
-        self.prefix_len = 0;
-
-        (self.prefix, len, capped_len)
-    }
-}
-
 /// A placeholder type that has the required amount of alignment.
 ///
 /// An alignment of 8 gives us 3 unused bits in any pointer to this type.
@@ -250,43 +105,43 @@ struct OpaqueValue;
 /// Could be any one of the NodeTypes, need to perform check on the runtime type
 /// and then cast to a [`NodePtr`].
 #[repr(transparent)]
-pub struct OpaqueNodePtr<K: AsBytes, V>(TaggedPointer<OpaqueValue, 3>, PhantomData<(K, V)>);
+pub struct OpaqueNodePtr<K: AsBytes, V, H: NodeHeader>(TaggedPointer<OpaqueValue, 3>, PhantomData<(K, V, H)>);
 
-impl<K: AsBytes, V> Copy for OpaqueNodePtr<K, V> {}
+impl<K: AsBytes, V, H: NodeHeader> Copy for OpaqueNodePtr<K, V, H> {}
 
-impl<K: AsBytes, V> Clone for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Clone for OpaqueNodePtr<K, V, H> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<K: AsBytes, V> fmt::Debug for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> fmt::Debug for OpaqueNodePtr<K, V, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("OpaqueNodePtr").field(&self.0).finish()
     }
 }
 
-impl<K: AsBytes, V> fmt::Pointer for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> fmt::Pointer for OpaqueNodePtr<K, V, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.0, f)
     }
 }
 
-impl<K: AsBytes, V> Eq for OpaqueNodePtr<K, V> {}
+impl<K: AsBytes, V, H: NodeHeader> Eq for OpaqueNodePtr<K, V, H> {}
 
-impl<K: AsBytes, V> PartialEq for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> PartialEq for OpaqueNodePtr<K, V, H> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl<K: AsBytes, V> Hash for OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V, H1: NodeHeader> Hash for OpaqueNodePtr<K, V, H1> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
 
-impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> OpaqueNodePtr<K, V, H> {
     /// Construct a new opaque node pointer from an existing non-null node
     /// pointer.
     pub fn new<N>(pointer: NonNull<N>) -> Self
@@ -318,22 +173,22 @@ impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
 
     /// Cast this opaque pointer type an enum that contains a pointer to the
     /// concrete node type.
-    pub fn to_node_ptr(self) -> ConcreteNodePtr<K, V> {
+    pub fn to_node_ptr(self) -> ConcreteNodePtr<K, V, H> {
         match self.node_type() {
             NodeType::Node4 => {
-                ConcreteNodePtr::Node4(NodePtr(self.0.cast::<InnerNode4<K, V>>().into()))
+                ConcreteNodePtr::Node4(NodePtr(self.0.cast::<InnerNode4<K, V, H>>().into()))
             },
             NodeType::Node16 => {
-                ConcreteNodePtr::Node16(NodePtr(self.0.cast::<InnerNode16<K, V>>().into()))
+                ConcreteNodePtr::Node16(NodePtr(self.0.cast::<InnerNode16<K, V, H>>().into()))
             },
             NodeType::Node48 => {
-                ConcreteNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<K, V>>().into()))
+                ConcreteNodePtr::Node48(NodePtr(self.0.cast::<InnerNode48<K, V, H>>().into()))
             },
             NodeType::Node256 => {
-                ConcreteNodePtr::Node256(NodePtr(self.0.cast::<InnerNode256<K, V>>().into()))
+                ConcreteNodePtr::Node256(NodePtr(self.0.cast::<InnerNode256<K, V, H>>().into()))
             },
             NodeType::Leaf => {
-                ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<K, V>>().into()))
+                ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<K, V, H>>().into()))
             },
         }
     }
@@ -354,7 +209,7 @@ impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get accessed
     ///    (read or written) through any other pointer.
-    pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header> {
+    pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut H> {
         let header_ptr = match self.node_type() {
             NodeType::Node4 | NodeType::Node16 | NodeType::Node48 | NodeType::Node256 => unsafe {
                 self.header_mut_uncheked()
@@ -370,8 +225,8 @@ impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
         Some(header_ptr)
     }
 
-    pub(crate) unsafe fn header_mut_uncheked<'h>(self) -> &'h mut Header {
-        unsafe { &mut *self.0.cast::<Header>().to_ptr() }
+    pub(crate) unsafe fn header_mut_uncheked<'h>(self) -> &'h mut H {
+        unsafe { &mut *self.0.cast::<H>().to_ptr() }
     }
 
     /// Do a deep clone recursively, by allocating new nodes
@@ -393,20 +248,20 @@ impl<K: AsBytes, V> OpaqueNodePtr<K, V> {
 }
 
 /// An enum that encapsulates pointers to every type of Node
-pub enum ConcreteNodePtr<K: AsBytes, V> {
+pub enum ConcreteNodePtr<K: AsBytes, V, H: NodeHeader> {
     /// Node that references between 2 and 4 children
-    Node4(NodePtr<InnerNode4<K, V>>),
+    Node4(NodePtr<InnerNode4<K, V, H>>),
     /// Node that references between 5 and 16 children
-    Node16(NodePtr<InnerNode16<K, V>>),
+    Node16(NodePtr<InnerNode16<K, V, H>>),
     /// Node that references between 17 and 49 children
-    Node48(NodePtr<InnerNode48<K, V>>),
+    Node48(NodePtr<InnerNode48<K, V, H>>),
     /// Node that references between 49 and 256 children
-    Node256(NodePtr<InnerNode256<K, V>>),
+    Node256(NodePtr<InnerNode256<K, V, H>>),
     /// Node that contains a single value
-    LeafNode(NodePtr<LeafNode<K, V>>),
+    LeafNode(NodePtr<LeafNode<K, V, H>>),
 }
 
-impl<K: AsBytes, V> fmt::Debug for ConcreteNodePtr<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> fmt::Debug for ConcreteNodePtr<K, V, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
@@ -472,7 +327,7 @@ impl<N: Node> NodePtr<N> {
     }
 
     /// Cast node pointer back to an opaque version, losing type information
-    pub fn to_opaque(self) -> OpaqueNodePtr<N::Key, N::Value> {
+    pub fn to_opaque(self) -> OpaqueNodePtr<N::Key, N::Value, N::Header> {
         OpaqueNodePtr::new(self.0)
     }
 
@@ -529,7 +384,7 @@ impl<N: Node> NodePtr<N> {
     }
 }
 
-impl<K: AsBytes, V> NodePtr<LeafNode<K, V>> {
+impl<K: AsBytes, V, H: NodeHeader> NodePtr<LeafNode<K, V, H>> {
     /// Returns a shared reference to the key and value of the pointed to
     /// [`LeafNode`].
     ///
@@ -539,7 +394,10 @@ impl<K: AsBytes, V> NodePtr<LeafNode<K, V>> {
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get mutated
     ///    (except inside UnsafeCell).
-    pub unsafe fn as_key_value_ref<'a>(self) -> (&'a K, &'a V) {
+    pub unsafe fn as_key_value_ref<'a>(self) -> (&'a K, &'a V) 
+    where
+        H: 'a
+    {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
 
@@ -555,7 +413,10 @@ impl<K: AsBytes, V> NodePtr<LeafNode<K, V>> {
     ///    lifetime of the node. In particular, for the duration of this
     ///    lifetime, the node the pointer points to must not get accessed (read
     ///    or written) through any other pointer.
-    pub unsafe fn as_key_ref_value_mut<'a>(self) -> (&'a K, &'a mut V) {
+    pub unsafe fn as_key_ref_value_mut<'a>(self) -> (&'a K, &'a mut V) 
+    where
+        H: 'a
+    {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_mut() };
 
@@ -575,6 +436,7 @@ impl<K: AsBytes, V> NodePtr<LeafNode<K, V>> {
     pub unsafe fn as_key_ref<'a>(self) -> &'a K
     where
         V: 'a,
+        H: 'a,
     {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
@@ -595,6 +457,7 @@ impl<K: AsBytes, V> NodePtr<LeafNode<K, V>> {
     where
         K: 'a,
         V: 'a,
+        H: 'a,
     {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
@@ -615,6 +478,7 @@ impl<K: AsBytes, V> NodePtr<LeafNode<K, V>> {
     where
         K: 'a,
         V: 'a,
+        H: 'a,
     {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_mut() };
@@ -659,17 +523,17 @@ impl<N: Node> fmt::Pointer for NodePtr<N> {
 }
 
 pub(crate) mod private {
-    use crate::AsBytes;
+    use crate::{nodes::header::NodeHeader, AsBytes};
 
     /// This trait is used to seal other traits, such that they cannot be
     /// implemented outside of the crate.
     pub trait Sealed {}
 
-    impl<K: AsBytes, V> Sealed for super::InnerNode4<K, V> {}
-    impl<K: AsBytes, V> Sealed for super::InnerNode16<K, V> {}
-    impl<K: AsBytes, V> Sealed for super::InnerNode48<K, V> {}
-    impl<K: AsBytes, V> Sealed for super::InnerNode256<K, V> {}
-    impl<K: AsBytes, V> Sealed for super::LeafNode<K, V> {}
+    impl<K: AsBytes, V, H: NodeHeader> Sealed for super::InnerNode4<K, V, H> {}
+    impl<K: AsBytes, V, H: NodeHeader> Sealed for super::InnerNode16<K, V, H> {}
+    impl<K: AsBytes, V, H: NodeHeader> Sealed for super::InnerNode48<K, V, H> {}
+    impl<K: AsBytes, V, H: NodeHeader> Sealed for super::InnerNode256<K, V, H> {}
+    impl<K: AsBytes, V, H: NodeHeader> Sealed for super::LeafNode<K, V, H> {}
 }
 
 /// All nodes which contain a runtime tag that validates their type.
@@ -682,15 +546,18 @@ pub trait Node: private::Sealed {
 
     /// The value type carried by the leaf nodes
     type Value;
+
+    /// The header type
+    type Header: NodeHeader;
 }
 
 /// Result of prefix match
 #[derive(Debug)]
-pub enum MatchPrefixResult<K: AsBytes, V> {
+pub enum MatchPrefixResult<K: AsBytes, V, H: NodeHeader> {
     /// If prefixes don't match
     Mismatch {
         /// Mismatch object
-        mismatch: Mismatch<K, V>,
+        mismatch: Mismatch<K, V, H>,
     },
     /// If the prefixes match entirely
     Match {
@@ -701,28 +568,28 @@ pub enum MatchPrefixResult<K: AsBytes, V> {
 
 /// Represents a prefix mismatch
 #[derive(Debug)]
-pub struct Mismatch<K: AsBytes, V> {
+pub struct Mismatch<K: AsBytes, V, H: NodeHeader> {
     /// How many bytes were matched
     pub matched_bytes: usize,
     /// Value of the byte that made it not match
     pub prefix_byte: u8,
     /// Pointer to the leaf if the prefix was reconstructed
-    pub leaf_ptr: Option<NodePtr<LeafNode<K, V>>>,
+    pub leaf_ptr: Option<NodePtr<LeafNode<K, V, H>>>,
 }
 
 /// Common methods implemented by all inner node.
 pub trait InnerNode: Node + Sized {
     /// The type of the next larger node type.
-    type GrownNode: InnerNode<Key = <Self as Node>::Key, Value = <Self as Node>::Value>;
+    type GrownNode: InnerNode<Key = Self::Key, Value = Self::Value, Header = Self::Header>;
 
     /// The type of the next smaller node type.
-    type ShrunkNode: InnerNode<Key = <Self as Node>::Key, Value = <Self as Node>::Value>;
+    type ShrunkNode: InnerNode<Key = Self::Key, Value = Self::Value, Header = Self::Header>;
 
     /// The type of the iterator over all children of the inner node
     type Iter<'a>: Iterator<
             Item = (
                 u8,
-                OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+                OpaqueNodePtr<Self::Key, Self::Value, Self::Header>,
             ),
         > + DoubleEndedIterator
         + FusedIterator
@@ -731,7 +598,7 @@ pub trait InnerNode: Node + Sized {
 
     /// Create an empty [`InnerNode`], with no children and no prefix
     fn empty() -> Self {
-        Self::from_header(Header::empty())
+        Self::from_header(Self::Header::empty())
     }
 
     /// Create a new [`InnerNode`] using
@@ -744,21 +611,21 @@ pub trait InnerNode: Node + Sized {
     /// node to recreate the prefix, that's why we don't use
     /// `prefix.len()` as the node prefix length
     fn from_prefix(prefix: &[u8], prefix_len: usize) -> Self {
-        Self::from_header(Header::new(prefix, prefix_len))
+        Self::from_header(Self::Header::new(prefix, prefix_len))
     }
 
     /// Create a new [`InnerNode`] using a [`Header`]
-    fn from_header(header: Header) -> Self;
+    fn from_header(header: Self::Header) -> Self;
 
     /// Get the [`Header`] from the [`InnerNode`]
-    fn header(&self) -> &Header;
+    fn header(&self) -> &Self::Header;
 
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
     fn lookup_child(
         &self,
         key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>>;
+    ) -> Option<OpaqueNodePtr<Self::Key, Self::Value, Self::Header>>;
 
     /// Write a child pointer with key fragment to this inner node.
     ///
@@ -771,7 +638,7 @@ pub trait InnerNode: Node + Sized {
     fn write_child(
         &mut self,
         key_fragment: u8,
-        child_pointer: OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        child_pointer: OpaqueNodePtr<Self::Key, Self::Value, Self::Header>,
     );
 
     /// Attempt to remove a child pointer at the key fragment from this inner
@@ -781,7 +648,7 @@ pub trait InnerNode: Node + Sized {
     fn remove_child(
         &mut self,
         key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>>;
+    ) -> Option<OpaqueNodePtr<Self::Key, Self::Value, Self::Header>>;
 
     /// Grow this node into the next larger class, copying over children and
     /// prefix information.
@@ -822,7 +689,7 @@ pub trait InnerNode: Node + Sized {
         &self,
         key: &[u8],
         current_depth: usize,
-    ) -> MatchPrefixResult<<Self as Node>::Key, <Self as Node>::Value> {
+    ) -> MatchPrefixResult<Self::Key, Self::Value, Self::Header> {
         unsafe {
             // SAFETY: Since we are iterating the key and prefixes, we
             // expect that the depth never exceeds the key len.
@@ -859,39 +726,9 @@ pub trait InnerNode: Node + Sized {
         current_depth: usize,
     ) -> (
         &[u8],
-        Option<NodePtr<LeafNode<<Self as Node>::Key, <Self as Node>::Value>>>,
+        Option<NodePtr<LeafNode<Self::Key, Self::Value, Self::Header>>>,
     ) {
-        let header = self.header();
-        let len = header.prefix_len();
-        if likely(len <= NUM_PREFIX_BYTES) {
-            (header.read_prefix(), None)
-        } else {
-            // SAFETY: By construction a InnerNode, must have >= 1 childs, this
-            // is even more strict since in the case of 1 child the node can be
-            // collapsed, so a InnserNode must have >= 2 childs, so it's safe
-            // to search for the minium. And the same applies to the `minimum_unchecked`
-            // function
-            let (_, min_child) = self.min();
-            let leaf_ptr = unsafe { minimum_unchecked(min_child) };
-            let leaf = unsafe { leaf_ptr.as_ref() };
-            let leaf = leaf.key_ref().as_bytes();
-            unsafe {
-                // SAFETY: Since we are iterating the key and prefixes, we
-                // expect that the depth never exceeds the key len.
-                // Because if this happens we ran out of bytes in the key to match
-                // and the whole process should be already finished
-                assume(current_depth <= leaf.len());
-
-                // SAFETY: By the construction of the prefix we know that this is inbounds
-                // since the prefix len guarantees it to us
-                assume(current_depth + len <= leaf.len());
-
-                // SAFETY: This can't overflow since len comes from a u32
-                assume(current_depth <= current_depth + len);
-            }
-            let leaf = &leaf[current_depth..(current_depth + len)];
-            (leaf, Some(leaf_ptr))
-        }
+        self.header().inner_read_full_prefix(self, current_depth)
     }
 
     /// Returns the minimum child pointer from this node and it's key
@@ -907,7 +744,7 @@ pub trait InnerNode: Node + Sized {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<Self::Key, Self::Value, Self::Header>,
     );
 
     /// Returns the maximum child pointer from this node and it's key
@@ -923,14 +760,14 @@ pub trait InnerNode: Node + Sized {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<Self::Key, Self::Value, Self::Header>,
     );
 
     /// Deep clones the inner node by allocating memory to a new one
     fn deep_clone(&self) -> NodePtr<Self>
     where
-        <Self as Node>::Key: Clone,
-        <Self as Node>::Value: Clone;
+        Self::Key: Clone,
+        Self::Value: Clone;
 }
 
 /// Where a write should happen inside the node
@@ -955,9 +792,9 @@ trait SearchInnerNodeCompressed {
 /// Node type that has a compact representation for key bytes and children
 /// pointers.
 #[repr(C, align(8))]
-pub struct InnerNodeCompressed<K: AsBytes, V, const SIZE: usize> {
+pub struct InnerNodeCompressed<K: AsBytes, V, H: NodeHeader,const SIZE: usize> {
     /// The common node fields.
-    pub header: Header,
+    pub header: H,
     /// An array that contains single key bytes in the same index as the
     /// `child_pointers` array contains the matching child tree.
     ///
@@ -968,10 +805,10 @@ pub struct InnerNodeCompressed<K: AsBytes, V, const SIZE: usize> {
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V>>; SIZE],
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, H>>; SIZE],
 }
 
-impl<K: AsBytes, V, const SIZE: usize> Clone for InnerNodeCompressed<K, V, SIZE> {
+impl<K: AsBytes, V, H: NodeHeader, const SIZE: usize> Clone for InnerNodeCompressed<K, V, H, SIZE> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -981,7 +818,7 @@ impl<K: AsBytes, V, const SIZE: usize> Clone for InnerNodeCompressed<K, V, SIZE>
     }
 }
 
-impl<K: AsBytes, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, SIZE> {
+impl<K: AsBytes, V, H: NodeHeader, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, H, SIZE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (keys, child_pointers) = self.initialized_portion();
         f.debug_struct("InnerNodeBlock")
@@ -994,11 +831,12 @@ impl<K: AsBytes, V, const SIZE: usize> fmt::Debug for InnerNodeCompressed<K, V, 
 }
 
 /// Iterator type for an [`InnerNodeCompressed`]
-pub type InnerNodeCompressedIter<'a, K, V> =
-    Zip<Copied<Iter<'a, u8>>, Copied<Iter<'a, OpaqueNodePtr<K, V>>>>;
-impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
+pub type InnerNodeCompressedIter<'a, K, V, H> =
+    Zip<Copied<Iter<'a, u8>>, Copied<Iter<'a, OpaqueNodePtr<K, V, H>>>>;
+
+impl<K: AsBytes, V, H: NodeHeader, const SIZE: usize> InnerNodeCompressed<K, V, H, SIZE> {
     /// Return the initialized portions of the keys and child pointer arrays.
-    pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<K, V>]) {
+    pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<K, V, H>]) {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
         // be initialized
         unsafe {
@@ -1014,7 +852,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 
     /// Generalized version of [`InnerNode::lookup_child`] for compressed nodes
-    fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>>
+    fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, H>>
     where
         Self: SearchInnerNodeCompressed,
     {
@@ -1038,7 +876,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     /// This functions assumes that the write is gonna be inbound
     /// (i.e the check for a full node is done previously to the call of this
     /// function)
-    fn write_child_inner(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>)
+    fn write_child_inner(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, H>)
     where
         Self: SearchInnerNodeCompressed,
     {
@@ -1046,7 +884,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         let idx = match self.find_write_point(key_fragment) {
             WritePoint::Existing(child_index) => child_index,
             WritePoint::Last(child_index) => {
-                self.header.num_children += 1;
+                self.header.inc_num_children();
                 child_index
             },
             WritePoint::Shift(child_index) => {
@@ -1068,7 +906,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
                     .copy_within(child_index..num_children, child_index + 1);
                 self.child_pointers
                     .copy_within(child_index..num_children, child_index + 1);
-                self.header.num_children += 1;
+                self.header.inc_num_children();
                 child_index
             },
         };
@@ -1090,11 +928,11 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     pub unsafe fn write_child_unchecked(
         &mut self,
         key_fragment: u8,
-        child_pointer: OpaqueNodePtr<K, V>,
+        child_pointer: OpaqueNodePtr<K, V, H>,
     ) {
-        let idx = self.header.num_children as usize;
+        let idx = self.header.num_children() as usize;
         unsafe { self.write_child_at(idx, key_fragment, child_pointer) };
-        self.header.num_children += 1;
+        self.header.inc_num_children();
     }
 
     /// Writes a child to the node without bounds check or order
@@ -1108,7 +946,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         &mut self,
         idx: usize,
         key_fragment: u8,
-        child_pointer: OpaqueNodePtr<K, V>,
+        child_pointer: OpaqueNodePtr<K, V, H>,
     ) {
         unsafe {
             assume(idx < self.keys.len());
@@ -1120,7 +958,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 
     /// Removes child if it exists
-    fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>>
+    fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, H>>
     where
         Self: SearchInnerNodeCompressed,
     {
@@ -1133,14 +971,14 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
         self.keys
             .copy_within((child_index + 1)..self.header.num_children(), child_index);
 
-        self.header.num_children -= 1;
+        self.header.dec_num_children();
         // SAFETY: This child pointer value is initialized because we got it by
         // searching through the initialized keys and got the `Ok(index)` value.
         Some(unsafe { MaybeUninit::assume_init(child_ptr) })
     }
 
     /// Grows or shrinks the node
-    fn change_block_size<const NEW_SIZE: usize>(&self) -> InnerNodeCompressed<K, V, NEW_SIZE> {
+    fn change_block_size<const NEW_SIZE: usize>(&self) -> InnerNodeCompressed<K, V, H, NEW_SIZE> {
         debug_assert!(
             self.header.num_children() <= NEW_SIZE,
             "Cannot change InnerNodeCompressed<{}> to size {} when it has more than {} children. \
@@ -1148,7 +986,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
             SIZE,
             NEW_SIZE,
             NEW_SIZE,
-            self.header.num_children
+            self.header.num_children()
         );
 
         let header = self.header.clone();
@@ -1184,7 +1022,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 
     /// Transform node into a [`InnerNode48`]
-    fn grow_node48(&self) -> InnerNode48<K, V> {
+    fn grow_node48(&self) -> InnerNode48<K, V, H> {
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
         let mut child_pointers = MaybeUninit::uninit_array();
@@ -1227,7 +1065,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     }
 
     /// Get an iterator over the keys and values of the node
-    fn inner_iter(&self) -> InnerNodeCompressedIter<'_, K, V> {
+    fn inner_iter(&self) -> InnerNodeCompressedIter<'_, K, V, H> {
         let (keys, nodes) = self.initialized_portion();
         keys.iter().copied().zip(nodes.iter().copied())
     }
@@ -1237,7 +1075,7 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
     where
         K: Clone,
         V: Clone,
-        Self: InnerNode<Key = K, Value = V>,
+        Self: InnerNode<Key = K, Value = V, Header = H>,
     {
         let mut node = NodePtr::allocate_node_ptr(Self::from_header(self.header.clone()));
         let node_ref = node.as_mut_safe();
@@ -1251,9 +1089,9 @@ impl<K: AsBytes, V, const SIZE: usize> InnerNodeCompressed<K, V, SIZE> {
 }
 
 /// Node that references between 2 and 4 children
-pub type InnerNode4<K, V> = InnerNodeCompressed<K, V, 4>;
+pub type InnerNode4<K, V, H> = InnerNodeCompressed<K, V, H, 4>;
 
-impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode4<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> SearchInnerNodeCompressed for InnerNode4<K, V, H> {
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         let (keys, _) = self.initialized_portion();
         for (child_index, key) in keys.iter().enumerate() {
@@ -1282,23 +1120,24 @@ impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode4<K, V> {
     }
 }
 
-impl<K: AsBytes, V> Node for InnerNode4<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Node for InnerNode4<K, V, H> {
     type Key = K;
     type Value = V;
+    type Header = H;
 
     const TYPE: NodeType = NodeType::Node4;
 }
 
-impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
-    type GrownNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
-    type Iter<'a> = InnerNodeCompressedIter<'a, K, V> where Self: 'a;
-    type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
+impl<K: AsBytes, V, H: NodeHeader> InnerNode for InnerNode4<K, V, H> {
+    type GrownNode = InnerNode16<K, V, H>;
+    type Iter<'a> = InnerNodeCompressedIter<'a, K, V, H> where Self: 'a;
+    type ShrunkNode = InnerNode4<K, V, H>;
 
-    fn header(&self) -> &Header {
+    fn header(&self) -> &H {
         &self.header
     }
 
-    fn from_header(header: Header) -> Self {
+    fn from_header(header: H) -> Self {
         Self {
             header,
             child_pointers: MaybeUninit::uninit_array(),
@@ -1306,18 +1145,18 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         }
     }
 
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>> {
+    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, H>> {
         self.lookup_child_inner(key_fragment)
     }
 
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>) {
+    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, H>) {
         self.write_child_inner(key_fragment, child_pointer)
     }
 
     fn remove_child(
         &mut self,
         key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+    ) -> Option<OpaqueNodePtr<K, V, H>> {
         self.remove_child_inner(key_fragment)
     }
 
@@ -1337,7 +1176,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<K, V, H>,
     ) {
         let (keys, children) = self.initialized_portion();
         unsafe {
@@ -1352,7 +1191,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<K, V, H>,
     ) {
         let (keys, children) = self.initialized_portion();
         unsafe {
@@ -1374,15 +1213,15 @@ impl<K: AsBytes, V> InnerNode for InnerNode4<K, V> {
 }
 
 /// Node that references between 5 and 16 children
-pub type InnerNode16<K, V> = InnerNodeCompressed<K, V, 16>;
+pub type InnerNode16<K, V, H> = InnerNodeCompressed<K, V, H, 16>;
 
-impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> SearchInnerNodeCompressed for InnerNode16<K, V, H> {
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
         let cmp = u8x16::splat(key_fragment)
             .simd_eq(u8x16::from_array(keys))
             .to_bitmask() as u32;
-        let mask = (1u32 << self.header.num_children) - 1;
+        let mask = (1u32 << self.header.num_children()) - 1;
         let bitfield = cmp & mask;
         if bitfield != 0 {
             Some(bitfield.trailing_zeros() as usize)
@@ -1399,7 +1238,7 @@ impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
                 let cmp = u8x16::splat(key_fragment)
                     .simd_lt(u8x16::from_array(keys))
                     .to_bitmask() as u32;
-                let mask = (1u32 << self.header.num_children) - 1;
+                let mask = (1u32 << self.header.num_children()) - 1;
                 let bitfield = cmp & mask;
                 if bitfield != 0 {
                     WritePoint::Shift(bitfield.trailing_zeros() as usize)
@@ -1411,23 +1250,24 @@ impl<K: AsBytes, V> SearchInnerNodeCompressed for InnerNode16<K, V> {
     }
 }
 
-impl<K: AsBytes, V> Node for InnerNode16<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Node for InnerNode16<K, V, H> {
     type Key = K;
     type Value = V;
+    type Header = H;
 
     const TYPE: NodeType = NodeType::Node16;
 }
 
-impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
-    type GrownNode = InnerNode48<<Self as Node>::Key, <Self as Node>::Value>;
-    type Iter<'a> = InnerNodeCompressedIter<'a, K, V> where Self: 'a;
-    type ShrunkNode = InnerNode4<<Self as Node>::Key, <Self as Node>::Value>;
+impl<K: AsBytes, V, H: NodeHeader> InnerNode for InnerNode16<K, V, H> {
+    type GrownNode = InnerNode48<K, V, H>;
+    type Iter<'a> = InnerNodeCompressedIter<'a, K, V, H> where Self: 'a;
+    type ShrunkNode = InnerNode4<K, V, H>;
 
-    fn header(&self) -> &Header {
+    fn header(&self) -> &H {
         &self.header
     }
 
-    fn from_header(header: Header) -> Self {
+    fn from_header(header: H) -> Self {
         Self {
             header,
             child_pointers: MaybeUninit::uninit_array(),
@@ -1435,18 +1275,18 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         }
     }
 
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V>> {
+    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, H>> {
         self.lookup_child_inner(key_fragment)
     }
 
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V>) {
+    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, H>) {
         self.write_child_inner(key_fragment, child_pointer)
     }
 
     fn remove_child(
         &mut self,
         key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+    ) -> Option<OpaqueNodePtr<K, V, H>> {
         self.remove_child_inner(key_fragment)
     }
 
@@ -1466,7 +1306,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<K, V, H>,
     ) {
         let (keys, children) = self.initialized_portion();
         unsafe {
@@ -1481,7 +1321,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode16<K, V> {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<K, V, H>,
     ) {
         let (keys, children) = self.initialized_portion();
         unsafe {
@@ -1582,9 +1422,9 @@ impl Error for TryFromByteError {}
 
 /// Node that references between 17 and 49 children
 #[repr(C, align(8))]
-pub struct InnerNode48<K: AsBytes, V> {
+pub struct InnerNode48<K: AsBytes, V, H: NodeHeader> {
     /// The common node fields.
-    pub header: Header,
+    pub header: H,
     /// An array that maps key bytes (as the index) to the index value in the
     /// `child_pointers` array.
     ///
@@ -1593,10 +1433,10 @@ pub struct InnerNode48<K: AsBytes, V> {
     pub child_indices: [RestrictedNodeIndex<48>; 256],
     /// For each element in this array, it is assumed to be initialized if there
     /// is a index in the `child_indices` array that points to it
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V>>; 48],
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, H>>; 48],
 }
 
-impl<K: AsBytes, V> fmt::Debug for InnerNode48<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> fmt::Debug for InnerNode48<K, V, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode48")
             .field("header", &self.header)
@@ -1606,7 +1446,7 @@ impl<K: AsBytes, V> fmt::Debug for InnerNode48<K, V> {
     }
 }
 
-impl<K: AsBytes, V> Clone for InnerNode48<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Clone for InnerNode48<K, V, H> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -1616,9 +1456,9 @@ impl<K: AsBytes, V> Clone for InnerNode48<K, V> {
     }
 }
 
-impl<K: AsBytes, V> InnerNode48<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> InnerNode48<K, V, H> {
     /// Return the initialized portions of the child pointer array.
-    pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<K, V>] {
+    pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<K, V, H>] {
         unsafe {
             // SAFETY: The array prefix with length `header.num_children` is guaranteed to
             // be initialized
@@ -1628,23 +1468,24 @@ impl<K: AsBytes, V> InnerNode48<K, V> {
     }
 }
 
-impl<K: AsBytes, V> Node for InnerNode48<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Node for InnerNode48<K, V, H> {
     type Key = K;
     type Value = V;
+    type Header = H;
 
     const TYPE: NodeType = NodeType::Node48;
 }
 
-impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
-    type GrownNode = InnerNode256<<Self as Node>::Key, <Self as Node>::Value>;
-    type Iter<'a> = Map<FilterMap<Enumerate<Iter<'a, RestrictedNodeIndex<48>>>, impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>>, impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V>)> where Self: 'a;
-    type ShrunkNode = InnerNode16<<Self as Node>::Key, <Self as Node>::Value>;
+impl<K: AsBytes, V, H: NodeHeader> InnerNode for InnerNode48<K, V, H> {
+    type GrownNode = InnerNode256<K, V, H>;
+    type Iter<'a> = Map<FilterMap<Enumerate<Iter<'a, RestrictedNodeIndex<48>>>, impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>>, impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V, H>)> where Self: 'a;
+    type ShrunkNode = InnerNode16<K, V, H>;
 
-    fn header(&self) -> &Header {
+    fn header(&self) -> &H {
         &self.header
     }
 
-    fn from_header(header: Header) -> Self {
+    fn from_header(header: H) -> Self {
         InnerNode48 {
             header,
             child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
@@ -1655,7 +1496,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     fn lookup_child(
         &self,
         key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+    ) -> Option<OpaqueNodePtr<K, V, H>> {
         let index = &self.child_indices[usize::from(key_fragment)];
         let child_pointers = self.initialized_child_pointers();
         if !index.is_empty() {
@@ -1675,7 +1516,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     fn write_child(
         &mut self,
         key_fragment: u8,
-        child_pointer: OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        child_pointer: OpaqueNodePtr<K, V, H>,
     ) {
         let key_fragment_idx = usize::from(key_fragment);
         let child_index = if self.child_indices[key_fragment_idx] == RestrictedNodeIndex::EMPTY {
@@ -1694,7 +1535,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
             // have alredy grown
             self.child_indices[key_fragment_idx] =
                 unsafe { RestrictedNodeIndex::try_from(child_index).unwrap_unchecked() };
-            self.header.num_children += 1;
+            self.header.inc_num_children();
             child_index
         } else {
             // overwrite existing
@@ -1711,7 +1552,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
     fn remove_child(
         &mut self,
         key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+    ) -> Option<OpaqueNodePtr<K, V, H>> {
         let restricted_index = self.child_indices[usize::from(key_fragment)];
         if restricted_index.is_empty() {
             return None;
@@ -1747,7 +1588,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         }
 
         self.child_indices[usize::from(key_fragment)] = RestrictedNodeIndex::EMPTY;
-        self.header.num_children -= 1;
+        self.header.dec_num_children();
         // SAFETY: This child pointer value is initialized because we got it by using a
         // non-`RestrictedNodeIndex::<>::EMPTY` index from the child indices array.
         Some(unsafe { MaybeUninit::assume_init(child_ptr) })
@@ -1785,10 +1626,10 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
 
     fn shrink(&self) -> Self::ShrunkNode {
         debug_assert!(
-            self.header.num_children <= 16,
+            self.header.num_children() <= 16,
             "Cannot shrink a Node48 when it has more than 16 children. Currently has [{}] \
              children.",
-            self.header.num_children
+            self.header.num_children()
         );
 
         let header = self.header.clone();
@@ -1840,7 +1681,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<K, V, H>,
     ) {
         let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
         let empty = u8x64::splat(48);
@@ -1893,7 +1734,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<K, V, H>,
     ) {
         let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
         let empty = u8x64::splat(48);
@@ -1966,14 +1807,14 @@ impl<K: AsBytes, V> InnerNode for InnerNode48<K, V> {
 
 /// Node that references between 49 and 256 children
 #[repr(C, align(8))]
-pub struct InnerNode256<K: AsBytes, V> {
+pub struct InnerNode256<K: AsBytes, V, H: NodeHeader> {
     /// The common node fields.
-    pub header: Header,
+    pub header: H,
     /// An array that directly maps a key byte (as index) to a child node.
-    pub child_pointers: [Option<OpaqueNodePtr<K, V>>; 256],
+    pub child_pointers: [Option<OpaqueNodePtr<K, V, H>>; 256],
 }
 
-impl<K: AsBytes, V> fmt::Debug for InnerNode256<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> fmt::Debug for InnerNode256<K, V, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode256")
             .field("header", &self.header)
@@ -1982,7 +1823,7 @@ impl<K: AsBytes, V> fmt::Debug for InnerNode256<K, V> {
     }
 }
 
-impl<K: AsBytes, V> Clone for InnerNode256<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Clone for InnerNode256<K, V, H> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -1991,23 +1832,24 @@ impl<K: AsBytes, V> Clone for InnerNode256<K, V> {
     }
 }
 
-impl<K: AsBytes, V> Node for InnerNode256<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Node for InnerNode256<K, V, H> {
     type Key = K;
     type Value = V;
+    type Header = H;
 
     const TYPE: NodeType = NodeType::Node256;
 }
 
-impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> InnerNode for InnerNode256<K, V, H> {
     type GrownNode = Self;
-    type Iter<'a> = FilterMap<Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V>>>>, impl FnMut((usize, &'a Option<OpaqueNodePtr<K, V>>)) -> Option<(u8, OpaqueNodePtr<K, V>)>> where Self: 'a;
-    type ShrunkNode = InnerNode48<K, V>;
+    type Iter<'a> = FilterMap<Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, H>>>>, impl FnMut((usize, &'a Option<OpaqueNodePtr<K, V, H>>)) -> Option<(u8, OpaqueNodePtr<K, V, H>)>> where Self: 'a;
+    type ShrunkNode = InnerNode48<K, V, H>;
 
-    fn header(&self) -> &Header {
+    fn header(&self) -> &H {
         &self.header
     }
 
-    fn from_header(header: Header) -> Self {
+    fn from_header(header: H) -> Self {
         InnerNode256 {
             header,
             child_pointers: [None; 256],
@@ -2017,31 +1859,31 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
     fn lookup_child(
         &self,
         key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+    ) -> Option<OpaqueNodePtr<K, V, H>> {
         self.child_pointers[usize::from(key_fragment)]
     }
 
     fn write_child(
         &mut self,
         key_fragment: u8,
-        child_pointer: OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        child_pointer: OpaqueNodePtr<K, V, H>,
     ) {
         let key_fragment_idx = usize::from(key_fragment);
         let existing_pointer = self.child_pointers[key_fragment_idx];
         self.child_pointers[key_fragment_idx] = Some(child_pointer);
         if existing_pointer.is_none() {
-            self.header.num_children += 1;
+            self.header.inc_num_children();
         }
     }
 
     fn remove_child(
         &mut self,
         key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>> {
+    ) -> Option<OpaqueNodePtr<K, V, H>> {
         let removed_child = self.child_pointers[usize::from(key_fragment)].take();
 
         if removed_child.is_some() {
-            self.header.num_children -= 1;
+            self.header.dec_num_children();
         }
 
         removed_child
@@ -2053,10 +1895,10 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
 
     fn shrink(&self) -> Self::ShrunkNode {
         debug_assert!(
-            self.header.num_children <= 48,
+            self.header.num_children() <= 48,
             "Cannot shrink a Node256 when it has more than 48 children. Currently has [{}] \
              children.",
-            self.header.num_children
+            self.header.num_children()
         );
 
         let header = self.header.clone();
@@ -2090,7 +1932,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<K, V, H>,
     ) {
         let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
         let empty = usizex64::splat(0);
@@ -2132,7 +1974,7 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
         &self,
     ) -> (
         u8,
-        OpaqueNodePtr<<Self as Node>::Key, <Self as Node>::Value>,
+        OpaqueNodePtr<K, V, H>,
     ) {
         let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
         let empty = usizex64::splat(0);
@@ -2191,17 +2033,19 @@ impl<K: AsBytes, V> InnerNode for InnerNode256<K, V> {
 /// Node that contains a single leaf value.
 #[derive(Debug, Clone)]
 #[repr(align(8))]
-pub struct LeafNode<K, V> {
+pub struct LeafNode<K, V, H: NodeHeader> {
     /// The leaf value.
     value: V,
     /// The full key that the `value` was stored with.
     key: K,
+
+    _marker: PhantomData<H>
 }
 
-impl<K, V> LeafNode<K, V> {
+impl<K, V, H: NodeHeader> LeafNode<K, V, H> {
     /// Create a new leaf node with the given value.
     pub fn new(key: K, value: V) -> Self {
-        LeafNode { value, key }
+        LeafNode { value, key, _marker: PhantomData }
     }
 
     /// Returns a shared reference to the key contained by this leaf node
@@ -2246,9 +2090,10 @@ impl<K, V> LeafNode<K, V> {
     }
 }
 
-impl<K: AsBytes, V> Node for LeafNode<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Node for LeafNode<K, V, H> {
     type Key = K;
     type Value = V;
+    type Header = H;
 
     const TYPE: NodeType = NodeType::Leaf;
 }
