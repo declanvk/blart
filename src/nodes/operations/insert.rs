@@ -1,5 +1,5 @@
 use crate::{
-    header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode,
+    NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode,
     MatchPrefixResult, Mismatch, NodePtr, OpaqueNodePtr,
 };
 use std::{

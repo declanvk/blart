@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    deallocate_tree, header::ReconstructableHeader, search_unchecked,
+    deallocate_tree, ReconstructableHeader, search_unchecked,
     tests_common::setup_tree_from_entries, NodeType,
 };
 

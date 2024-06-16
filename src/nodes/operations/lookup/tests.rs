@@ -1,5 +1,5 @@
 use crate::{
-    header::ReconstructableHeader, nodes::NodePtr, search_unchecked, InnerNode, InnerNode16,
+    ReconstructableHeader, nodes::NodePtr, search_unchecked, InnerNode, InnerNode16,
     InnerNode256, InnerNode4, InnerNode48, LeafNode,
 };
 

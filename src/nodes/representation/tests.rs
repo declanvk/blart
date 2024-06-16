@@ -1,4 +1,4 @@
-use crate::header::ReconstructableHeader;
+use crate::ReconstructableHeader;
 
 use super::*;
 use std::mem;

@@ -1,6 +1,6 @@
 use crate::{
     deallocate_tree,
-    header::ReconstructableHeader,
+    ReconstructableHeader,
     maximum_unchecked, minimum_unchecked,
     tests_common::{generate_key_fixed_length, generate_keys_skewed, insert_unchecked},
     LeafNode, NodePtr, OpaqueNodePtr,
