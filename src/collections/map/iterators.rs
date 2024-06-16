@@ -291,7 +291,7 @@ impl<'a, K, V, H> DoubleEndedIterator for RangeMut<'a, K, V, H> {
 
 /// An owning iterator over the keys of a `TreeMap`.
 ///
-/// This `struct` is created by the [`TreeMap::into_keys`] method on `TreeMap`.
+/// This `struct` is created by the [`crate::TreeMap::into_keys`] method on `TreeMap`.
 /// See its documentation for more.
 pub struct IntoKeys<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
     IntoIter<K, V, NUM_PREFIX_BYTES, H>,
@@ -328,7 +328,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 /// This `struct` is created by the [`into_values`] method on `TreeMap`.
 /// See its documentation for more.
 ///
-/// [`into_values`]: TreeMap::into_values
+/// [`into_values`]: crate::TreeMap::into_values
 pub struct IntoValues<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
     IntoIter<K, V, NUM_PREFIX_BYTES, H>,
 );

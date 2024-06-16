@@ -20,7 +20,7 @@ pub use ordered::*;
 /// Any type implementing `AsBytes` can be decomposed into bytes.
 ///
 /// The primary purpose of this trait is to allow different types to be used as
-/// keys on the [`TreeMap`][crate::map::TreeMap] and `TreeSet` types.
+/// keys on the [`crate::TreeMap`] and `TreeSet` types.
 pub trait AsBytes {
     /// View the current value as a byte array.
     fn as_bytes(&self) -> &[u8];
