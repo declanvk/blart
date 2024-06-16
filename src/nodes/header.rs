@@ -192,7 +192,7 @@ macro_rules! define_common_node_header_methods {
 
 /// Specifies the behaviour of different headers types
 pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq + Eq {
-    /// Create a new [`Header`] using
+    /// Create a new `Header` using
     /// `prefix` as the node prefix and
     /// `prefix_len` as the node prefix length and
     ///
@@ -212,7 +212,7 @@ pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq +
     /// Get the number of bytes in the prefix.
     fn prefix_len(&self) -> usize;
 
-    /// Minimum between [`Self::prefix_len`] and [`NUM_PREFIX_BYTES`]
+    /// Minimum between [`NodeHeader::prefix_len`] and `NUM_PREFIX_BYTES`
     fn capped_prefix_len(&self) -> usize;
 
     /// Return the number of children of this node.

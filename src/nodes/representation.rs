@@ -697,10 +697,10 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
         Self::from_header(Self::Header::new(prefix, prefix_len))
     }
 
-    /// Create a new [`InnerNode`] using a [`Header`]
+    /// Create a new [`InnerNode`] using a `Header`
     fn from_header(header: Self::Header) -> Self;
 
-    /// Get the [`Header`] from the [`InnerNode`]
+    /// Get the `Header` from the [`InnerNode`]
     fn header(&self) -> &Self::Header;
 
     /// Search through this node for a child node that corresponds to the given

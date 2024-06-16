@@ -34,7 +34,7 @@ pub struct RawTreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeade
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
     RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
 {
-    /// Create a new, empty [`TreeMap`].
+    /// Create a new, empty [`crate::TreeMap`].
     ///
     /// This function will not pre-allocate anything.
     ///
@@ -528,7 +528,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// If the map did have this key present, the value is updated, and the old
     /// value is returned.
     ///
-    /// Unlike [`try_insert`][TreeMap::try_insert], this function will not
+    /// Unlike [`try_insert`][crate::TreeMap::try_insert], this function will not
     /// return an error, because the contract of the
     /// [`NoPrefixesBytes`][crate::bytes::NoPrefixesBytes] ensures that the
     /// given key type will never be a prefix of an existing value.
