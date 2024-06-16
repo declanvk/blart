@@ -1,5 +1,7 @@
 use crate::{
-    header::NodeHeader, visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap
+    header::NodeHeader,
+    visitor::{Visitable, Visitor},
+    AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
 };
 use std::{
     fmt::Debug,
@@ -37,7 +39,7 @@ impl<O: Write> DotPrinter<O> {
     where
         K: Debug + AsBytes,
         V: Debug,
-        H: NodeHeader<NUM_PREFIX_BYTES>
+        H: NodeHeader<NUM_PREFIX_BYTES>,
     {
         tree.root
             .map(|root| unsafe { Self::print_tree(output, &root, settings) })
@@ -56,7 +58,7 @@ impl<O: Write> DotPrinter<O> {
     where
         K: Debug + AsBytes,
         V: Debug,
-        H: NodeHeader<NUM_PREFIX_BYTES>
+        H: NodeHeader<NUM_PREFIX_BYTES>,
     {
         let mut visitor = DotPrinter {
             output,
@@ -84,7 +86,10 @@ impl<O: Write> DotPrinter<O> {
         new_id
     }
 
-    fn write_inner_node<K, T, N, const NUM_PREFIX_BYTES: usize>(&mut self, inner_node: &N) -> io::Result<usize>
+    fn write_inner_node<K, T, N, const NUM_PREFIX_BYTES: usize>(
+        &mut self,
+        inner_node: &N,
+    ) -> io::Result<usize>
     where
         K: Debug + AsBytes,
         T: Debug,
@@ -146,7 +151,7 @@ where
     K: Debug + AsBytes,
     T: Debug,
     O: Write,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     type Output = io::Result<usize>;
 
@@ -170,7 +175,10 @@ where
         self.write_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node256(
+        &mut self,
+        t: &crate::InnerNode256<K, T, NUM_PREFIX_BYTES, H>,
+    ) -> Self::Output {
         self.write_inner_node(t)
     }
 
@@ -210,11 +218,12 @@ mod tests {
 
     #[test]
     fn simple_tree_output_to_dot() {
-        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> = crate::tests_common::setup_tree_from_entries(
-            crate::tests_common::generate_key_fixed_length([3, 3])
-                .enumerate()
-                .map(|(a, b)| (b, a)),
-        );
+        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> =
+            crate::tests_common::setup_tree_from_entries(
+                crate::tests_common::generate_key_fixed_length([3, 3])
+                    .enumerate()
+                    .map(|(a, b)| (b, a)),
+            );
         let mut buffer = Vec::new();
 
         // SAFETY: There are no concurrent mutation to the tree node or its children

@@ -1,27 +1,32 @@
 use std::mem::replace;
 
-use crate::{header::NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap};
+use crate::{
+    header::NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr,
+    RawTreeMap,
+};
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
 pub struct OccupiedEntry<'a, K, V, const NUM_PREFIX_BYTES: usize, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     pub(crate) leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
 
     /// Used for the removal
     pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     /// Used for the removal
-    pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
+    pub(crate) grandparent_ptr_and_parent_key_byte:
+        Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
     /// Used for the removal
-    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
+    pub(crate) parent_ptr_and_child_key_byte:
+        Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
 }
 
 impl<'a, K, V, const NUM_PREFIX_BYTES: usize, H> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     /// Gets a reference to the value in the entry.
     pub fn get(&self) -> &V {
@@ -80,7 +85,7 @@ where
 pub struct VacantEntry<'a, K, V, const NUM_PREFIX_BYTES: usize, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     pub(crate) key: K,
@@ -90,7 +95,7 @@ where
 impl<'a, K, V, const NUM_PREFIX_BYTES: usize, H> VacantEntry<'a, K, V, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a mutable reference to it.
@@ -141,7 +146,7 @@ where
 pub enum Entry<'a, K, V, const NUM_PREFIX_BYTES: usize, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     /// A view into an occupied entry in a HashMap. It is part of the [`Entry`]
     /// enum.
@@ -154,7 +159,7 @@ where
 impl<'a, K, V, const NUM_PREFIX_BYTES: usize, H> Entry<'a, K, V, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     /// Provides in-place mutable access to an occupied entry before any
     /// potential inserts into the map.

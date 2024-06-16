@@ -36,8 +36,8 @@ use std::{
 /// This trait is unsafe because implementing it implies that the
 /// [`Mapped<Self>`] type will implement [`OrderedBytes`], so the safety
 /// requirements must be upheld. Namely, that the ordering of values of the
-/// [`BytesMapping::Domain`] type must be equal to the ordering of those same values
-/// translated to the the [`BytesMapping::Bytes`] type.
+/// [`BytesMapping::Domain`] type must be equal to the ordering of those same
+/// values translated to the the [`BytesMapping::Bytes`] type.
 pub unsafe trait BytesMapping {
     /// The unconverted type that has a specific ordering
     type Domain;
@@ -160,8 +160,8 @@ where
     }
 }
 
-/// This struct represents a conversion of **unsigned integers** to the [big endian
-/// format], so that the natural ordering of the numbers matches the
+/// This struct represents a conversion of **unsigned integers** to the [big
+/// endian format], so that the natural ordering of the numbers matches the
 /// lexicographic ordering of the bytes.
 ///
 /// [big endian format]: https://en.wikipedia.org/wiki/Endianness
@@ -305,9 +305,9 @@ impl_ordered_bytes_nonzero_ints!(
     [NonZeroUsize; usize, NonZeroIsize; isize]
 );
 
-/// This struct represents a conversion of **IP addresses** (V4 and V6) into their
-/// component bytes. The ordering of IP addresses is already the lexicographic
-/// ordering of the component bytes, so it will be preserved.
+/// This struct represents a conversion of **IP addresses** (V4 and V6) into
+/// their component bytes. The ordering of IP addresses is already the
+/// lexicographic ordering of the component bytes, so it will be preserved.
 pub struct ToOctets<IP>(PhantomData<IP>);
 
 // SAFETY: This is safe to implement because the conversion to octets is

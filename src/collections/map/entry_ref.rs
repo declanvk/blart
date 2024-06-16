@@ -1,27 +1,32 @@
 use std::{borrow::Borrow, mem::replace};
 
-use crate::{header::NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap};
+use crate::{
+    header::NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr,
+    RawTreeMap,
+};
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
 pub struct OccupiedEntryRef<'a, K, V, const NUM_PREFIX_BYTES: usize, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     pub(crate) leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
 
     /// Used for the removal
     pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     /// Used for the removal
-    pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
+    pub(crate) grandparent_ptr_and_parent_key_byte:
+        Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
     /// Used for the removal
-    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
+    pub(crate) parent_ptr_and_child_key_byte:
+        Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
 }
 
 impl<'a, K, V, const NUM_PREFIX_BYTES: usize, H> OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     /// Gets a reference to the value in the entry.
     pub fn get(&self) -> &V {
@@ -30,8 +35,9 @@ where
 
     /// Gets a mutable reference to the value in the entry.
     ///
-    /// If you need a reference to the [`OccupiedEntryRef`] which may outlive the
-    /// destruction of the Entry value, see [`OccupiedEntryRef::into_mut`].
+    /// If you need a reference to the [`OccupiedEntryRef`] which may outlive
+    /// the destruction of the Entry value, see
+    /// [`OccupiedEntryRef::into_mut`].
     pub fn get_mut(&mut self) -> &mut V {
         unsafe { self.leaf_node_ptr.as_value_mut() }
     }
@@ -42,8 +48,8 @@ where
         replace(leaf_value, value)
     }
 
-    /// Converts the [`OccupiedEntryRef`] into a mutable reference to the value in
-    /// the entry with a lifetime bound to the map itself.
+    /// Converts the [`OccupiedEntryRef`] into a mutable reference to the value
+    /// in the entry with a lifetime bound to the map itself.
     ///
     /// If you need multiple references to the [`OccupiedEntryRef`], see
     /// [`OccupiedEntryRef::get_mut`].
@@ -76,32 +82,34 @@ where
     }
 }
 
-/// A view into a vacant entry in a HashMap. It is part of the [`EntryRef`] enum.
+/// A view into a vacant entry in a HashMap. It is part of the [`EntryRef`]
+/// enum.
 pub struct VacantEntryRef<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize, H>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     pub(crate) key: &'b Q,
     pub(crate) insert_point: Option<InsertPoint<K, V, NUM_PREFIX_BYTES, H>>,
 }
 
-impl<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize, H> VacantEntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>
+impl<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize, H>
+    VacantEntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
-    /// Sets the value of the entry with the [`VacantEntryRef`]’s key, and returns
-    /// a mutable reference to it.
+    /// Sets the value of the entry with the [`VacantEntryRef`]’s key, and
+    /// returns a mutable reference to it.
     pub fn insert(self, value: V) -> &'a mut V {
         unsafe { self.insert_entry(value).leaf_node_ptr.as_value_mut() }
     }
 
-    /// Sets the value of the entry with the [`VacantEntryRef`]’s key, and returns
-    /// a [`OccupiedEntryRef`].
+    /// Sets the value of the entry with the [`VacantEntryRef`]’s key, and
+    /// returns a [`OccupiedEntryRef`].
     pub fn insert_entry(self, value: V) -> OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES, H> {
         let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
             match self.insert_point {
@@ -146,21 +154,22 @@ pub enum EntryRef<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize, H>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
-    /// A view into an occupied entry in a HashMap. It is part of the [`EntryRef`]
-    /// enum.
+    /// A view into an occupied entry in a HashMap. It is part of the
+    /// [`EntryRef`] enum.
     Occupied(OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES, H>),
     /// A view into a vacant entry in a HashMap. It is part of the [`EntryRef`]
     /// enum.
     Vacant(VacantEntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>),
 }
 
-impl<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize, H> EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>
+impl<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize, H>
+    EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     /// Provides in-place mutable access to an occupied entry before any
     /// potential inserts into the map.
@@ -269,7 +278,8 @@ where
         }
     }
 
-    /// Similar to [`EntryRef::or_insert_with`] but yields an [`OccupiedEntryRef`]
+    /// Similar to [`EntryRef::or_insert_with`] but yields an
+    /// [`OccupiedEntryRef`]
     pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES, H>
     where
         F: FnOnce() -> V,
@@ -280,8 +290,12 @@ where
         }
     }
 
-    /// Similar to [`EntryRef::or_insert_with_key`] but yields an [`OccupiedEntryRef`]
-    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES, H>
+    /// Similar to [`EntryRef::or_insert_with_key`] but yields an
+    /// [`OccupiedEntryRef`]
+    pub fn or_insert_with_key_entry<F>(
+        self,
+        f: F,
+    ) -> OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES, H>
     where
         F: FnOnce(&Q) -> V,
     {

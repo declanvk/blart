@@ -1,5 +1,9 @@
 use crate::{
-    deallocate_tree, header::ReconstructableHeader, maximum_unchecked, minimum_unchecked, tests_common::{generate_key_fixed_length, generate_keys_skewed, insert_unchecked}, LeafNode, NodePtr, OpaqueNodePtr
+    deallocate_tree,
+    header::ReconstructableHeader,
+    maximum_unchecked, minimum_unchecked,
+    tests_common::{generate_key_fixed_length, generate_keys_skewed, insert_unchecked},
+    LeafNode, NodePtr, OpaqueNodePtr,
 };
 
 #[test]
@@ -24,7 +28,8 @@ fn large_tree_same_length_keys_min_max() {
     const VALUE_STOPS: u8 = 2;
 
     let mut keys = generate_key_fixed_length([VALUE_STOPS; 3]);
-    let mut root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> = NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
+    let mut root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> =
+        NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
@@ -47,7 +52,8 @@ fn large_tree_same_length_keys_min_max() {
 fn skewed_tree_min_max() {
     let mut keys = generate_keys_skewed(12);
 
-    let mut root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> = NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
+    let mut root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> =
+        NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };

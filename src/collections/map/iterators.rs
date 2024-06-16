@@ -1,4 +1,6 @@
-use crate::{header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, RawTreeMap};
+use crate::{
+    header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, RawTreeMap,
+};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_iter {
@@ -11,13 +13,21 @@ macro_rules! gen_iter {
         ///
         /// This iterator maintains pointers to internal nodes from the trie. No
         /// mutating operation can occur while this an instance of the iterator is live.
-        pub struct $name<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+        pub struct $name<
+            'a,
+            K: AsBytes,
+            V,
+            const NUM_PREFIX_BYTES: usize,
+            H: NodeHeader<NUM_PREFIX_BYTES>,
+        > {
             nodes: VecDeque<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
             size: usize,
             _tree: $tree,
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> $name<'a, K, V, NUM_PREFIX_BYTES, H> {
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+            $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
             pub fn new(tree: $tree) -> Self {
@@ -54,7 +64,9 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator for $name<'a, K, V, NUM_PREFIX_BYTES, H> {
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+            Iterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        {
             type Item = $ret;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -86,7 +98,9 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> DoubleEndedIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H> {
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+            DoubleEndedIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        {
             fn next_back(&mut self) -> Option<Self::Item> {
                 while let Some(node) = self.nodes.pop_front() {
                     match node.to_node_ptr() {
@@ -105,9 +119,14 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FusedIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H> {}
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+            FusedIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        {
+        }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> ExactSizeIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H> {
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+            ExactSizeIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        {
             fn len(&self) -> usize {
                 self.size
             }
@@ -127,9 +146,24 @@ gen_iter!(
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
-gen_iter!(Keys, &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a K, as_key_ref);
-gen_iter!(Values, &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a V, as_value_ref);
-gen_iter!(ValuesMut, &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a mut V, as_value_mut);
+gen_iter!(
+    Keys,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a K,
+    as_key_ref
+);
+gen_iter!(
+    Values,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a V,
+    as_value_ref
+);
+gen_iter!(
+    ValuesMut,
+    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a mut V,
+    as_value_mut
+);
 
 /*
 /// An iterator over a sub-range of entries in a `TreeMap`.
@@ -259,15 +293,21 @@ impl<'a, K, V, H> DoubleEndedIterator for RangeMut<'a, K, V, H> {
 ///
 /// This `struct` is created by the [`TreeMap::into_keys`] method on `TreeMap`.
 /// See its documentation for more.
-pub struct IntoKeys<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(IntoIter<K, V, NUM_PREFIX_BYTES, H>);
+pub struct IntoKeys<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+    IntoIter<K, V, NUM_PREFIX_BYTES, H>,
+);
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoKeys<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    IntoKeys<K, V, NUM_PREFIX_BYTES, H>
+{
     pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
         IntoKeys(IntoIter::new(tree))
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator for IntoKeys<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator
+    for IntoKeys<K, V, NUM_PREFIX_BYTES, H>
+{
     type Item = K;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -275,7 +315,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> DoubleEndedIterator for IntoKeys<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    DoubleEndedIterator for IntoKeys<K, V, NUM_PREFIX_BYTES, H>
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.0.next_back()?.0)
     }
@@ -287,15 +329,21 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 /// See its documentation for more.
 ///
 /// [`into_values`]: TreeMap::into_values
-pub struct IntoValues<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(IntoIter<K, V, NUM_PREFIX_BYTES, H>);
+pub struct IntoValues<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+    IntoIter<K, V, NUM_PREFIX_BYTES, H>,
+);
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoValues<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    IntoValues<K, V, NUM_PREFIX_BYTES, H>
+{
     pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
         IntoValues(IntoIter::new(tree))
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator for IntoValues<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator
+    for IntoValues<K, V, NUM_PREFIX_BYTES, H>
+{
     type Item = V;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -303,7 +351,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> DoubleEndedIterator for IntoValues<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    DoubleEndedIterator for IntoValues<K, V, NUM_PREFIX_BYTES, H>
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.0.next_back()?.1)
     }
@@ -316,15 +366,21 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 ///
 /// [`into_iter`]: IntoIterator::into_iter
 /// [`IntoIterator`]: core::iter::IntoIterator
-pub struct IntoIter<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(RawTreeMap<K, V, NUM_PREFIX_BYTES, H>);
+pub struct IntoIter<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+    RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+);
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIter<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    IntoIter<K, V, NUM_PREFIX_BYTES, H>
+{
     pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
         IntoIter(tree)
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator for IntoIter<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator
+    for IntoIter<K, V, NUM_PREFIX_BYTES, H>
+{
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -338,7 +394,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> DoubleEndedIterator for IntoIter<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    DoubleEndedIterator for IntoIter<K, V, NUM_PREFIX_BYTES, H>
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         self.0.pop_last()
     }

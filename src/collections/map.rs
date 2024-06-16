@@ -2,14 +2,16 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, header::NodeHeader, maximum_unchecked, minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena
+    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, header::NodeHeader,
+    maximum_unchecked, minimum_unchecked, search_for_delete_point, search_for_insert_point,
+    search_unchecked, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch, InnerNode,
+    InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode,
+    NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena,
 };
 use std::{
     borrow::Borrow,
-    collections::HashMap,
     fmt::Debug,
     hash::{Hash, Hasher},
-    intrinsics::assume,
     ops::Index,
 };
 
@@ -21,14 +23,17 @@ pub use entry_ref::*;
 pub use iterators::*;
 
 /// An ordered map based on an adaptive radix tree.
-pub struct RawTreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+pub struct RawTreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+{
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
     pub(crate) root: Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> RawTreeMap<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+{
     /// Create a new, empty [`TreeMap`].
     ///
     /// This function will not pre-allocate anything.
@@ -467,7 +472,11 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         }
     }
 
-    fn init_tree(&mut self, key: K, value: V) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>> {
+    fn init_tree(
+        &mut self,
+        key: K,
+        value: V,
+    ) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>> {
         let leaf = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
         self.root = Some(leaf.to_opaque());
         self.num_entries = 1;
@@ -496,7 +505,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         insert_result
     }
 
-    fn apply_delete_point(&mut self, delete_point: DeletePoint<K, V, NUM_PREFIX_BYTES, H>) -> DeleteResult<K, V, NUM_PREFIX_BYTES, H>
+    fn apply_delete_point(
+        &mut self,
+        delete_point: DeletePoint<K, V, NUM_PREFIX_BYTES, H>,
+    ) -> DeleteResult<K, V, NUM_PREFIX_BYTES, H>
     where
         K: AsBytes,
     {
@@ -586,153 +598,153 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         }
     }
 
-/*
-    #[inline(always)]
-    #[allow(dead_code)]
-    fn write_partitions<N, F>(
-        header: Header,
-        partitions: HashMap<u8, Vec<(K, V)>>,
-        depth: usize,
-        f: F,
-    ) -> OpaqueNodePtr<K, V, H>
-    where
-        N: InnerNode<Key = K, Value = V, Header = H>,
-        F: Fn(&mut N, u8, OpaqueNodePtr<K, V, H>),
-    {
-        let mut node = N::from_header(header);
-        for (idx, partition) in partitions {
-            let child = if partition.len() == 1 {
-                let (key, value) = partition.into_iter().next().unwrap();
-                NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()
-            } else {
-                Self::inner_bulk_insert(partition, depth + 1)
-            };
-            f(&mut node, idx, child);
-        }
-        NodePtr::allocate_node_ptr(node).to_opaque()
-    }
-
-    #[allow(dead_code)]
-    fn inner_bulk_insert(entries: Vec<(K, V)>, mut depth: usize) -> OpaqueNodePtr<K, V, H>
-    where
-        K: AsBytes,
-    {
-        unsafe {
-            assume(entries.len() >= 2);
-        }
-        let first = entries.first().unwrap().0.as_bytes();
-        let last = entries.last().unwrap().0.as_bytes();
-
-        unsafe {
-            assume(depth <= first.len());
-            assume(depth <= last.len());
+    /*
+        #[inline(always)]
+        #[allow(dead_code)]
+        fn write_partitions<N, F>(
+            header: Header,
+            partitions: HashMap<u8, Vec<(K, V)>>,
+            depth: usize,
+            f: F,
+        ) -> OpaqueNodePtr<K, V, H>
+        where
+            N: InnerNode<Key = K, Value = V, Header = H>,
+            F: Fn(&mut N, u8, OpaqueNodePtr<K, V, H>),
+        {
+            let mut node = N::from_header(header);
+            for (idx, partition) in partitions {
+                let child = if partition.len() == 1 {
+                    let (key, value) = partition.into_iter().next().unwrap();
+                    NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()
+                } else {
+                    Self::inner_bulk_insert(partition, depth + 1)
+                };
+                f(&mut node, idx, child);
+            }
+            NodePtr::allocate_node_ptr(node).to_opaque()
         }
 
-        let lcp = first[depth..]
-            .iter()
-            .zip(&last[depth..])
-            .take_while(|(a, b)| **a == **b)
-            .count();
-
-        unsafe {
-            assume(depth + lcp <= first.len());
-            assume(depth <= depth + lcp);
-        }
-
-        let header = Header::new(&first[depth..depth + lcp], lcp);
-        depth += lcp;
-
-        let mut partitions = HashMap::<u8, Vec<(K, V)>>::new();
-        for entry in entries {
+        #[allow(dead_code)]
+        fn inner_bulk_insert(entries: Vec<(K, V)>, mut depth: usize) -> OpaqueNodePtr<K, V, H>
+        where
+            K: AsBytes,
+        {
             unsafe {
-                let idx = *entry.0.as_bytes().get_unchecked(depth);
-                partitions.entry(idx).or_default().push(entry);
+                assume(entries.len() >= 2);
+            }
+            let first = entries.first().unwrap().0.as_bytes();
+            let last = entries.last().unwrap().0.as_bytes();
+
+            unsafe {
+                assume(depth <= first.len());
+                assume(depth <= last.len());
+            }
+
+            let lcp = first[depth..]
+                .iter()
+                .zip(&last[depth..])
+                .take_while(|(a, b)| **a == **b)
+                .count();
+
+            unsafe {
+                assume(depth + lcp <= first.len());
+                assume(depth <= depth + lcp);
+            }
+
+            let header = Header::new(&first[depth..depth + lcp], lcp);
+            depth += lcp;
+
+            let mut partitions = HashMap::<u8, Vec<(K, V)>>::new();
+            for entry in entries {
+                unsafe {
+                    let idx = *entry.0.as_bytes().get_unchecked(depth);
+                    partitions.entry(idx).or_default().push(entry);
+                }
+            }
+
+            let num_keys = partitions.len();
+            if num_keys <= 4 {
+                Self::write_partitions::<InnerNode4<K, V, H>, _>(
+                    header,
+                    partitions,
+                    depth,
+                    |node, idx, child| unsafe { node.write_child_unchecked(idx, child) },
+                )
+            } else if num_keys <= 16 {
+                Self::write_partitions::<InnerNode16<K, V, H>, _>(
+                    header,
+                    partitions,
+                    depth,
+                    |node, idx, child| unsafe { node.write_child_unchecked(idx, child) },
+                )
+            } else if num_keys <= 48 {
+                Self::write_partitions::<InnerNode48<K, V, H>, _>(
+                    header,
+                    partitions,
+                    depth,
+                    |node, idx, child| node.write_child(idx, child),
+                )
+            } else {
+                Self::write_partitions::<InnerNode256<K, V, H>, _>(
+                    header,
+                    partitions,
+                    depth,
+                    |node, idx, child| node.write_child(idx, child),
+                )
             }
         }
 
-        let num_keys = partitions.len();
-        if num_keys <= 4 {
-            Self::write_partitions::<InnerNode4<K, V, H>, _>(
-                header,
-                partitions,
-                depth,
-                |node, idx, child| unsafe { node.write_child_unchecked(idx, child) },
-            )
-        } else if num_keys <= 16 {
-            Self::write_partitions::<InnerNode16<K, V, H>, _>(
-                header,
-                partitions,
-                depth,
-                |node, idx, child| unsafe { node.write_child_unchecked(idx, child) },
-            )
-        } else if num_keys <= 48 {
-            Self::write_partitions::<InnerNode48<K, V, H>, _>(
-                header,
-                partitions,
-                depth,
-                |node, idx, child| node.write_child(idx, child),
-            )
-        } else {
-            Self::write_partitions::<InnerNode256<K, V, H>, _>(
-                header,
-                partitions,
-                depth,
-                |node, idx, child| node.write_child(idx, child),
-            )
-        }
-    }
+        #[allow(dead_code)]
+        fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
+        where
+            K: AsBytes,
+        {
+            if entries.is_empty() {
+                return Self::new();
+            }
 
-    #[allow(dead_code)]
-    fn bulk_insert(mut entries: Vec<(K, V)>) -> Self
-    where
-        K: AsBytes,
-    {
-        if entries.is_empty() {
-            return Self::new();
+            if entries.len() == 1 {
+                let (key, value) = entries.into_iter().next().unwrap();
+                return Self {
+                    num_entries: 1,
+                    root: Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()),
+                };
+            }
+
+            let num_entries = entries.len();
+            entries.sort_by(|l1, l2| l1.0.as_bytes().cmp(l2.0.as_bytes()));
+            let root = Self::inner_bulk_insert(entries, 0);
+            Self {
+                num_entries,
+                root: Some(root),
+            }
         }
 
-        if entries.len() == 1 {
-            let (key, value) = entries.into_iter().next().unwrap();
-            return Self {
-                num_entries: 1,
-                root: Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()),
-            };
-        }
+        #[allow(dead_code)]
+        fn bulk_insert_unchecked(entries: Vec<(K, V)>) -> Self
+        where
+            K: AsBytes,
+        {
+            if entries.is_empty() {
+                return Self::new();
+            }
 
-        let num_entries = entries.len();
-        entries.sort_by(|l1, l2| l1.0.as_bytes().cmp(l2.0.as_bytes()));
-        let root = Self::inner_bulk_insert(entries, 0);
-        Self {
-            num_entries,
-            root: Some(root),
-        }
-    }
+            if entries.len() == 1 {
+                let (key, value) = entries.into_iter().next().unwrap();
+                return Self {
+                    num_entries: 1,
+                    root: Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()),
+                };
+            }
 
-    #[allow(dead_code)]
-    fn bulk_insert_unchecked(entries: Vec<(K, V)>) -> Self
-    where
-        K: AsBytes,
-    {
-        if entries.is_empty() {
-            return Self::new();
+            let num_entries = entries.len();
+            let root = Self::inner_bulk_insert(entries, 0);
+            Self {
+                num_entries,
+                root: Some(root),
+            }
         }
-
-        if entries.len() == 1 {
-            let (key, value) = entries.into_iter().next().unwrap();
-            return Self {
-                num_entries: 1,
-                root: Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque()),
-            };
-        }
-
-        let num_entries = entries.len();
-        let root = Self::inner_bulk_insert(entries, 0);
-        Self {
-            num_entries,
-            root: Some(root),
-        }
-    }
-*/
+    */
 
     /// Removes a key from the map, returning the stored key and value if the
     /// key was previously in the map.
@@ -1214,10 +1226,15 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> RawTreeMap<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+{
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, NUM_PREFIX_BYTES, H>, InsertPrefixError>
+    pub fn try_entry(
+        &mut self,
+        key: K,
+    ) -> Result<Entry<K, V, NUM_PREFIX_BYTES, H>, InsertPrefixError>
     where
         K: AsBytes,
     {
@@ -1296,7 +1313,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>
+    pub fn entry_ref<'a, 'b, Q>(
+        &'a mut self,
+        key: &'b Q,
+    ) -> EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>
     where
         K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
         Q: NoPrefixesBytes + ?Sized,
@@ -1305,7 +1325,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Drop for RawTreeMap<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Drop
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+{
     fn drop(&mut self) {
         self.clear();
     }
@@ -1315,7 +1337,7 @@ impl<K, V, const NUM_PREFIX_BYTES: usize, H> Clone for RawTreeMap<K, V, NUM_PREF
 where
     K: Clone + AsBytes,
     V: Clone,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn clone(&self) -> Self {
         if let Some(root) = self.root {
@@ -1333,24 +1355,27 @@ impl<K, V, const NUM_PREFIX_BYTES: usize, H> Debug for RawTreeMap<K, V, NUM_PREF
 where
     K: Debug + AsBytes,
     V: Debug,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Default for RawTreeMap<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Default
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, K, V, const NUM_PREFIX_BYTES: usize, H> Extend<(&'a K, &'a V)> for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<'a, K, V, const NUM_PREFIX_BYTES: usize, H> Extend<(&'a K, &'a V)>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
 where
     K: Copy + NoPrefixesBytes,
     V: Copy,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn extend<T: IntoIterator<Item = (&'a K, &'a V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1359,10 +1384,11 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> Extend<(K, V)> for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize, H> Extend<(K, V)>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
 where
     K: NoPrefixesBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1371,10 +1397,11 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H, const N: usize> From<[(K, V); N]> for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize, H, const N: usize> From<[(K, V); N]>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
 where
     K: NoPrefixesBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn from(arr: [(K, V); N]) -> Self {
         let mut map = RawTreeMap::new();
@@ -1385,10 +1412,11 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> FromIterator<(K, V)> for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize, H> FromIterator<(K, V)>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
 where
     K: NoPrefixesBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let mut map = RawTreeMap::new();
@@ -1403,7 +1431,7 @@ impl<K, V, const NUM_PREFIX_BYTES: usize, H1> Hash for RawTreeMap<K, V, NUM_PREF
 where
     K: Hash + AsBytes,
     V: Hash,
-    H1: NodeHeader<NUM_PREFIX_BYTES>
+    H1: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         Hasher::write_length_prefix(state, self.num_entries);
@@ -1417,7 +1445,7 @@ impl<Q, K, V, const NUM_PREFIX_BYTES: usize, H> Index<&Q> for RawTreeMap<K, V, N
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     type Output = V;
 
@@ -1426,7 +1454,9 @@ where
     }
 }
 
-impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator for &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H> {
+impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator
+    for &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+{
     type IntoIter = TreeIterator<'a, K, V, NUM_PREFIX_BYTES, H>;
     type Item = (&'a K, &'a V);
 
@@ -1435,7 +1465,9 @@ impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_
     }
 }
 
-impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator for &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H> {
+impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator
+    for &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+{
     type IntoIter = TreeIteratorMut<'a, K, V, NUM_PREFIX_BYTES, H>;
     type Item = (&'a K, &'a mut V);
 
@@ -1444,7 +1476,9 @@ impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator for RawTreeMap<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+{
     type IntoIter = iterators::IntoIter<K, V, NUM_PREFIX_BYTES, H>;
     type Item = (K, V);
 
@@ -1457,7 +1491,7 @@ impl<K, V, H, const NUM_PREFIX_BYTES: usize> Ord for RawTreeMap<K, V, NUM_PREFIX
 where
     K: Ord + AsBytes,
     V: Ord,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.iter().cmp(other.iter())
@@ -1468,7 +1502,7 @@ impl<K, V, H, const NUM_PREFIX_BYTES: usize> PartialOrd for RawTreeMap<K, V, NUM
 where
     K: PartialOrd + AsBytes,
     V: PartialOrd,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.iter().partial_cmp(other.iter())
@@ -1479,7 +1513,7 @@ impl<K, V, H, const NUM_PREFIX_BYTES: usize> Eq for RawTreeMap<K, V, NUM_PREFIX_
 where
     K: Eq + AsBytes,
     V: Eq,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
 }
 
@@ -1487,7 +1521,7 @@ impl<K, V, H, const NUM_PREFIX_BYTES: usize> PartialEq for RawTreeMap<K, V, NUM_
 where
     K: PartialEq + AsBytes,
     V: PartialEq,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn eq(&self, other: &Self) -> bool {
         self.iter().eq(other.iter()) && self.num_entries == other.num_entries
@@ -1498,7 +1532,7 @@ unsafe impl<K, V, H, const NUM_PREFIX_BYTES: usize> Send for RawTreeMap<K, V, NU
 where
     K: Send + AsBytes,
     V: Send,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
 }
 
@@ -1506,7 +1540,7 @@ unsafe impl<K, V, H, const NUM_PREFIX_BYTES: usize> Sync for RawTreeMap<K, V, NU
 where
     K: Sync + AsBytes,
     V: Sync,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
 }
 
@@ -1514,9 +1548,13 @@ where
 mod tests {
     use std::{cmp::Ordering, collections::hash_map::RandomState, ffi::CString, hash::BuildHasher};
 
-    use crate::{tests_common::{
-        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
-    }, TreeMap};
+    use crate::{
+        tests_common::{
+            generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
+            PrefixExpansion,
+        },
+        TreeMap,
+    };
 
     use super::*;
 

@@ -429,7 +429,8 @@ impl<'a> AsBytes for IoSliceMut<'a> {
 
 /// Concats two or more types that implement [`AsBytes`]. The construction of
 /// this type will allocate memory, since the concatenated bytes need to be in a
-/// flat buffer. If the types are [`Copy`] use tuple syntax which avoids allocating
+/// flat buffer. If the types are [`Copy`] use tuple syntax which avoids
+/// allocating
 ///
 /// If all of the types implement [`OrderedBytes`] then this type is also
 /// implements [`OrderedBytes`]
@@ -544,11 +545,11 @@ macro_rules! as_bytes_for_tuples {
             {
                 #[inline(always)]
                 fn as_bytes(&self) -> &[u8] {
-                    unsafe { 
+                    unsafe {
                         std::slice::from_raw_parts(
                             self as *const Self as *const u8,
                             std::mem::size_of::<Self>()
-                        ) 
+                        )
                     }
                 }
             }

@@ -9,7 +9,6 @@
 #![feature(core_intrinsics)]
 #![feature(is_sorted)]
 #![feature(strict_provenance)]
-
 #![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
 #![deny(
     missing_docs,
@@ -51,7 +50,6 @@ pub mod benches_common;
 pub use bytes::*;
 pub use collections::*;
 pub use nodes::{visitor, *};
-
 
 /// Standard ART type
 pub type TreeMap<K, V> = RawTreeMap<K, V, 16, nodes::header::ReconstructableHeader<16>>;

@@ -1,14 +1,14 @@
 //! Trie node representation
 
 // pub use self::iterators::*;
-use crate::{minimum_unchecked, tagged_pointer::TaggedPointer, AsBytes};
+use crate::{tagged_pointer::TaggedPointer, AsBytes};
 use std::{
     borrow::Borrow,
     cmp::Ordering,
     error::Error,
     fmt,
     hash::Hash,
-    intrinsics::{assume, likely},
+    intrinsics::assume,
     iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip},
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
@@ -1051,7 +1051,7 @@ impl<
         key_fragment: u8,
         child_pointer: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
     ) {
-        let idx = self.header.num_children() as usize;
+        let idx = self.header.num_children();
         unsafe { self.write_child_at(idx, key_fragment, child_pointer) };
         self.header.inc_num_children();
     }

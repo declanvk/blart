@@ -1,7 +1,8 @@
 use std::{intrinsics::assume, mem::MaybeUninit};
 
 use crate::{
-    header::NodeHeader, AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, OpaqueNodePtr
+    header::NodeHeader, AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed,
+    LeafNode, OpaqueNodePtr,
 };
 
 pub struct StackArena {
@@ -118,7 +119,8 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
     std::mem::swap(temp, new_row);
 }
 
-pub trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+pub trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+{
     #[allow(clippy::too_many_arguments)]
     fn fuzzy_search<'s>(
         &'s self,
@@ -157,7 +159,14 @@ pub trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeade
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>, const SIZE: usize> FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNodeCompressed<K, V, NUM_PREFIX_BYTES, H, SIZE>
+impl<
+        K: AsBytes,
+        V,
+        const NUM_PREFIX_BYTES: usize,
+        H: NodeHeader<NUM_PREFIX_BYTES>,
+        const SIZE: usize,
+    > FuzzySearch<K, V, NUM_PREFIX_BYTES, H>
+    for InnerNodeCompressed<K, V, NUM_PREFIX_BYTES, H, SIZE>
 where
     Self: InnerNode<NUM_PREFIX_BYTES>,
 {
@@ -187,7 +196,9 @@ where
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNode48<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNode48<K, V, NUM_PREFIX_BYTES, H>
+{
     fn fuzzy_search<'s>(
         &'s self,
         arena: &mut StackArena,
@@ -218,7 +229,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNode256<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNode256<K, V, NUM_PREFIX_BYTES, H>
+{
     fn fuzzy_search<'s>(
         &'s self,
         arena: &mut StackArena,
@@ -247,7 +260,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for LeafNode<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for LeafNode<K, V, NUM_PREFIX_BYTES, H>
+{
     fn fuzzy_search<'s>(
         &'s self,
         _arena: &mut StackArena,

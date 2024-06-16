@@ -1,5 +1,6 @@
 use crate::{
-    header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch, NodePtr, OpaqueNodePtr
+    header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode,
+    MatchPrefixResult, Mismatch, NodePtr, OpaqueNodePtr,
 };
 use std::{
     borrow::Borrow,
@@ -12,7 +13,13 @@ use std::{
 
 /// The results of a successful tree insert
 #[derive(Debug)]
-pub struct InsertResult<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+pub struct InsertResult<
+    'a,
+    K: AsBytes,
+    V,
+    const NUM_PREFIX_BYTES: usize,
+    H: NodeHeader<NUM_PREFIX_BYTES>,
+> {
     /// Pointer to the leaf
     pub leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
     /// The existing leaf referenced by the insert key, if present
@@ -57,7 +64,12 @@ impl Error for InsertPrefixError {}
 ///
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
-pub struct InsertPoint<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+pub struct InsertPoint<
+    K: AsBytes,
+    V,
+    const NUM_PREFIX_BYTES: usize,
+    H: NodeHeader<NUM_PREFIX_BYTES>,
+> {
     /// The grandparent node pointer and key byte that points to the parent node
     /// insert point.
     ///
@@ -84,26 +96,47 @@ pub struct InsertPoint<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHead
     pub root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> InsertPoint<K, V, NUM_PREFIX_BYTES, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    InsertPoint<K, V, NUM_PREFIX_BYTES, H>
+{
     pub fn apply<'a>(self, key: K, value: V) -> InsertResult<'a, K, V, NUM_PREFIX_BYTES, H>
     where
         K: AsBytes + 'a,
         V: 'a,
     {
-        fn write_new_child_in_existing_node<'a, K, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+        fn write_new_child_in_existing_node<
+            'a,
+            K,
+            V,
+            const NUM_PREFIX_BYTES: usize,
+            H: NodeHeader<NUM_PREFIX_BYTES>,
+        >(
             inner_node_ptr: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
             new_leaf_node: LeafNode<K, V, NUM_PREFIX_BYTES, H>,
             key_bytes_used: usize,
-        ) -> (OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>)
+        ) -> (
+            OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
+            NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
+        )
         where
             K: AsBytes + 'a,
             V: 'a,
         {
-            fn write_new_child_in_existing_inner_node<'a, K, V, N, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+            fn write_new_child_in_existing_inner_node<
+                'a,
+                K,
+                V,
+                N,
+                const NUM_PREFIX_BYTES: usize,
+                H: NodeHeader<NUM_PREFIX_BYTES>,
+            >(
                 inner_node_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
                 new_leaf_node: LeafNode<K, V, NUM_PREFIX_BYTES, H>,
                 key_bytes_used: usize,
-            ) -> (OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>)
+            ) -> (
+                OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
+                NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
+            )
             where
                 N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
                 K: AsBytes + 'a,
@@ -163,12 +196,23 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         }
 
         /// Write a new child node to an inner node at the specified key byte.
-        fn parent_write_child<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+        fn parent_write_child<
+            K: AsBytes,
+            V,
+            const NUM_PREFIX_BYTES: usize,
+            H: NodeHeader<NUM_PREFIX_BYTES>,
+        >(
             parent_inner_node: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
             key_byte: u8,
             new_child: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
         ) {
-            fn write_inner_node<K: AsBytes, V, N, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+            fn write_inner_node<
+                K: AsBytes,
+                V,
+                N,
+                const NUM_PREFIX_BYTES: usize,
+                H: NodeHeader<NUM_PREFIX_BYTES>,
+            >(
                 parent_inner_node: NodePtr<NUM_PREFIX_BYTES, N>,
                 key_byte: u8,
                 new_child: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
@@ -383,7 +427,12 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 }
 
 /// The type of insert
-pub enum InsertSearchResultType<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+pub enum InsertSearchResultType<
+    K: AsBytes,
+    V,
+    const NUM_PREFIX_BYTES: usize,
+    H: NodeHeader<NUM_PREFIX_BYTES>,
+> {
     /// An insert where an inner node had a differing prefix from the key.
     ///
     /// This insert type will create a new inner node with the portion of
@@ -445,18 +494,24 @@ pub unsafe fn search_for_insert_point<K, V, Q, const NUM_PREFIX_BYTES: usize, H>
 where
     K: AsBytes + Borrow<Q>,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     #[allow(clippy::type_complexity)]
     fn test_prefix_identify_insert<K, V, N, const NUM_PREFIX_BYTES: usize, H>(
         inner_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
         key: &[u8],
         current_depth: &mut usize,
-    ) -> Result<ControlFlow<Mismatch<K, V, NUM_PREFIX_BYTES, H>, Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>>, InsertPrefixError>
+    ) -> Result<
+        ControlFlow<
+            Mismatch<K, V, NUM_PREFIX_BYTES, H>,
+            Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
+        >,
+        InsertPrefixError,
+    >
     where
         N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
         K: AsBytes,
-        H: NodeHeader<NUM_PREFIX_BYTES>
+        H: NodeHeader<NUM_PREFIX_BYTES>,
     {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further
