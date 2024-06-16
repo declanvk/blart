@@ -1,9 +1,7 @@
 //! Different header type
 
 use std::{
-    fmt::Debug,
-    intrinsics::{assume, likely},
-    marker::PhantomData,
+    fmt::Debug, hint::unreachable_unchecked, intrinsics::{assume, likely}, marker::PhantomData
 };
 
 use crate::{minimum_unchecked, AsBytes, InnerNode, LeafNode, NodePtr};
@@ -374,7 +372,13 @@ impl<const NUM_PREFIX_BYTES: usize, K1: Copy + Eq + Debug + Sized> NodeHeader<NU
         _depth: usize,
         _leaf_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
     ) {
-        panic!("This method should never be called with a FixedKeyHeader");
+        debug_assert!(
+            false,
+            "FixedKeyHeader::ltrim_by_with_leaf should never be called"
+        );
+
+        #[cfg(not(debug_assertions))]
+        unsafe { unreachable_unchecked() };
     }
 
     #[inline(always)]

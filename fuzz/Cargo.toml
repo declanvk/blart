@@ -32,5 +32,11 @@ path = "fuzz_targets/fuzz_tree_map_api.rs"
 test = false
 doc = false
 
+[[bin]]
+name = "fuzz_tree_map_api_fixed"
+path = "fuzz_targets/fuzz_tree_map_api_fixed.rs"
+test = false
+doc = false
+
 [profile.release]
 rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]
