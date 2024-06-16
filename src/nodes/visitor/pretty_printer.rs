@@ -1,5 +1,5 @@
 use crate::{
-    header::NodeHeader, visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap
+    header::NodeHeader, visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap
 };
 use std::{
     fmt::Debug,
@@ -31,7 +31,7 @@ impl<O: Write> DotPrinter<O> {
     ///    children nodes must not get mutated.
     pub unsafe fn print<K, V, const NUM_PREFIX_BYTES: usize, H>(
         output: O,
-        tree: &TreeMap<K, V, NUM_PREFIX_BYTES, H>,
+        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where
@@ -204,13 +204,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::deallocate_tree;
+    use crate::{deallocate_tree, header::ReconstructableHeader};
 
     use super::*;
 
     #[test]
     fn simple_tree_output_to_dot() {
-        let root = crate::tests_common::setup_tree_from_entries(
+        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> = crate::tests_common::setup_tree_from_entries(
             crate::tests_common::generate_key_fixed_length([3, 3])
                 .enumerate()
                 .map(|(a, b)| (b, a)),

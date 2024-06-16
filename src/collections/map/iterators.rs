@@ -1,4 +1,4 @@
-use crate::{header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, TreeMap};
+use crate::{header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, RawTreeMap};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_iter {
@@ -117,19 +117,19 @@ macro_rules! gen_iter {
 
 gen_iter!(
     TreeIterator,
-    &'a TreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     (&'a K, &'a V),
     as_key_value_ref
 );
 gen_iter!(
     TreeIteratorMut,
-    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
-gen_iter!(Keys, &'a TreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a K, as_key_ref);
-gen_iter!(Values, &'a TreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a V, as_value_ref);
-gen_iter!(ValuesMut, &'a mut TreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a mut V, as_value_mut);
+gen_iter!(Keys, &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a K, as_key_ref);
+gen_iter!(Values, &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a V, as_value_ref);
+gen_iter!(ValuesMut, &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>, &'a mut V, as_value_mut);
 
 /*
 /// An iterator over a sub-range of entries in a `TreeMap`.
@@ -262,7 +262,7 @@ impl<'a, K, V, H> DoubleEndedIterator for RangeMut<'a, K, V, H> {
 pub struct IntoKeys<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(IntoIter<K, V, NUM_PREFIX_BYTES, H>);
 
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoKeys<K, V, NUM_PREFIX_BYTES, H> {
-    pub(crate) fn new(tree: TreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
+    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
         IntoKeys(IntoIter::new(tree))
     }
 }
@@ -290,7 +290,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 pub struct IntoValues<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(IntoIter<K, V, NUM_PREFIX_BYTES, H>);
 
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoValues<K, V, NUM_PREFIX_BYTES, H> {
-    pub(crate) fn new(tree: TreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
+    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
         IntoValues(IntoIter::new(tree))
     }
 }
@@ -316,10 +316,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 ///
 /// [`into_iter`]: IntoIterator::into_iter
 /// [`IntoIterator`]: core::iter::IntoIterator
-pub struct IntoIter<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(TreeMap<K, V, NUM_PREFIX_BYTES, H>);
+pub struct IntoIter<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(RawTreeMap<K, V, NUM_PREFIX_BYTES, H>);
 
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIter<K, V, NUM_PREFIX_BYTES, H> {
-    pub(crate) fn new(tree: TreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
+    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
         IntoIter(tree)
     }
 }
@@ -348,7 +348,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 mod tests {
     use super::*;
 
-    use crate::tests_common::generate_key_fixed_length;
+    use crate::{tests_common::generate_key_fixed_length, TreeMap};
 
     #[test]
     fn small_tree_iterator_front_and_back() {
