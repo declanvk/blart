@@ -1,6 +1,7 @@
 use argh::FromArgs;
 use blart::{
-    visitor::{DotPrinter, DotPrinterSettings}, TreeMap,
+    visitor::{DotPrinter, DotPrinterSettings},
+    TreeMap,
 };
 use std::{
     error::Error,

@@ -1,6 +1,9 @@
 //! Different header type
 
-use std::{fmt::Debug, intrinsics::{assume, likely}};
+use std::{
+    fmt::Debug,
+    intrinsics::{assume, likely},
+};
 
 use crate::{minimum_unchecked, AsBytes, InnerNode, LeafNode, NodePtr};
 
@@ -134,52 +137,52 @@ macro_rules! define_common_node_header_methods {
         fn new(prefix: &[u8], prefix_len: usize) -> Self {
             Self(RawHeader::new(prefix, prefix_len))
         }
-    
+
         #[inline(always)]
         fn empty() -> Self {
             Self(RawHeader::empty())
         }
-    
+
         #[inline(always)]
         fn read_prefix(&self) -> &[u8] {
             &self.0.read_prefix()
         }
-    
+
         #[inline(always)]
         fn prefix_len(&self) -> usize {
             self.0.prefix_len()
         }
-    
+
         #[inline(always)]
         fn capped_prefix_len(&self) -> usize {
             self.0.capped_prefix_len()
         }
-    
+
         #[inline(always)]
         fn num_children(&self) -> usize {
             self.0.num_children()
         }
-    
+
         #[inline(always)]
         fn ltrim_by(&mut self, len: usize) {
             self.0.ltrim_by(len)
         }
-    
+
         #[inline(always)]
         fn clear_prefix(&mut self) -> ([u8; NUM_PREFIX_BYTES], usize, usize) {
             self.0.clear_prefix()
         }
-    
+
         #[inline(always)]
         fn inc_num_children(&mut self) {
             self.0.inc_num_children()
         }
-    
+
         #[inline(always)]
         fn dec_num_children(&mut self) {
             self.0.dec_num_children()
         }
-    
+
         #[inline(always)]
         fn push_prefix(&mut self, new: &[u8], new_len: usize) {
             self.0.push_prefix(new, new_len)
@@ -247,7 +250,11 @@ pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq +
     fn dec_num_children(&mut self);
 
     /// Reads the prefix as a whole without capping it
-    fn inner_read_full_prefix<'a, N: InnerNode<NUM_PREFIX_BYTES>>(&'a self, node: &'a N, current_depth: usize) -> (
+    fn inner_read_full_prefix<'a, N: InnerNode<NUM_PREFIX_BYTES>>(
+        &'a self,
+        node: &'a N,
+        current_depth: usize,
+    ) -> (
         &'a [u8],
         Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<N::Key, N::Value, NUM_PREFIX_BYTES, N::Header>>>,
     );
@@ -259,7 +266,9 @@ pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq +
 #[repr(transparent)]
 pub struct ReconstructableHeader<const NUM_PREFIX_BYTES: usize>(RawHeader<NUM_PREFIX_BYTES>);
 
-impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES> for ReconstructableHeader<NUM_PREFIX_BYTES> {
+impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
+    for ReconstructableHeader<NUM_PREFIX_BYTES>
+{
     define_common_node_header_methods!();
 
     #[inline(always)]
@@ -293,7 +302,11 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES> for Reconstruct
     }
 
     #[inline(always)]
-    fn inner_read_full_prefix<'a, N: InnerNode<NUM_PREFIX_BYTES>>(&'a self, node: &'a N, current_depth: usize) -> (
+    fn inner_read_full_prefix<'a, N: InnerNode<NUM_PREFIX_BYTES>>(
+        &'a self,
+        node: &'a N,
+        current_depth: usize,
+    ) -> (
         &'a [u8],
         Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<N::Key, N::Value, NUM_PREFIX_BYTES, N::Header>>>,
     ) {

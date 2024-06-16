@@ -1,12 +1,14 @@
 use crate::{
-    header::ReconstructableHeader, nodes::NodePtr, search_unchecked, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode
+    header::ReconstructableHeader, nodes::NodePtr, search_unchecked, InnerNode, InnerNode16,
+    InnerNode256, InnerNode4, InnerNode48, LeafNode,
 };
 
 #[test]
 fn lookup_on_non_copy_leaf() {
     let mut l1: LeafNode<Box<[u8]>, String, 16, ReconstructableHeader<16>> =
         LeafNode::new(Box::from([1, 2, 3]), "Hello world my name is".into());
-    let mut l2: LeafNode<Box<[u8]>, String, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4]), "geregog".into());
+    let mut l2: LeafNode<Box<[u8]>, String, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4]), "geregog".into());
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -33,7 +35,8 @@ fn lookup_on_non_copy_leaf() {
 
 #[test]
 fn lookup_on_leaf() {
-    let mut leaf: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut leaf: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3]), 123);
     let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
 
     // SAFETY: The type parameter (`i32`) matches the type that the leaf was
@@ -52,10 +55,14 @@ fn lookup_on_leaf() {
 
 #[test]
 fn lookup_on_full_node4() {
-    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 1]), 121);
-    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 2]), 122);
-    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3]), 123);
-    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4]), 124);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 1]), 121);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 2]), 122);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4]), 124);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -144,10 +151,14 @@ fn lookup_on_empty_nodes() {
 
 #[test]
 fn lookup_on_node16() {
-    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 1]), 121);
-    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 2]), 122);
-    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3]), 123);
-    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4]), 124);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 1]), 121);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 2]), 122);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4]), 124);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -206,10 +217,14 @@ fn lookup_on_node16() {
 
 #[test]
 fn lookup_on_node48() {
-    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 1]), 121);
-    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 2]), 122);
-    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3]), 123);
-    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4]), 124);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 1]), 121);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 2]), 122);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4]), 124);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -268,10 +283,14 @@ fn lookup_on_node48() {
 
 #[test]
 fn lookup_on_node256() {
-    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 1]), 121);
-    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 2]), 122);
-    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3]), 123);
-    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4]), 124);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 1]), 121);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 2]), 122);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4]), 124);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -359,10 +378,14 @@ fn lookup_on_n16_n4_layer_tree() {
     //                                                     │ Value │    124784    │
     //                                                     └───────┴──────────────┘
 
-    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
-    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
-    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
-    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -439,10 +462,14 @@ fn lookup_on_n16_n4_layer_tree() {
 
 #[test]
 fn lookup_on_n48_n4_layer_tree() {
-    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
-    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
-    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
-    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -519,10 +546,14 @@ fn lookup_on_n48_n4_layer_tree() {
 
 #[test]
 fn lookup_on_n256_n4_layer_tree() {
-    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
-    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
-    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
-    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -599,10 +630,14 @@ fn lookup_on_n256_n4_layer_tree() {
 
 #[test]
 fn lookup_on_n4_n4_layer_tree() {
-    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
-    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
-    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
-    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();

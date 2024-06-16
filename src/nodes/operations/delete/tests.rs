@@ -313,7 +313,8 @@ fn delete_maximum_entire_small_tree() {
         .copied()
         .map(|(key, value)| (Box::<[u8]>::from(key), value));
 
-    let mut root: OpaqueNodePtr<Box<[u8]>, char, 16, ReconstructableHeader<16>> = setup_tree_from_entries(entries_it);
+    let mut root: OpaqueNodePtr<Box<[u8]>, char, 16, ReconstructableHeader<16>> =
+        setup_tree_from_entries(entries_it);
 
     assert_eq!(root.node_type(), NodeType::Node4);
 

@@ -326,7 +326,7 @@ pub(crate) unsafe fn insert_unchecked<'a, K, V, const NUM_PREFIX_BYTES: usize, H
 ) -> Result<InsertResult<'a, K, V, NUM_PREFIX_BYTES, H>, InsertPrefixError>
 where
     K: AsBytes + 'a,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     use crate::search_for_insert_point;
 
@@ -335,7 +335,11 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn setup_tree_from_entries<V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+pub(crate) fn setup_tree_from_entries<
+    V,
+    const NUM_PREFIX_BYTES: usize,
+    H: NodeHeader<NUM_PREFIX_BYTES>,
+>(
     mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
 ) -> OpaqueNodePtr<Box<[u8]>, V, NUM_PREFIX_BYTES, H> {
     use crate::{LeafNode, NodePtr};

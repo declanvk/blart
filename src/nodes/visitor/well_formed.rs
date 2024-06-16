@@ -1,5 +1,7 @@
 use crate::{
-    header::NodeHeader, nodes::visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap
+    header::NodeHeader,
+    nodes::visitor::{Visitable, Visitor},
+    AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
 };
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -29,7 +31,12 @@ impl<const LEN: usize> PartialEq<[u8; LEN]> for KeyPrefix {
 
 /// An issue with the well-formed-ness of the tree. See the documentation on
 /// [`WellFormedChecker`] for more context.
-pub enum MalformedTreeError<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+pub enum MalformedTreeError<
+    K: AsBytes,
+    V,
+    const NUM_PREFIX_BYTES: usize,
+    H: NodeHeader<NUM_PREFIX_BYTES>,
+> {
     /// A loop was observed between nodes
     LoopFound {
         /// The node that was observed more than once while traversing the tree
@@ -63,10 +70,11 @@ pub enum MalformedTreeError<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: Nod
     EmptyTreeWithLen,
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> fmt::Debug for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize, H> fmt::Debug
+    for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -103,10 +111,11 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> fmt::Display for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize, H> fmt::Display
+    for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -156,7 +165,8 @@ where
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Clone for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Clone
+    for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
 where
     K: Clone,
 {
@@ -192,7 +202,8 @@ where
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> PartialEq for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> PartialEq
+    for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
 where
     K: Eq,
 {
@@ -245,9 +256,15 @@ where
     }
 }
 
-impl<K: Eq + AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Eq for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H> {}
+impl<K: Eq + AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Eq
+    for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
+{
+}
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Error for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H> {}
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Error
+    for MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>
+{
+}
 
 /// A visitor of the radix tree which checks that the tree is well-formed.
 ///
@@ -266,7 +283,12 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 /// "well-formed" (by the definition given above) if the checker returns
 /// `Ok(())`.
 #[derive(Debug)]
-pub struct WellFormedChecker<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+pub struct WellFormedChecker<
+    K: AsBytes,
+    V,
+    const NUM_PREFIX_BYTES: usize,
+    H: NodeHeader<NUM_PREFIX_BYTES>,
+> {
     current_key_prefix: Vec<u8>,
     seen_nodes: HashMap<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, KeyPrefix>,
 }
@@ -274,7 +296,7 @@ pub struct WellFormedChecker<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: No
 impl<K, V, const NUM_PREFIX_BYTES: usize, H> WellFormedChecker<K, V, NUM_PREFIX_BYTES, H>
 where
     K: AsBytes + Clone,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     /// Traverse the given tree and check that it is well-formed. Returns the
     /// number of nodes in the tree.
@@ -287,7 +309,9 @@ where
     /// # Errors
     ///
     /// Returns an error if the given tree is not well-formed.
-    pub unsafe fn check(tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>> {
+    pub unsafe fn check(
+        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>> {
         tree.root
             .map(|root| unsafe { Self::check_tree(root) })
             .unwrap_or_else(|| {
@@ -310,7 +334,9 @@ where
     /// # Errors
     ///
     /// Returns an error if the given tree is not well-formed.
-    unsafe fn check_tree(tree: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>> {
+    unsafe fn check_tree(
+        tree: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
+    ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>> {
         let mut visitor = WellFormedChecker {
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
@@ -322,7 +348,10 @@ where
         tree.visit_with(&mut visitor)
     }
 
-    fn visit_inner_node<N>(&mut self, inner_node: &N) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>>
+    fn visit_inner_node<N>(
+        &mut self,
+        inner_node: &N,
+    ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>>
     where
         N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
     {
@@ -389,10 +418,11 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> Visitor<K, V, NUM_PREFIX_BYTES, H> for WellFormedChecker<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize, H> Visitor<K, V, NUM_PREFIX_BYTES, H>
+    for WellFormedChecker<K, V, NUM_PREFIX_BYTES, H>
 where
     K: Clone + AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>
+    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     type Output = Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>>;
 
@@ -418,7 +448,10 @@ where
         self.visit_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node256(
+        &mut self,
+        t: &crate::InnerNode256<K, V, NUM_PREFIX_BYTES, H>,
+    ) -> Self::Output {
         self.visit_inner_node(t)
     }
 
@@ -441,7 +474,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        deallocate_tree, header::ReconstructableHeader, tests_common::{generate_key_fixed_length, setup_tree_from_entries}, InnerNode16, InnerNode4, LeafNode, NodePtr, RawTreeMap, TreeMap
+        deallocate_tree,
+        header::ReconstructableHeader,
+        tests_common::{generate_key_fixed_length, setup_tree_from_entries},
+        InnerNode16, InnerNode4, LeafNode, NodePtr, TreeMap,
     };
 
     #[test]
@@ -454,7 +490,8 @@ mod tests {
             .enumerate()
             .map(|(idx, key)| (key, idx));
 
-        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> = setup_tree_from_entries(keys);
+        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> =
+            setup_tree_from_entries(keys);
         // 4  * 3 * 2
         assert_eq!(num_leaves, 24);
 
@@ -482,9 +519,12 @@ mod tests {
         // have to allocate in this one because miri didn't like us using `&mut _` to
         // make loops
 
-        let l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
 
         let l1_ptr = NodePtr::allocate_node_ptr(l1);
         let l2_ptr = NodePtr::allocate_node_ptr(l2);
@@ -563,10 +603,14 @@ mod tests {
 
     #[test]
     fn check_tree_with_wrong_child_count() {
-        let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
-        let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 4]), 124784);
+        let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 4, 7, 8, 4]), 124784);
 
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -612,9 +656,12 @@ mod tests {
 
     #[test]
     fn check_tree_with_mismatched_key_prefix() {
-        let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+            LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
         let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
             LeafNode::new(Box::new([255, 255, 255, 255, 255, 255]), 124784);
 
