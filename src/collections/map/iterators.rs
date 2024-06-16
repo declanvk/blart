@@ -1,6 +1,4 @@
-use crate::{
-    NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, RawTreeMap,
-};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodeHeader, NodePtr, OpaqueNodePtr, RawTreeMap};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_iter {
@@ -291,8 +289,8 @@ impl<'a, K, V, H> DoubleEndedIterator for RangeMut<'a, K, V, H> {
 
 /// An owning iterator over the keys of a `TreeMap`.
 ///
-/// This `struct` is created by the [`crate::TreeMap::into_keys`] method on `TreeMap`.
-/// See its documentation for more.
+/// This `struct` is created by the [`crate::TreeMap::into_keys`] method on
+/// `TreeMap`. See its documentation for more.
 pub struct IntoKeys<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
     IntoIter<K, V, NUM_PREFIX_BYTES, H>,
 );
@@ -420,7 +418,7 @@ mod tests {
             vec![6, 193, 187].into_boxed_slice(),   // 8
         ];
 
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<_, _> = TreeMap::new();
         for (v, k) in keys.into_iter().enumerate() {
             tree.try_insert(k, v).unwrap();
         }
@@ -472,7 +470,7 @@ mod tests {
 
         let keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
 
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<_, _> = TreeMap::new();
         for (v, k) in keys.enumerate() {
             tree.try_insert(k, v).unwrap();
         }

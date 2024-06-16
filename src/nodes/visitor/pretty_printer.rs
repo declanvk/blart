@@ -1,7 +1,6 @@
 use crate::{
-    NodeHeader,
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
+    AsBytes, InnerNode, NodeHeader, NodeType, OpaqueNodePtr, RawTreeMap,
 };
 use std::{
     fmt::Debug,
@@ -212,13 +211,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{deallocate_tree, ReconstructableHeader};
+    use crate::{deallocate_tree, VariableKeyHeader};
 
     use super::*;
 
     #[test]
     fn simple_tree_output_to_dot() {
-        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> =
+        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, VariableKeyHeader<16>> =
             crate::tests_common::setup_tree_from_entries(
                 crate::tests_common::generate_key_fixed_length([3, 3])
                     .enumerate()

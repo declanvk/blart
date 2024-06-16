@@ -1,7 +1,6 @@
 use crate::{
-    NodeHeader,
     visitor::{Visitable, Visitor},
-    AsBytes, RawTreeMap,
+    AsBytes, NodeHeader, RawTreeMap,
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -147,10 +146,10 @@ where
     // fn visit_node4(&mut self, t: &crate::InnerNode4<K, V, H>) -> Self::Output {
     //     let mut output = t.super_visit_with(self);
     //     output.node4_count += 1;
-    //     output.empty_capacity += NodeType::Node4.upper_capacity() - t.header.num_children();
-    //     output.total_inner_node_bytes += mem::size_of_val(t)
-    //         + if t.header.prefix.is_heap() {
-    //             t.header.prefix.len()
+    //     output.empty_capacity += NodeType::Node4.upper_capacity() -
+    // t.header.num_children();     output.total_inner_node_bytes +=
+    // mem::size_of_val(t)
+    //         + if t.header.prefix.is_heap() { t.header.prefix.len()
     //         } else {
     //             0
     //         };
@@ -160,10 +159,10 @@ where
     // fn visit_node16(&mut self, t: &crate::InnerNode16<K, V, H>) -> Self::Output {
     //     let mut output = t.super_visit_with(self);
     //     output.node16_count += 1;
-    //     output.empty_capacity += NodeType::Node16.upper_capacity() - t.header.num_children();
-    //     output.total_inner_node_bytes += mem::size_of_val(t)
-    //         + if t.header.prefix.is_heap() {
-    //             t.header.prefix.len()
+    //     output.empty_capacity += NodeType::Node16.upper_capacity() -
+    // t.header.num_children();     output.total_inner_node_bytes +=
+    // mem::size_of_val(t)
+    //         + if t.header.prefix.is_heap() { t.header.prefix.len()
     //         } else {
     //             0
     //         };
@@ -173,23 +172,23 @@ where
     // fn visit_node48(&mut self, t: &crate::InnerNode48<K, V, H>) -> Self::Output {
     //     let mut output = t.super_visit_with(self);
     //     output.node48_count += 1;
-    //     output.empty_capacity += NodeType::Node48.upper_capacity() - t.header.num_children();
-    //     output.total_inner_node_bytes += mem::size_of_val(t)
-    //         + if t.header.prefix.is_heap() {
-    //             t.header.prefix.len()
+    //     output.empty_capacity += NodeType::Node48.upper_capacity() -
+    // t.header.num_children();     output.total_inner_node_bytes +=
+    // mem::size_of_val(t)
+    //         + if t.header.prefix.is_heap() { t.header.prefix.len()
     //         } else {
     //             0
     //         };
     //     output
     // }
 
-    // fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, H>) -> Self::Output {
-    //     let mut output = t.super_visit_with(self);
+    // fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, H>) -> Self::Output
+    // {     let mut output = t.super_visit_with(self);
     //     output.node256_count += 1;
-    //     output.empty_capacity += NodeType::Node256.upper_capacity() - t.header.num_children();
-    //     output.total_inner_node_bytes += mem::size_of_val(t)
-    //         + if t.header.prefix.is_heap() {
-    //             t.header.prefix.len()
+    //     output.empty_capacity += NodeType::Node256.upper_capacity() -
+    // t.header.num_children();     output.total_inner_node_bytes +=
+    // mem::size_of_val(t)
+    //         + if t.header.prefix.is_heap() { t.header.prefix.len()
     //         } else {
     //             0
     //         };

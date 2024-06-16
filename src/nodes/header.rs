@@ -3,6 +3,7 @@
 use std::{
     fmt::Debug,
     intrinsics::{assume, likely},
+    marker::PhantomData,
 };
 
 use crate::{minimum_unchecked, AsBytes, InnerNode, LeafNode, NodePtr};
@@ -134,16 +135,6 @@ impl<const NUM_PREFIX_BYTES: usize> RawHeader<NUM_PREFIX_BYTES> {
 macro_rules! define_common_node_header_methods {
     () => {
         #[inline(always)]
-        fn new(prefix: &[u8], prefix_len: usize) -> Self {
-            Self(RawHeader::new(prefix, prefix_len))
-        }
-
-        #[inline(always)]
-        fn empty() -> Self {
-            Self(RawHeader::empty())
-        }
-
-        #[inline(always)]
         fn read_prefix(&self) -> &[u8] {
             &self.0.read_prefix()
         }
@@ -264,12 +255,22 @@ pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq +
 /// Since the key can be reconstructed from a leaf
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct ReconstructableHeader<const NUM_PREFIX_BYTES: usize>(RawHeader<NUM_PREFIX_BYTES>);
+pub struct VariableKeyHeader<const NUM_PREFIX_BYTES: usize>(RawHeader<NUM_PREFIX_BYTES>);
 
 impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
-    for ReconstructableHeader<NUM_PREFIX_BYTES>
+    for VariableKeyHeader<NUM_PREFIX_BYTES>
 {
     define_common_node_header_methods!();
+
+    #[inline(always)]
+    fn new(prefix: &[u8], prefix_len: usize) -> Self {
+        Self(RawHeader::new(prefix, prefix_len))
+    }
+
+    #[inline(always)]
+    fn empty() -> Self {
+        Self(RawHeader::empty())
+    }
 
     #[inline(always)]
     fn ltrim_by_with_leaf<K: AsBytes, V, H: NodeHeader<NUM_PREFIX_BYTES>>(
@@ -340,5 +341,57 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
             let leaf = &leaf[current_depth..(current_depth + len)];
             (leaf, Some(leaf_ptr))
         }
+    }
+}
+
+/// This header should be used with **fixed** length keys
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct FixedKeyHeader<const NUM_PREFIX_BYTES: usize, K1: Copy + Eq + Debug + Sized>(
+    RawHeader<NUM_PREFIX_BYTES>,
+    PhantomData<K1>,
+);
+
+impl<const NUM_PREFIX_BYTES: usize, K1: Copy + Eq + Debug + Sized> NodeHeader<NUM_PREFIX_BYTES>
+    for FixedKeyHeader<NUM_PREFIX_BYTES, K1>
+{
+    define_common_node_header_methods!();
+
+    #[inline(always)]
+    fn new(prefix: &[u8], prefix_len: usize) -> Self {
+        Self(RawHeader::new(prefix, prefix_len), PhantomData)
+    }
+
+    #[inline(always)]
+    fn empty() -> Self {
+        Self(RawHeader::empty(), PhantomData)
+    }
+
+    #[inline(always)]
+    fn ltrim_by_with_leaf<K: AsBytes, V, H: NodeHeader<NUM_PREFIX_BYTES>>(
+        &mut self,
+        _len: usize,
+        _depth: usize,
+        _leaf_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
+    ) {
+        panic!("This method should never be called with a FixedKeyHeader");
+    }
+
+    #[inline(always)]
+    fn inner_read_full_prefix<'a, N: InnerNode<NUM_PREFIX_BYTES>>(
+        &'a self,
+        _node: &'a N,
+        _current_depth: usize,
+    ) -> (
+        &'a [u8],
+        Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<N::Key, N::Value, NUM_PREFIX_BYTES, N::Header>>>,
+    ) {
+        debug_assert!(
+            self.prefix_len() <= NUM_PREFIX_BYTES,
+            "Current prefix length should always be {} <= {} in a FixedKeyHeader",
+            self.prefix_len(),
+            NUM_PREFIX_BYTES
+        );
+        (self.read_prefix(), None)
     }
 }

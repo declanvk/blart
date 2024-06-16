@@ -9,6 +9,7 @@
 #![feature(core_intrinsics)]
 #![feature(is_sorted)]
 #![feature(strict_provenance)]
+#![feature(generic_const_exprs)]
 #![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
 #![deny(
     missing_docs,
@@ -51,8 +52,13 @@ pub use bytes::*;
 pub use collections::*;
 pub use nodes::{visitor, *};
 
-/// Standard ART type
-pub type TreeMap<K, V> = RawTreeMap<K, V, 16, nodes::ReconstructableHeader<16>>;
+/// Standard ART type. By default the prefix size is 16 bytes
+pub type TreeMap<K, V, const NUM_PREFIX_BYTES: usize = 16> =
+    RawTreeMap<K, V, NUM_PREFIX_BYTES, nodes::VariableKeyHeader<NUM_PREFIX_BYTES>>;
+
+/// ART type for keys with fixed length
+pub type FixedTreeMap<K, V, const NUM_PREFIX_BYTES: usize = { std::mem::size_of::<K>() }> =
+    RawTreeMap<K, V, NUM_PREFIX_BYTES, nodes::FixedKeyHeader<NUM_PREFIX_BYTES, K>>;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

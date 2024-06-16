@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use crate::{
-    NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodeHeader, NodePtr,
     OpaqueNodePtr,
 };
 

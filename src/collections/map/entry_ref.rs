@@ -1,8 +1,7 @@
 use std::{borrow::Borrow, mem::replace};
 
 use crate::{
-    NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr,
-    RawTreeMap,
+    AsBytes, DeletePoint, InsertPoint, LeafNode, NodeHeader, NodePtr, OpaqueNodePtr, RawTreeMap,
 };
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
@@ -319,7 +318,7 @@ mod tests {
 
     #[test]
     fn and_modify() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<_, _> = TreeMap::new();
         let a = CString::new("a").unwrap();
         let b = CString::new("b").unwrap();
         let c = CString::new("c").unwrap();
@@ -337,7 +336,7 @@ mod tests {
 
     #[test]
     fn key() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<_, _> = TreeMap::new();
         let a = CString::new("a").unwrap();
         let b = CString::new("b").unwrap();
         let c = CString::new("c").unwrap();
@@ -351,7 +350,7 @@ mod tests {
 
     #[test]
     fn or() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<_, _> = TreeMap::new();
         let a = CString::new("a").unwrap();
         let b = CString::new("b").unwrap();
         let c = CString::new("c").unwrap();
@@ -379,7 +378,7 @@ mod tests {
 
     #[test]
     fn insert_entry() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<_, _> = TreeMap::new();
         let a = CString::new("a").unwrap();
         let b = CString::new("b").unwrap();
         let c = CString::new("c").unwrap();
@@ -397,7 +396,7 @@ mod tests {
 
     #[test]
     fn remove_entry() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<_, _> = TreeMap::new();
         let a = CString::new("a").unwrap();
         let b = CString::new("b").unwrap();
         let c = CString::new("c").unwrap();

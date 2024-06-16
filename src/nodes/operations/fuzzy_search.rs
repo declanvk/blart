@@ -1,8 +1,8 @@
 use std::{intrinsics::assume, mem::MaybeUninit};
 
 use crate::{
-    NodeHeader, AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed,
-    LeafNode, OpaqueNodePtr,
+    AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, NodeHeader,
+    OpaqueNodePtr,
 };
 
 pub struct StackArena {
