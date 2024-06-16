@@ -21,7 +21,7 @@ use std::{
     slice::Iter,
 };
 
-use super::header::NodeHeader;
+use super::NodeHeader;
 
 // mod iterators;
 
@@ -576,7 +576,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> fmt::Pointer
 }
 
 pub(crate) mod private {
-    use crate::{nodes::header::NodeHeader, AsBytes};
+    use crate::{nodes::NodeHeader, AsBytes};
 
     /// This trait is used to seal other traits, such that they cannot be
     /// implemented outside of the crate.

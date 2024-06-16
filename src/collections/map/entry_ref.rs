@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, mem::replace};
 
 use crate::{
-    header::NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr,
+    NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr,
     RawTreeMap,
 };
 

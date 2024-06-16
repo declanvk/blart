@@ -1,5 +1,5 @@
 use crate::{
-    header::NodeHeader,
+    NodeHeader,
     visitor::{Visitable, Visitor},
     AsBytes, RawTreeMap,
 };

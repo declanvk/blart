@@ -1,7 +1,7 @@
 use std::{intrinsics::assume, mem::MaybeUninit};
 
 use crate::{
-    header::NodeHeader, AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed,
+    NodeHeader, AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed,
     LeafNode, OpaqueNodePtr,
 };
 

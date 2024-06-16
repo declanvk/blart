@@ -52,7 +52,7 @@ pub use collections::*;
 pub use nodes::{visitor, *};
 
 /// Standard ART type
-pub type TreeMap<K, V> = RawTreeMap<K, V, 16, nodes::header::ReconstructableHeader<16>>;
+pub type TreeMap<K, V> = RawTreeMap<K, V, 16, nodes::ReconstructableHeader<16>>;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

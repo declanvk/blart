@@ -1,5 +1,5 @@
 use crate::{
-    header::NodeHeader,
+    NodeHeader,
     visitor::{Visitable, Visitor},
     AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
 };
@@ -212,7 +212,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{deallocate_tree, header::ReconstructableHeader};
+    use crate::{deallocate_tree, ReconstructableHeader};
 
     use super::*;
 

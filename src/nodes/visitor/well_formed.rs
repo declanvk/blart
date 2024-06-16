@@ -1,5 +1,5 @@
 use crate::{
-    header::NodeHeader,
+    NodeHeader,
     nodes::visitor::{Visitable, Visitor},
     AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
 };
@@ -475,7 +475,7 @@ mod tests {
     use super::*;
     use crate::{
         deallocate_tree,
-        header::ReconstructableHeader,
+        ReconstructableHeader,
         tests_common::{generate_key_fixed_length, setup_tree_from_entries},
         InnerNode16, InnerNode4, LeafNode, NodePtr, TreeMap,
     };

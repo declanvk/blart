@@ -3,7 +3,7 @@
 mod operations;
 mod representation;
 
-pub mod header;
+mod header;
 
 pub mod visitor;
 
@@ -11,3 +11,5 @@ pub(crate) use operations::*;
 
 #[doc(hidden)]
 pub use representation::*;
+
+pub use header::*;

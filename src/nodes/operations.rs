@@ -1,6 +1,6 @@
 //! Trie node lookup and manipulation
 
-use crate::{header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
+use crate::{NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
 
 mod insert;
 pub(crate) use insert::*;

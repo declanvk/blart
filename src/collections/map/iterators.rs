@@ -1,5 +1,5 @@
 use crate::{
-    header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, RawTreeMap,
+    NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, RawTreeMap,
 };
 use std::{collections::VecDeque, iter::FusedIterator};
 
