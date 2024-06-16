@@ -9,6 +9,7 @@
 #![feature(core_intrinsics)]
 #![feature(is_sorted)]
 #![feature(strict_provenance)]
+
 #![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
 #![deny(
     missing_docs,
