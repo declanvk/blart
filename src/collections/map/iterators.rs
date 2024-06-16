@@ -404,8 +404,6 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use crate::{tests_common::generate_key_fixed_length, TreeMap};
 
     #[test]
