@@ -1,25 +1,27 @@
 use std::mem::replace;
 
-use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
+use crate::{header::NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
-pub struct OccupiedEntry<'a, K, V>
+pub struct OccupiedEntry<'a, K, V, H>
 where
     K: AsBytes,
+    H: NodeHeader
 {
-    pub(crate) leaf_node_ptr: NodePtr<LeafNode<K, V>>,
+    pub(crate) leaf_node_ptr: NodePtr<LeafNode<K, V, H>>,
 
     /// Used for the removal
-    pub(crate) map: &'a mut TreeMap<K, V>,
+    pub(crate) map: &'a mut TreeMap<K, V, H>,
     /// Used for the removal
-    pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
+    pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, H>, u8)>,
     /// Used for the removal
-    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
+    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, H>, u8)>,
 }
 
-impl<'a, K, V> OccupiedEntry<'a, K, V>
+impl<'a, K, V, H> OccupiedEntry<'a, K, V, H>
 where
     K: AsBytes,
+    H: NodeHeader
 {
     /// Gets a reference to the value in the entry.
     pub fn get(&self) -> &V {
@@ -75,18 +77,20 @@ where
 }
 
 /// A view into a vacant entry in a HashMap. It is part of the [`Entry`] enum.
-pub struct VacantEntry<'a, K, V>
+pub struct VacantEntry<'a, K, V, H>
 where
     K: AsBytes,
+    H: NodeHeader
 {
-    pub(crate) map: &'a mut TreeMap<K, V>,
+    pub(crate) map: &'a mut TreeMap<K, V, H>,
     pub(crate) key: K,
-    pub(crate) insert_point: Option<InsertPoint<K, V>>,
+    pub(crate) insert_point: Option<InsertPoint<K, V, H>>,
 }
 
-impl<'a, K, V> VacantEntry<'a, K, V>
+impl<'a, K, V, H> VacantEntry<'a, K, V, H>
 where
     K: AsBytes,
+    H: NodeHeader
 {
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a mutable reference to it.
@@ -96,7 +100,7 @@ where
 
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a [`OccupiedEntry`].
-    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V> {
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, H> {
         let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
             match self.insert_point {
                 Some(insert_point) => {
@@ -134,21 +138,23 @@ where
 ///A view into a single entry in a map, which may either be vacant or occupied.
 //
 //This enum is constructed from the entry method on HashMap.
-pub enum Entry<'a, K, V>
+pub enum Entry<'a, K, V, H>
 where
     K: AsBytes,
+    H: NodeHeader
 {
     /// A view into an occupied entry in a HashMap. It is part of the [`Entry`]
     /// enum.
-    Occupied(OccupiedEntry<'a, K, V>),
+    Occupied(OccupiedEntry<'a, K, V, H>),
     /// A view into a vacant entry in a HashMap. It is part of the [`Entry`]
     /// enum.
-    Vacant(VacantEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V, H>),
 }
 
-impl<'a, K, V> Entry<'a, K, V>
+impl<'a, K, V, H> Entry<'a, K, V, H>
 where
     K: AsBytes,
+    H: NodeHeader
 {
     /// Provides in-place mutable access to an occupied entry before any
     /// potential inserts into the map.
@@ -166,7 +172,7 @@ where
     }
 
     /// Sets the value of the entry, and returns an [`OccupiedEntry`].
-    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V> {
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, H> {
         match self {
             Entry::Occupied(mut entry) => {
                 entry.insert(value);
@@ -239,7 +245,7 @@ where
     }
 
     /// Similar to [`Entry::or_default`] but yields an [`OccupiedEntry`]
-    pub fn or_default_entry(self) -> OccupiedEntry<'a, K, V>
+    pub fn or_default_entry(self) -> OccupiedEntry<'a, K, V, H>
     where
         V: Default,
     {
@@ -250,7 +256,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_entry(self, value: V) -> OccupiedEntry<'a, K, V> {
+    pub fn or_insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, H> {
         match self {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(entry) => entry.insert_entry(value),
@@ -258,7 +264,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert_with`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V>
+    pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, H>
     where
         F: FnOnce() -> V,
     {
@@ -269,7 +275,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert_with_key`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V>
+    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, H>
     where
         F: FnOnce(&K) -> V,
     {

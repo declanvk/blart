@@ -1,6 +1,5 @@
 use crate::{
-    visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
+    header::NodeHeader, visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap
 };
 use std::{
     fmt::Debug,
@@ -30,14 +29,15 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn print<K, V>(
+    pub unsafe fn print<K, V, H>(
         output: O,
-        tree: &TreeMap<K, V>,
+        tree: &TreeMap<K, V, H>,
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where
         K: Debug + AsBytes,
         V: Debug,
+        H: NodeHeader
     {
         tree.root
             .map(|root| unsafe { Self::print_tree(output, &root, settings) })
@@ -48,14 +48,15 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    unsafe fn print_tree<K, V>(
+    unsafe fn print_tree<K, V, H>(
         output: O,
-        tree: &OpaqueNodePtr<K, V>,
+        tree: &OpaqueNodePtr<K, V, H>,
         settings: DotPrinterSettings,
     ) -> io::Result<()>
     where
         K: Debug + AsBytes,
         V: Debug,
+        H: NodeHeader
     {
         let mut visitor = DotPrinter {
             output,
@@ -140,11 +141,12 @@ impl<O: Write> DotPrinter<O> {
     }
 }
 
-impl<K, T, O> Visitor<K, T> for DotPrinter<O>
+impl<K, T, O, H> Visitor<K, T, H> for DotPrinter<O>
 where
     K: Debug + AsBytes,
     T: Debug,
     O: Write,
+    H: NodeHeader
 {
     type Output = io::Result<usize>;
 
@@ -156,23 +158,23 @@ where
         unimplemented!("this visitor should never combine outputs")
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<K, T>) -> Self::Output {
+    fn visit_node4(&mut self, t: &crate::InnerNode4<K, T, H>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<K, T>) -> Self::Output {
+    fn visit_node16(&mut self, t: &crate::InnerNode16<K, T, H>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<K, T>) -> Self::Output {
+    fn visit_node48(&mut self, t: &crate::InnerNode48<K, T, H>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T, H>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T, H>) -> Self::Output {
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;

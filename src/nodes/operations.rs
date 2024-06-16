@@ -1,6 +1,6 @@
 //! Trie node lookup and manipulation
 
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
+use crate::{header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
 
 mod insert;
 pub(crate) use insert::*;
@@ -25,12 +25,12 @@ pub(crate) use delete::*;
 ///
 ///  - This function must only be called once for this root node and all
 ///    descendants, otherwise a double-free could result.
-pub unsafe fn deallocate_tree<K: AsBytes, V>(root: OpaqueNodePtr<K, V>) {
-    fn deallocate_inner_node<K: AsBytes, V, N>(
-        stack: &mut Vec<OpaqueNodePtr<K, V>>,
+pub unsafe fn deallocate_tree<K: AsBytes, V, H: NodeHeader>(root: OpaqueNodePtr<K, V, H>) {
+    fn deallocate_inner_node<K: AsBytes, V, N, H: NodeHeader>(
+        stack: &mut Vec<OpaqueNodePtr<K, V, H>>,
         inner_ptr: NodePtr<N>,
     ) where
-        N: InnerNode<Key = K, Value = V>,
+        N: InnerNode<Key = K, Value = V, Header = H>,
     {
         {
             // SAFETY: The scope of this reference is bounded and we enforce that no

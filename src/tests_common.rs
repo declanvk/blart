@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, iter};
 
-use crate::{AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr};
+use crate::{header::NodeHeader, AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a
 /// maximum value.
@@ -319,13 +319,14 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
 }
 
 #[allow(dead_code)]
-pub(crate) unsafe fn insert_unchecked<'a, K, V>(
-    root: OpaqueNodePtr<K, V>,
+pub(crate) unsafe fn insert_unchecked<'a, K, V, H>(
+    root: OpaqueNodePtr<K, V, H>,
     key: K,
     value: V,
-) -> Result<InsertResult<'a, K, V>, InsertPrefixError>
+) -> Result<InsertResult<'a, K, V, H>, InsertPrefixError>
 where
     K: AsBytes + 'a,
+    H: NodeHeader
 {
     use crate::search_for_insert_point;
 
@@ -334,9 +335,9 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn setup_tree_from_entries<V>(
+pub(crate) fn setup_tree_from_entries<V, H: NodeHeader>(
     mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
-) -> OpaqueNodePtr<Box<[u8]>, V> {
+) -> OpaqueNodePtr<Box<[u8]>, V, H> {
     use crate::{LeafNode, NodePtr};
 
     let (first_key, first_value) = entries_it.next().unwrap();

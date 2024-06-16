@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr,
+    header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr
 };
 
 /// Search in the given tree for the value stored with the given key.
@@ -11,13 +11,14 @@ use crate::{
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-pub unsafe fn search_unchecked<Q, K, V>(
-    root: OpaqueNodePtr<K, V>,
+pub unsafe fn search_unchecked<Q, K, V, H>(
+    root: OpaqueNodePtr<K, V, H>,
     key: &Q,
-) -> Option<NodePtr<LeafNode<K, V>>>
+) -> Option<NodePtr<LeafNode<K, V, H>>>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
+    H: NodeHeader
 {
     let mut current_node = root;
     let mut current_depth = 0;
@@ -69,15 +70,16 @@ where
 ///
 ///  - No other access or mutation to the `inner_ptr` Node can happen while this
 ///    function runs.
-pub(crate) unsafe fn check_prefix_lookup_child<Q, K, V, N>(
+pub(crate) unsafe fn check_prefix_lookup_child<Q, K, V, N, H>(
     inner_ptr: NodePtr<N>,
     key: &Q,
     current_depth: &mut usize,
-) -> Option<OpaqueNodePtr<K, V>>
+) -> Option<OpaqueNodePtr<K, V, H>>
 where
-    N: InnerNode<Key = K, Value = V>,
+    N: InnerNode<Key = K, Value = V, Header = H>,
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
+    H: NodeHeader
 {
     // SAFETY: The lifetime produced from this is bounded to this scope and does not
     // escape. Further, no other code mutates the node referenced, which is further

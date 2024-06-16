@@ -3,7 +3,7 @@
 mod operations;
 mod representation;
 
-mod header;
+pub mod header;
 
 pub mod visitor;
 

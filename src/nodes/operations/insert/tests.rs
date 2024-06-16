@@ -270,7 +270,7 @@ fn insert_existing_key_overwrite() {
 
     let current_root = setup_tree_from_entries(entries_it);
 
-    unsafe fn get_value<K: AsBytes, V: Copy>(n: NodePtr<LeafNode<K, V>>) -> V {
+    unsafe fn get_value<K: AsBytes, V: Copy>(n: NodePtr<LeafNode<K, V, H>>) -> V {
         unsafe { *n.as_ref().value_ref() }
     }
 

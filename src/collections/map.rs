@@ -2,11 +2,7 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
-    minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes,
-    ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch, Header, InnerNode, InnerNode16,
-    InnerNode256, InnerNode4, InnerNode48, InsertPoint, InsertPrefixError, InsertResult,
-    InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena,
+    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, header::NodeHeader, maximum_unchecked, minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena
 };
 use std::{
     borrow::Borrow,
@@ -25,14 +21,14 @@ pub use entry_ref::*;
 pub use iterators::*;
 
 /// An ordered map based on an adaptive radix tree.
-pub struct TreeMap<K: AsBytes, V> {
+pub struct TreeMap<K: AsBytes, V, H: NodeHeader> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
-    pub(crate) root: Option<OpaqueNodePtr<K, V>>,
+    pub(crate) root: Option<OpaqueNodePtr<K, V, H>>,
 }
 
-impl<K: AsBytes, V> TreeMap<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> TreeMap<K, V, H> {
     /// Create a new, empty [`TreeMap`].
     ///
     /// This function will not pre-allocate anything.
@@ -471,7 +467,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
-    fn init_tree(&mut self, key: K, value: V) -> NodePtr<LeafNode<K, V>> {
+    fn init_tree(&mut self, key: K, value: V) -> NodePtr<LeafNode<K, V, H>> {
         let leaf = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
         self.root = Some(leaf.to_opaque());
         self.num_entries = 1;
@@ -480,10 +476,10 @@ impl<K: AsBytes, V> TreeMap<K, V> {
 
     fn apply_insert_point(
         &mut self,
-        insert_point: InsertPoint<K, V>,
+        insert_point: InsertPoint<K, V, H>,
         key: K,
         value: V,
-    ) -> InsertResult<K, V>
+    ) -> InsertResult<K, V, H>
     where
         K: AsBytes,
     {
@@ -500,7 +496,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         insert_result
     }
 
-    fn apply_delete_point(&mut self, delete_point: DeletePoint<K, V>) -> DeleteResult<K, V>
+    fn apply_delete_point(&mut self, delete_point: DeletePoint<K, V, H>) -> DeleteResult<K, V, H>
     where
         K: AsBytes,
     {
@@ -590,6 +586,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         }
     }
 
+/*
     #[inline(always)]
     #[allow(dead_code)]
     fn write_partitions<N, F>(
@@ -597,10 +594,10 @@ impl<K: AsBytes, V> TreeMap<K, V> {
         partitions: HashMap<u8, Vec<(K, V)>>,
         depth: usize,
         f: F,
-    ) -> OpaqueNodePtr<K, V>
+    ) -> OpaqueNodePtr<K, V, H>
     where
-        N: InnerNode<Key = K, Value = V>,
-        F: Fn(&mut N, u8, OpaqueNodePtr<K, V>),
+        N: InnerNode<Key = K, Value = V, Header = H>,
+        F: Fn(&mut N, u8, OpaqueNodePtr<K, V, H>),
     {
         let mut node = N::from_header(header);
         for (idx, partition) in partitions {
@@ -616,7 +613,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     }
 
     #[allow(dead_code)]
-    fn inner_bulk_insert(entries: Vec<(K, V)>, mut depth: usize) -> OpaqueNodePtr<K, V>
+    fn inner_bulk_insert(entries: Vec<(K, V)>, mut depth: usize) -> OpaqueNodePtr<K, V, H>
     where
         K: AsBytes,
     {
@@ -655,28 +652,28 @@ impl<K: AsBytes, V> TreeMap<K, V> {
 
         let num_keys = partitions.len();
         if num_keys <= 4 {
-            Self::write_partitions::<InnerNode4<K, V>, _>(
+            Self::write_partitions::<InnerNode4<K, V, H>, _>(
                 header,
                 partitions,
                 depth,
                 |node, idx, child| unsafe { node.write_child_unchecked(idx, child) },
             )
         } else if num_keys <= 16 {
-            Self::write_partitions::<InnerNode16<K, V>, _>(
+            Self::write_partitions::<InnerNode16<K, V, H>, _>(
                 header,
                 partitions,
                 depth,
                 |node, idx, child| unsafe { node.write_child_unchecked(idx, child) },
             )
         } else if num_keys <= 48 {
-            Self::write_partitions::<InnerNode48<K, V>, _>(
+            Self::write_partitions::<InnerNode48<K, V, H>, _>(
                 header,
                 partitions,
                 depth,
                 |node, idx, child| node.write_child(idx, child),
             )
         } else {
-            Self::write_partitions::<InnerNode256<K, V>, _>(
+            Self::write_partitions::<InnerNode256<K, V, H>, _>(
                 header,
                 partitions,
                 depth,
@@ -735,6 +732,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
             root: Some(root),
         }
     }
+*/
 
     /// Removes a key from the map, returning the stored key and value if the
     /// key was previously in the map.
@@ -835,7 +833,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     // assert_eq!(a[&5], "f");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V>)
+    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V, H>)
     where
         K: NoPrefixesBytes,
     {
@@ -868,7 +866,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     // assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
     // ```
     #[allow(dead_code)]
-    pub(crate) fn range<Q, R>(&self, _range: R) -> iterators::Range<K, V>
+    pub(crate) fn range<Q, R>(&self, _range: R) -> iterators::Range<K, V, H>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -915,7 +913,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     // assert_eq!(map["Cheryl"], 200);
     // ```
     #[allow(dead_code)]
-    pub(crate) fn range_mut<Q, R>(&mut self, _range: R) -> iterators::RangeMut<K, V>
+    pub(crate) fn range_mut<Q, R>(&mut self, _range: R) -> iterators::RangeMut<K, V, H>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -952,7 +950,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     // assert_eq!(b[[41].as_ref()], "e");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V>
+    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, H>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -1032,7 +1030,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), 4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_keys(self) -> iterators::IntoKeys<K, V> {
+    pub fn into_keys(self) -> iterators::IntoKeys<K, V, H> {
         iterators::IntoKeys::new(self)
     }
 
@@ -1058,7 +1056,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), 'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_values(self) -> iterators::IntoValues<K, V> {
+    pub fn into_values(self) -> iterators::IntoValues<K, V, H> {
         iterators::IntoValues::new(self)
     }
 
@@ -1082,7 +1080,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), (&4, &'z'));
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn iter(&self) -> TreeIterator<'_, K, V> {
+    pub fn iter(&self) -> TreeIterator<'_, K, V, H> {
         TreeIterator::new(self)
     }
 
@@ -1107,7 +1105,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V> {
+    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V, H> {
         TreeIteratorMut::new(self)
     }
 
@@ -1131,7 +1129,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), &4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn keys(&self) -> Keys<'_, K, V> {
+    pub fn keys(&self) -> Keys<'_, K, V, H> {
         Keys::new(self)
     }
 
@@ -1155,7 +1153,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), &'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn values(&self) -> Values<'_, K, V> {
+    pub fn values(&self) -> Values<'_, K, V, H> {
         Values::new(self)
     }
 
@@ -1180,7 +1178,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V> {
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V, H> {
         ValuesMut::new(self)
     }
 
@@ -1216,10 +1214,10 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     }
 }
 
-impl<K: AsBytes, V> TreeMap<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> TreeMap<K, V, H> {
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V>, InsertPrefixError>
+    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, H>, InsertPrefixError>
     where
         K: AsBytes,
     {
@@ -1255,7 +1253,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     pub fn try_entry_ref<'a, 'b, Q>(
         &'a mut self,
         key: &'b Q,
-    ) -> Result<EntryRef<'a, 'b, K, V, Q>, InsertPrefixError>
+    ) -> Result<EntryRef<'a, 'b, K, V, Q, H>, InsertPrefixError>
     where
         K: AsBytes + Borrow<Q> + From<&'b Q>,
         Q: AsBytes + ?Sized,
@@ -1289,7 +1287,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
 
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V>
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, H>
     where
         K: NoPrefixesBytes,
     {
@@ -1298,7 +1296,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
 
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> EntryRef<'a, 'b, K, V, Q>
+    pub fn entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> EntryRef<'a, 'b, K, V, Q, H>
     where
         K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
         Q: NoPrefixesBytes + ?Sized,
@@ -1307,16 +1305,17 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     }
 }
 
-impl<K: AsBytes, V> Drop for TreeMap<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Drop for TreeMap<K, V, H> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<K, V> Clone for TreeMap<K, V>
+impl<K, V, H> Clone for TreeMap<K, V, H>
 where
     K: Clone + AsBytes,
     V: Clone,
+    H: NodeHeader
 {
     fn clone(&self) -> Self {
         if let Some(root) = self.root {
@@ -1330,26 +1329,28 @@ where
     }
 }
 
-impl<K, V> Debug for TreeMap<K, V>
+impl<K, V, H> Debug for TreeMap<K, V, H>
 where
     K: Debug + AsBytes,
     V: Debug,
+    H: NodeHeader
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<K: AsBytes, V> Default for TreeMap<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Default for TreeMap<K, V, H> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, K, V> Extend<(&'a K, &'a V)> for TreeMap<K, V>
+impl<'a, K, V, H> Extend<(&'a K, &'a V)> for TreeMap<K, V, H>
 where
     K: Copy + NoPrefixesBytes,
     V: Copy,
+    H: NodeHeader
 {
     fn extend<T: IntoIterator<Item = (&'a K, &'a V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1358,9 +1359,10 @@ where
     }
 }
 
-impl<K, V> Extend<(K, V)> for TreeMap<K, V>
+impl<K, V, H> Extend<(K, V)> for TreeMap<K, V, H>
 where
     K: NoPrefixesBytes,
+    H: NodeHeader
 {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1369,9 +1371,10 @@ where
     }
 }
 
-impl<K, V, const N: usize> From<[(K, V); N]> for TreeMap<K, V>
+impl<K, V, H, const N: usize> From<[(K, V); N]> for TreeMap<K, V, H>
 where
     K: NoPrefixesBytes,
+    H: NodeHeader
 {
     fn from(arr: [(K, V); N]) -> Self {
         let mut map = TreeMap::new();
@@ -1382,9 +1385,10 @@ where
     }
 }
 
-impl<K, V> FromIterator<(K, V)> for TreeMap<K, V>
+impl<K, V, H> FromIterator<(K, V)> for TreeMap<K, V, H>
 where
     K: NoPrefixesBytes,
+    H: NodeHeader
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let mut map = TreeMap::new();
@@ -1395,10 +1399,11 @@ where
     }
 }
 
-impl<K, V> Hash for TreeMap<K, V>
+impl<K, V, H1> Hash for TreeMap<K, V, H1>
 where
     K: Hash + AsBytes,
     V: Hash,
+    H1: NodeHeader
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         Hasher::write_length_prefix(state, self.num_entries);
@@ -1408,10 +1413,11 @@ where
     }
 }
 
-impl<Q, K, V> Index<&Q> for TreeMap<K, V>
+impl<Q, K, V, H> Index<&Q> for TreeMap<K, V, H>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
+    H: NodeHeader
 {
     type Output = V;
 
@@ -1420,8 +1426,8 @@ where
     }
 }
 
-impl<'a, K: AsBytes, V> IntoIterator for &'a TreeMap<K, V> {
-    type IntoIter = TreeIterator<'a, K, V>;
+impl<'a, K: AsBytes, V, H: NodeHeader> IntoIterator for &'a TreeMap<K, V, H> {
+    type IntoIter = TreeIterator<'a, K, V, H>;
     type Item = (&'a K, &'a V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1429,8 +1435,8 @@ impl<'a, K: AsBytes, V> IntoIterator for &'a TreeMap<K, V> {
     }
 }
 
-impl<'a, K: AsBytes, V> IntoIterator for &'a mut TreeMap<K, V> {
-    type IntoIter = TreeIteratorMut<'a, K, V>;
+impl<'a, K: AsBytes, V, H: NodeHeader> IntoIterator for &'a mut TreeMap<K, V, H> {
+    type IntoIter = TreeIteratorMut<'a, K, V, H>;
     type Item = (&'a K, &'a mut V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1438,8 +1444,8 @@ impl<'a, K: AsBytes, V> IntoIterator for &'a mut TreeMap<K, V> {
     }
 }
 
-impl<K: AsBytes, V> IntoIterator for TreeMap<K, V> {
-    type IntoIter = iterators::IntoIter<K, V>;
+impl<K: AsBytes, V, H: NodeHeader> IntoIterator for TreeMap<K, V, H> {
+    type IntoIter = iterators::IntoIter<K, V, H>;
     type Item = (K, V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1447,54 +1453,60 @@ impl<K: AsBytes, V> IntoIterator for TreeMap<K, V> {
     }
 }
 
-impl<K, V> Ord for TreeMap<K, V>
+impl<K, V, H> Ord for TreeMap<K, V, H>
 where
     K: Ord + AsBytes,
     V: Ord,
+    H: NodeHeader
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.iter().cmp(other.iter())
     }
 }
 
-impl<K, V> PartialOrd for TreeMap<K, V>
+impl<K, V, H> PartialOrd for TreeMap<K, V, H>
 where
     K: PartialOrd + AsBytes,
     V: PartialOrd,
+    H: NodeHeader
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.iter().partial_cmp(other.iter())
     }
 }
 
-impl<K, V> Eq for TreeMap<K, V>
+impl<K, V, H> Eq for TreeMap<K, V, H>
 where
     K: Eq + AsBytes,
     V: Eq,
+    H: NodeHeader
 {
 }
 
-impl<K, V> PartialEq for TreeMap<K, V>
+impl<K, V, H> PartialEq for TreeMap<K, V, H>
 where
     K: PartialEq + AsBytes,
     V: PartialEq,
+    H: NodeHeader
 {
     fn eq(&self, other: &Self) -> bool {
         self.iter().eq(other.iter()) && self.num_entries == other.num_entries
     }
 }
 
-unsafe impl<K, V> Send for TreeMap<K, V>
+unsafe impl<K, V, H> Send for TreeMap<K, V, H>
 where
     K: Send + AsBytes,
     V: Send,
+    H: NodeHeader
 {
 }
 
-unsafe impl<K, V> Sync for TreeMap<K, V>
+unsafe impl<K, V, H> Sync for TreeMap<K, V, H>
 where
     K: Sync + AsBytes,
     V: Sync,
+    H: NodeHeader
 {
 }
 

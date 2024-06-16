@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use crate::{
-    nodes::operations::lookup, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr,
+    nodes::{header::NodeHeader, operations::lookup}, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr,
     OpaqueNodePtr,
 };
 
@@ -21,7 +21,7 @@ use crate::{
 unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
     inner_node_ptr: NodePtr<N>,
     key_fragment: u8,
-) -> Option<OpaqueNodePtr<N::Key, N::Value>> {
+) -> Option<OpaqueNodePtr<N::Key, N::Value, N::Header>> {
     // SAFETY: The `inner_node` reference is scoped to this function and dropped
     // before cases where the inner node is deallocated. It is a unique reference,
     // by the safety requirements of the containing function.
@@ -110,12 +110,12 @@ unsafe fn remove_child_from_inner_node_and_compress<N: InnerNode>(
 ///    have any other mutable references.
 ///  - `leaf_node_ptr` must be a unique pointer to the node and not have any
 ///    other mutable references.
-unsafe fn inner_delete_non_root_unchecked<K: AsBytes, V>(
-    leaf_node_ptr: NodePtr<LeafNode<K, V>>,
-    (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V>, u8),
-    grandparent_node_ptr: Option<(OpaqueNodePtr<K, V>, u8)>,
-    original_root: OpaqueNodePtr<K, V>,
-) -> DeleteResult<K, V> {
+unsafe fn inner_delete_non_root_unchecked<K: AsBytes, V, H: NodeHeader>(
+    leaf_node_ptr: NodePtr<LeafNode<K, V, H>>,
+    (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V, H>, u8),
+    grandparent_node_ptr: Option<(OpaqueNodePtr<K, V, H>, u8)>,
+    original_root: OpaqueNodePtr<K, V, H>,
+) -> DeleteResult<K, V, H> {
     let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
         ConcreteNodePtr::Node4(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
@@ -193,33 +193,33 @@ unsafe fn inner_delete_non_root_unchecked<K: AsBytes, V>(
 
 /// The results of a successful delete operation
 #[derive(Debug)]
-pub struct DeleteResult<K: AsBytes, V> {
+pub struct DeleteResult<K: AsBytes, V, H: NodeHeader> {
     /// The new root node for the tree, after the delete has been applied.
     ///
     /// If `None`, that means the tree is now empty.
-    pub new_root: Option<OpaqueNodePtr<K, V>>,
+    pub new_root: Option<OpaqueNodePtr<K, V, H>>,
     /// The leaf node that was successfully deleted.
-    pub deleted_leaf: LeafNode<K, V>,
+    pub deleted_leaf: LeafNode<K, V, H>,
 }
 
-pub struct DeletePoint<K: AsBytes, V> {
+pub struct DeletePoint<K: AsBytes, V, H: NodeHeader> {
     /// The grandparent node of the leaf that will be deleted and the key byte
     /// that was used to continue search.
     ///
     /// If there is no grandparent, this value is `None`.
-    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
+    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, H>, u8)>,
 
     /// The parent node of the leaf that will be deleted and the key byte that
     /// was used to continue search.
     ///
     /// If the leaf node to delete is also the root, then this value is `None`.
     /// If the grandparent node is present, this value also must be present.
-    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V>, u8)>,
+    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, H>, u8)>,
     /// The node to delete.
-    pub leaf_node_ptr: NodePtr<LeafNode<K, V>>,
+    pub leaf_node_ptr: NodePtr<LeafNode<K, V, H>>,
 }
 
-impl<K: AsBytes, V> std::fmt::Debug for DeletePoint<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> std::fmt::Debug for DeletePoint<K, V, H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeleteSearchResult")
             .field(
@@ -232,7 +232,7 @@ impl<K: AsBytes, V> std::fmt::Debug for DeletePoint<K, V> {
     }
 }
 
-impl<K: AsBytes, V> DeletePoint<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> DeletePoint<K, V, H> {
     /// Handle the logic of deleting a leaf node from the tree, after it has
     /// been found.
     ///
@@ -243,7 +243,7 @@ impl<K: AsBytes, V> DeletePoint<K, V> {
     ///  - This function cannot be called concurrently to any reads or writes of
     ///    the `root` node or any child node of `root`. This function will
     ///    arbitrarily read or write to any child in the given tree.
-    pub fn apply(self, root: OpaqueNodePtr<K, V>) -> DeleteResult<K, V> {
+    pub fn apply(self, root: OpaqueNodePtr<K, V, H>) -> DeleteResult<K, V, H> {
         let DeletePoint {
             grandparent_ptr_and_parent_key_byte: grandparent_node_ptr,
             parent_ptr_and_child_key_byte: parent_node_ptr,
@@ -296,13 +296,14 @@ impl<K: AsBytes, V> DeletePoint<K, V> {
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-pub unsafe fn search_for_delete_point<Q, K, V>(
-    root: OpaqueNodePtr<K, V>,
+pub unsafe fn search_for_delete_point<Q, K, V, H>(
+    root: OpaqueNodePtr<K, V, H>,
     key: &Q,
-) -> Option<DeletePoint<K, V>>
+) -> Option<DeletePoint<K, V, H>>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
+    H: NodeHeader
 {
     let mut current_grandparent = None;
     let mut current_parent = None;
@@ -371,9 +372,9 @@ where
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn find_minimum_to_delete<K: AsBytes, V>(
-    root: OpaqueNodePtr<K, V>,
-) -> DeletePoint<K, V> {
+pub unsafe fn find_minimum_to_delete<K: AsBytes, V, H: NodeHeader>(
+    root: OpaqueNodePtr<K, V, H>,
+) -> DeletePoint<K, V, H> {
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;
@@ -408,9 +409,9 @@ pub unsafe fn find_minimum_to_delete<K: AsBytes, V>(
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn find_maximum_to_delete<K: AsBytes, V>(
-    root: OpaqueNodePtr<K, V>,
-) -> DeletePoint<K, V> {
+pub unsafe fn find_maximum_to_delete<K: AsBytes, V, H: NodeHeader>(
+    root: OpaqueNodePtr<K, V, H>,
+) -> DeletePoint<K, V, H> {
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;
