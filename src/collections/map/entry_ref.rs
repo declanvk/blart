@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, mem::replace};
 
-use crate::{header::NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
+use crate::{header::NodeHeader, AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap};
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
 pub struct OccupiedEntryRef<'a, K, V, const NUM_PREFIX_BYTES: usize, H>
@@ -11,7 +11,7 @@ where
     pub(crate) leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
 
     /// Used for the removal
-    pub(crate) map: &'a mut TreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     /// Used for the removal
     pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>, u8)>,
     /// Used for the removal
@@ -83,7 +83,7 @@ where
     Q: AsBytes + ?Sized,
     H: NodeHeader<NUM_PREFIX_BYTES>
 {
-    pub(crate) map: &'a mut TreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     pub(crate) key: &'b Q,
     pub(crate) insert_point: Option<InsertPoint<K, V, NUM_PREFIX_BYTES, H>>,
 }
@@ -298,6 +298,8 @@ where
 #[cfg(test)]
 mod tests {
     use std::ffi::CString;
+
+    use crate::TreeMap;
 
     use super::*;
 

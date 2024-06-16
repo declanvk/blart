@@ -1,5 +1,5 @@
 use crate::{
-    header::NodeHeader, visitor::{Visitable, Visitor}, AsBytes, TreeMap
+    header::NodeHeader, visitor::{Visitable, Visitor}, AsBytes, RawTreeMap
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -14,7 +14,7 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn collect<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(tree: &TreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Option<TreeStats> {
+    pub unsafe fn collect<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Option<TreeStats> {
         let mut collector = TreeStatsCollector;
 
         tree.root.map(|root| root.visit_with(&mut collector))
@@ -25,7 +25,7 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn count_leaf_nodes<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(tree: &TreeMap<K, V, NUM_PREFIX_BYTES, H>) -> usize {
+    pub unsafe fn count_leaf_nodes<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> usize {
         struct LeafNodeCounter;
 
         impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Visitor<K, V, NUM_PREFIX_BYTES, H> for LeafNodeCounter {
