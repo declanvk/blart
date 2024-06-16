@@ -1,7 +1,6 @@
 use crate::{
-    NodeHeader,
     nodes::visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
+    AsBytes, InnerNode, NodeHeader, NodeType, OpaqueNodePtr, RawTreeMap,
 };
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -475,9 +474,8 @@ mod tests {
     use super::*;
     use crate::{
         deallocate_tree,
-        ReconstructableHeader,
         tests_common::{generate_key_fixed_length, setup_tree_from_entries},
-        InnerNode16, InnerNode4, LeafNode, NodePtr, TreeMap,
+        InnerNode16, InnerNode4, LeafNode, NodePtr, TreeMap, VariableKeyHeader,
     };
 
     #[test]
@@ -490,7 +488,7 @@ mod tests {
             .enumerate()
             .map(|(idx, key)| (key, idx));
 
-        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, ReconstructableHeader<16>> =
+        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, VariableKeyHeader<16>> =
             setup_tree_from_entries(keys);
         // 4  * 3 * 2
         assert_eq!(num_leaves, 24);
@@ -502,7 +500,7 @@ mod tests {
 
     #[test]
     fn check_well_formed_tree_long_prefix() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<CString, i32> = TreeMap::new();
         tree.insert(CString::new("1").unwrap(), 1);
         tree.insert(CString::new("2XX1XXXXXXXXXXXXXXXXXXXXXX1").unwrap(), 2);
         tree.insert(CString::new("2XX1XXXXXXXXXXXXXXXXXXXXXX2").unwrap(), 3);
@@ -519,11 +517,11 @@ mod tests {
         // have to allocate in this one because miri didn't like us using `&mut _` to
         // make loops
 
-        let l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let l1: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let l2: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let l3: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
 
         let l1_ptr = NodePtr::allocate_node_ptr(l1);
@@ -603,13 +601,13 @@ mod tests {
 
     #[test]
     fn check_tree_with_wrong_child_count() {
-        let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let mut l1: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let mut l2: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let mut l3: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
-        let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let mut l4: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 4, 7, 8, 4]), 124784);
 
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
@@ -656,13 +654,13 @@ mod tests {
 
     #[test]
     fn check_tree_with_mismatched_key_prefix() {
-        let mut l1: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let mut l1: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let mut l2: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let mut l2: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let mut l3: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let mut l3: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
-        let mut l4: LeafNode<Box<[u8]>, i32, 16, ReconstructableHeader<16>> =
+        let mut l4: LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
             LeafNode::new(Box::new([255, 255, 255, 255, 255, 255]), 124784);
 
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();

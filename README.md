@@ -20,7 +20,7 @@ use blart::TreeMap;
 
 // type inference lets us omit an explicit type signature (which
 // would be `TreeMap<&str, &str>` in this example).
-let mut movie_reviews = TreeMap::new();
+let mut movie_reviews: TreeMap<_, _> = TreeMap::new();
 
 // review some movies.
 let _ = movie_reviews.try_insert("Office Space",       "Deals with real issues in the workplace.").unwrap();

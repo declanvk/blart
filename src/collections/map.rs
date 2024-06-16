@@ -2,11 +2,11 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, NodeHeader,
-    maximum_unchecked, minimum_unchecked, search_for_delete_point, search_for_insert_point,
-    search_unchecked, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch,
-    InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode,
-    NoPrefixesBytes, NodePtr, OpaqueNodePtr, StackArena,
+    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
+    minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes,
+    ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch, InsertPoint, InsertPrefixError,
+    InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodeHeader, NodePtr,
+    OpaqueNodePtr, StackArena,
 };
 use std::{
     borrow::Borrow,
@@ -210,7 +210,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// use blart::TreeMap;
     /// use std::ffi::CString;
 
-    /// let mut map = TreeMap::new();
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
 
     /// map.insert(CString::from(c"abc"), 'a');
     /// map.insert(CString::from(c"abd"), 'b');
@@ -528,8 +528,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// If the map did have this key present, the value is updated, and the old
     /// value is returned.
     ///
-    /// Unlike [`try_insert`][crate::TreeMap::try_insert], this function will not
-    /// return an error, because the contract of the
+    /// Unlike [`try_insert`][crate::TreeMap::try_insert], this function will
+    /// not return an error, because the contract of the
     /// [`NoPrefixesBytes`][crate::bytes::NoPrefixesBytes] ensures that the
     /// given key type will never be a prefix of an existing value.
     ///
@@ -1748,7 +1748,7 @@ mod tests {
             }
         }
 
-        let mut map = TreeMap::new();
+        let mut map: TreeMap<_, _> = TreeMap::new();
 
         map.try_insert(Box::from(b"0000"), DropBomb::default())
             .unwrap();
@@ -1924,7 +1924,7 @@ mod tests {
     fn get_fuzzy() {
         for n in [4, 5, 17, 49] {
             let it = 48u8..48 + n;
-            let mut tree = TreeMap::new();
+            let mut tree: TreeMap<CString, usize> = TreeMap::new();
             let search = CString::new("a").unwrap();
             for c in it.clone() {
                 let c = c as char;
@@ -1938,7 +1938,7 @@ mod tests {
                 assert_eq!(k, &s);
             }
 
-            let mut tree = TreeMap::new();
+            let mut tree: TreeMap<CString, usize> = TreeMap::new();
             let search = CString::new("a").unwrap();
             for c in it.clone() {
                 let s = if c % 2 == 0 {
@@ -1957,7 +1957,7 @@ mod tests {
                 assert_eq!(k, &s);
             }
 
-            let mut tree = TreeMap::new();
+            let mut tree: TreeMap<CString, usize> = TreeMap::new();
             let search = CString::new("a").unwrap();
             for c in it.clone() {
                 let s = if c % 2 == 0 {
@@ -1986,7 +1986,7 @@ mod tests {
     #[cfg(not(miri))]
     #[test]
     fn clone_tree_skewed() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
         for (v, k) in generate_keys_skewed(u8::MAX as usize).enumerate() {
             tree.try_insert(k, v).unwrap();
         }
@@ -1997,7 +1997,7 @@ mod tests {
     #[cfg(not(miri))]
     #[test]
     fn clone_tree_fixed_length() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
         for (v, k) in generate_key_fixed_length([2; 8]).enumerate() {
             tree.try_insert(k, v).unwrap();
         }
@@ -2008,7 +2008,7 @@ mod tests {
     #[cfg(not(miri))]
     #[test]
     fn clone_tree_with_prefix() {
-        let mut tree = TreeMap::new();
+        let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
         for (v, k) in generate_key_with_prefix(
             [2; 8],
             [

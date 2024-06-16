@@ -1,6 +1,4 @@
-use crate::{
-    NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
-};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodeHeader, NodePtr, OpaqueNodePtr};
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///

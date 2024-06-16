@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, iter};
 
-use crate::{NodeHeader, AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr};
+use crate::{AsBytes, InsertPrefixError, InsertResult, NodeHeader, OpaqueNodePtr};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a
 /// maximum value.

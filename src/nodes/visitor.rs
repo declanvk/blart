@@ -5,8 +5,8 @@ mod tree_stats;
 mod well_formed;
 
 use crate::{
-    NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4,
-    InnerNode48, LeafNode, Node, NodePtr, OpaqueNodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48,
+    LeafNode, Node, NodeHeader, NodePtr, OpaqueNodePtr,
 };
 pub use pretty_printer::*;
 pub use tree_stats::*;

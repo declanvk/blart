@@ -1,6 +1,6 @@
 use crate::{
-    NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode,
-    MatchPrefixResult, Mismatch, NodePtr, OpaqueNodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch,
+    NodeHeader, NodePtr, OpaqueNodePtr,
 };
 use std::{
     borrow::Borrow,
