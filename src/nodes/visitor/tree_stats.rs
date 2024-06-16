@@ -1,6 +1,5 @@
 use crate::{
-    visitor::{Visitable, Visitor},
-    AsBytes, TreeMap,
+    header::NodeHeader, visitor::{Visitable, Visitor}, AsBytes, TreeMap
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -15,7 +14,7 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn collect<K: AsBytes, V>(tree: &TreeMap<K, V>) -> Option<TreeStats> {
+    pub unsafe fn collect<K: AsBytes, V, H: NodeHeader>(tree: &TreeMap<K, V, H>) -> Option<TreeStats> {
         let mut collector = TreeStatsCollector;
 
         tree.root.map(|root| root.visit_with(&mut collector))
@@ -26,10 +25,10 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn count_leaf_nodes<K: AsBytes, V>(tree: &TreeMap<K, V>) -> usize {
+    pub unsafe fn count_leaf_nodes<K: AsBytes, V, H: NodeHeader>(tree: &TreeMap<K, V, H>) -> usize {
         struct LeafNodeCounter;
 
-        impl<K: AsBytes, V> Visitor<K, V> for LeafNodeCounter {
+        impl<K: AsBytes, V, H: NodeHeader> Visitor<K, V, H> for LeafNodeCounter {
             type Output = usize;
 
             fn default_output(&self) -> Self::Output {
@@ -40,7 +39,7 @@ impl TreeStatsCollector {
                 o1 + o2
             }
 
-            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V>) -> Self::Output {
+            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V, H>) -> Self::Output {
                 1
             }
         }
@@ -99,9 +98,10 @@ impl TreeStats {
     }
 }
 
-impl<K, V> Visitor<K, V> for TreeStatsCollector
+impl<K, V, H> Visitor<K, V, H> for TreeStatsCollector
 where
     K: AsBytes,
+    H: NodeHeader
 {
     type Output = TreeStats;
 
@@ -122,7 +122,7 @@ where
         }
     }
 
-    // fn visit_node4(&mut self, t: &crate::InnerNode4<K, V>) -> Self::Output {
+    // fn visit_node4(&mut self, t: &crate::InnerNode4<K, V, H>) -> Self::Output {
     //     let mut output = t.super_visit_with(self);
     //     output.node4_count += 1;
     //     output.empty_capacity += NodeType::Node4.upper_capacity() - t.header.num_children();
@@ -135,7 +135,7 @@ where
     //     output
     // }
 
-    // fn visit_node16(&mut self, t: &crate::InnerNode16<K, V>) -> Self::Output {
+    // fn visit_node16(&mut self, t: &crate::InnerNode16<K, V, H>) -> Self::Output {
     //     let mut output = t.super_visit_with(self);
     //     output.node16_count += 1;
     //     output.empty_capacity += NodeType::Node16.upper_capacity() - t.header.num_children();
@@ -148,7 +148,7 @@ where
     //     output
     // }
 
-    // fn visit_node48(&mut self, t: &crate::InnerNode48<K, V>) -> Self::Output {
+    // fn visit_node48(&mut self, t: &crate::InnerNode48<K, V, H>) -> Self::Output {
     //     let mut output = t.super_visit_with(self);
     //     output.node48_count += 1;
     //     output.empty_capacity += NodeType::Node48.upper_capacity() - t.header.num_children();
@@ -161,7 +161,7 @@ where
     //     output
     // }
 
-    // fn visit_node256(&mut self, t: &crate::InnerNode256<K, V>) -> Self::Output {
+    // fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, H>) -> Self::Output {
     //     let mut output = t.super_visit_with(self);
     //     output.node256_count += 1;
     //     output.empty_capacity += NodeType::Node256.upper_capacity() - t.header.num_children();
@@ -174,7 +174,7 @@ where
     //     output
     // }
 
-    // fn visit_leaf(&mut self, t: &crate::LeafNode<K, V>) -> Self::Output {
+    // fn visit_leaf(&mut self, t: &crate::LeafNode<K, V, H>) -> Self::Output {
     //     let mut output = TreeStats::default();
     //     output.leaf_count += 1;
     //     output.total_key_bytes += t.key_ref().as_bytes().len();

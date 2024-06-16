@@ -1,4 +1,4 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, TreeMap};
+use crate::{header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, TreeMap};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_iter {
@@ -11,13 +11,13 @@ macro_rules! gen_iter {
         ///
         /// This iterator maintains pointers to internal nodes from the trie. No
         /// mutating operation can occur while this an instance of the iterator is live.
-        pub struct $name<'a, K: AsBytes, V> {
-            nodes: VecDeque<OpaqueNodePtr<K, V>>,
+        pub struct $name<'a, K: AsBytes, V, H: NodeHeader> {
+            nodes: VecDeque<OpaqueNodePtr<K, V, H>>,
             size: usize,
             _tree: $tree,
         }
 
-        impl<'a, K: AsBytes, V> $name<'a, K, V> {
+        impl<'a, K: AsBytes, V, H: NodeHeader> $name<'a, K, V, H> {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
             pub fn new(tree: $tree) -> Self {
@@ -30,7 +30,7 @@ macro_rules! gen_iter {
 
             fn push_back_rev_iter<N>(&mut self, inner: NodePtr<N>)
             where
-                N: InnerNode<Key = K, Value = V>,
+                N: InnerNode<Key = K, Value = V, Header = H>,
             {
                 unsafe {
                     inner
@@ -43,7 +43,7 @@ macro_rules! gen_iter {
 
             fn push_front<N>(&mut self, inner: NodePtr<N>)
             where
-                N: InnerNode<Key = K, Value = V>,
+                N: InnerNode<Key = K, Value = V, Header = H>,
             {
                 unsafe {
                     inner
@@ -54,7 +54,7 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V> Iterator for $name<'a, K, V> {
+        impl<'a, K: AsBytes, V, H: NodeHeader> Iterator for $name<'a, K, V, H> {
             type Item = $ret;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -86,7 +86,7 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V> DoubleEndedIterator for $name<'a, K, V> {
+        impl<'a, K: AsBytes, V, H: NodeHeader> DoubleEndedIterator for $name<'a, K, V, H> {
             fn next_back(&mut self) -> Option<Self::Item> {
                 while let Some(node) = self.nodes.pop_front() {
                     match node.to_node_ptr() {
@@ -105,9 +105,9 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V> FusedIterator for $name<'a, K, V> {}
+        impl<'a, K: AsBytes, V, H: NodeHeader> FusedIterator for $name<'a, K, V, H> {}
 
-        impl<'a, K: AsBytes, V> ExactSizeIterator for $name<'a, K, V> {
+        impl<'a, K: AsBytes, V, H: NodeHeader> ExactSizeIterator for $name<'a, K, V, H> {
             fn len(&self) -> usize {
                 self.size
             }
@@ -117,19 +117,19 @@ macro_rules! gen_iter {
 
 gen_iter!(
     TreeIterator,
-    &'a TreeMap<K, V>,
+    &'a TreeMap<K, V, H>,
     (&'a K, &'a V),
     as_key_value_ref
 );
 gen_iter!(
     TreeIteratorMut,
-    &'a mut TreeMap<K, V>,
+    &'a mut TreeMap<K, V, H>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
-gen_iter!(Keys, &'a TreeMap<K, V>, &'a K, as_key_ref);
-gen_iter!(Values, &'a TreeMap<K, V>, &'a V, as_value_ref);
-gen_iter!(ValuesMut, &'a mut TreeMap<K, V>, &'a mut V, as_value_mut);
+gen_iter!(Keys, &'a TreeMap<K, V, H>, &'a K, as_key_ref);
+gen_iter!(Values, &'a TreeMap<K, V, H>, &'a V, as_value_ref);
+gen_iter!(ValuesMut, &'a mut TreeMap<K, V, H>, &'a mut V, as_value_mut);
 
 /*
 /// An iterator over a sub-range of entries in a `TreeMap`.
@@ -138,9 +138,9 @@ gen_iter!(ValuesMut, &'a mut TreeMap<K, V>, &'a mut V, as_value_mut);
 /// documentation for more.
 ///
 /// [`range`]: TreeMap::range
-pub struct Range<'a, K, V>(PhantomData<(&'a K, &'a V)>);
+pub struct Range<'a, K, V, H>(PhantomData<(&'a K, &'a V)>);
 
-impl<'a, K, V> Iterator for Range<'a, K, V> {
+impl<'a, K, V, H> Iterator for Range<'a, K, V, H> {
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -180,7 +180,7 @@ impl<'a, K, V> Iterator for Range<'a, K, V> {
     }
 }
 
-impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
+impl<'a, K, V, H> DoubleEndedIterator for Range<'a, K, V, H> {
     fn next_back(&mut self) -> Option<Self::Item> {
         todo!()
     }
@@ -192,9 +192,9 @@ impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
 /// its documentation for more.
 ///
 /// [`range_mut`]: TreeMap::range_mut
-pub struct RangeMut<'a, K, V>(PhantomData<(&'a K, &'a mut V)>);
+pub struct RangeMut<'a, K, V, H>(PhantomData<(&'a K, &'a mut V)>);
 
-impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
+impl<'a, K, V, H> Iterator for RangeMut<'a, K, V, H> {
     type Item = (&'a K, &'a mut V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -234,7 +234,7 @@ impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
     }
 }
 
-impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
+impl<'a, K, V, H> DoubleEndedIterator for RangeMut<'a, K, V, H> {
     fn next_back(&mut self) -> Option<Self::Item> {
         todo!()
     }
@@ -245,9 +245,9 @@ impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
 // /// documentation for more.
 // ///
 // /// [`drain_filter`]: TreeMap::range_mut
-// pub struct ExtractIf<K, V>(PhantomData<(K, V)>);
+// pub struct ExtractIf<K, V, H>(PhantomData<(K, V)>);
 
-// impl<K, V> Iterator for ExtractIf<K, V> {
+// impl<K, V, H> Iterator for ExtractIf<K, V, H> {
 //     type Item = (K, V);
 
 //     fn next(&mut self) -> Option<Self::Item> {
@@ -259,15 +259,15 @@ impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
 ///
 /// This `struct` is created by the [`TreeMap::into_keys`] method on `TreeMap`.
 /// See its documentation for more.
-pub struct IntoKeys<K: AsBytes, V>(IntoIter<K, V>);
+pub struct IntoKeys<K: AsBytes, V, H: NodeHeader>(IntoIter<K, V, H>);
 
-impl<K: AsBytes, V> IntoKeys<K, V> {
-    pub(crate) fn new(tree: TreeMap<K, V>) -> Self {
+impl<K: AsBytes, V, H: NodeHeader> IntoKeys<K, V, H> {
+    pub(crate) fn new(tree: TreeMap<K, V, H>) -> Self {
         IntoKeys(IntoIter::new(tree))
     }
 }
 
-impl<K: AsBytes, V> Iterator for IntoKeys<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Iterator for IntoKeys<K, V, H> {
     type Item = K;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -275,7 +275,7 @@ impl<K: AsBytes, V> Iterator for IntoKeys<K, V> {
     }
 }
 
-impl<K: AsBytes, V> DoubleEndedIterator for IntoKeys<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> DoubleEndedIterator for IntoKeys<K, V, H> {
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.0.next_back()?.0)
     }
@@ -287,15 +287,15 @@ impl<K: AsBytes, V> DoubleEndedIterator for IntoKeys<K, V> {
 /// See its documentation for more.
 ///
 /// [`into_values`]: TreeMap::into_values
-pub struct IntoValues<K: AsBytes, V>(IntoIter<K, V>);
+pub struct IntoValues<K: AsBytes, V, H: NodeHeader>(IntoIter<K, V, H>);
 
-impl<K: AsBytes, V> IntoValues<K, V> {
-    pub(crate) fn new(tree: TreeMap<K, V>) -> Self {
+impl<K: AsBytes, V, H: NodeHeader> IntoValues<K, V, H> {
+    pub(crate) fn new(tree: TreeMap<K, V, H>) -> Self {
         IntoValues(IntoIter::new(tree))
     }
 }
 
-impl<K: AsBytes, V> Iterator for IntoValues<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Iterator for IntoValues<K, V, H> {
     type Item = V;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -303,7 +303,7 @@ impl<K: AsBytes, V> Iterator for IntoValues<K, V> {
     }
 }
 
-impl<K: AsBytes, V> DoubleEndedIterator for IntoValues<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> DoubleEndedIterator for IntoValues<K, V, H> {
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.0.next_back()?.1)
     }
@@ -316,15 +316,15 @@ impl<K: AsBytes, V> DoubleEndedIterator for IntoValues<K, V> {
 ///
 /// [`into_iter`]: IntoIterator::into_iter
 /// [`IntoIterator`]: core::iter::IntoIterator
-pub struct IntoIter<K: AsBytes, V>(TreeMap<K, V>);
+pub struct IntoIter<K: AsBytes, V, H: NodeHeader>(TreeMap<K, V, H>);
 
-impl<K: AsBytes, V> IntoIter<K, V> {
-    pub(crate) fn new(tree: TreeMap<K, V>) -> Self {
+impl<K: AsBytes, V, H: NodeHeader> IntoIter<K, V, H> {
+    pub(crate) fn new(tree: TreeMap<K, V, H>) -> Self {
         IntoIter(tree)
     }
 }
 
-impl<K: AsBytes, V> Iterator for IntoIter<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> Iterator for IntoIter<K, V, H> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -338,7 +338,7 @@ impl<K: AsBytes, V> Iterator for IntoIter<K, V> {
     }
 }
 
-impl<K: AsBytes, V> DoubleEndedIterator for IntoIter<K, V> {
+impl<K: AsBytes, V, H: NodeHeader> DoubleEndedIterator for IntoIter<K, V, H> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.0.pop_last()
     }

@@ -1,6 +1,5 @@
 use crate::{
-    nodes::visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
+    header::NodeHeader, nodes::visitor::{Visitable, Visitor}, AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap
 };
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -30,11 +29,11 @@ impl<const LEN: usize> PartialEq<[u8; LEN]> for KeyPrefix {
 
 /// An issue with the well-formed-ness of the tree. See the documentation on
 /// [`WellFormedChecker`] for more context.
-pub enum MalformedTreeError<K: AsBytes, V> {
+pub enum MalformedTreeError<K: AsBytes, V, H: NodeHeader> {
     /// A loop was observed between nodes
     LoopFound {
         /// The node that was observed more than once while traversing the tree
-        node_ptr: OpaqueNodePtr<K, V>,
+        node_ptr: OpaqueNodePtr<K, V, H>,
         /// The key prefix when the node was first observed
         first_observed: KeyPrefix,
         /// The key prefix when the node was observed a second time
@@ -64,9 +63,10 @@ pub enum MalformedTreeError<K: AsBytes, V> {
     EmptyTreeWithLen,
 }
 
-impl<K, V> fmt::Debug for MalformedTreeError<K, V>
+impl<K, V, H> fmt::Debug for MalformedTreeError<K, V, H>
 where
     K: AsBytes,
+    H: NodeHeader
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -103,9 +103,10 @@ where
     }
 }
 
-impl<K, V> fmt::Display for MalformedTreeError<K, V>
+impl<K, V, H> fmt::Display for MalformedTreeError<K, V, H>
 where
     K: AsBytes,
+    H: NodeHeader
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -155,7 +156,7 @@ where
     }
 }
 
-impl<K: AsBytes, V> Clone for MalformedTreeError<K, V>
+impl<K: AsBytes, V, H: NodeHeader> Clone for MalformedTreeError<K, V, H>
 where
     K: Clone,
 {
@@ -191,7 +192,7 @@ where
     }
 }
 
-impl<K: AsBytes, V> PartialEq for MalformedTreeError<K, V>
+impl<K: AsBytes, V, H: NodeHeader> PartialEq for MalformedTreeError<K, V, H>
 where
     K: Eq,
 {
@@ -244,9 +245,9 @@ where
     }
 }
 
-impl<K, V> Eq for MalformedTreeError<K, V> where K: Eq + AsBytes {}
+impl<K: Eq + AsBytes, V, H: NodeHeader> Eq for MalformedTreeError<K, V, H> {}
 
-impl<K, V> Error for MalformedTreeError<K, V> where K: AsBytes {}
+impl<K: AsBytes, V, H: NodeHeader> Error for MalformedTreeError<K, V, H> {}
 
 /// A visitor of the radix tree which checks that the tree is well-formed.
 ///
@@ -265,14 +266,15 @@ impl<K, V> Error for MalformedTreeError<K, V> where K: AsBytes {}
 /// "well-formed" (by the definition given above) if the checker returns
 /// `Ok(())`.
 #[derive(Debug)]
-pub struct WellFormedChecker<K: AsBytes, V> {
+pub struct WellFormedChecker<K: AsBytes, V, H: NodeHeader> {
     current_key_prefix: Vec<u8>,
-    seen_nodes: HashMap<OpaqueNodePtr<K, V>, KeyPrefix>,
+    seen_nodes: HashMap<OpaqueNodePtr<K, V, H>, KeyPrefix>,
 }
 
-impl<K, V> WellFormedChecker<K, V>
+impl<K, V, H> WellFormedChecker<K, V, H>
 where
     K: AsBytes + Clone,
+    H: NodeHeader
 {
     /// Traverse the given tree and check that it is well-formed. Returns the
     /// number of nodes in the tree.
@@ -285,7 +287,7 @@ where
     /// # Errors
     ///
     /// Returns an error if the given tree is not well-formed.
-    pub unsafe fn check(tree: &TreeMap<K, V>) -> Result<usize, MalformedTreeError<K, V>> {
+    pub unsafe fn check(tree: &TreeMap<K, V, H>) -> Result<usize, MalformedTreeError<K, V, H>> {
         tree.root
             .map(|root| unsafe { Self::check_tree(root) })
             .unwrap_or_else(|| {
@@ -308,7 +310,7 @@ where
     /// # Errors
     ///
     /// Returns an error if the given tree is not well-formed.
-    unsafe fn check_tree(tree: OpaqueNodePtr<K, V>) -> Result<usize, MalformedTreeError<K, V>> {
+    unsafe fn check_tree(tree: OpaqueNodePtr<K, V, H>) -> Result<usize, MalformedTreeError<K, V, H>> {
         let mut visitor = WellFormedChecker {
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
@@ -320,9 +322,9 @@ where
         tree.visit_with(&mut visitor)
     }
 
-    fn visit_inner_node<N>(&mut self, inner_node: &N) -> Result<usize, MalformedTreeError<K, V>>
+    fn visit_inner_node<N>(&mut self, inner_node: &N) -> Result<usize, MalformedTreeError<K, V, H>>
     where
-        N: InnerNode<Key = K, Value = V>,
+        N: InnerNode<Key = K, Value = V, Header = H>,
     {
         let original_key_prefix_len = self.current_key_prefix.len();
 
@@ -387,11 +389,12 @@ where
     }
 }
 
-impl<K, V> Visitor<K, V> for WellFormedChecker<K, V>
+impl<K, V, H> Visitor<K, V, H> for WellFormedChecker<K, V, H>
 where
     K: Clone + AsBytes,
+    H: NodeHeader
 {
-    type Output = Result<usize, MalformedTreeError<K, V>>;
+    type Output = Result<usize, MalformedTreeError<K, V, H>>;
 
     fn default_output(&self) -> Self::Output {
         // Chose zero so that any places that call `default_output` don't influce the
@@ -403,23 +406,23 @@ where
         Ok(o1? + o2?)
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<K, V>) -> Self::Output {
+    fn visit_node4(&mut self, t: &crate::InnerNode4<K, V, H>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<K, V>) -> Self::Output {
+    fn visit_node16(&mut self, t: &crate::InnerNode16<K, V, H>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<K, V>) -> Self::Output {
+    fn visit_node48(&mut self, t: &crate::InnerNode48<K, V, H>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, H>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V, H>) -> Self::Output {
         if !t.key_ref().as_bytes().starts_with(&self.current_key_prefix) {
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::PrefixMismatch {

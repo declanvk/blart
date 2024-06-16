@@ -1,4 +1,4 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
@@ -15,9 +15,9 @@ use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePt
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
 #[inline(always)]
-pub unsafe fn minimum_unchecked<K: AsBytes, V>(
-    root: OpaqueNodePtr<K, V>,
-) -> NodePtr<LeafNode<K, V>> {
+pub unsafe fn minimum_unchecked<K: AsBytes, V, H: NodeHeader>(
+    root: OpaqueNodePtr<K, V, H>,
+) -> NodePtr<LeafNode<K, V, H>> {
     let mut current_node = root;
 
     loop {
@@ -48,9 +48,9 @@ pub unsafe fn minimum_unchecked<K: AsBytes, V>(
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
 #[inline(always)]
-pub unsafe fn maximum_unchecked<K: AsBytes, V>(
-    root: OpaqueNodePtr<K, V>,
-) -> NodePtr<LeafNode<K, V>> {
+pub unsafe fn maximum_unchecked<K: AsBytes, V, H: NodeHeader>(
+    root: OpaqueNodePtr<K, V, H>,
+) -> NodePtr<LeafNode<K, V, H>> {
     let mut current_node = root;
 
     loop {
