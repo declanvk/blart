@@ -7,7 +7,7 @@ use crate::{minimum_unchecked, AsBytes, InnerNode, LeafNode, NodePtr};
 /// The common header for all inner nodes
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(align(8))]
-pub struct RawHeader<const NUM_PREFIX_BYTES: usize> {
+struct RawHeader<const NUM_PREFIX_BYTES: usize> {
     /// Number of children of this inner node. This field has no meaning for
     /// a leaf node.
     ///
@@ -230,7 +230,7 @@ pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq +
         &mut self,
         len: usize,
         depth: usize,
-        leaf_ptr: NodePtr<LeafNode<K, V, H>>,
+        leaf_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
     );
 
     /// Append `new` to the prefix and sums `new_len` to the prefix length
@@ -247,9 +247,9 @@ pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq +
     fn dec_num_children(&mut self);
 
     /// Reads the prefix as a whole without capping it
-    fn inner_read_full_prefix<'a, N: InnerNode>(&'a self, node: &'a N, current_depth: usize) -> (
+    fn inner_read_full_prefix<'a, N: InnerNode<NUM_PREFIX_BYTES>>(&'a self, node: &'a N, current_depth: usize) -> (
         &'a [u8],
-        Option<NodePtr<LeafNode<N::Key, N::Value, N::Header>>>,
+        Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<N::Key, N::Value, NUM_PREFIX_BYTES, N::Header>>>,
     );
 }
 
@@ -267,7 +267,7 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES> for Reconstruct
         &mut self,
         len: usize,
         depth: usize,
-        leaf_ptr: NodePtr<LeafNode<K, V, H>>,
+        leaf_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
     ) {
         self.0.prefix_len -= len as u32;
 
@@ -293,9 +293,9 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES> for Reconstruct
     }
 
     #[inline(always)]
-    fn inner_read_full_prefix<'a, N: InnerNode>(&'a self, node: &'a N, current_depth: usize) -> (
+    fn inner_read_full_prefix<'a, N: InnerNode<NUM_PREFIX_BYTES>>(&'a self, node: &'a N, current_depth: usize) -> (
         &'a [u8],
-        Option<NodePtr<LeafNode<N::Key, N::Value, N::Header>>>,
+        Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<N::Key, N::Value, NUM_PREFIX_BYTES, N::Header>>>,
     ) {
         let len = self.prefix_len();
         if likely(len <= NUM_PREFIX_BYTES) {

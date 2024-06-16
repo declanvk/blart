@@ -118,7 +118,7 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
     std::mem::swap(temp, new_row);
 }
 
-pub trait FuzzySearch<K: AsBytes, V, H: NodeHeader> {
+pub trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
     #[allow(clippy::too_many_arguments)]
     fn fuzzy_search<'s>(
         &'s self,
@@ -126,7 +126,7 @@ pub trait FuzzySearch<K: AsBytes, V, H: NodeHeader> {
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, H>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
         results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     );
@@ -140,7 +140,7 @@ pub trait FuzzySearch<K: AsBytes, V, H: NodeHeader> {
         max_edit_dist: usize,
     ) -> bool
     where
-        Self: InnerNode,
+        Self: InnerNode<NUM_PREFIX_BYTES>,
     {
         // We can use the fact that the first entry in the old_row holds,
         // the length of how many bytes we used so far, so this becomes de depth
@@ -157,9 +157,9 @@ pub trait FuzzySearch<K: AsBytes, V, H: NodeHeader> {
     }
 }
 
-impl<K: AsBytes, V, H: NodeHeader, const SIZE: usize> FuzzySearch<K, V, H> for InnerNodeCompressed<K, V, H, SIZE>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>, const SIZE: usize> FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNodeCompressed<K, V, NUM_PREFIX_BYTES, H, SIZE>
 where
-    Self: InnerNode,
+    Self: InnerNode<NUM_PREFIX_BYTES>,
 {
     fn fuzzy_search<'s>(
         &'s self,
@@ -167,7 +167,7 @@ where
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, H>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
         _results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     ) {
@@ -187,14 +187,14 @@ where
     }
 }
 
-impl<K: AsBytes, V, H: NodeHeader> FuzzySearch<K, V, H> for InnerNode48<K, V, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNode48<K, V, NUM_PREFIX_BYTES, H> {
     fn fuzzy_search<'s>(
         &'s self,
         arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, H>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
         _results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     ) {
@@ -218,14 +218,14 @@ impl<K: AsBytes, V, H: NodeHeader> FuzzySearch<K, V, H> for InnerNode48<K, V, H>
     }
 }
 
-impl<K: AsBytes, V, H: NodeHeader> FuzzySearch<K, V, H> for InnerNode256<K, V, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNode256<K, V, NUM_PREFIX_BYTES, H> {
     fn fuzzy_search<'s>(
         &'s self,
         arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, H>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
         _results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     ) {
@@ -247,14 +247,14 @@ impl<K: AsBytes, V, H: NodeHeader> FuzzySearch<K, V, H> for InnerNode256<K, V, H
     }
 }
 
-impl<K: AsBytes, V, H: NodeHeader> FuzzySearch<K, V, H> for LeafNode<K, V, H> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for LeafNode<K, V, NUM_PREFIX_BYTES, H> {
     fn fuzzy_search<'s>(
         &'s self,
         _arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        _nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, H>>,
+        _nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
         results: &mut Vec<(&'s K, &'s V)>,
         max_edit_dist: usize,
     ) {

@@ -29,15 +29,15 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn print<K, V, H>(
+    pub unsafe fn print<K, V, const NUM_PREFIX_BYTES: usize, H>(
         output: O,
-        tree: &TreeMap<K, V, H>,
+        tree: &TreeMap<K, V, NUM_PREFIX_BYTES, H>,
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where
         K: Debug + AsBytes,
         V: Debug,
-        H: NodeHeader
+        H: NodeHeader<NUM_PREFIX_BYTES>
     {
         tree.root
             .map(|root| unsafe { Self::print_tree(output, &root, settings) })
@@ -48,15 +48,15 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    unsafe fn print_tree<K, V, H>(
+    unsafe fn print_tree<K, V, const NUM_PREFIX_BYTES: usize, H>(
         output: O,
-        tree: &OpaqueNodePtr<K, V, H>,
+        tree: &OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
         settings: DotPrinterSettings,
     ) -> io::Result<()>
     where
         K: Debug + AsBytes,
         V: Debug,
-        H: NodeHeader
+        H: NodeHeader<NUM_PREFIX_BYTES>
     {
         let mut visitor = DotPrinter {
             output,
@@ -84,11 +84,11 @@ impl<O: Write> DotPrinter<O> {
         new_id
     }
 
-    fn write_inner_node<K, T, N>(&mut self, inner_node: &N) -> io::Result<usize>
+    fn write_inner_node<K, T, N, const NUM_PREFIX_BYTES: usize>(&mut self, inner_node: &N) -> io::Result<usize>
     where
         K: Debug + AsBytes,
         T: Debug,
-        N: InnerNode<Key = K, Value = T>,
+        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = T>,
     {
         let header = inner_node.header();
         let node_id = self.get_id();
@@ -141,12 +141,12 @@ impl<O: Write> DotPrinter<O> {
     }
 }
 
-impl<K, T, O, H> Visitor<K, T, H> for DotPrinter<O>
+impl<K, T, O, const NUM_PREFIX_BYTES: usize, H> Visitor<K, T, NUM_PREFIX_BYTES, H> for DotPrinter<O>
 where
     K: Debug + AsBytes,
     T: Debug,
     O: Write,
-    H: NodeHeader
+    H: NodeHeader<NUM_PREFIX_BYTES>
 {
     type Output = io::Result<usize>;
 
@@ -158,23 +158,23 @@ where
         unimplemented!("this visitor should never combine outputs")
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<K, T, H>) -> Self::Output {
+    fn visit_node4(&mut self, t: &crate::InnerNode4<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<K, T, H>) -> Self::Output {
+    fn visit_node16(&mut self, t: &crate::InnerNode16<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<K, T, H>) -> Self::Output {
+    fn visit_node48(&mut self, t: &crate::InnerNode48<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T, H>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T, H>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;

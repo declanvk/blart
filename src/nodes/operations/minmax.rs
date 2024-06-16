@@ -15,9 +15,9 @@ use crate::{header::NodeHeader, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, N
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
 #[inline(always)]
-pub unsafe fn minimum_unchecked<K: AsBytes, V, H: NodeHeader>(
-    root: OpaqueNodePtr<K, V, H>,
-) -> NodePtr<LeafNode<K, V, H>> {
+pub unsafe fn minimum_unchecked<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
+) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>> {
     let mut current_node = root;
 
     loop {
@@ -48,9 +48,9 @@ pub unsafe fn minimum_unchecked<K: AsBytes, V, H: NodeHeader>(
 ///    - Does not have any loops
 ///    - All inner nodes have at least one child
 #[inline(always)]
-pub unsafe fn maximum_unchecked<K: AsBytes, V, H: NodeHeader>(
-    root: OpaqueNodePtr<K, V, H>,
-) -> NodePtr<LeafNode<K, V, H>> {
+pub unsafe fn maximum_unchecked<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
+    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
+) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>> {
     let mut current_node = root;
 
     loop {

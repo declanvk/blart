@@ -14,7 +14,7 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn collect<K: AsBytes, V, H: NodeHeader>(tree: &TreeMap<K, V, H>) -> Option<TreeStats> {
+    pub unsafe fn collect<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(tree: &TreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Option<TreeStats> {
         let mut collector = TreeStatsCollector;
 
         tree.root.map(|root| root.visit_with(&mut collector))
@@ -25,10 +25,10 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn count_leaf_nodes<K: AsBytes, V, H: NodeHeader>(tree: &TreeMap<K, V, H>) -> usize {
+    pub unsafe fn count_leaf_nodes<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(tree: &TreeMap<K, V, NUM_PREFIX_BYTES, H>) -> usize {
         struct LeafNodeCounter;
 
-        impl<K: AsBytes, V, H: NodeHeader> Visitor<K, V, H> for LeafNodeCounter {
+        impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Visitor<K, V, NUM_PREFIX_BYTES, H> for LeafNodeCounter {
             type Output = usize;
 
             fn default_output(&self) -> Self::Output {
@@ -39,7 +39,7 @@ impl TreeStatsCollector {
                 o1 + o2
             }
 
-            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V, H>) -> Self::Output {
+            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
                 1
             }
         }
@@ -98,10 +98,10 @@ impl TreeStats {
     }
 }
 
-impl<K, V, H> Visitor<K, V, H> for TreeStatsCollector
+impl<K, V, const NUM_PREFIX_BYTES: usize, H> Visitor<K, V, NUM_PREFIX_BYTES, H> for TreeStatsCollector
 where
     K: AsBytes,
-    H: NodeHeader
+    H: NodeHeader<NUM_PREFIX_BYTES>
 {
     type Output = TreeStats;
 
