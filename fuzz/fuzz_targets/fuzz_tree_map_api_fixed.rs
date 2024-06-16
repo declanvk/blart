@@ -1,9 +1,11 @@
 #![feature(is_sorted)]
 #![no_main]
 
-use blart::TreeMap;
+use blart::FixedTreeMap;
 use blart::map::Entry;
 use blart::map::EntryRef;
+use blart::Mapped;
+use blart::ToUBE;
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 use std::{
     collections::hash_map::RandomState,
@@ -25,25 +27,24 @@ enum EntryAction {
 #[derive(Arbitrary, Debug)]
 enum Action {
     Clear,
-    ContainsKey(Box<[u8]>),
+    ContainsKey(usize),
     GetMinimum,
     PopMinimum,
     GetMaximum,
     PopMaximum,
-    GetKey(Box<[u8]>),
+    GetKey(usize),
     CheckLen,
     CheckIter,
-    Remove(Box<[u8]>),
-    TryInsert(Box<[u8]>),
-    Extend(Vec<Box<[u8]>>),
+    Remove(usize),
+    Insert(usize),
+    Extend(Vec<usize>),
     Clone,
     Hash,
-    Entry(EntryAction, Box<[u8]>),
-    EntryRef(EntryAction, Box<[u8]>)
+    Entry(EntryAction, usize)
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
-    let mut tree = TreeMap::<_, u32>::new();
+    let mut tree = FixedTreeMap::<Mapped::<ToUBE<usize>>, u32>::new();
     let mut next_key = 0;
 
     for action in actions {
@@ -52,7 +53,8 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 tree.clear();
             },
             Action::ContainsKey(key) => {
-                let _ = tree.contains_key(key.as_ref());
+                let key = Mapped::<ToUBE<usize>>::new(key);
+                let _ = tree.contains_key(&key);
             },
             Action::GetMinimum => {
                 let min = tree.first_key_value();
@@ -79,7 +81,8 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 }
             },
             Action::GetKey(key) => {
-                let entry = tree.get_mut(key.as_ref());
+                let key = Mapped::<ToUBE<usize>>::new(key);
+                let entry = tree.get_mut(&key);
                 if let Some(value) = entry {
                     *value = value.saturating_sub(1);
                 }
@@ -102,22 +105,25 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert!(tree.iter().rev().count() == tree.len());
             },
             Action::Remove(key) => {
-                if let Some(value) = tree.remove(key.as_ref()) {
+                let key = Mapped::<ToUBE<usize>>::new(key);
+                if let Some(value) = tree.remove(&key) {
                     assert!(value < next_key);
                 }
             },
-            Action::TryInsert(key) => {
+            Action::Insert(key) => {
+                let key = Mapped::<ToUBE<usize>>::new(key);
                 let value = next_key;
                 next_key += 1;
 
-                let _ = tree.try_insert(key, value);
+                let _ = tree.insert(key, value);
             },
             Action::Extend(new_keys) => {
                 for key in new_keys {
+                    let key = Mapped::<ToUBE<usize>>::new(key);
                     let value = next_key;
                     next_key += 1;
 
-                    let _ = tree.try_insert(key, value);
+                    let _ = tree.insert(key, value);
                 }
             },
             Action::Clone => {
@@ -133,46 +139,25 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert_eq!(original_hash, copy_hash, "{:?} != {:?}", tree, tree_copy);
             },
             Action::Entry(ea, key) => {
-                if let Ok(entry) = tree.try_entry(key) {
-                    let value = next_key;
-                    next_key += 1;
-                    match ea {
-                        EntryAction::AndModify => {entry.and_modify(|v| *v = v.saturating_sub(1));},
-                        EntryAction::InsertEntry => {entry.insert_entry(value);},
-                        EntryAction::Key => {entry.key();},
-                        EntryAction::OrDefault => {entry.or_default();},
-                        EntryAction::OrInsert => {entry.or_insert(value);},
-                        EntryAction::OrInsertWith => {entry.or_insert_with(|| value);},
-                        EntryAction::OrInsertWithKey => {entry.or_insert_with_key(|_| value);},
-                        EntryAction::RemoveEntry => {
-                            match entry {
-                                blart::map::Entry::Occupied(e) => {e.remove_entry();},
-                                blart::map::Entry::Vacant(_) => {},
-                            };
-                        }
-                    };
-                }
-            },
-            Action::EntryRef(ea, key) => {
-                if let Ok(entry) = tree.try_entry_ref(&key) {
-                    let value = next_key;
-                    next_key += 1;
-                    match ea {
-                        EntryAction::AndModify => {entry.and_modify(|v| *v = v.saturating_sub(1));},
-                        EntryAction::InsertEntry => {entry.insert_entry(value);},
-                        EntryAction::Key => {entry.key();},
-                        EntryAction::OrDefault => {entry.or_default();},
-                        EntryAction::OrInsert => {entry.or_insert(value);},
-                        EntryAction::OrInsertWith => {entry.or_insert_with(|| value);},
-                        EntryAction::OrInsertWithKey => {entry.or_insert_with_key(|_| value);},
-                        EntryAction::RemoveEntry => {
-                            match entry {
-                                blart::map::EntryRef::Occupied(e) => {e.remove_entry();},
-                                blart::map::EntryRef::Vacant(_) => {},
-                            };
-                        }
-                    };
-                }
+                let key = Mapped::<ToUBE<usize>>::new(key);
+                let entry = tree.entry(key);
+                let value = next_key;
+                next_key += 1;
+                match ea {
+                    EntryAction::AndModify => {entry.and_modify(|v| *v = v.saturating_sub(1));},
+                    EntryAction::InsertEntry => {entry.insert_entry(value);},
+                    EntryAction::Key => {entry.key();},
+                    EntryAction::OrDefault => {entry.or_default();},
+                    EntryAction::OrInsert => {entry.or_insert(value);},
+                    EntryAction::OrInsertWith => {entry.or_insert_with(|| value);},
+                    EntryAction::OrInsertWithKey => {entry.or_insert_with_key(|_| value);},
+                    EntryAction::RemoveEntry => {
+                        match entry {
+                            blart::map::Entry::Occupied(e) => {e.remove_entry();},
+                            blart::map::Entry::Vacant(_) => {},
+                        };
+                    }
+                };
             }
         }
     }
