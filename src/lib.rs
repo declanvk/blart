@@ -52,9 +52,13 @@ pub use bytes::*;
 pub use collections::*;
 pub use nodes::{visitor, *};
 
-/// Standard ART type. By default the prefix size is 16 bytes
-pub type TreeMap<K, V, const NUM_PREFIX_BYTES: usize = 16> =
+/// ART type for keys with variable length
+pub type VariableTreeMap<K, V, const NUM_PREFIX_BYTES: usize> =
     RawTreeMap<K, V, NUM_PREFIX_BYTES, nodes::VariableKeyHeader<NUM_PREFIX_BYTES>>;
+
+/// Standard ART type. The default is for variable key lengths, with 16 byte
+/// prefix
+pub type TreeMap<K, V> = VariableTreeMap<K, V, 16>;
 
 /// ART type for keys with fixed length
 pub type FixedTreeMap<K, V, const NUM_PREFIX_BYTES: usize = { std::mem::size_of::<K>() }> =
