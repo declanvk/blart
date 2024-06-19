@@ -1,6 +1,5 @@
 //! Trie node representation
 
-// pub use self::iterators::*;
 use crate::{assume, rust_nightly_apis::{maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array}, tagged_pointer::TaggedPointer, AsBytes};
 use std::{
     borrow::Borrow,
@@ -1349,7 +1348,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 {
     #[cfg(feature = "nightly")]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        let keys = unsafe { maybe_uninit_array_assume_init(&self.keys) };
+        let keys = unsafe { crate::rust_nightly_apis::maybe_uninit_array_assume_init(&self.keys) };
         let cmp = u8x16::splat(key_fragment)
             .simd_eq(u8x16::from_array(*keys))
             .to_bitmask() as u32;
@@ -1379,7 +1378,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         match self.lookup_child_index(key_fragment) {
             Some(child_index) => WritePoint::Existing(child_index),
             None => {
-                let keys = unsafe { maybe_uninit_array_assume_init(&self.keys) };
+                let keys = unsafe { crate::rust_nightly_apis::maybe_uninit_array_assume_init(&self.keys) };
                 let cmp = u8x16::splat(key_fragment)
                     .simd_lt(u8x16::from_array(*keys))
                     .to_bitmask() as u32;
