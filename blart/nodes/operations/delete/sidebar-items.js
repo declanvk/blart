@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["delete_maximum_unchecked","delete_minimum_unchecked","delete_unchecked","find_maximum_to_delete","find_minimum_to_delete","inner_delete_non_root_unchecked","inner_delete_unchecked","remove_child_from_inner_node_and_compress","search_for_node_to_delete"],"struct":["DeleteResult","DeleteSearchResult"]};
