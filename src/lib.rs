@@ -5,11 +5,18 @@
 #![feature(hasher_prefixfree_extras)]
 #![feature(portable_simd)]
 #![feature(new_uninit)]
-#![feature(impl_trait_in_assoc_type)]
 #![feature(core_intrinsics)]
 #![feature(is_sorted)]
 #![feature(strict_provenance)]
-#![feature(generic_const_exprs)]
+
+#![cfg_attr(
+    feature = "nightly",
+    feature(
+        impl_trait_in_assoc_type,
+        generic_const_exprs
+    )
+)]
+
 #![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
 #![deny(
     missing_docs,
@@ -60,8 +67,14 @@ pub type VariableTreeMap<K, V, const NUM_PREFIX_BYTES: usize> =
 /// prefix
 pub type TreeMap<K, V> = VariableTreeMap<K, V, 16>;
 
+#[cfg(feature = "nightly")]
 /// ART type for keys with fixed length
 pub type FixedTreeMap<K, V, const NUM_PREFIX_BYTES: usize = { std::mem::size_of::<K>() }> =
+    RawTreeMap<K, V, NUM_PREFIX_BYTES, nodes::FixedKeyHeader<NUM_PREFIX_BYTES, K>>;
+
+#[cfg(not(feature = "nightly"))]
+/// ART type for keys with fixed length
+pub type FixedTreeMap<K, V, const NUM_PREFIX_BYTES: usize> =
     RawTreeMap<K, V, NUM_PREFIX_BYTES, nodes::FixedKeyHeader<NUM_PREFIX_BYTES, K>>;
 
 #[doc = include_str!("../README.md")]

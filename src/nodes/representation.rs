@@ -12,7 +12,7 @@ use std::{
     iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip},
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
-    ops::Range,
+    ops::{ControlFlow, Range},
     ptr::{self, NonNull},
     simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
@@ -1621,7 +1621,13 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     InnerNode<NUM_PREFIX_BYTES> for InnerNode48<K, V, NUM_PREFIX_BYTES, H>
 {
     type GrownNode = InnerNode256<K, V, NUM_PREFIX_BYTES, H>;
+
+    #[cfg(not(feature = "nightly"))]
+    type Iter<'a> = stable_iters::Node48Iter<'a, K, V, NUM_PREFIX_BYTES, H> where Self: 'a;
+
+    #[cfg(feature = "nightly")]
     type Iter<'a> = Map<FilterMap<Enumerate<Iter<'a, RestrictedNodeIndex<48>>>, impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>>, impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>)> where Self: 'a;
+
     type ShrunkNode = InnerNode16<K, V, NUM_PREFIX_BYTES, H>;
 
     fn header(&self) -> &H {
@@ -1810,11 +1816,23 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     fn iter(&self) -> Self::Iter<'_> {
         let child_pointers = self.initialized_child_pointers();
-        self.child_indices
-            .iter()
-            .enumerate()
-            .filter_map(|(key, idx)| (!idx.is_empty()).then_some((key as u8, usize::from(*idx))))
-            .map(|(key, idx)| unsafe { (key, *child_pointers.get_unchecked(idx)) })
+
+        #[cfg(not(feature = "nightly"))]
+        {
+            stable_iters::Node48Iter {
+                it: self.child_indices.iter().enumerate(),
+                child_pointers
+            }
+        }
+
+        #[cfg(feature = "nightly")]
+        {
+            self.child_indices
+                .iter()
+                .enumerate()
+                .filter_map(|(key, idx)| (!idx.is_empty()).then_some((key as u8, usize::from(*idx))))
+                .map(|(key, idx)| unsafe { (key, *child_pointers.get_unchecked(idx)) })
+        }
     }
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
@@ -1985,7 +2003,13 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     InnerNode<NUM_PREFIX_BYTES> for InnerNode256<K, V, NUM_PREFIX_BYTES, H>
 {
     type GrownNode = Self;
+
+    #[cfg(not(feature = "nightly"))]
+    type Iter<'a> = stable_iters::Node256Iter<'a, K, V, NUM_PREFIX_BYTES, H> where Self: 'a;
+    
+    #[cfg(feature = "nightly")]
     type Iter<'a> = FilterMap<Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>>>, impl FnMut((usize, &'a Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>)) -> Option<(u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>)>> where Self: 'a;
+    
     type ShrunkNode = InnerNode48<K, V, NUM_PREFIX_BYTES, H>;
 
     fn header(&self) -> &H {
@@ -2062,10 +2086,20 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 
     fn iter(&self) -> Self::Iter<'_> {
-        self.child_pointers
-            .iter()
-            .enumerate()
-            .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
+        #[cfg(not(feature = "nightly"))]
+        {
+            stable_iters::Node256Iter {
+                it: self.child_pointers.iter().enumerate()
+            }
+        }
+
+        #[cfg(feature = "nightly")]
+        {
+            self.child_pointers
+                .iter()
+                .enumerate()
+                .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
+        }
     }
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
@@ -2158,6 +2192,79 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
         node
     }
+}
+
+mod stable_iters {
+    use super::*;
+
+    pub struct Node48Iter<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+        pub(crate) it: Enumerate<Iter<'a, RestrictedNodeIndex<48>>>,
+        pub(crate) child_pointers: &'a [OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>]
+    }
+
+    impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator for Node48Iter<'a, K, V, NUM_PREFIX_BYTES, H> {
+        type Item = (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>);
+    
+        fn next(&mut self) -> Option<Self::Item> {
+            while let Some((key, idx)) = self.it.next() {
+                if idx.is_empty() {
+                    continue;
+                }
+                let key = key as u8;
+                let child_pointer = unsafe { *self.child_pointers.get_unchecked(usize::from(*idx)) };
+                return Some((key, child_pointer));
+            }
+            None
+        }
+    }
+    
+    impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> DoubleEndedIterator for Node48Iter<'a, K, V, NUM_PREFIX_BYTES, H> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            while let Some((key, idx)) = self.it.next_back() {
+                if idx.is_empty() {
+                    continue;
+                }
+                let key = key as u8;
+                let child_pointer = unsafe { *self.child_pointers.get_unchecked(usize::from(*idx)) };
+                return Some((key, child_pointer));
+            }
+            None
+        }
+    }
+    
+    impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FusedIterator for Node48Iter<'a, K, V, NUM_PREFIX_BYTES, H> {}
+
+    pub struct Node256Iter<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+        pub(crate) it: Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>>>
+    }
+
+    impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator for Node256Iter<'a, K, V, NUM_PREFIX_BYTES, H> {
+        type Item = (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            while let Some((key, node)) = self.it.next() {
+                match node {
+                    Some(node) => return Some((key as u8, *node)),
+                    None => continue,
+                }
+            }
+            None
+        }
+    }
+
+    impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> DoubleEndedIterator for Node256Iter<'a, K, V, NUM_PREFIX_BYTES, H> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            while let Some((key, node)) = self.it.next_back() {
+                match node {
+                    Some(node) => return Some((key as u8, *node)),
+                    None => continue,
+                }
+            }
+            None
+        }
+    }
+
+    impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> FusedIterator for Node256Iter<'a, K, V, NUM_PREFIX_BYTES, H> {}
 }
 
 /// Node that contains a single leaf value.
