@@ -176,17 +176,28 @@ pub fn hasher_write_length_prefix<H: std::hash::Hasher>(state: &mut H, num_entri
 /// issue is [#96097][issue-96097]**
 ///
 /// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
+#[cfg(feature = "nightly")]
 #[inline(always)]
 pub const fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeUninit<T>; N] {
-    #[cfg(feature = "nightly")]
-    {
-        std::mem::MaybeUninit::uninit_array()
-    }
+    std::mem::MaybeUninit::uninit_array()
+}
 
-    #[cfg(not(feature = "nightly"))]
-    {
-        [const { std::mem::MaybeUninit::uninit() }; N]
-    }
+/// Create a new array of `MaybeUninit<T>` items, in an uninitialized state.
+///
+/// Note: in a future Rust version this method may become unnecessary
+/// when Rust allows
+/// [inline const expressions](https://github.com/rust-lang/rust/issues/76001).
+/// The example below could then use `let mut buf = [const {
+/// MaybeUninit::<u8>::uninit() }; 32];`.
+///
+/// **This is a unstable API copied from the Rust standard library, tracking
+/// issue is [#96097][issue-96097]**
+///
+/// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
+#[cfg(not(feature = "nightly"))]
+#[inline(always)]
+pub fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeUninit<T>; N] {
+    std::array::from_fn(|_| std::mem::MaybeUninit::uninit())
 }
 
 /// Extracts the values from an array of `MaybeUninit` containers.
