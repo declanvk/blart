@@ -20,31 +20,6 @@ use sptr::Strict;
 /// bits. As a result, we can cast safely because we know that the
 /// const-evaluation process & type-checking will ensure that the number of bits
 /// is sufficient.
-#[cfg_attr(
-    not(miri),
-    doc = "",
-    doc = "Here is an example of a cast that fails to compile because the result type",
-    doc = "has insufficient alignment:",
-    doc = "",
-    doc = "```rust,compile_fail",
-    doc = "use blart::tagged_pointer::TaggedPointer;",
-    doc = "",
-    doc = "let pointee = u64::MAX;",
-    doc = "let pointer = Box::into_raw(Box::new(pointee));",
-    doc = "let tag_data = 0b010usize;",
-    doc = "",
-    doc = "let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, \
-           tag_data).unwrap();",
-    doc = "",
-    doc = "assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);",
-    doc = "assert_eq!(tagged_pointer.to_data(), 0b010);",
-    doc = "",
-    doc = "tagged_pointer.set_data(0b101);",
-    doc = "",
-    doc = "// This cast to `i32` causes the compilation failure",
-    doc = "let new_tagged_pointer = tagged_pointer.cast::<i32>();",
-    doc = "```"
-)]
 #[repr(transparent)]
 pub struct TaggedPointer<P, const MIN_BITS: u32>(NonNull<P>);
 
@@ -112,6 +87,19 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
         // function, who must provide a non-null (non-zero) pointer. This
         // assumes that null is always a zero value.
         let unchecked_ptr = unsafe { NonNull::new_unchecked(pointer) };
+
+        let ptr_addr = unchecked_ptr.as_ptr().addr();
+
+        // Double-check that there are no existing bits stored in the data-carrying
+        // positions
+        assert_eq!(
+            ptr_addr & Self::DATA_MASK,
+            0,
+            "this pointer was not aligned"
+        );
+
+        // After the assert we know that the pointer has no bits set in the lowest
+        // couple bits.
         TaggedPointer(unchecked_ptr)
     }
 
@@ -151,6 +139,11 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     ///  - Panics if any bits other than the lowest [`Self::NUM_BITS`] are
     ///    non-zero in the new `data` value.
     pub fn set_data(&mut self, data: usize) {
+        assert_eq!(
+            data & Self::POINTER_MASK,
+            0,
+            "cannot set more data beyond the lowest NUM_BITS"
+        );
         let data = data & Self::DATA_MASK;
 
         let ptr_with_new_data = self
@@ -356,45 +349,45 @@ mod tests {
         };
     }
 
-    // #[test]
-    // #[should_panic]
-    // fn set_data_beyond_capacity_u8() {
-    //     let mut val = 0u8;
-    //     let raw_ptr = &mut val as *mut _;
-    //     let mut p = TaggedPointer::<_, 0>::new(raw_ptr).unwrap();
+    #[test]
+    #[should_panic]
+    fn set_data_beyond_capacity_u8() {
+        let mut val = 0u8;
+        let raw_ptr = &mut val as *mut _;
+        let mut p = TaggedPointer::<_, 0>::new(raw_ptr).unwrap();
 
-    //     p.set_data(0b1);
-    // }
+        p.set_data(0b1);
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn set_data_beyond_capacity_u16() {
-    //     let mut val = 0u16;
-    //     let raw_ptr = &mut val as *mut _;
-    //     let mut p = TaggedPointer::<_, 1>::new(raw_ptr).unwrap();
+    #[test]
+    #[should_panic]
+    fn set_data_beyond_capacity_u16() {
+        let mut val = 0u16;
+        let raw_ptr = &mut val as *mut _;
+        let mut p = TaggedPointer::<_, 1>::new(raw_ptr).unwrap();
 
-    //     p.set_data(0b11);
-    // }
+        p.set_data(0b11);
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn set_data_beyond_capacity_u32() {
-    //     let mut val = 0u32;
-    //     let raw_ptr = &mut val as *mut _;
-    //     let mut p = TaggedPointer::<_, 2>::new(raw_ptr).unwrap();
+    #[test]
+    #[should_panic]
+    fn set_data_beyond_capacity_u32() {
+        let mut val = 0u32;
+        let raw_ptr = &mut val as *mut _;
+        let mut p = TaggedPointer::<_, 2>::new(raw_ptr).unwrap();
 
-    //     p.set_data(0b111);
-    // }
+        p.set_data(0b111);
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn set_data_beyond_capacity_u64() {
-    //     let mut val = 0u64;
-    //     let raw_ptr = &mut val as *mut _;
-    //     let mut p = TaggedPointer::<_, 3>::new(raw_ptr).unwrap();
+    #[test]
+    #[should_panic]
+    fn set_data_beyond_capacity_u64() {
+        let mut val = 0u64;
+        let raw_ptr = &mut val as *mut _;
+        let mut p = TaggedPointer::<_, 3>::new(raw_ptr).unwrap();
 
-    //     p.set_data(0b1111);
-    // }
+        p.set_data(0b1111);
+    }
 
     #[test]
     fn set_data_different_alignments() {
