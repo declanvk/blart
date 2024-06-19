@@ -33,6 +33,7 @@ impl StackArena {
         &mut self,
         buffer: &'a mut &'b mut [MaybeUninit<usize>],
     ) -> Option<&'a mut &'b mut [usize]> {
+        #[allow(unused_unsafe)]
         unsafe {
             assume!(self.data.len() % self.n == 0);
         }
@@ -45,6 +46,7 @@ impl StackArena {
         let end = self.data.len();
         let s = unsafe { &self.data.get_unchecked(begin..end) };
 
+        #[allow(unused_unsafe)]
         unsafe {
             assume!(buffer.len() == s.len());
         }
@@ -73,6 +75,7 @@ fn edit_dist(
     new: &mut [MaybeUninit<usize>],
     max_edit_dist: usize,
 ) -> bool {
+    #[allow(unused_unsafe)]
     unsafe {
         assume!(old.len() == new.len());
         assume!(!old.is_empty());

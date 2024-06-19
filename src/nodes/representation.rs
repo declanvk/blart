@@ -784,6 +784,7 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
         key: &[u8],
         current_depth: usize,
     ) -> MatchPrefixResult<Self::Key, Self::Value, NUM_PREFIX_BYTES, Self::Header> {
+        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: Since we are iterating the key and prefixes, we
             // expect that the depth never exceeds the key len.
@@ -1020,6 +1021,7 @@ impl<
                 child_index
             },
             WritePoint::Shift(child_index) => {
+                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: This is by construction, since the number of children
                     // is always <= maximum number o keys (childrens) that we can hold
@@ -1131,6 +1133,7 @@ impl<
         let mut child_pointers = maybe_uninit_uninit_array();
         let num_children = header.num_children();
 
+        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: By construction the number of children in the header
             // is kept in sync with the number of children written in the node
@@ -1181,6 +1184,7 @@ impl<
 
         let num_children = header.num_children();
 
+        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: By construction the number of children in the header
             // is kept in sync with the number of children written in the node
@@ -1687,6 +1691,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         let child_pointers = self.initialized_child_pointers();
         if !index.is_empty() {
             let idx = usize::from(*index);
+
+            #[allow(unused_unsafe)]
             unsafe {
                 // SAFETY: If `idx` is out of bounds we have more than
                 // 48 childs in this node, so it should have already
@@ -1729,6 +1735,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         };
 
         // SAFETY: This index can be up to <= 47 as decribed above
+        #[allow(unused_unsafe)]
         unsafe {
             assume!(child_index < self.child_pointers.len());
         }
@@ -1794,6 +1801,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             }
 
             let idx = usize::from(*idx);
+
+            #[allow(unused_unsafe)]
             unsafe {
                 // SAFETY: When growing initialized_child_pointers should be full
                 // i.e initialized_child_pointers len == 48. And idx <= 47, since
@@ -2011,6 +2020,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             let child_pointer = child_pointer.deep_clone();
             node_ref.child_indices[usize::from(key_fragment)] =
                 unsafe { RestrictedNodeIndex::try_from(idx).unwrap_unchecked() };
+
+            #[allow(unused_unsafe)]
             unsafe {
                 assume!(idx < node_ref.child_pointers.len());
             }
@@ -2283,6 +2294,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
+#[allow(dead_code)]
 mod stable_iters {
     use super::*;
 

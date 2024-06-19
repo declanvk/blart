@@ -81,6 +81,8 @@ impl<const NUM_PREFIX_BYTES: usize> RawHeader<NUM_PREFIX_BYTES> {
 
         let begin = len;
         let end = begin + self.capped_prefix_len();
+
+        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: This function is called when mismatch happened and
             // we used the node to match the number of bytes,
@@ -282,6 +284,8 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
         let begin = depth + len;
         let end = begin + self.capped_prefix_len();
         let len = end - begin;
+
+        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: This function is called a mismatch happened and
             // we used the leaf to match the number of matching bytes,
@@ -320,6 +324,8 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
             let leaf_ptr = unsafe { minimum_unchecked(min_child) };
             let leaf = unsafe { leaf_ptr.as_ref() };
             let leaf = leaf.key_ref().as_bytes();
+
+            #[allow(unused_unsafe)]
             unsafe {
                 // SAFETY: Since we are iterating the key and prefixes, we
                 // expect that the depth never exceeds the key len.
