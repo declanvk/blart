@@ -1,13 +1,8 @@
 use crate::{
-    assume, likely, unlikely, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch, NodeHeader, NodePtr, OpaqueNodePtr
+    assume, likely, unlikely, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode,
+    MatchPrefixResult, Mismatch, NodeHeader, NodePtr, OpaqueNodePtr,
 };
-use std::{
-    borrow::Borrow,
-    error::Error,
-    fmt,
-    marker::PhantomData,
-    ops::ControlFlow,
-};
+use std::{borrow::Borrow, error::Error, fmt, marker::PhantomData, ops::ControlFlow};
 
 /// The results of a successful tree insert
 #[derive(Debug)]

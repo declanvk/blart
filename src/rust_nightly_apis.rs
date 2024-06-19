@@ -167,8 +167,9 @@ pub fn hasher_write_length_prefix<H: std::hash::Hasher>(state: &mut H, num_entri
 /// Note: in a future Rust version this method may become unnecessary
 /// when Rust allows
 /// [inline const expressions](https://github.com/rust-lang/rust/issues/76001).
-/// The example below could then use `let mut buf = [const { MaybeUninit::<u8>::uninit() }; 32];`.
-/// 
+/// The example below could then use `let mut buf = [const {
+/// MaybeUninit::<u8>::uninit() }; 32];`.
+///
 /// **This is a unstable API copied from the Rust standard library, tracking
 /// issue is [#96097][issue-96097]**
 ///
@@ -199,17 +200,19 @@ pub const fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeU
 /// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
 ///
 /// # Note:
-/// 
+///
 /// This implementation is a little bit different since the original one
 /// requires intrinsics, in this implementation we take a reference to
 /// a uninit slice and transmute it to inited one.
-/// 
+///
 /// This will be done for nightly and stable version, since the standard
 /// library version uses intrinsics to make the transmute safer and so
 /// can only be done by the standard library, also the std library one
 /// takes the value not a reference
 #[inline(always)]
-pub const unsafe fn maybe_uninit_array_assume_init<T, const N: usize>(array: &[std::mem::MaybeUninit<T>; N]) -> &[T; N] {
+pub const unsafe fn maybe_uninit_array_assume_init<T, const N: usize>(
+    array: &[std::mem::MaybeUninit<T>; N],
+) -> &[T; N] {
     // SAFETY:
     // * The caller guarantees that all elements of the array are initialized
     // * `MaybeUninit<T>` and T are guaranteed to have the same layout
@@ -219,7 +222,7 @@ pub const unsafe fn maybe_uninit_array_assume_init<T, const N: usize>(array: &[s
 }
 
 /// Constructs a new boxed slice with uninitialized contents.
-/// 
+///
 /// **This is a unstable API copied from the Rust standard library, tracking
 /// issue is [#63291][issue-63291]**
 ///
@@ -259,7 +262,7 @@ pub unsafe fn box_assume_init<T>(b: Box<[std::mem::MaybeUninit<T>]>) -> Box<[T]>
     {
         unsafe { b.assume_init() }
     }
-    
+
     #[cfg(not(feature = "nightly"))]
     {
         let raw = Box::into_raw(b);
@@ -277,7 +280,7 @@ pub unsafe fn box_assume_init<T>(b: Box<[std::mem::MaybeUninit<T>]>) -> Box<[T]>
 /// own, or if it does not enable any significant optimizations.
 ///
 /// This intrinsic does not have a stable counterpart.
-/// 
+///
 /// **This is a unstable API copied from the Rust standard library**
 #[macro_export]
 macro_rules! assume {
@@ -298,7 +301,7 @@ macro_rules! assume {
 /// any safety invariants.
 ///
 /// This intrinsic does not have a stable counterpart.
-/// 
+///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(feature = "nightly")]
 #[macro_export]
@@ -319,7 +322,7 @@ macro_rules! likely {
 /// any safety invariants.
 ///
 /// This intrinsic does not have a stable counterpart.
-/// 
+///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(not(feature = "nightly"))]
 #[macro_export]
@@ -340,7 +343,7 @@ macro_rules! likely {
 /// any safety invariants.
 ///
 /// This intrinsic does not have a stable counterpart.
-/// 
+///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(feature = "nightly")]
 #[macro_export]
@@ -361,7 +364,7 @@ macro_rules! unlikely {
 /// any safety invariants.
 ///
 /// This intrinsic does not have a stable counterpart.
-/// 
+///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(not(feature = "nightly"))]
 #[macro_export]

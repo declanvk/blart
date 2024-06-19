@@ -1,3 +1,4 @@
+use crate::rust_nightly_apis::{box_assume_init, box_new_uninit_slice};
 use paste::paste;
 use std::{
     borrow::{Borrow, Cow},
@@ -13,7 +14,6 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
-use crate::rust_nightly_apis::{box_new_uninit_slice, box_assume_init};
 
 mod ordered;
 pub use ordered::*;

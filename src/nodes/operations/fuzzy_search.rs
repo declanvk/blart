@@ -1,7 +1,8 @@
 use std::mem::MaybeUninit;
 
 use crate::{
-    assume, AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, NodeHeader, OpaqueNodePtr
+    assume, AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
+    NodeHeader, OpaqueNodePtr,
 };
 
 pub struct StackArena {
