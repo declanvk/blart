@@ -200,41 +200,6 @@ pub fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeUninit<
     std::array::from_fn(|_| std::mem::MaybeUninit::uninit())
 }
 
-/// Extracts the values from an array of `MaybeUninit` containers.
-///
-/// # Safety
-///
-/// It is up to the caller to guarantee that all elements of the array are
-/// in an initialized state.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#96097][issue-96097]**
-///
-/// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
-///
-/// # Note:
-///
-/// This implementation is a little bit different since the original one
-/// requires intrinsics, in this implementation we take a reference to
-/// a uninit slice and transmute it to inited one.
-///
-/// This will be done for nightly and stable version, since the standard
-/// library version uses intrinsics to make the transmute safer and so
-/// can only be done by the standard library, also the std library one
-/// takes the value not a reference
-#[allow(dead_code)]
-#[inline(always)]
-pub const unsafe fn maybe_uninit_array_assume_init<T, const N: usize>(
-    array: &[std::mem::MaybeUninit<T>; N],
-) -> &[T; N] {
-    // SAFETY:
-    // * The caller guarantees that all elements of the array are initialized
-    // * `MaybeUninit<T>` and T are guaranteed to have the same layout
-    // * `MaybeUninit` does not drop, so there are no double-frees
-    // And thus the conversion is safe
-    unsafe { std::mem::transmute(array) }
-}
-
 /// Constructs a new boxed slice with uninitialized contents.
 ///
 /// **This is a unstable API copied from the Rust standard library, tracking
