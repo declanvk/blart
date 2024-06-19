@@ -1,12 +1,10 @@
 use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch,
-    NodeHeader, NodePtr, OpaqueNodePtr,
+    assume, likely, unlikely, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch, NodeHeader, NodePtr, OpaqueNodePtr
 };
 use std::{
     borrow::Borrow,
     error::Error,
     fmt,
-    intrinsics::{assume, likely, unlikely},
     marker::PhantomData,
     ops::ControlFlow,
 };
@@ -277,7 +275,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
                     // expect that the depth never exceeds the key len.
                     // Because if this happens we ran out of bytes in the key to match
                     // and the whole process should be already finished
-                    assume(key_bytes_used + mismatch.matched_bytes < key_bytes.len());
+                    assume!(key_bytes_used + mismatch.matched_bytes < key_bytes.len());
                 }
                 let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
@@ -349,14 +347,14 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
                     // guarantees that the amount of bytes used is always < len of the key or key in
                     // the leaf if this was not true, then a
                     // [`InsertPrefixError`] would already be triggered
-                    assume(key_bytes_used < leaf_bytes.len());
-                    assume(key_bytes_used < key_bytes.len());
-                    assume(new_key_bytes_used < leaf_bytes.len());
-                    assume(new_key_bytes_used < key_bytes.len());
+                    assume!(key_bytes_used < leaf_bytes.len());
+                    assume!(key_bytes_used < key_bytes.len());
+                    assume!(new_key_bytes_used < leaf_bytes.len());
+                    assume!(new_key_bytes_used < key_bytes.len());
 
                     // SAFETY: This is safe by construction, since new_key_bytes_used =
                     // key_bytes_used + x
-                    assume(key_bytes_used <= new_key_bytes_used);
+                    assume!(key_bytes_used <= new_key_bytes_used);
                 }
 
                 let mut new_n4 = InnerNode4::from_prefix(
@@ -525,7 +523,7 @@ where
                 // Since the prefix matched, advance the depth by the size of the prefix
                 *current_depth += matched_bytes;
 
-                if likely(*current_depth < key.len()) {
+                if likely!(*current_depth < key.len()) {
                     let next_key_fragment = key[*current_depth];
                     Ok(ControlFlow::Continue(
                         inner_node.lookup_child(next_key_fragment),
@@ -589,8 +587,8 @@ where
                     // which would lead to this not holding, but since it already checked we know
                     // that current_depth < len of the key and the key in the leaf. But there is an
                     // edge case, if the root of the tree is a leaf than the depth can be = len
-                    assume(current_depth <= leaf_bytes.len());
-                    assume(current_depth <= key_bytes.len());
+                    assume!(current_depth <= leaf_bytes.len());
+                    assume!(current_depth <= key_bytes.len());
                 }
 
                 let prefix_size = leaf_bytes[current_depth..]
@@ -601,12 +599,11 @@ where
 
                 let new_key_bytes_used = current_depth + prefix_size;
 
-                if unlikely(
-                    new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len(),
+                if unlikely!(
+                    new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len()
                 ) {
                     // then the key has insufficient bytes to be unique. It must be
                     // a prefix of an existing key OR an existing key is a prefix of it
-                    // println!("{key_bytes:?}");
                     return Err(InsertPrefixError {
                         byte_repr: key_bytes.into(),
                     });
@@ -633,7 +630,7 @@ where
                     // that current_depth < len of the key and the key in the leaf. And also the
                     // only edge case can occur in the Leaf node, but if we reach a leaf not the
                     // function returns early, so it's impossible to be <=
-                    assume(current_depth < key_bytes.len());
+                    assume!(current_depth < key_bytes.len());
                 }
 
                 match next_child_node {
@@ -659,7 +656,7 @@ where
                 }
             },
             ControlFlow::Break(mismatch) => {
-                if unlikely((current_depth + mismatch.matched_bytes) >= key_bytes.len()) {
+                if unlikely!((current_depth + mismatch.matched_bytes) >= key_bytes.len()) {
                     // then the key has insufficient bytes to be unique. It must be
                     // a prefix of an existing key
 

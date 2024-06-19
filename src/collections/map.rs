@@ -2,11 +2,7 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
-    minimum_unchecked, search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes,
-    ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch, InsertPoint, InsertPrefixError,
-    InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodeHeader, NodePtr,
-    OpaqueNodePtr, StackArena,
+    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked, minimum_unchecked, rust_nightly_apis::{box_new_uninit_slice, hasher_write_length_prefix}, search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult, FuzzySearch, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes, NodeHeader, NodePtr, OpaqueNodePtr, StackArena
 };
 use std::{
     borrow::Borrow,
@@ -241,9 +237,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             s[i].write(i);
         }
 
-        let mut old_row = Box::new_uninit_slice(arena.size());
+        let mut old_row = box_new_uninit_slice(arena.size());
         let mut old_row = old_row.as_mut();
-        let mut new_row = Box::new_uninit_slice(arena.size());
+        let mut new_row = box_new_uninit_slice(arena.size());
         let mut new_row = new_row.as_mut();
 
         while let (Some(node), Some(old_row)) =
@@ -1434,7 +1430,7 @@ where
     H1: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        Hasher::write_length_prefix(state, self.num_entries);
+        hasher_write_length_prefix(state, self.num_entries);
         for elt in self {
             elt.hash(state);
         }

@@ -3,6 +3,9 @@ use crate::VariableKeyHeader;
 use super::*;
 use std::mem;
 
+#[cfg(not(feature = "nightly"))]
+use sptr::Strict;
+
 // This test is important because it verifies that we can transform a tagged
 // pointer to a type with large and small alignment and back without issues.
 #[test]

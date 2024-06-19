@@ -1,10 +1,12 @@
 //! Different header type
 
 use std::{
-    fmt::Debug, hint::unreachable_unchecked, intrinsics::{assume, likely}, marker::PhantomData
+    fmt::Debug,
+    hint::unreachable_unchecked,
+    marker::PhantomData,
 };
 
-use crate::{minimum_unchecked, AsBytes, InnerNode, LeafNode, NodePtr};
+use crate::{assume, likely, minimum_unchecked, AsBytes, InnerNode, LeafNode, NodePtr};
 
 /// The common header for all inner nodes
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,10 +90,10 @@ impl<const NUM_PREFIX_BYTES: usize> RawHeader<NUM_PREFIX_BYTES> {
             // we used the node to match the number of bytes,
             // by this we know that len < prefix len, but since we + 1,
             // to skip the key byte we have that len <= prefix len
-            assume(end <= self.prefix.len());
+            assume!(end <= self.prefix.len());
 
             // SAFETY: This is by construction end = begin + len
-            assume(begin <= end);
+            assume!(begin <= end);
         }
         self.prefix.copy_within(begin..end, 0);
     }
@@ -289,10 +291,10 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
             // we used the leaf to match the number of matching bytes,
             // by this we know that len < prefix len, but since we + 1,
             // to skip the key byte we have that len <= prefix len
-            assume(end <= leaf_key.len());
+            assume!(end <= leaf_key.len());
 
             // SAFETY: This is by construction end = begin + len
-            assume(begin <= end);
+            assume!(begin <= end);
         }
 
         let leaf_key = &leaf_key[begin..end];
@@ -310,7 +312,7 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
         Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<N::Key, N::Value, NUM_PREFIX_BYTES, N::Header>>>,
     ) {
         let len = self.prefix_len();
-        if likely(len <= NUM_PREFIX_BYTES) {
+        if likely!(len <= NUM_PREFIX_BYTES) {
             (self.read_prefix(), None)
         } else {
             // SAFETY: By construction a InnerNode, must have >= 1 childs, this
@@ -327,14 +329,14 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
                 // expect that the depth never exceeds the key len.
                 // Because if this happens we ran out of bytes in the key to match
                 // and the whole process should be already finished
-                assume(current_depth <= leaf.len());
+                assume!(current_depth <= leaf.len());
 
                 // SAFETY: By the construction of the prefix we know that this is inbounds
                 // since the prefix len guarantees it to us
-                assume(current_depth + len <= leaf.len());
+                assume!(current_depth + len <= leaf.len());
 
                 // SAFETY: This can't overflow since len comes from a u32
-                assume(current_depth <= current_depth + len);
+                assume!(current_depth <= current_depth + len);
             }
             let leaf = &leaf[current_depth..(current_depth + len)];
             (leaf, Some(leaf_ptr))
@@ -378,7 +380,9 @@ impl<const NUM_PREFIX_BYTES: usize, K1: Copy + Eq + Debug + Sized> NodeHeader<NU
         );
 
         #[cfg(not(debug_assertions))]
-        unsafe { unreachable_unchecked() };
+        unsafe {
+            unreachable_unchecked()
+        };
     }
 
     #[inline(always)]
