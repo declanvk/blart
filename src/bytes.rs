@@ -13,6 +13,7 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
+use crate::rust_nightly_apis::{box_new_uninit_slice, box_assume_init};
 
 mod ordered;
 pub use ordered::*;
@@ -490,7 +491,7 @@ macro_rules! as_bytes_for_concat {
                         let mut sum = 0;
                         $(sum += $ty.len();)+
 
-                        let mut v = Box::new_uninit_slice(sum);
+                        let mut v = box_new_uninit_slice(sum);
 
                         let mut sum = 0;
                         $(
@@ -506,7 +507,7 @@ macro_rules! as_bytes_for_concat {
 
                         let _ = sum;
 
-                        Self(unsafe { v.assume_init() }, PhantomData)
+                        Self(unsafe { box_assume_init(v) }, PhantomData)
                     }
                 }
             }

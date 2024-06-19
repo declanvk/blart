@@ -1,22 +1,20 @@
-#![feature(maybe_uninit_slice)]
-#![feature(maybe_uninit_uninit_array)]
-#![feature(maybe_uninit_array_assume_init)]
-#![feature(slice_ptr_get)]
-#![feature(hasher_prefixfree_extras)]
-#![feature(portable_simd)]
-#![feature(new_uninit)]
-#![feature(core_intrinsics)]
-#![feature(is_sorted)]
-#![feature(strict_provenance)]
-
 #![cfg_attr(
     feature = "nightly",
     feature(
         impl_trait_in_assoc_type,
-        generic_const_exprs
+        generic_const_exprs,
+        maybe_uninit_slice,
+        maybe_uninit_uninit_array,
+        const_maybe_uninit_uninit_array,
+        maybe_uninit_array_assume_init,
+        slice_ptr_get,
+        hasher_prefixfree_extras,
+        new_uninit,
+        core_intrinsics,
+        strict_provenance,
+        portable_simd
     )
 )]
-
 #![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
 #![deny(
     missing_docs,
@@ -54,6 +52,7 @@ pub mod tests_common;
 #[cfg(feature = "gen-benches-macro")]
 #[doc(hidden)]
 pub mod benches_common;
+mod rust_nightly_apis;
 
 pub use bytes::*;
 pub use collections::*;

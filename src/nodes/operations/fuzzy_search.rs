@@ -1,8 +1,7 @@
-use std::{intrinsics::assume, mem::MaybeUninit};
+use std::mem::MaybeUninit;
 
 use crate::{
-    AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, NodeHeader,
-    OpaqueNodePtr,
+    assume, AsBytes, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, NodeHeader, OpaqueNodePtr
 };
 
 pub struct StackArena {
@@ -34,7 +33,7 @@ impl StackArena {
         buffer: &'a mut &'b mut [MaybeUninit<usize>],
     ) -> Option<&'a mut &'b mut [usize]> {
         unsafe {
-            assume(self.data.len() % self.n == 0);
+            assume!(self.data.len() % self.n == 0);
         }
 
         if self.data.is_empty() {
@@ -46,7 +45,7 @@ impl StackArena {
         let s = unsafe { &self.data.get_unchecked(begin..end) };
 
         unsafe {
-            assume(buffer.len() == s.len());
+            assume!(buffer.len() == s.len());
         }
 
         buffer.copy_from_slice(s);
@@ -74,9 +73,9 @@ fn edit_dist(
     max_edit_dist: usize,
 ) -> bool {
     unsafe {
-        assume(old.len() == new.len());
-        assume(!old.is_empty());
-        assume(key.len() + 1 == old.len());
+        assume!(old.len() == new.len());
+        assume!(!old.is_empty());
+        assume!(key.len() + 1 == old.len());
     }
 
     let first = *new[0].write(old[0] + 1);
