@@ -1363,9 +1363,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 {
     #[cfg(feature = "nightly")]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        let keys = unsafe { crate::rust_nightly_apis::maybe_uninit_array_assume_init(&self.keys) };
+        let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
         let cmp = u8x16::splat(key_fragment)
-            .simd_eq(u8x16::from_array(*keys))
+            .simd_eq(u8x16::from_array(keys))
             .to_bitmask() as u32;
         let mask = (1u32 << self.header.num_children()) - 1;
         let bitfield = cmp & mask;
@@ -1394,9 +1394,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             Some(child_index) => WritePoint::Existing(child_index),
             None => {
                 let keys =
-                    unsafe { crate::rust_nightly_apis::maybe_uninit_array_assume_init(&self.keys) };
+                    unsafe { MaybeUninit::array_assume_init(self.keys) };
                 let cmp = u8x16::splat(key_fragment)
-                    .simd_lt(u8x16::from_array(*keys))
+                    .simd_lt(u8x16::from_array(keys))
                     .to_bitmask() as u32;
                 let mask = (1u32 << self.header.num_children()) - 1;
                 let bitfield = cmp & mask;
