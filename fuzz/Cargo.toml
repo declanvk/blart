@@ -15,6 +15,7 @@ libfuzzer-sys = { version = "0.4.0", features = ["arbitrary-derive"] }
 
 [dependencies.blart]
 path = ".."
+# features = ["nightly"]
 
 # Prevent this from interfering with workspaces
 [workspace]
