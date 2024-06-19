@@ -13,7 +13,7 @@ use crate::{
 use std::{
     borrow::Borrow,
     fmt::Debug,
-    hash::{Hash, Hasher},
+    hash::Hash,
     ops::Index,
 };
 

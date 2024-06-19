@@ -265,6 +265,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
                 // variant is only returned in cases where there was a mismatch in the header
                 // prefix, implying that the header is present.
                 let key_bytes = key.as_bytes();
+
+                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: Since we are iterating the key and prefixes, we
                     // expect that the depth never exceeds the key len.
@@ -336,6 +338,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             } => {
                 let key_bytes = key.as_bytes();
                 let leaf_bytes = unsafe { leaf_node_ptr.as_key_ref().as_bytes() };
+
+                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: When reaching this point in the insertion proccess this invarants
                     // should always be true, due to the check of [`InsertPrefixError`] which
@@ -577,6 +581,8 @@ where
                 }
 
                 let leaf_bytes = leaf_node.key_ref().as_bytes();
+
+                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
                     // which would lead to this not holding, but since it already checked we know
@@ -619,6 +625,7 @@ where
 
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
+                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
                     // which would lead to this not holding, but since it already checked we know

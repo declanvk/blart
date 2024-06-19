@@ -15,7 +15,7 @@
         portable_simd
     )
 )]
-#![allow(unstable_name_collisions, internal_features, clippy::type_complexity)]
+#![allow(unstable_name_collisions, internal_features, clippy::type_complexity, incomplete_features)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,

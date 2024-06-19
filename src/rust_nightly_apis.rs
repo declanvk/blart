@@ -78,6 +78,7 @@ pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
 /// issue is [#63569][issue-63569]**
 ///
 /// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
+#[allow(dead_code)]
 #[inline(always)]
 pub fn maybe_uninit_slice_as_ptr<T>(this: &[std::mem::MaybeUninit<T>]) -> *const T {
     #[cfg(feature = "nightly")]
@@ -102,6 +103,7 @@ pub fn maybe_uninit_slice_as_ptr<T>(this: &[std::mem::MaybeUninit<T>]) -> *const
 ///
 /// [issue-74265]: https://github.com/rust-lang/rust/issues/74265
 /// [undefined behavior]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
+#[allow(dead_code)]
 #[inline(always)]
 pub unsafe fn non_null_get_unchecked_mut<T>(
     data: std::ptr::NonNull<[T]>,
@@ -209,6 +211,7 @@ pub const fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeU
 /// library version uses intrinsics to make the transmute safer and so
 /// can only be done by the standard library, also the std library one
 /// takes the value not a reference
+#[allow(dead_code)]
 #[inline(always)]
 pub const unsafe fn maybe_uninit_array_assume_init<T, const N: usize>(
     array: &[std::mem::MaybeUninit<T>; N],
