@@ -1,14 +1,14 @@
 //! Trie node representation
 
 // pub use self::iterators::*;
-use crate::{assume, rust_nightly_apis::{maybe_uninit_array_assume_init, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array}, tagged_pointer::TaggedPointer, AsBytes};
+use crate::{assume, rust_nightly_apis::{maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array}, tagged_pointer::TaggedPointer, AsBytes};
 use std::{
     borrow::Borrow,
     cmp::Ordering,
     error::Error,
     fmt,
     hash::Hash,
-    iter::{Copied, Enumerate, FilterMap, FusedIterator, Map, Zip},
+    iter::{Copied, Enumerate, FusedIterator, Zip},
     marker::PhantomData,
     mem::{self, ManuallyDrop, MaybeUninit},
     ops::Range,
@@ -17,7 +17,10 @@ use std::{
 };
 
 #[cfg(feature = "nightly")]
-use std::simd::{cmp::{SimdPartialEq, SimdPartialOrd},u8x16, u8x64, usizex64};
+use std::{
+    iter::{FilterMap, Map},
+    simd::{cmp::{SimdPartialEq, SimdPartialOrd},u8x16, u8x64, usizex64}
+};
 
 use super::NodeHeader;
 
@@ -2289,7 +2292,7 @@ mod stable_iters {
         type Item = (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>);
 
         fn next(&mut self) -> Option<Self::Item> {
-            while let Some((key, idx)) = self.it.next() {
+            for (key, idx) in self.it.by_ref() {
                 if idx.is_empty() {
                     continue;
                 }
@@ -2340,7 +2343,7 @@ mod stable_iters {
         type Item = (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>);
 
         fn next(&mut self) -> Option<Self::Item> {
-            while let Some((key, node)) = self.it.next() {
+            for (key, node) in self.it.by_ref() {
                 match node {
                     Some(node) => return Some((key as u8, *node)),
                     None => continue,

@@ -2,7 +2,6 @@
 
 use std::{
     fmt::Debug,
-    hint::unreachable_unchecked,
     marker::PhantomData,
 };
 
