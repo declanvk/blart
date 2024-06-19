@@ -10,12 +10,7 @@ use crate::{
     InsertSearchResultType::Exact,
     LeafNode, NoPrefixesBytes, NodeHeader, NodePtr, OpaqueNodePtr, StackArena,
 };
-use std::{
-    borrow::Borrow,
-    fmt::Debug,
-    hash::Hash,
-    ops::Index,
-};
+use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Index};
 
 mod entry;
 mod entry_ref;
