@@ -383,7 +383,7 @@ impl<const NUM_PREFIX_BYTES: usize, K1: Copy + Eq + Debug + Sized> NodeHeader<NU
 
         #[cfg(not(debug_assertions))]
         unsafe {
-            unreachable_unchecked()
+            std::hint::unreachable_unchecked()
         };
     }
 
