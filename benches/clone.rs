@@ -8,6 +8,9 @@ use blart::{
 };
 use criterion::{measurement::Measurement, Criterion, Throughput};
 
+#[macro_use]
+mod common;
+
 fn gen_group<M: Measurement, K: AsBytes + Clone>(
     c: &mut Criterion<M>,
     group: String,
@@ -59,7 +62,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     gen_group(c, format!("{prefix}/dict"), dict.clone());
 }
 
-blart::gen_benches!(
+gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (

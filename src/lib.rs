@@ -54,9 +54,6 @@ mod tagged_pointer;
 #[doc(hidden)]
 pub mod tests_common;
 
-#[cfg(feature = "gen-benches-macro")]
-#[doc(hidden)]
-pub mod benches_common;
 mod rust_nightly_apis;
 
 pub use bytes::*;

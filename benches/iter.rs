@@ -6,6 +6,9 @@ use blart::{
 use criterion::{measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
+#[macro_use]
+mod common;
+
 fn iter_node<const NUM_PREFIX_BYTES: usize, M: Measurement, N: InnerNode<NUM_PREFIX_BYTES>>(
     c: &mut Criterion<M>,
     prefix: &str,
@@ -68,7 +71,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     });
 }
 
-blart::gen_benches!(
+gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (

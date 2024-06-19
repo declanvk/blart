@@ -3,6 +3,9 @@ use std::{ffi::CString, time::Duration};
 use blart::TreeMap;
 use criterion::{measurement::Measurement, Criterion};
 
+#[macro_use]
+mod common;
+
 fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let words = include_str!("dict.txt");
     let mut bytes = 0;
@@ -39,7 +42,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     }
 }
 
-blart::gen_benches!(
+gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (

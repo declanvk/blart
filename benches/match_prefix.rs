@@ -5,6 +5,9 @@ use blart::{
 };
 use criterion::{measurement::Measurement, Criterion};
 
+#[macro_use]
+mod common;
+
 fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let leaf = LeafNode::new(
         vec![
@@ -94,7 +97,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     drop(unsafe { Box::from_raw(leaf_ptr) });
 }
 
-blart::gen_benches!(
+gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (
