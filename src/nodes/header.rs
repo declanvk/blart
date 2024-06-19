@@ -1,9 +1,6 @@
 //! Different header type
 
-use std::{
-    fmt::Debug,
-    marker::PhantomData,
-};
+use std::{fmt::Debug, marker::PhantomData};
 
 use crate::{assume, likely, minimum_unchecked, AsBytes, InnerNode, LeafNode, NodePtr};
 

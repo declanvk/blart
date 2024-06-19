@@ -1,6 +1,14 @@
 //! Trie node representation
 
-use crate::{assume, rust_nightly_apis::{maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array}, tagged_pointer::TaggedPointer, AsBytes};
+use crate::{
+    assume,
+    rust_nightly_apis::{
+        maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
+        maybe_uninit_uninit_array,
+    },
+    tagged_pointer::TaggedPointer,
+    AsBytes,
+};
 use std::{
     borrow::Borrow,
     cmp::Ordering,
@@ -18,7 +26,10 @@ use std::{
 #[cfg(feature = "nightly")]
 use std::{
     iter::{FilterMap, Map},
-    simd::{cmp::{SimdPartialEq, SimdPartialOrd},u8x16, u8x64, usizex64}
+    simd::{
+        cmp::{SimdPartialEq, SimdPartialOrd},
+        u8x16, u8x64, usizex64,
+    },
 };
 
 use super::NodeHeader;
@@ -1378,7 +1389,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         match self.lookup_child_index(key_fragment) {
             Some(child_index) => WritePoint::Existing(child_index),
             None => {
-                let keys = unsafe { crate::rust_nightly_apis::maybe_uninit_array_assume_init(&self.keys) };
+                let keys =
+                    unsafe { crate::rust_nightly_apis::maybe_uninit_array_assume_init(&self.keys) };
                 let cmp = u8x16::splat(key_fragment)
                     .simd_lt(u8x16::from_array(*keys))
                     .to_bitmask() as u32;
@@ -1918,7 +1930,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
         for (key, idx) in self.child_indices.iter().enumerate() {
             if idx.is_empty() {
-                continue; 
+                continue;
             }
             let child_pointers = self.initialized_child_pointers();
             return (key as u8, child_pointers[usize::from(*idx)]);
@@ -1979,7 +1991,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
         for (key, idx) in self.child_indices.iter().enumerate().rev() {
             if idx.is_empty() {
-                continue; 
+                continue;
             }
             let child_pointers = self.initialized_child_pointers();
             return (key as u8, child_pointers[usize::from(*idx)]);
