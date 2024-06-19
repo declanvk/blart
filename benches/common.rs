@@ -1,19 +1,14 @@
-#[cfg(feature = "gen-benches-macro")]
-#[macro_export]
 macro_rules! gen_benches {
     ($bench:ident, $(($target:ident, $event:path)),+) => {
-        use paste::paste;
-        use criterion::{criterion_group, criterion_main};
-
-        #[cfg(feature = "perf-events")]
-        paste! {
+        #[cfg(all(feature = "bench-perf-events", target_arch = "x86_64"))]
+        paste::paste! {
             $(
                 fn $target(c: &mut Criterion<criterion_perf_events::Perf>) {
                     $bench(c, stringify!($target));
                 }
 
 
-                criterion_group! {
+                criterion::criterion_group! {
                     name = [<group_ $target>];
                     config = Criterion::default()
                     .with_measurement(
@@ -25,22 +20,22 @@ macro_rules! gen_benches {
                 }
             )+
 
-            criterion_main!($([<group_ $target>]),+);
+            criterion::criterion_main!($([<group_ $target>]),+);
         }
 
-        #[cfg(not(feature = "perf-events"))]
+        #[cfg(not(all(feature = "bench-perf-events", target_arch = "x86_64")))]
         fn default_run(c: &mut Criterion<criterion::measurement::WallTime>) {
             $bench(c, "default");
         }
 
-        #[cfg(not(feature = "perf-events"))]
-        criterion_group!(
+        #[cfg(not(all(feature = "bench-perf-events", target_arch = "x86_64")))]
+        criterion::criterion_group!(
             name = default_bench;
             config = Criterion::default();
             targets = default_run
         );
 
-        #[cfg(not(feature = "perf-events"))]
-        criterion_main!(default_bench);
+        #[cfg(not(all(feature = "bench-perf-events", target_arch = "x86_64")))]
+        criterion::criterion_main!(default_bench);
     };
 }

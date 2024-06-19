@@ -4,6 +4,9 @@ use blart::TreeMap;
 use criterion::{measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
+#[macro_use]
+mod common;
+
 fn insert(words: Vec<CString>) -> TreeMap<CString, usize> {
     let mut art = TreeMap::new();
     for (idx, word) in words.into_iter().enumerate() {
@@ -100,7 +103,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     }
 }
 
-blart::gen_benches!(
+gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (

@@ -6,6 +6,9 @@ use blart::{
 };
 use criterion::{measurement::Measurement, Criterion, Throughput};
 
+#[macro_use]
+mod common;
+
 fn gen_group<M: Measurement>(c: &mut Criterion<M>, group: String, keys: Vec<Box<[u8]>>) {
     let mut group = c.benchmark_group(group);
     group.warm_up_time(std::time::Duration::from_secs(5));
@@ -50,7 +53,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     gen_group(c, format!("{prefix}/large_prefixes"), large_prefixes);
 }
 
-blart::gen_benches!(
+gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (

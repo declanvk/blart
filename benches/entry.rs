@@ -4,6 +4,9 @@ use blart::TreeMap;
 use criterion::{measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
+#[macro_use]
+mod common;
+
 fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let mut rng = StdRng::seed_from_u64(69420);
     let words = include_str!("dict.txt");
@@ -202,7 +205,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     }
 }
 
-blart::gen_benches!(
+gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (

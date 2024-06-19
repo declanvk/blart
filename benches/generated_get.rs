@@ -8,6 +8,9 @@ use blart::{
 };
 use criterion::{measurement::Measurement, BenchmarkGroup, Criterion};
 
+#[macro_use]
+mod common;
+
 #[inline(always)]
 fn run_benchmarks<M: Measurement>(
     group: &mut BenchmarkGroup<M>,
@@ -94,7 +97,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     );
 }
 
-blart::gen_benches!(
+gen_benches!(
     bench,
     (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
     (
