@@ -1,10 +1,8 @@
 //! Trie node representation
 
 use crate::{
-    assume,
     rust_nightly_apis::{
-        maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
-        maybe_uninit_uninit_array,
+        assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array
     },
     tagged_pointer::TaggedPointer,
     AsBytes,

@@ -1,6 +1,5 @@
 use crate::{
-    assume, likely, unlikely, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode,
-    MatchPrefixResult, Mismatch, NodeHeader, NodePtr, OpaqueNodePtr,
+    rust_nightly_apis::{assume, likely, unlikely}, AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch, NodeHeader, NodePtr, OpaqueNodePtr
 };
 use std::{borrow::Borrow, error::Error, fmt, marker::PhantomData, ops::ControlFlow};
 

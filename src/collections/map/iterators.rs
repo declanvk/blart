@@ -1,167 +1,11 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodeHeader, NodePtr, OpaqueNodePtr, RawTreeMap};
-use std::{collections::VecDeque, iter::FusedIterator};
+mod iterator;
+pub use iterator::*;
 
-macro_rules! gen_iter {
-    ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
-        /// An iterator over all the `LeafNode`s in a non-singleton tree.
-        ///
-        /// Non-singleton here means that the tree has at least one `InnerNode`.
-        ///
-        /// # Safety
-        ///
-        /// This iterator maintains pointers to internal nodes from the trie. No
-        /// mutating operation can occur while this an instance of the iterator is live.
-        pub struct $name<
-            'a,
-            K: AsBytes,
-            V,
-            const NUM_PREFIX_BYTES: usize,
-            H: NodeHeader<NUM_PREFIX_BYTES>,
-        > {
-            nodes: VecDeque<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
-            size: usize,
-            _tree: $tree,
-        }
+mod prefix;
+pub use prefix::*;
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            $name<'a, K, V, NUM_PREFIX_BYTES, H>
-        {
-            /// Create a new iterator that will visit all leaf nodes descended from the
-            /// given node.
-            pub fn new(tree: $tree) -> Self {
-                Self {
-                    nodes: tree.root.into_iter().collect(),
-                    size: tree.num_entries,
-                    _tree: tree,
-                }
-            }
-
-            fn push_back_rev_iter<N>(&mut self, inner: NodePtr<NUM_PREFIX_BYTES, N>)
-            where
-                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
-            {
-                unsafe {
-                    inner
-                        .as_ref()
-                        .iter()
-                        .rev()
-                        .for_each(|(_, n)| self.nodes.push_back(n))
-                };
-            }
-
-            fn push_front<N>(&mut self, inner: NodePtr<NUM_PREFIX_BYTES, N>)
-            where
-                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
-            {
-                unsafe {
-                    inner
-                        .as_ref()
-                        .iter()
-                        .for_each(|(_, n)| self.nodes.push_front(n))
-                };
-            }
-        }
-
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            Iterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
-        {
-            type Item = $ret;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                while let Some(node) = self.nodes.pop_back() {
-                    match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner) => self.push_back_rev_iter(inner),
-                        ConcreteNodePtr::Node16(inner) => self.push_back_rev_iter(inner),
-                        ConcreteNodePtr::Node48(inner) => self.push_back_rev_iter(inner),
-                        ConcreteNodePtr::Node256(inner) => self.push_back_rev_iter(inner),
-                        ConcreteNodePtr::LeafNode(inner) => {
-                            self.size -= 1;
-                            return unsafe { Some(inner.$op()) };
-                        },
-                    }
-                }
-
-                None
-            }
-
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                (self.size, Some(self.size))
-            }
-
-            fn last(mut self) -> Option<Self::Item>
-            where
-                Self: Sized,
-            {
-                self.next_back()
-            }
-        }
-
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            DoubleEndedIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
-        {
-            fn next_back(&mut self) -> Option<Self::Item> {
-                while let Some(node) = self.nodes.pop_front() {
-                    match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner) => self.push_front(inner),
-                        ConcreteNodePtr::Node16(inner) => self.push_front(inner),
-                        ConcreteNodePtr::Node48(inner) => self.push_front(inner),
-                        ConcreteNodePtr::Node256(inner) => self.push_front(inner),
-                        ConcreteNodePtr::LeafNode(inner) => {
-                            self.size -= 1;
-                            return unsafe { Some(inner.$op()) };
-                        },
-                    }
-                }
-
-                None
-            }
-        }
-
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            FusedIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
-        {
-        }
-
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            ExactSizeIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
-        {
-            fn len(&self) -> usize {
-                self.size
-            }
-        }
-    };
-}
-
-gen_iter!(
-    TreeIterator,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
-    (&'a K, &'a V),
-    as_key_value_ref
-);
-gen_iter!(
-    TreeIteratorMut,
-    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
-    (&'a K, &'a mut V),
-    as_key_ref_value_mut
-);
-gen_iter!(
-    Keys,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
-    &'a K,
-    as_key_ref
-);
-gen_iter!(
-    Values,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
-    &'a V,
-    as_value_ref
-);
-gen_iter!(
-    ValuesMut,
-    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
-    &'a mut V,
-    as_value_mut
-);
+mod into_iter;
+pub use into_iter::*;
 
 /*
 /// An iterator over a sub-range of entries in a `TreeMap`.
@@ -287,119 +131,6 @@ impl<'a, K, V, H> DoubleEndedIterator for RangeMut<'a, K, V, H> {
 //     }
 // }
 
-/// An owning iterator over the keys of a `TreeMap`.
-///
-/// This `struct` is created by the [`crate::TreeMap::into_keys`] method on
-/// `TreeMap`. See its documentation for more.
-pub struct IntoKeys<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
-    IntoIter<K, V, NUM_PREFIX_BYTES, H>,
-);
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    IntoKeys<K, V, NUM_PREFIX_BYTES, H>
-{
-    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
-        IntoKeys(IntoIter::new(tree))
-    }
-}
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator
-    for IntoKeys<K, V, NUM_PREFIX_BYTES, H>
-{
-    type Item = K;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(self.0.next()?.0)
-    }
-}
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    DoubleEndedIterator for IntoKeys<K, V, NUM_PREFIX_BYTES, H>
-{
-    fn next_back(&mut self) -> Option<Self::Item> {
-        Some(self.0.next_back()?.0)
-    }
-}
-
-/// An owning iterator over the values of a `TreeMap`.
-///
-/// This `struct` is created by the [`into_values`] method on `TreeMap`.
-/// See its documentation for more.
-///
-/// [`into_values`]: crate::TreeMap::into_values
-pub struct IntoValues<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
-    IntoIter<K, V, NUM_PREFIX_BYTES, H>,
-);
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    IntoValues<K, V, NUM_PREFIX_BYTES, H>
-{
-    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
-        IntoValues(IntoIter::new(tree))
-    }
-}
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator
-    for IntoValues<K, V, NUM_PREFIX_BYTES, H>
-{
-    type Item = V;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(self.0.next()?.1)
-    }
-}
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    DoubleEndedIterator for IntoValues<K, V, NUM_PREFIX_BYTES, H>
-{
-    fn next_back(&mut self) -> Option<Self::Item> {
-        Some(self.0.next_back()?.1)
-    }
-}
-
-/// An owning iterator over the entries of a `TreeMap`.
-///
-/// This `struct` is created by the [`into_iter`] method on `TreeMap`
-/// (provided by the [`IntoIterator`] trait). See its documentation for more.
-///
-/// [`into_iter`]: IntoIterator::into_iter
-/// [`IntoIterator`]: core::iter::IntoIterator
-pub struct IntoIter<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>(
-    RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
-);
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    IntoIter<K, V, NUM_PREFIX_BYTES, H>
-{
-    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES, H>) -> Self {
-        IntoIter(tree)
-    }
-}
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator
-    for IntoIter<K, V, NUM_PREFIX_BYTES, H>
-{
-    type Item = (K, V);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // TODO(#19): Optimize `IntoIter` by not maintaining a valid tree throughout
-        // iteration
-        self.0.pop_first()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.0.len(), Some(self.0.len()))
-    }
-}
-
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    DoubleEndedIterator for IntoIter<K, V, NUM_PREFIX_BYTES, H>
-{
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.0.pop_last()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{tests_common::generate_key_fixed_length, TreeMap};
@@ -499,5 +230,46 @@ mod tests {
             last_remaining_half[last_remaining_half.len() - 1],
             &TEST_PARAMS.last_half_last.into()
         );
+    }
+
+    #[test]
+    fn prefix() {
+        let mut t = TreeMap::new();
+        t.insert(c"abcde", 0);
+        t.insert(c"abcx", 0);
+        t.insert(c"abcdx", 0);
+        t.insert(c"bx", 0);
+        let p0: Vec<_> = t.prefix(c"abcde".to_bytes()).collect();
+        let p1: Vec<_> = t.prefix(c"abcde".to_bytes()).rev().collect();
+        assert_eq!(p0, vec![(&c"abcde", &0)]);
+        assert_eq!(p1, vec![(&c"abcde", &0)]);
+
+        let mut t = TreeMap::new();
+        t.insert(c"abcde", 0);
+        t.insert(c"abcdexxx", 0);
+        t.insert(c"abcdexxy", 0);
+        t.insert(c"abcdx", 0);
+        t.insert(c"abcx", 0);
+        t.insert(c"bx", 0);
+        let p0: Vec<_> = t.prefix(c"abcde".to_bytes()).collect();
+        let p1: Vec<_> = t.prefix(c"abcde".to_bytes()).rev().collect();
+        assert_eq!(
+            p0,
+            vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]
+        );
+        assert_eq!(
+            p1,
+            vec![(&c"abcdexxy", &0), (&c"abcdexxx", &0), (&c"abcde", &0)]
+        );
+
+        let mut t = TreeMap::new();
+        t.insert(c"abcdexxx", 0);
+        t.insert(c"abcdexxy", 0);
+        t.insert(c"abcx", 0);
+        t.insert(c"bx", 0);
+        let p0: Vec<_> = t.prefix(c"abcde".to_bytes()).collect();
+        let p1: Vec<_> = t.prefix(c"abcde".to_bytes()).rev().collect();
+        assert_eq!(p0, vec![(&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
+        assert_eq!(p1, vec![(&c"abcdexxy", &0), (&c"abcdexxx", &0)]);
     }
 }
