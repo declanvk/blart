@@ -2,7 +2,7 @@
 
 use std::{fmt::Debug, marker::PhantomData};
 
-use crate::{assume, likely, minimum_unchecked, AsBytes, InnerNode, LeafNode, NodePtr};
+use crate::{minimum_unchecked, rust_nightly_apis::{assume, likely}, AsBytes, InnerNode, LeafNode, NodePtr};
 
 /// The common header for all inner nodes
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -261,13 +261,14 @@ pub unsafe fn box_assume_init<T>(b: Box<[std::mem::MaybeUninit<T>]>) -> Box<[T]>
 /// This intrinsic does not have a stable counterpart.
 ///
 /// **This is a unstable API copied from the Rust standard library**
-#[macro_export]
 macro_rules! assume {
     ($b:expr) => {
         #[cfg(feature = "nightly")]
         std::intrinsics::assume($b)
     };
 }
+
+pub(crate) use assume;
 
 /// Hints to the compiler that branch condition is likely to be true.
 /// Returns the value passed to it.
@@ -304,12 +305,14 @@ macro_rules! likely {
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(not(feature = "nightly"))]
-#[macro_export]
+// #[macro_export]
 macro_rules! likely {
     ($b:expr) => {
         $b
     };
 }
+
+pub(crate) use likely;
 
 /// Hints to the compiler that branch condition is likely to be false.
 /// Returns the value passed to it.
@@ -346,9 +349,10 @@ macro_rules! unlikely {
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(not(feature = "nightly"))]
-#[macro_export]
 macro_rules! unlikely {
     ($b:expr) => {
         $b
     };
 }
+
+pub(crate) use unlikely;
