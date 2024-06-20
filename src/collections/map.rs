@@ -203,17 +203,15 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     ///
     /// ```rust
     /// use blart::TreeMap;
-    /// use std::ffi::CString;
     ///
     /// let mut map: TreeMap<_, _> = TreeMap::new();
     ///
-    /// map.insert(CString::from(c"abc"), 'a');
-    /// map.insert(CString::from(c"abd"), 'b');
-    /// map.insert(CString::from(c"abdefg"), 'c');
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
     ///
-    /// // Returned kv would be ("abc", 'a'), ("abd", 'b')
     /// let fuzzy: Vec<_> = map.fuzzy(c"ab", 2).collect();
-    /// assert_eq!(fuzzy.len(), 2);
+    /// assert_eq!(fuzzy, vec![(&c"abd", &1), (&c"abc", &0)]);
     /// ```
     pub fn fuzzy<'a, 'b, Q>(
         &'a self,
@@ -225,6 +223,134 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         Q: AsBytes + ?Sized,
     {
         Fuzzy::new(self, key.as_bytes(), max_edit_dist)
+    }
+
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy_mut(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![(&c"abd", &mut 1), (&c"abc", &mut 0)]);
+    /// ```
+    pub fn fuzzy_mut<'a, 'b, Q>(
+        &'a mut self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> FuzzyMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        FuzzyMut::new(self, key.as_bytes(), max_edit_dist)
+    }
+
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy_keys(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![&c"abd", &c"abc"]);
+    /// ```
+    pub fn fuzzy_keys<'a, 'b, Q>(
+        &'a self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> FuzzyKeys<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        FuzzyKeys::new(self, key.as_bytes(), max_edit_dist)
+    }
+
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy_values(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![&1, &0]);
+    /// ```
+    pub fn fuzzy_values<'a, 'b, Q>(
+        &'a self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> FuzzyValues<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        FuzzyValues::new(self, key.as_bytes(), max_edit_dist)
+    }
+
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy_values(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![&mut 1, &mut 0]);
+    /// ```
+    pub fn fuzzy_values_mut<'a, 'b, Q>(
+        &'a mut self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> FuzzyValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        FuzzyValuesMut::new(self, key.as_bytes(), max_edit_dist)
     }
 
     /// Returns true if the map contains a value for the specified key.
