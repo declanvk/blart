@@ -2,7 +2,8 @@
 
 use crate::{
     rust_nightly_apis::{
-        assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array
+        assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
+        maybe_uninit_uninit_array,
     },
     tagged_pointer::TaggedPointer,
     AsBytes,
@@ -1391,8 +1392,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         match self.lookup_child_index(key_fragment) {
             Some(child_index) => WritePoint::Existing(child_index),
             None => {
-                let keys =
-                    unsafe { MaybeUninit::array_assume_init(self.keys) };
+                let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
                 let cmp = u8x16::splat(key_fragment)
                     .simd_lt(u8x16::from_array(keys))
                     .to_bitmask() as u32;
