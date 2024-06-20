@@ -124,8 +124,8 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
 
 trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
     #[allow(clippy::too_many_arguments)]
-    fn fuzzy_search<'s>(
-        &'s self,
+    fn fuzzy_search(
+        &self,
         arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
@@ -171,8 +171,8 @@ impl<
 where
     Self: InnerNode<NUM_PREFIX_BYTES>,
 {
-    fn fuzzy_search<'s>(
-        &'s self,
+    fn fuzzy_search(
+        &self,
         arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
@@ -200,8 +200,8 @@ where
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
     FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNode48<K, V, NUM_PREFIX_BYTES, H>
 {
-    fn fuzzy_search<'s>(
-        &'s self,
+    fn fuzzy_search(
+        &self,
         arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
@@ -233,8 +233,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
     FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for InnerNode256<K, V, NUM_PREFIX_BYTES, H>
 {
-    fn fuzzy_search<'s>(
-        &'s self,
+    fn fuzzy_search(
+        &self,
         arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],
@@ -264,8 +264,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
     FuzzySearch<K, V, NUM_PREFIX_BYTES, H> for LeafNode<K, V, NUM_PREFIX_BYTES, H>
 {
-    fn fuzzy_search<'s>(
-        &'s self,
+    fn fuzzy_search(
+        &self,
         _arena: &mut StackArena,
         key: &[u8],
         old_row: &mut &mut [usize],

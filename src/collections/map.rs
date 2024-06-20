@@ -3,12 +3,10 @@
 
 use crate::{
     deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
-    minimum_unchecked,
-    rust_nightly_apis::hasher_write_length_prefix,
-    search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes, ConcreteNodePtr,
-    DeletePoint, DeleteResult, InsertPoint, InsertPrefixError, InsertResult,
-    InsertSearchResultType::Exact,
-    LeafNode, NoPrefixesBytes, NodeHeader, NodePtr, OpaqueNodePtr,
+    minimum_unchecked, rust_nightly_apis::hasher_write_length_prefix, search_for_delete_point,
+    search_for_insert_point, search_unchecked, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult,
+    InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode,
+    NoPrefixesBytes, NodeHeader, NodePtr, OpaqueNodePtr,
 };
 use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Index};
 
@@ -217,7 +215,11 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// let fuzzy: Vec<_> = map.fuzzy(c"ab", 2).collect();
     /// assert_eq!(fuzzy.len(), 2);
     /// ```
-    pub fn fuzzy<'a, 'b, Q>(&'a self, key: &'b Q, max_edit_dist: usize) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    pub fn fuzzy<'a, 'b, Q>(
+        &'a self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -1117,16 +1119,17 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// map.insert(c"abcdx", 0);
     /// map.insert(c"abcx", 0);
     /// map.insert(c"bx", 0);
-    /// 
+    ///
     /// let p: Vec<_> = map.prefix(c"abcde".to_bytes()).collect();
-    /// 
+    ///
     /// assert_eq!(p, vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
     /// ```
     pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
         Prefix::new(self, prefix)
     }
 
-    /// Gets a mutable iterator over the entries of the map that start with `prefix`
+    /// Gets a mutable iterator over the entries of the map that start with
+    /// `prefix`
     ///
     /// # Example
     /// ```rust
@@ -1139,12 +1142,15 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// map.insert(c"abcdx", 0);
     /// map.insert(c"abcx", 0);
     /// map.insert(c"bx", 0);
-    /// 
+    ///
     /// let p: Vec<_> = map.prefix_mut(c"abcde".to_bytes()).collect();
-    /// 
+    ///
     /// assert_eq!(p, vec![(&c"abcde", &mut 0), (&c"abcdexxx", &mut 0), (&c"abcdexxy", &mut 0)]);
     /// ```
-    pub fn prefix_mut<'a, 'b>(&'a mut self, prefix: &'b [u8]) -> PrefixMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn prefix_mut<'a, 'b>(
+        &'a mut self,
+        prefix: &'b [u8],
+    ) -> PrefixMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
         PrefixMut::new(self, prefix)
     }
 
@@ -1161,12 +1167,15 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// map.insert(c"abcdx", 0);
     /// map.insert(c"abcx", 0);
     /// map.insert(c"bx", 0);
-    /// 
+    ///
     /// let p: Vec<_> = map.prefix_keys(c"abcde".to_bytes()).collect();
-    /// 
+    ///
     /// assert_eq!(p, vec![&c"abcde", &c"abcdexxx", &c"abcdexxy"]);
     /// ```
-    pub fn prefix_keys<'a, 'b>(&'a self, prefix: &'b [u8]) -> PrefixKeys<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn prefix_keys<'a, 'b>(
+        &'a self,
+        prefix: &'b [u8],
+    ) -> PrefixKeys<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
         PrefixKeys::new(self, prefix)
     }
 
@@ -1183,16 +1192,20 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// map.insert(c"abcdx", 3);
     /// map.insert(c"abcx", 4);
     /// map.insert(c"bx", 5);
-    /// 
+    ///
     /// let p: Vec<_> = map.prefix_values(c"abcde".to_bytes()).collect();
-    /// 
+    ///
     /// assert_eq!(p, vec![&0, &1, &2]);
     /// ```
-    pub fn prefix_values<'a, 'b>(&'a self, prefix: &'b [u8]) -> PrefixValues<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn prefix_values<'a, 'b>(
+        &'a self,
+        prefix: &'b [u8],
+    ) -> PrefixValues<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
         PrefixValues::new(self, prefix)
     }
 
-    /// Gets a mutable iterator over the values of the map that start with `prefix`
+    /// Gets a mutable iterator over the values of the map that start with
+    /// `prefix`
     ///
     /// # Example
     /// ```rust
@@ -1205,101 +1218,16 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// map.insert(c"abcdx", 3);
     /// map.insert(c"abcx", 4);
     /// map.insert(c"bx", 5);
-    /// 
+    ///
     /// let p: Vec<_> = map.prefix_values(c"abcde".to_bytes()).collect();
-    /// 
+    ///
     /// assert_eq!(p, vec![&mut 0, &mut 1, &mut 2]);
     /// ```
-    pub fn prefix_values_mut<'a, 'b>(&'a mut self, prefix: &'b [u8]) -> PrefixValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn prefix_values_mut<'a, 'b>(
+        &'a mut self,
+        prefix: &'b [u8],
+    ) -> PrefixValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
         PrefixValuesMut::new(self, prefix)
-    }
-
-    /// abc
-    pub fn prefix1<'a, 'b>(&'a self, prefix: &'b [u8]) -> Vec<(&'a K, &'a V)> {
-        fn is_prefix_of(a: &[u8], b: &[u8]) -> Option<usize> {
-            let min = a.len().min(b.len());
-            let matched_bytes = a.iter().zip(b).take_while(|(a, b)| **a == **b).count();
-
-            (min == matched_bytes).then_some(matched_bytes)
-        }
-
-        fn add_childs<
-            'a,
-            'b,
-            K: AsBytes,
-            V,
-            const NUM_PREFIX_BYTES: usize,
-            H: NodeHeader<NUM_PREFIX_BYTES>,
-            N,
-        >(
-            nodes: &mut std::collections::VecDeque<(
-                OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
-                usize,
-            )>,
-            inner: NodePtr<NUM_PREFIX_BYTES, N>,
-            current_depth: usize,
-            searched_prefix: &[u8],
-        ) where
-            N: crate::InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
-        {
-            let inner = unsafe { inner.as_ref() };
-            if current_depth >= searched_prefix.len() {
-                let prefix_len = inner.header().prefix_len();
-                inner
-                    .iter()
-                    .rev()
-                    .for_each(|(_, n)| nodes.push_back((n, current_depth + prefix_len + 1)));
-                return;
-            }
-
-            let (prefix, _) = inner.read_full_prefix(current_depth);
-            let Some(matched_bytes) = is_prefix_of(prefix, &searched_prefix[current_depth..]) else {
-                return;
-            };
-
-            let new_depth = current_depth + matched_bytes;
-            if new_depth >= searched_prefix.len() {
-                inner
-                    .iter()
-                    .rev()
-                    .for_each(|(_, n)| nodes.push_back((n, new_depth + 1)));
-                return;
-            }
-
-            let key = *searched_prefix[new_depth..].first().unwrap();
-            if let Some((_, n)) = inner.iter().find(|(k, _)| *k == key) {
-                nodes.push_back((n, new_depth + 1));
-            }
-        }
-
-        let mut nodes: std::collections::VecDeque<_> =
-            self.root.into_iter().map(|r| (r, 0usize)).collect();
-        let mut kv = Vec::new();
-
-        while let Some((node, current_depth)) = nodes.pop_back() {
-            match node.to_node_ptr() {
-                ConcreteNodePtr::Node4(inner) => {
-                    add_childs(&mut nodes, inner, current_depth, prefix)
-                },
-                ConcreteNodePtr::Node16(inner) => {
-                    add_childs(&mut nodes, inner, current_depth, prefix)
-                },
-                ConcreteNodePtr::Node48(inner) => {
-                    add_childs(&mut nodes, inner, current_depth, prefix)
-                },
-                ConcreteNodePtr::Node256(inner) => {
-                    add_childs(&mut nodes, inner, current_depth, prefix)
-                },
-                ConcreteNodePtr::LeafNode(inner) => {
-                    if let Some(_) = is_prefix_of(unsafe { inner.as_key_ref().as_bytes() }, prefix)
-                    {
-                        unsafe { kv.push(inner.as_key_value_ref()) };
-                    }
-                },
-            }
-        }
-
-        kv
     }
 
     /// Returns the number of elements in the map.
