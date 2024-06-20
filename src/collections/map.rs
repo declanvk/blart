@@ -312,6 +312,36 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         results
     }
 
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    /// use std::ffi::CString;
+
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+
+    /// map.insert(CString::from(c"abc"), 'a');
+    /// map.insert(CString::from(c"abd"), 'b');
+    /// map.insert(CString::from(c"abdefg"), 'c');
+
+    /// // Returned kv would be ("abc", 'a'), ("abd", 'b')
+    /// let fuzzy = map.get_fuzzy(c"ab", 2);
+    /// assert_eq!(fuzzy.len(), 2);
+    /// ```
+    pub fn get_fuzzy1<'a, 'b, Q>(&'a self, key: &'b Q, max_edit_dist: usize) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        Fuzzy::new(self, key.as_bytes(), max_edit_dist)
+    }
+
     /// Returns true if the map contains a value for the specified key.
     ///
     /// # Examples

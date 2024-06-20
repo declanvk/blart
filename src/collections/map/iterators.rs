@@ -7,6 +7,9 @@ pub use prefix::*;
 mod into_iter;
 pub use into_iter::*;
 
+mod fuzzy;
+pub use fuzzy::*;
+
 /*
 /// An iterator over a sub-range of entries in a `TreeMap`.
 ///
