@@ -11,12 +11,6 @@ pub(crate) use minmax::*;
 mod lookup;
 pub(crate) use lookup::*;
 
-mod fuzzy_search;
-pub(crate) use fuzzy_search::*;
-
-mod fuzzy_search1;
-pub(crate) use fuzzy_search1::*;
-
 mod delete;
 pub(crate) use delete::*;
 
