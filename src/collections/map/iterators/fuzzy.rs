@@ -285,146 +285,195 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-/// An iterator over all the `LeafNode`s with a within a specifix edit distance
-pub struct Fuzzy<
-    'a,
-    'b,
-    K: AsBytes,
-    V,
-    const NUM_PREFIX_BYTES: usize,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
-> {
-    nodes_to_search: Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
-    old_row: Box<[MaybeUninit<usize>]>,
-    new_row: Box<[MaybeUninit<usize>]>,
-    arena: StackArena,
-    max_edit_dist: usize,
-    key: &'b [u8],
+macro_rules! gen_iter {
+    ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
+        /// An iterator over all the `LeafNode`s with a within a specifix edit distance
+        pub struct $name<
+            'a,
+            'b,
+            K: AsBytes,
+            V,
+            const NUM_PREFIX_BYTES: usize,
+            H: NodeHeader<NUM_PREFIX_BYTES>,
+        > {
+            nodes_to_search: Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
+            old_row: Box<[MaybeUninit<usize>]>,
+            new_row: Box<[MaybeUninit<usize>]>,
+            arena: StackArena,
+            max_edit_dist: usize,
+            key: &'b [u8],
 
-    size: usize,
-    _tree: &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
-}
-
-impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
-{
-    pub(crate) fn new(
-        tree: &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
-        key: &'b [u8],
-        max_edit_dist: usize,
-    ) -> Self {
-        let mut arena = StackArena::new(key.len() + 1);
-        let n = arena.size();
-        let s = arena.push();
-
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..n {
-            s[i].write(i);
+            size: usize,
+            _tree: $tree,
         }
 
-        Self {
-            nodes_to_search: tree.root.into_iter().collect(),
-            old_row: box_new_uninit_slice(arena.size()),
-            new_row: box_new_uninit_slice(arena.size()),
-            arena,
-            max_edit_dist,
-            key,
+        impl<
+                'a,
+                'b,
+                K: AsBytes,
+                V,
+                const NUM_PREFIX_BYTES: usize,
+                H: NodeHeader<NUM_PREFIX_BYTES>,
+            > $name<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+        {
+            pub(crate) fn new(tree: $tree, key: &'b [u8], max_edit_dist: usize) -> Self {
+                let mut arena = StackArena::new(key.len() + 1);
+                let n = arena.size();
+                let s = arena.push();
 
-            size: tree.num_entries,
-            _tree: tree,
-        }
-    }
-}
+                #[allow(clippy::needless_range_loop)]
+                for i in 0..n {
+                    s[i].write(i);
+                }
 
-impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Iterator
-    for Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
-{
-    type Item = (&'a K, &'a V);
+                Self {
+                    nodes_to_search: tree.root.into_iter().collect(),
+                    old_row: box_new_uninit_slice(arena.size()),
+                    new_row: box_new_uninit_slice(arena.size()),
+                    arena,
+                    max_edit_dist,
+                    key,
 
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut old_row = self.old_row.as_mut();
-        let mut new_row = self.new_row.as_mut();
-
-        while let (Some(node), Some(old_row)) = (
-            self.nodes_to_search.pop(),
-            self.arena.pop_copy(&mut old_row),
-        ) {
-            match node.to_node_ptr() {
-                ConcreteNodePtr::Node4(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut self.arena,
-                        self.key,
-                        old_row,
-                        &mut new_row,
-                        &mut self.nodes_to_search,
-                        self.max_edit_dist,
-                    );
-                },
-                ConcreteNodePtr::Node16(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut self.arena,
-                        self.key,
-                        old_row,
-                        &mut new_row,
-                        &mut self.nodes_to_search,
-                        self.max_edit_dist,
-                    );
-                },
-                ConcreteNodePtr::Node48(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut self.arena,
-                        self.key,
-                        old_row,
-                        &mut new_row,
-                        &mut self.nodes_to_search,
-                        self.max_edit_dist,
-                    );
-                },
-                ConcreteNodePtr::Node256(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut self.arena,
-                        self.key,
-                        old_row,
-                        &mut new_row,
-                        &mut self.nodes_to_search,
-                        self.max_edit_dist,
-                    );
-                },
-                ConcreteNodePtr::LeafNode(inner_ptr) => {
-                    self.size -= 1;
-
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    if inner_node.fuzzy_search(
-                        &mut self.arena,
-                        self.key,
-                        old_row,
-                        &mut new_row,
-                        &mut self.nodes_to_search,
-                        self.max_edit_dist,
-                    ) {
-                        return Some(inner_node.entry_ref());
-                    }
-                },
-            };
+                    size: tree.num_entries,
+                    _tree: tree,
+                }
+            }
         }
 
-        None
-    }
+        impl<
+                'a,
+                'b,
+                K: AsBytes,
+                V,
+                const NUM_PREFIX_BYTES: usize,
+                H: NodeHeader<NUM_PREFIX_BYTES>,
+            > Iterator for $name<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+        {
+            type Item = $ret;
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, Some(self.size))
-    }
+            #[inline(always)]
+            fn next(&mut self) -> Option<Self::Item> {
+                let mut old_row = self.old_row.as_mut();
+                let mut new_row = self.new_row.as_mut();
+
+                while let (Some(node), Some(old_row)) = (
+                    self.nodes_to_search.pop(),
+                    self.arena.pop_copy(&mut old_row),
+                ) {
+                    match node.to_node_ptr() {
+                        ConcreteNodePtr::Node4(inner_ptr) => {
+                            let inner_node = unsafe { inner_ptr.as_ref() };
+                            inner_node.fuzzy_search(
+                                &mut self.arena,
+                                self.key,
+                                old_row,
+                                &mut new_row,
+                                &mut self.nodes_to_search,
+                                self.max_edit_dist,
+                            );
+                        },
+                        ConcreteNodePtr::Node16(inner_ptr) => {
+                            let inner_node = unsafe { inner_ptr.as_ref() };
+                            inner_node.fuzzy_search(
+                                &mut self.arena,
+                                self.key,
+                                old_row,
+                                &mut new_row,
+                                &mut self.nodes_to_search,
+                                self.max_edit_dist,
+                            );
+                        },
+                        ConcreteNodePtr::Node48(inner_ptr) => {
+                            let inner_node = unsafe { inner_ptr.as_ref() };
+                            inner_node.fuzzy_search(
+                                &mut self.arena,
+                                self.key,
+                                old_row,
+                                &mut new_row,
+                                &mut self.nodes_to_search,
+                                self.max_edit_dist,
+                            );
+                        },
+                        ConcreteNodePtr::Node256(inner_ptr) => {
+                            let inner_node = unsafe { inner_ptr.as_ref() };
+                            inner_node.fuzzy_search(
+                                &mut self.arena,
+                                self.key,
+                                old_row,
+                                &mut new_row,
+                                &mut self.nodes_to_search,
+                                self.max_edit_dist,
+                            );
+                        },
+                        ConcreteNodePtr::LeafNode(inner_ptr) => {
+                            self.size -= 1;
+
+                            let inner_node = unsafe { inner_ptr.as_ref() };
+                            if inner_node.fuzzy_search(
+                                &mut self.arena,
+                                self.key,
+                                old_row,
+                                &mut new_row,
+                                &mut self.nodes_to_search,
+                                self.max_edit_dist,
+                            ) {
+                                return unsafe { Some(inner_ptr.$op()) };
+                            }
+                        },
+                    };
+                }
+
+                None
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                (0, Some(self.size))
+            }
+        }
+
+        impl<
+                'a,
+                'b,
+                K: AsBytes,
+                V,
+                const NUM_PREFIX_BYTES: usize,
+                H: NodeHeader<NUM_PREFIX_BYTES>,
+            > FusedIterator for $name<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+        {
+        }
+    };
 }
 
-impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    FusedIterator for Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
-{
-}
+gen_iter!(
+    Fuzzy,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    (&'a K, &'a V),
+    as_key_value_ref
+);
+gen_iter!(
+    FuzzyMut,
+    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    (&'a K, &'a mut V),
+    as_key_ref_value_mut
+);
+gen_iter!(
+    FuzzyKeys,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a K,
+    as_key_ref
+);
+gen_iter!(
+    FuzzyValues,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a V,
+    as_value_ref
+);
+gen_iter!(
+    FuzzyValuesMut,
+    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a mut V,
+    as_value_mut
+);
 
 #[cfg(test)]
 mod tests {
