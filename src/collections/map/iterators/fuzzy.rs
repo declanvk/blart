@@ -3,7 +3,7 @@ use crate::{
     AsBytes, ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
     NodeHeader, OpaqueNodePtr, RawTreeMap,
 };
-use std::mem::MaybeUninit;
+use std::{iter::FusedIterator, mem::MaybeUninit};
 
 struct StackArena {
     data: Vec<MaybeUninit<usize>>,
@@ -285,7 +285,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-/// abc
+/// An iterator over all the `LeafNode`s with a within a specifix edit distance
 pub struct Fuzzy<
     'a,
     'b,
@@ -415,6 +415,15 @@ impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PRE
 
         None
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.size))
+    }
+}
+
+impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+    FusedIterator for Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+{
 }
 
 #[cfg(test)]
