@@ -4,7 +4,7 @@
 use crate::{
     deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
     minimum_unchecked, rust_nightly_apis::hasher_write_length_prefix, search_for_delete_point,
-    search_for_insert_point, search_unchecked, AsBytes, ConcreteNodePtr, DeletePoint, DeleteResult,
+    search_for_insert_point, search_unchecked, AsBytes, DeletePoint, DeleteResult,
     InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode,
     NoPrefixesBytes, NodeHeader, NodePtr, OpaqueNodePtr,
 };
@@ -1582,7 +1582,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{cmp::Ordering, collections::hash_map::RandomState, ffi::CString, hash::BuildHasher};
+    use std::{cmp::Ordering, collections::hash_map::RandomState, hash::BuildHasher};
 
     use crate::{
         tests_common::{
@@ -1954,69 +1954,6 @@ mod tests {
         assert_eq!(tree.pop_first(), None);
         assert_eq!(tree.pop_last(), None);
         assert_eq!(tree.remove(&Box::from([])), None);
-    }
-
-    #[test]
-    fn get_fuzzy() {
-        for n in [4, 5, 17, 49] {
-            let it = 48u8..48 + n;
-            let mut tree: TreeMap<CString, usize> = TreeMap::new();
-            let search = CString::new("a").unwrap();
-            for c in it.clone() {
-                let c = c as char;
-                let s = CString::new(format!("a{c}")).unwrap();
-                tree.insert(s, 0usize);
-            }
-            let results: Vec<_> = tree.fuzzy(&search, 1).collect();
-            for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
-                let c = c as char;
-                let s = CString::new(format!("a{c}")).unwrap();
-                assert_eq!(k, &s);
-            }
-
-            let mut tree: TreeMap<CString, usize> = TreeMap::new();
-            let search = CString::new("a").unwrap();
-            for c in it.clone() {
-                let s = if c % 2 == 0 {
-                    let c = c as char;
-                    CString::new(format!("a{c}")).unwrap()
-                } else {
-                    let c = c as char;
-                    CString::new(format!("a{c}a")).unwrap()
-                };
-                tree.insert(s, 0usize);
-            }
-            let results: Vec<_> = tree.fuzzy(&search, 1).collect();
-            for ((k, _), c) in results.into_iter().rev().zip((it.clone()).step_by(2)) {
-                let c = c as char;
-                let s = CString::new(format!("a{c}")).unwrap();
-                assert_eq!(k, &s);
-            }
-
-            let mut tree: TreeMap<CString, usize> = TreeMap::new();
-            let search = CString::new("a").unwrap();
-            for c in it.clone() {
-                let s = if c % 2 == 0 {
-                    let c = c as char;
-                    CString::new(format!("a{c}")).unwrap()
-                } else {
-                    let c = c as char;
-                    CString::new(format!("a{c}a")).unwrap()
-                };
-                tree.insert(s, 0usize);
-            }
-            let results: Vec<_> = tree.fuzzy(&search, 2).collect();
-            for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
-                let s = if c % 2 == 0 {
-                    let c = c as char;
-                    CString::new(format!("a{c}")).unwrap()
-                } else {
-                    let c = c as char;
-                    CString::new(format!("a{c}a")).unwrap()
-                };
-                assert_eq!(k, &s);
-            }
-        }
     }
 
     #[cfg(not(miri))]

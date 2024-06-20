@@ -416,3 +416,73 @@ impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PRE
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::CString;
+
+    use crate::TreeMap;
+
+    #[test]
+    fn fuzzy() {
+        for n in [4, 5, 17, 49] {
+            let it = 48u8..48 + n;
+            let mut tree: TreeMap<CString, usize> = TreeMap::new();
+            let search = CString::new("a").unwrap();
+            for c in it.clone() {
+                let c = c as char;
+                let s = CString::new(format!("a{c}")).unwrap();
+                tree.insert(s, 0usize);
+            }
+            let results: Vec<_> = tree.fuzzy(&search, 1).collect();
+            for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
+                let c = c as char;
+                let s = CString::new(format!("a{c}")).unwrap();
+                assert_eq!(k, &s);
+            }
+
+            let mut tree: TreeMap<CString, usize> = TreeMap::new();
+            let search = CString::new("a").unwrap();
+            for c in it.clone() {
+                let s = if c % 2 == 0 {
+                    let c = c as char;
+                    CString::new(format!("a{c}")).unwrap()
+                } else {
+                    let c = c as char;
+                    CString::new(format!("a{c}a")).unwrap()
+                };
+                tree.insert(s, 0usize);
+            }
+            let results: Vec<_> = tree.fuzzy(&search, 1).collect();
+            for ((k, _), c) in results.into_iter().rev().zip((it.clone()).step_by(2)) {
+                let c = c as char;
+                let s = CString::new(format!("a{c}")).unwrap();
+                assert_eq!(k, &s);
+            }
+
+            let mut tree: TreeMap<CString, usize> = TreeMap::new();
+            let search = CString::new("a").unwrap();
+            for c in it.clone() {
+                let s = if c % 2 == 0 {
+                    let c = c as char;
+                    CString::new(format!("a{c}")).unwrap()
+                } else {
+                    let c = c as char;
+                    CString::new(format!("a{c}a")).unwrap()
+                };
+                tree.insert(s, 0usize);
+            }
+            let results: Vec<_> = tree.fuzzy(&search, 2).collect();
+            for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
+                let s = if c % 2 == 0 {
+                    let c = c as char;
+                    CString::new(format!("a{c}")).unwrap()
+                } else {
+                    let c = c as char;
+                    CString::new(format!("a{c}a")).unwrap()
+                };
+                assert_eq!(k, &s);
+            }
+        }
+    }
+}

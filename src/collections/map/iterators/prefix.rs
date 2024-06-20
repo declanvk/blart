@@ -245,3 +245,49 @@ gen_iter!(
     &'a mut V,
     as_value_mut
 );
+
+#[cfg(test)]
+mod tests {
+    use crate::TreeMap;
+
+    #[test]
+    fn prefix() {
+        let mut t = TreeMap::new();
+        t.insert(c"abcde", 0);
+        t.insert(c"abcx", 0);
+        t.insert(c"abcdx", 0);
+        t.insert(c"bx", 0);
+        let p0: Vec<_> = t.prefix(c"abcde".to_bytes()).collect();
+        let p1: Vec<_> = t.prefix(c"abcde".to_bytes()).rev().collect();
+        assert_eq!(p0, vec![(&c"abcde", &0)]);
+        assert_eq!(p1, vec![(&c"abcde", &0)]);
+
+        let mut t = TreeMap::new();
+        t.insert(c"abcde", 0);
+        t.insert(c"abcdexxx", 0);
+        t.insert(c"abcdexxy", 0);
+        t.insert(c"abcdx", 0);
+        t.insert(c"abcx", 0);
+        t.insert(c"bx", 0);
+        let p0: Vec<_> = t.prefix(c"abcde".to_bytes()).collect();
+        let p1: Vec<_> = t.prefix(c"abcde".to_bytes()).rev().collect();
+        assert_eq!(
+            p0,
+            vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]
+        );
+        assert_eq!(
+            p1,
+            vec![(&c"abcdexxy", &0), (&c"abcdexxx", &0), (&c"abcde", &0)]
+        );
+
+        let mut t = TreeMap::new();
+        t.insert(c"abcdexxx", 0);
+        t.insert(c"abcdexxy", 0);
+        t.insert(c"abcx", 0);
+        t.insert(c"bx", 0);
+        let p0: Vec<_> = t.prefix(c"abcde".to_bytes()).collect();
+        let p1: Vec<_> = t.prefix(c"abcde".to_bytes()).rev().collect();
+        assert_eq!(p0, vec![(&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
+        assert_eq!(p1, vec![(&c"abcdexxy", &0), (&c"abcdexxx", &0)]);
+    }
+}
