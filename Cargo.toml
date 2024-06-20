@@ -54,7 +54,7 @@ harness = false
 required-features = ["gen-benches-macro"]
 
 [[bench]]
-name = "get_fuzzy"
+name = "fuzzy"
 harness = false
 required-features = ["gen-benches-macro"]
 

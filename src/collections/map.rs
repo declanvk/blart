@@ -4,11 +4,11 @@
 use crate::{
     deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
     minimum_unchecked,
-    rust_nightly_apis::{box_new_uninit_slice, hasher_write_length_prefix},
+    rust_nightly_apis::hasher_write_length_prefix,
     search_for_delete_point, search_for_insert_point, search_unchecked, AsBytes, ConcreteNodePtr,
-    DeletePoint, DeleteResult, FuzzySearch, InsertPoint, InsertPrefixError, InsertResult,
+    DeletePoint, DeleteResult, InsertPoint, InsertPrefixError, InsertResult,
     InsertSearchResultType::Exact,
-    LeafNode, NoPrefixesBytes, NodeHeader, NodePtr, OpaqueNodePtr, StackArena,
+    LeafNode, NoPrefixesBytes, NodeHeader, NodePtr, OpaqueNodePtr,
 };
 use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Index};
 
@@ -206,135 +206,18 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// ```rust
     /// use blart::TreeMap;
     /// use std::ffi::CString;
-
+    ///
     /// let mut map: TreeMap<_, _> = TreeMap::new();
-
+    ///
     /// map.insert(CString::from(c"abc"), 'a');
     /// map.insert(CString::from(c"abd"), 'b');
     /// map.insert(CString::from(c"abdefg"), 'c');
-
+    ///
     /// // Returned kv would be ("abc", 'a'), ("abd", 'b')
-    /// let fuzzy = map.get_fuzzy(c"ab", 2);
+    /// let fuzzy: Vec<_> = map.fuzzy(c"ab", 2).collect();
     /// assert_eq!(fuzzy.len(), 2);
     /// ```
-    pub fn get_fuzzy<Q>(&self, key: &Q, max_edit_dist: usize) -> Vec<(&K, &V)>
-    where
-        K: Borrow<Q> + AsBytes,
-        Q: AsBytes + ?Sized,
-    {
-        let Some(node) = self.root else {
-            return vec![];
-        };
-
-        let key = key.as_bytes();
-        let mut results = vec![];
-        let mut nodes_to_search = vec![node];
-        let mut arena = StackArena::new(key.len() + 1);
-        let n = arena.size();
-        let s = arena.push();
-
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..n {
-            s[i].write(i);
-        }
-
-        let mut old_row = box_new_uninit_slice(arena.size());
-        let mut old_row = old_row.as_mut();
-        let mut new_row = box_new_uninit_slice(arena.size());
-        let mut new_row = new_row.as_mut();
-
-        while let (Some(node), Some(old_row)) =
-            (nodes_to_search.pop(), arena.pop_copy(&mut old_row))
-        {
-            match node.to_node_ptr() {
-                ConcreteNodePtr::Node4(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut arena,
-                        key,
-                        old_row,
-                        &mut new_row,
-                        &mut nodes_to_search,
-                        &mut results,
-                        max_edit_dist,
-                    );
-                },
-                ConcreteNodePtr::Node16(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut arena,
-                        key,
-                        old_row,
-                        &mut new_row,
-                        &mut nodes_to_search,
-                        &mut results,
-                        max_edit_dist,
-                    );
-                },
-                ConcreteNodePtr::Node48(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut arena,
-                        key,
-                        old_row,
-                        &mut new_row,
-                        &mut nodes_to_search,
-                        &mut results,
-                        max_edit_dist,
-                    );
-                },
-                ConcreteNodePtr::Node256(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut arena,
-                        key,
-                        old_row,
-                        &mut new_row,
-                        &mut nodes_to_search,
-                        &mut results,
-                        max_edit_dist,
-                    );
-                },
-                ConcreteNodePtr::LeafNode(inner_ptr) => {
-                    let inner_node = unsafe { inner_ptr.as_ref() };
-                    inner_node.fuzzy_search(
-                        &mut arena,
-                        key,
-                        old_row,
-                        &mut new_row,
-                        &mut nodes_to_search,
-                        &mut results,
-                        max_edit_dist,
-                    );
-                },
-            };
-        }
-        results
-    }
-
-    /// Makes a fuzzy search in the tree by `key`,
-    /// returning all keys and values that are
-    /// less than or equal to `max_edit_dist`
-    ///
-    /// This is done by using Levenshtein distance
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::TreeMap;
-    /// use std::ffi::CString;
-
-    /// let mut map: TreeMap<_, _> = TreeMap::new();
-
-    /// map.insert(CString::from(c"abc"), 'a');
-    /// map.insert(CString::from(c"abd"), 'b');
-    /// map.insert(CString::from(c"abdefg"), 'c');
-
-    /// // Returned kv would be ("abc", 'a'), ("abd", 'b')
-    /// let fuzzy = map.get_fuzzy(c"ab", 2);
-    /// assert_eq!(fuzzy.len(), 2);
-    /// ```
-    pub fn get_fuzzy1<'a, 'b, Q>(&'a self, key: &'b Q, max_edit_dist: usize) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    pub fn fuzzy<'a, 'b, Q>(&'a self, key: &'b Q, max_edit_dist: usize) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -2156,7 +2039,7 @@ mod tests {
                 let s = CString::new(format!("a{c}")).unwrap();
                 tree.insert(s, 0usize);
             }
-            let results = tree.get_fuzzy(&search, 1);
+            let results: Vec<_> = tree.fuzzy(&search, 1).collect();
             for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
                 let c = c as char;
                 let s = CString::new(format!("a{c}")).unwrap();
@@ -2175,7 +2058,7 @@ mod tests {
                 };
                 tree.insert(s, 0usize);
             }
-            let results = tree.get_fuzzy(&search, 1);
+            let results: Vec<_> = tree.fuzzy(&search, 1).collect();
             for ((k, _), c) in results.into_iter().rev().zip((it.clone()).step_by(2)) {
                 let c = c as char;
                 let s = CString::new(format!("a{c}")).unwrap();
@@ -2194,7 +2077,7 @@ mod tests {
                 };
                 tree.insert(s, 0usize);
             }
-            let results = tree.get_fuzzy(&search, 2);
+            let results: Vec<_> = tree.fuzzy(&search, 2).collect();
             for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
                 let s = if c % 2 == 0 {
                     let c = c as char;

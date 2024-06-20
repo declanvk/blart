@@ -33,7 +33,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         group.measurement_time(Duration::from_secs(10));
         for search in &searches {
             group.bench_function(search.to_str().unwrap(), |b| {
-                b.iter(|| std::hint::black_box(tree.get_fuzzy(search, cost)));
+                b.iter(|| std::hint::black_box(tree.fuzzy(search, cost).collect::<Vec<_>>()));
             });
         }
     }
