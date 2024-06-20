@@ -40,7 +40,7 @@ enum Action {
     Hash,
     Entry(EntryAction, Box<[u8]>),
     EntryRef(EntryAction, Box<[u8]>),
-    GetFuzzy(Box<[u8]>),
+    Fuzzy(Box<[u8]>),
     Prefix(Box<[u8]>),
 }
 
@@ -176,8 +176,9 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     };
                 }
             },
-            Action::GetFuzzy(key) => {
-                std::hint::black_box(tree.get_fuzzy(&key, 3));
+            Action::Fuzzy(key) => {
+                let v: Vec<_> = tree.fuzzy(&key, 3).collect();
+                std::hint::black_box(v);
             },
             Action::Prefix(key) => {
                 let v: Vec<_> = tree.prefix(&key).collect();
