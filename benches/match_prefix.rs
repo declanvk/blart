@@ -1,7 +1,7 @@
 use std::{ffi::CString, ptr::NonNull, time::Duration};
 
 use blart::{
-    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, NodePtr, TreeMap,
+    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, NodePtr, TreeMap, VariableKeyHeader,
 };
 use criterion::{measurement::Measurement, Criterion};
 
@@ -47,16 +47,16 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     ];
 
     let p0 = &[0, 0, 0, 0, 0, 0, 0, 0];
-    let mut node48_small = InnerNode48::<Box<[u8]>, usize>::from_prefix(p0, p0.len());
-    let mut node256_small = InnerNode256::<Box<[u8]>, usize>::from_prefix(p0, p0.len());
+    let mut node48_small = InnerNode48::<Box<[u8]>, usize, 16, VariableKeyHeader<16>>::from_prefix(p0, p0.len());
+    let mut node256_small = InnerNode256::<Box<[u8]>, usize, 16, VariableKeyHeader<16>>::from_prefix(p0, p0.len());
     node48_small.write_child(99, leaf_opaque);
     node256_small.write_child(99, leaf_opaque);
 
     let p1 = &[
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
-    let mut node48_large = InnerNode48::<Box<[u8]>, usize>::from_prefix(p1, p1.len());
-    let mut node256_large = InnerNode256::<Box<[u8]>, usize>::from_prefix(p1, p1.len());
+    let mut node48_large = InnerNode48::<Box<[u8]>, usize, 16, VariableKeyHeader<16>>::from_prefix(p1, p1.len());
+    let mut node256_large = InnerNode256::<Box<[u8]>, usize, 16, VariableKeyHeader<16>>::from_prefix(p1, p1.len());
     node48_large.write_child(99, leaf_opaque);
     node256_large.write_child(99, leaf_opaque);
 
