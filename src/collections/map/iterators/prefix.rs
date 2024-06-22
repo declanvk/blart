@@ -148,6 +148,7 @@ macro_rules! gen_iter {
                         ConcreteNodePtr::Node256(inner) => self.add_childs(inner, current_depth),
                         ConcreteNodePtr::LeafNode(inner) => {
                             self.size -= 1;
+                            let key = unsafe { inner.as_key_ref().as_bytes() };
 
                             // In this case we consumed more bytes than the
                             // searched prefix, so in this case we are sure
@@ -159,14 +160,17 @@ macro_rules! gen_iter {
                             // If the searched prefix > key length it's 
                             // impossible for the search prefix to be
                             // prefix of this leaf
-                            // 
-                            // Note: doing this makes things slower
+                            if self.prefix.len() > key.len() {
+                                continue;
+                            }
 
                             // We just checked, so it's impossible
                             // for this this to panic
+                            let key = &key[current_depth..];
+                            let prefix = &self.prefix[current_depth..];
                             if let Some(_) = Self::is_prefix_of(
-                                unsafe { inner.as_key_ref().as_bytes() },
-                                &self.prefix,
+                                key,
+                                prefix,
                             ) {
                                 return unsafe { Some(inner.$op()) };
                             }
@@ -207,6 +211,7 @@ macro_rules! gen_iter {
                         ConcreteNodePtr::Node256(inner) => self.add_childs_rev(inner, current_depth),
                         ConcreteNodePtr::LeafNode(inner) => {
                             self.size -= 1;
+                            let key = unsafe { inner.as_key_ref().as_bytes() };
 
                             // In this case we consumed more bytes than the
                             // searched prefix, so in this case we are sure
@@ -218,14 +223,17 @@ macro_rules! gen_iter {
                             // If the searched prefix > key length it's 
                             // impossible for the search prefix to be
                             // prefix of this leaf
-                            // 
-                            // Note: doing this makes things slower
+                            if self.prefix.len() > key.len() {
+                                continue;
+                            }
 
                             // We just checked, so it's impossible
                             // for this this to panic
+                            let key = &key[current_depth..];
+                            let prefix = &self.prefix[current_depth..];
                             if let Some(_) = Self::is_prefix_of(
-                                unsafe { inner.as_key_ref().as_bytes() },
-                                &self.prefix,
+                                key,
+                                prefix,
                             ) {
                                 return unsafe { Some(inner.$op()) };
                             }
