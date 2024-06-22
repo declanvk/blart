@@ -340,7 +340,8 @@ impl std::fmt::Debug for TreeStats {
             .and(f.write_fmt(format_args!("n4 size:                           {:?} bytes\n", node4.node_size())))
             .and(f.write_fmt(format_args!("n16 size:                          {:?} bytes\n", node16.node_size())))
             .and(f.write_fmt(format_args!("n48 size:                          {:?} bytes\n", node48.node_size())))
-            .and(f.write_fmt(format_args!("n256 size:                         {:?} bytes", node256.node_size())))
+            .and(f.write_fmt(format_args!("n256 size:                         {:?} bytes\n", node256.node_size())))
+            .and(f.write_fmt(format_args!("max prefix length:                 {} bytes", tree.max_prefix_len_bytes)))
     }
 }
 
