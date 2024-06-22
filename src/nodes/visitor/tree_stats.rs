@@ -1,6 +1,9 @@
+use std::ops::Add;
+
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, NodeHeader, RawTreeMap,
+    AsBytes, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, NodeHeader,
+    RawTreeMap,
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -72,49 +75,160 @@ impl TreeStatsCollector {
     }
 }
 
+/// Statistics for inner nodes
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct InnerNodeStats {
+    /// The number of occurrences
+    pub count: usize,
+
+    /// The total number of slots in inner nodes
+    pub total_slots: usize,
+
+    /// The number of used slots in inner nodes
+    pub sum_slots: usize,
+
+    /// Sum of all header prefix lengths
+    pub total_header_bytes: usize,
+
+    /// Sum of all used prefix length
+    pub sum_prefix_len_bytes: usize,
+
+    /// Sum of all used prefix length capped
+    /// to the maximum number of bytes in the header
+    pub sum_capped_prefix_len_bytes: usize,
+
+    /// Total memory usage
+    pub mem_usage: usize,
+}
+
+impl InnerNodeStats {
+    fn sum_data<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>, N>(
+        &mut self,
+        t: &N,
+    ) where
+        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
+    {
+        self.count += 1;
+        self.total_slots += N::TYPE.upper_capacity();
+        self.sum_slots += t.header().num_children();
+
+        self.total_header_bytes += NUM_PREFIX_BYTES;
+        self.sum_prefix_len_bytes += t.header().prefix_len();
+        self.sum_capped_prefix_len_bytes += t.header().capped_prefix_len();
+
+        self.mem_usage += std::mem::size_of_val(t);
+    }
+
+    /// How many free slots
+    pub fn free_slots(&self) -> usize {
+        self.total_slots - self.sum_slots
+    }
+
+    /// Percentage of the maximum slots that is being used
+    pub fn percentage_slots(&self) -> f64 {
+        self.sum_slots as f64 / self.total_slots as f64
+    }
+
+    /// The average prefix length
+    pub fn avg_prefix_len(&self) -> f64 {
+        self.sum_prefix_len_bytes as f64 / self.count as f64
+    }
+
+    /// The average prefix length but capped to the header prefix length
+    pub fn avg_capped_prefix_len(&self) -> f64 {
+        self.sum_capped_prefix_len_bytes as f64 / self.count as f64
+    }
+
+    /// The average prefix length but capped to the header prefix length
+    pub fn free_header_bytes(&self) -> usize {
+        self.total_header_bytes - self.sum_capped_prefix_len_bytes
+    }
+
+    /// The average prefix length but capped to the header prefix length
+    pub fn percentage_header_bytes(&self) -> f64 {
+        self.sum_capped_prefix_len_bytes as f64 / self.total_header_bytes as f64
+    }
+}
+
+impl Add for InnerNodeStats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            count: self.count + rhs.count,
+            total_slots: self.total_slots + rhs.total_slots,
+            sum_slots: self.sum_slots + rhs.sum_slots,
+            total_header_bytes: self.total_header_bytes + rhs.total_header_bytes,
+            sum_prefix_len_bytes: self.sum_prefix_len_bytes + rhs.sum_prefix_len_bytes,
+            sum_capped_prefix_len_bytes: self.sum_capped_prefix_len_bytes
+                + rhs.sum_capped_prefix_len_bytes,
+            mem_usage: self.mem_usage + rhs.mem_usage,
+        }
+    }
+}
+
+/// Statistics for inner nodes
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct LeafStats {
+    /// The number of occurrences
+    pub count: usize,
+
+    /// The sum of bytes of keys stored in the tree.
+    pub sum_key_bytes: usize,
+
+    /// Total memory usage
+    pub mem_usage: usize,
+}
+
+impl Add for LeafStats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            count: self.count + rhs.count,
+            sum_key_bytes: self.sum_key_bytes + rhs.sum_key_bytes,
+            mem_usage: self.mem_usage + rhs.mem_usage,
+        }
+    }
+}
+
 /// Collection of stats about the number of nodes types present in a tree
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TreeStats {
-    /// Number of [`InnerNode4`][crate::nodes::InnerNode4]s present in the tree.
-    pub node4_count: usize,
+    /// Stats for [`InnerNode4`][crate::nodes::InnerNode4]s
+    pub node4: InnerNodeStats,
 
-    /// Number of [`InnerNode16`][crate::nodes::InnerNode16]s present in the
-    /// tree.
-    pub node16_count: usize,
+    /// Stats for [`InnerNode16`][crate::nodes::InnerNode16]s
+    pub node16: InnerNodeStats,
 
-    /// Number of [`InnerNode48`][crate::nodes::InnerNode48]s present in the
-    /// tree.
-    pub node48_count: usize,
+    /// Stats for [`InnerNode48`][crate::nodes::InnerNode48]s
+    pub node48: InnerNodeStats,
 
-    /// Number of [`InnerNode256`][crate::nodes::InnerNode256]s present in the
-    /// tree.
-    pub node256_count: usize,
+    /// Stats for [`InnerNode256`][crate::nodes::InnerNode256]s
+    pub node256: InnerNodeStats,
+
+    /// Stats for the whole tree
+    pub tree: InnerNodeStats,
 
     /// Number of [`LeafNode`][crate::nodes::LeafNode]s present in the
     /// tree.
-    pub leaf_count: usize,
-
-    /// The number of empty slots in inner nodes, that could potentially contain
-    /// a leaf node.
-    ///
-    /// This value is useful to measure occupancy in the tree, and how much
-    /// space is potentially wasted.
-    pub empty_capacity: usize,
-
-    /// The total number of bytes of keys stored in the tree.
-    pub total_key_bytes: usize,
-
-    /// The total number of bytes used by inner nodes.
-    pub total_inner_node_bytes: usize,
+    pub leaf: LeafStats,
 }
 
 impl TreeStats {
-    /// Returns the number of bytes of overhead per byte of key stored in the
-    /// tree.
-    ///
-    /// Overheard in this case is all bytes used by the inner nodes.
-    pub fn overhead_per_key_byte(&self) -> f64 {
-        (self.total_inner_node_bytes as f64) / (self.total_key_bytes as f64)
+    /// Total memory usage of the tree (inner nodes + leaf)
+    pub fn total_memory_usage(&self) -> usize {
+        self.tree.mem_usage + self.leaf.mem_usage
+    }
+
+    /// Bytes used per entry in the tree (only inner node memory usage)
+    pub fn bytes_per_entry(&self) -> f64 {
+        self.tree.mem_usage as f64 / self.leaf.count as f64
+    }
+
+    /// Bytes used per entry in the tree (total memory usage)
+    pub fn bytes_per_entry_with_leaf(&self) -> f64 {
+        self.total_memory_usage() as f64 / self.leaf.count as f64
     }
 }
 
@@ -132,129 +246,132 @@ where
 
     fn combine_output(&self, o1: Self::Output, o2: Self::Output) -> Self::Output {
         TreeStats {
-            node16_count: o1.node16_count + o2.node16_count,
-            node256_count: o1.node256_count + o2.node256_count,
-            node48_count: o1.node48_count + o2.node48_count,
-            node4_count: o1.node4_count + o2.node4_count,
-            leaf_count: o1.leaf_count + o2.leaf_count,
-            empty_capacity: o1.empty_capacity + o2.empty_capacity,
-            total_inner_node_bytes: o1.total_inner_node_bytes + o2.total_inner_node_bytes,
-            total_key_bytes: o1.total_key_bytes + o2.total_key_bytes,
+            node4: o1.node4 + o2.node4,
+            node16: o1.node16 + o2.node16,
+            node48: o1.node48 + o2.node48,
+            node256: o1.node256 + o2.node256,
+            tree: o1.tree + o2.tree,
+            leaf: o1.leaf + o2.leaf,
         }
     }
 
-    // fn visit_node4(&mut self, t: &crate::InnerNode4<K, V, H>) -> Self::Output {
-    //     let mut output = t.super_visit_with(self);
-    //     output.node4_count += 1;
-    //     output.empty_capacity += NodeType::Node4.upper_capacity() -
-    // t.header.num_children();     output.total_inner_node_bytes +=
-    // mem::size_of_val(t)
-    //         + if t.header.prefix.is_heap() { t.header.prefix.len()
-    //         } else {
-    //             0
-    //         };
-    //     output
-    // }
+    fn visit_node4(&mut self, t: &InnerNode4<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+        let mut output = t.super_visit_with(self);
+        output.node4.sum_data(t);
+        output.tree.sum_data(t);
+        output
+    }
 
-    // fn visit_node16(&mut self, t: &crate::InnerNode16<K, V, H>) -> Self::Output {
-    //     let mut output = t.super_visit_with(self);
-    //     output.node16_count += 1;
-    //     output.empty_capacity += NodeType::Node16.upper_capacity() -
-    // t.header.num_children();     output.total_inner_node_bytes +=
-    // mem::size_of_val(t)
-    //         + if t.header.prefix.is_heap() { t.header.prefix.len()
-    //         } else {
-    //             0
-    //         };
-    //     output
-    // }
+    fn visit_node16(&mut self, t: &InnerNode16<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+        let mut output = t.super_visit_with(self);
+        output.node16.sum_data(t);
+        output.tree.sum_data(t);
+        output
+    }
 
-    // fn visit_node48(&mut self, t: &crate::InnerNode48<K, V, H>) -> Self::Output {
-    //     let mut output = t.super_visit_with(self);
-    //     output.node48_count += 1;
-    //     output.empty_capacity += NodeType::Node48.upper_capacity() -
-    // t.header.num_children();     output.total_inner_node_bytes +=
-    // mem::size_of_val(t)
-    //         + if t.header.prefix.is_heap() { t.header.prefix.len()
-    //         } else {
-    //             0
-    //         };
-    //     output
-    // }
+    fn visit_node48(&mut self, t: &InnerNode48<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+        let mut output = t.super_visit_with(self);
+        output.node48.sum_data(t);
+        output.tree.sum_data(t);
+        output
+    }
 
-    // fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, H>) -> Self::Output
-    // {     let mut output = t.super_visit_with(self);
-    //     output.node256_count += 1;
-    //     output.empty_capacity += NodeType::Node256.upper_capacity() -
-    // t.header.num_children();     output.total_inner_node_bytes +=
-    // mem::size_of_val(t)
-    //         + if t.header.prefix.is_heap() { t.header.prefix.len()
-    //         } else {
-    //             0
-    //         };
-    //     output
-    // }
+    fn visit_node256(&mut self, t: &InnerNode256<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+        let mut output = t.super_visit_with(self);
+        output.node256.sum_data(t);
+        output.tree.sum_data(t);
+        output
+    }
 
-    // fn visit_leaf(&mut self, t: &crate::LeafNode<K, V, H>) -> Self::Output {
-    //     let mut output = TreeStats::default();
-    //     output.leaf_count += 1;
-    //     output.total_key_bytes += t.key_ref().as_bytes().len();
-    //     output
-    // }
+    fn visit_leaf(&mut self, t: &LeafNode<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+        let mut output = TreeStats::default();
+        output.leaf.count += 1;
+        output.leaf.sum_key_bytes += t.key_ref().as_bytes().len();
+        output.leaf.mem_usage += std::mem::size_of_val(t);
+        output
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{tests_common::generate_key_fixed_length, TreeMap};
 
-    // #[test]
-    // fn mostly_empty_tree_stats_fixed_length_tree() {
-    //     let root = crate::tests_common::setup_tree_from_entries(
-    //         crate::tests_common::generate_key_fixed_length([1, 1, 1, 1])
-    //             .enumerate()
-    //             .map(|(a, b)| (b, a)),
-    //     );
-    //     let stats = unsafe { TreeStatsCollector::collect(root) };
+    #[test]
+    fn mostly_empty_tree_stats_fixed_length_tree() {
+        let mut tree = TreeMap::new();
+        for (k, v) in generate_key_fixed_length([1, 1, 1, 1])
+            .enumerate()
+            .map(|(a, b)| (b, a))
+        {
+            tree.try_insert(k, v).unwrap();
+        }
+        let stats = unsafe { TreeStatsCollector::collect(&tree).unwrap() };
 
-    //     assert_eq!(
-    //         stats,
-    //         TreeStats {
-    //             node4_count: 15,
-    //             node16_count: 0,
-    //             node48_count: 0,
-    //             node256_count: 0,
-    //             leaf_count: 16,
-    //             empty_capacity: 30,
-    //             total_key_bytes: 64,
-    //             total_inner_node_bytes: 1200
-    //         }
-    //     );
+        let expected_inner = InnerNodeStats {
+            count: 15,
+            total_slots: 60,
+            sum_slots: 30,
+            total_header_bytes: 240,
+            sum_prefix_len_bytes: 0,
+            sum_capped_prefix_len_bytes: 0,
+            mem_usage: 960,
+        };
+        let expected = TreeStats {
+            node4: expected_inner,
+            tree: expected_inner,
+            leaf: LeafStats {
+                count: 16,
+                sum_key_bytes: 64,
+                mem_usage: 384,
+            },
+            ..Default::default()
+        };
 
-    //     unsafe { deallocate_tree(root) };
-    // }
+        assert_eq!(stats, expected);
+    }
 
-    // #[test]
-    // fn full_tree_stats_fixed_length_tree() {
-    //     let root = crate::tests_common::setup_tree_from_entries(
-    //         crate::tests_common::generate_key_fixed_length([15, 3])
-    //             .enumerate()
-    //             .map(|(a, b)| (b, a)),
-    //     );
-    //     let stats = unsafe { TreeStatsCollector::collect(root) };
+    #[test]
+    fn full_tree_stats_fixed_length_tree() {
+        let mut tree = TreeMap::new();
+        for (k, v) in generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(|(a, b)| (b, a))
+        {
+            tree.try_insert(k, v).unwrap();
+        }
+        let stats = unsafe { TreeStatsCollector::collect(&tree).unwrap() };
 
-    //     assert_eq!(
-    //         stats,
-    //         TreeStats {
-    //             node4_count: 16,
-    //             node16_count: 1,
-    //             node48_count: 0,
-    //             node256_count: 0,
-    //             leaf_count: 64,
-    //             empty_capacity: 0,
-    //             total_key_bytes: 128,
-    //             total_inner_node_bytes: 1464,
-    //         }
-    //     );
+        let node4 = InnerNodeStats {
+            count: 16,
+            total_slots: 64,
+            sum_slots: 64,
+            total_header_bytes: 256,
+            sum_prefix_len_bytes: 0,
+            sum_capped_prefix_len_bytes: 0,
+            mem_usage: 1024,
+        };
+        let node16 = InnerNodeStats {
+            count: 1,
+            total_slots: 16,
+            sum_slots: 16,
+            total_header_bytes: 16,
+            sum_prefix_len_bytes: 0,
+            sum_capped_prefix_len_bytes: 0,
+            mem_usage: 168,
+        };
+        let expected = TreeStats {
+            node4,
+            node16,
+            tree: node4 + node16,
+            leaf: LeafStats {
+                count: 64,
+                sum_key_bytes: 128,
+                mem_usage: 1536,
+            },
+            ..Default::default()
+        };
 
-    //     unsafe { deallocate_tree(root) };
-    // }
+        assert_eq!(stats, expected);
+    }
 }
