@@ -105,7 +105,13 @@ pub struct InnerNodeStats {
 }
 
 impl InnerNodeStats {
-    fn aggregate_data<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>, N>(
+    fn aggregate_data<
+        K: AsBytes,
+        V,
+        const NUM_PREFIX_BYTES: usize,
+        H: NodeHeader<NUM_PREFIX_BYTES>,
+        N,
+    >(
         &mut self,
         t: &N,
     ) where
