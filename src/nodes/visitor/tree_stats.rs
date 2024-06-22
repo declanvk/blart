@@ -100,7 +100,7 @@ pub struct InnerNodeStats {
     /// Maximum prefix length in bytes
     pub max_prefix_len_bytes: usize,
 
-    /// Total memory usage
+    /// Total memory usage in bytes
     pub mem_usage: usize,
 }
 
@@ -157,6 +157,12 @@ impl InnerNodeStats {
     /// The average prefix length but capped to the header prefix length
     pub fn percentage_header_bytes(&self) -> f64 {
         self.sum_capped_prefix_len_bytes as f64 / self.total_header_bytes as f64
+    }
+
+    /// Gets the node size in bytes, if the node count is 0, than
+    /// this method returns [`None`]
+    pub fn node_size(&self) -> Option<usize> {
+        self.mem_usage.checked_div(self.count)
     }
 }
 
