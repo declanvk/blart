@@ -97,12 +97,15 @@ pub struct InnerNodeStats {
     /// to the maximum number of bytes in the header
     pub sum_capped_prefix_len_bytes: usize,
 
+    /// Maximum prefix length in bytes
+    pub max_prefix_len_bytes: usize,
+
     /// Total memory usage
     pub mem_usage: usize,
 }
 
 impl InnerNodeStats {
-    fn sum_data<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>, N>(
+    fn aggregate_data<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>, N>(
         &mut self,
         t: &N,
     ) where
@@ -115,6 +118,7 @@ impl InnerNodeStats {
         self.total_header_bytes += NUM_PREFIX_BYTES;
         self.sum_prefix_len_bytes += t.header().prefix_len();
         self.sum_capped_prefix_len_bytes += t.header().capped_prefix_len();
+        self.max_prefix_len_bytes = self.max_prefix_len_bytes.max(t.header().prefix_len());
 
         self.mem_usage += std::mem::size_of_val(t);
     }
@@ -162,6 +166,7 @@ impl Add for InnerNodeStats {
             sum_prefix_len_bytes: self.sum_prefix_len_bytes + rhs.sum_prefix_len_bytes,
             sum_capped_prefix_len_bytes: self.sum_capped_prefix_len_bytes
                 + rhs.sum_capped_prefix_len_bytes,
+            max_prefix_len_bytes: self.max_prefix_len_bytes.max(rhs.max_prefix_len_bytes),
             mem_usage: self.mem_usage + rhs.mem_usage,
         }
     }
@@ -257,29 +262,29 @@ where
 
     fn visit_node4(&mut self, t: &InnerNode4<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
         let mut output = t.super_visit_with(self);
-        output.node4.sum_data(t);
-        output.tree.sum_data(t);
+        output.node4.aggregate_data(t);
+        output.tree.aggregate_data(t);
         output
     }
 
     fn visit_node16(&mut self, t: &InnerNode16<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
         let mut output = t.super_visit_with(self);
-        output.node16.sum_data(t);
-        output.tree.sum_data(t);
+        output.node16.aggregate_data(t);
+        output.tree.aggregate_data(t);
         output
     }
 
     fn visit_node48(&mut self, t: &InnerNode48<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
         let mut output = t.super_visit_with(self);
-        output.node48.sum_data(t);
-        output.tree.sum_data(t);
+        output.node48.aggregate_data(t);
+        output.tree.aggregate_data(t);
         output
     }
 
     fn visit_node256(&mut self, t: &InnerNode256<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
         let mut output = t.super_visit_with(self);
-        output.node256.sum_data(t);
-        output.tree.sum_data(t);
+        output.node256.aggregate_data(t);
+        output.tree.aggregate_data(t);
         output
     }
 
@@ -315,6 +320,7 @@ mod tests {
             total_header_bytes: 240,
             sum_prefix_len_bytes: 0,
             sum_capped_prefix_len_bytes: 0,
+            max_prefix_len_bytes: 0,
             mem_usage: 960,
         };
         let expected = TreeStats {
@@ -349,6 +355,7 @@ mod tests {
             total_header_bytes: 256,
             sum_prefix_len_bytes: 0,
             sum_capped_prefix_len_bytes: 0,
+            max_prefix_len_bytes: 0,
             mem_usage: 1024,
         };
         let node16 = InnerNodeStats {
@@ -358,6 +365,7 @@ mod tests {
             total_header_bytes: 16,
             sum_prefix_len_bytes: 0,
             sum_capped_prefix_len_bytes: 0,
+            max_prefix_len_bytes: 0,
             mem_usage: 168,
         };
         let expected = TreeStats {
