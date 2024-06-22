@@ -210,7 +210,7 @@ impl Add for LeafStats {
 }
 
 /// Collection of stats about the number of nodes types present in a tree
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TreeStats {
     /// Stats for [`InnerNode4`][crate::nodes::InnerNode4]s
     pub node4: InnerNodeStats,
@@ -306,6 +306,41 @@ where
         output.leaf.sum_key_bytes += t.key_ref().as_bytes().len();
         output.leaf.mem_usage += std::mem::size_of_val(t);
         output
+    }
+}
+
+impl std::fmt::Debug for TreeStats {
+    #[rustfmt::skip]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let TreeStats {
+            node4,
+            node16,
+            node48,
+            node256,
+            tree,
+            leaf,
+        } = self;
+        f.debug_struct("TreeStats")
+            .field("node4", &node4)
+            .field("node16", &node16)
+            .field("node48", &node48)
+            .field("node256", &node256)
+            .field("tree", &tree)
+            .field("leaf", &leaf)
+            .finish()
+            .and(f.write_str("\n"))
+            .and(f.write_fmt(format_args!("memory usage (inner nodes):        {} bytes\n", tree.mem_usage)))
+            .and(f.write_fmt(format_args!("memory usage (inner nodes + leaf): {} bytes\n", self.total_memory_usage())))
+            .and(f.write_fmt(format_args!("bytes/entry:                       {:.5}\n", self.bytes_per_entry())))
+            .and(f.write_fmt(format_args!("bytes/entry (with leaf):           {:.5}\n", self.bytes_per_entry_with_leaf())))
+            .and(f.write_fmt(format_args!("avg prefix length:                 {:.5} bytes\n", tree.avg_prefix_len())))
+            .and(f.write_fmt(format_args!("avg capped prefix length:          {:.5} bytes\n", tree.avg_capped_prefix_len())))
+            .and(f.write_fmt(format_args!("% used header bytes (0-1):         {:.5}\n", tree.percentage_header_bytes())))
+            .and(f.write_fmt(format_args!("% used slots (0-1):                {:.5}\n", tree.percentage_slots())))
+            .and(f.write_fmt(format_args!("n4 size:                           {:?} bytes\n", node4.node_size())))
+            .and(f.write_fmt(format_args!("n16 size:                          {:?} bytes\n", node16.node_size())))
+            .and(f.write_fmt(format_args!("n48 size:                          {:?} bytes\n", node48.node_size())))
+            .and(f.write_fmt(format_args!("n256 size:                         {:?} bytes", node256.node_size())))
     }
 }
 
