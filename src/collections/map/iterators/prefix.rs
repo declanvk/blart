@@ -1,4 +1,6 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodeHeader, NodePtr, OpaqueNodePtr, RawTreeMap};
+use crate::{
+    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodeHeader, NodePtr, OpaqueNodePtr, RawTreeMap,
+};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_add_childs {
@@ -126,6 +128,35 @@ macro_rules! gen_iter {
 
                 (min == matched_bytes).then_some(matched_bytes)
             }
+
+            fn handle_leaf(
+                &mut self,
+                current_depth: usize,
+                inner: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
+            ) -> bool {
+                self.size -= 1;
+                let key = unsafe { inner.as_key_ref().as_bytes() };
+
+                // In this case we consumed more bytes than the
+                // searched prefix, so in this case we are sure
+                // that the searched prefix is prefix of this leaf
+                if current_depth >= self.prefix.len() {
+                    return true;
+                }
+
+                // If the searched prefix > key length it's
+                // impossible for the search prefix to be
+                // prefix of this leaf
+                if self.prefix.len() > key.len() {
+                    return false;
+                }
+
+                // We just checked, so it's impossible
+                // for this this to panic
+                let key = &key[current_depth..];
+                let prefix = &self.prefix[current_depth..];
+                Self::is_prefix_of(key, prefix).is_some()
+            }
         }
 
         impl<
@@ -147,37 +178,12 @@ macro_rules! gen_iter {
                         ConcreteNodePtr::Node48(inner) => self.add_childs(inner, current_depth),
                         ConcreteNodePtr::Node256(inner) => self.add_childs(inner, current_depth),
                         ConcreteNodePtr::LeafNode(inner) => {
-                            self.size -= 1;
-                            let key = unsafe { inner.as_key_ref().as_bytes() };
-
-                            // In this case we consumed more bytes than the
-                            // searched prefix, so in this case we are sure
-                            // that the searched prefix is prefix of this leaf
-                            if current_depth >= self.prefix.len() {
-                                return unsafe { Some(inner.$op()) }; 
-                            }
-
-                            // If the searched prefix > key length it's 
-                            // impossible for the search prefix to be
-                            // prefix of this leaf
-                            if self.prefix.len() > key.len() {
-                                continue;
-                            }
-
-                            // We just checked, so it's impossible
-                            // for this this to panic
-                            let key = &key[current_depth..];
-                            let prefix = &self.prefix[current_depth..];
-                            if let Some(_) = Self::is_prefix_of(
-                                key,
-                                prefix,
-                            ) {
+                            if self.handle_leaf(current_depth, inner) {
                                 return unsafe { Some(inner.$op()) };
                             }
                         },
                     }
                 }
-
                 None
             }
 
@@ -210,37 +216,12 @@ macro_rules! gen_iter {
                         ConcreteNodePtr::Node48(inner) => self.add_childs_rev(inner, current_depth),
                         ConcreteNodePtr::Node256(inner) => self.add_childs_rev(inner, current_depth),
                         ConcreteNodePtr::LeafNode(inner) => {
-                            self.size -= 1;
-                            let key = unsafe { inner.as_key_ref().as_bytes() };
-
-                            // In this case we consumed more bytes than the
-                            // searched prefix, so in this case we are sure
-                            // that the searched prefix is prefix of this leaf
-                            if current_depth >= self.prefix.len() {
-                                return unsafe { Some(inner.$op()) }; 
-                            }
-
-                            // If the searched prefix > key length it's 
-                            // impossible for the search prefix to be
-                            // prefix of this leaf
-                            if self.prefix.len() > key.len() {
-                                continue;
-                            }
-
-                            // We just checked, so it's impossible
-                            // for this this to panic
-                            let key = &key[current_depth..];
-                            let prefix = &self.prefix[current_depth..];
-                            if let Some(_) = Self::is_prefix_of(
-                                key,
-                                prefix,
-                            ) {
+                            if self.handle_leaf(current_depth, inner) {
                                 return unsafe { Some(inner.$op()) };
                             }
                         },
                     }
                 }
-
                 None
             }
         }
