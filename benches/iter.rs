@@ -1,7 +1,8 @@
 use std::{ffi::CString, ptr::NonNull};
 
 use blart::{
-    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, Node, NodePtr, TreeMap, VariableKeyHeader,
+    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, Node, NodePtr, TreeMap,
+    VariableKeyHeader,
 };
 use criterion::{measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
@@ -18,7 +19,9 @@ fn iter_node<const NUM_PREFIX_BYTES: usize, M: Measurement, N: InnerNode<NUM_PRE
     let mut rng = StdRng::seed_from_u64(69420);
     let bytes: Vec<_> = (0..=255u8).collect();
 
-    let dangling_ptr = unsafe { NodePtr::new(NonNull::<InnerNode48<_, _, NUM_PREFIX_BYTES, _>>::dangling().as_ptr()) };
+    let dangling_ptr = unsafe {
+        NodePtr::new(NonNull::<InnerNode48<_, _, NUM_PREFIX_BYTES, _>>::dangling().as_ptr())
+    };
     let dangling_opaque = dangling_ptr.to_opaque();
 
     let mut group = c.benchmark_group(format!("{prefix}/{ty}"));
@@ -39,10 +42,30 @@ fn iter_node<const NUM_PREFIX_BYTES: usize, M: Measurement, N: InnerNode<NUM_PRE
 }
 
 fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
-    iter_node::<16, _, InnerNode4<CString, usize, 16, VariableKeyHeader<16>>>(c, prefix, "n4", &[1, 4]);
-    iter_node::<16, _, InnerNode16<CString, usize, 16, VariableKeyHeader<16>>>(c, prefix, "n16", &[5, 12, 16]);
-    iter_node::<16, _, InnerNode48<CString, usize, 16, VariableKeyHeader<16>>>(c, prefix, "n48", &[17, 32, 48]);
-    iter_node::<16, _, InnerNode256<CString, usize, 16, VariableKeyHeader<16>>>(c, prefix, "n256", &[49, 100, 152, 204, 256]);
+    iter_node::<16, _, InnerNode4<CString, usize, 16, VariableKeyHeader<16>>>(
+        c,
+        prefix,
+        "n4",
+        &[1, 4],
+    );
+    iter_node::<16, _, InnerNode16<CString, usize, 16, VariableKeyHeader<16>>>(
+        c,
+        prefix,
+        "n16",
+        &[5, 12, 16],
+    );
+    iter_node::<16, _, InnerNode48<CString, usize, 16, VariableKeyHeader<16>>>(
+        c,
+        prefix,
+        "n48",
+        &[17, 32, 48],
+    );
+    iter_node::<16, _, InnerNode256<CString, usize, 16, VariableKeyHeader<16>>>(
+        c,
+        prefix,
+        "n256",
+        &[49, 100, 152, 204, 256],
+    );
 
     let words = include_str!("dict.txt");
     let tree: TreeMap<_, _> = words

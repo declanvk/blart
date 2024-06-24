@@ -1,14 +1,20 @@
 use std::{ffi::CString, ptr::NonNull, time::Duration};
 
-use blart::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr, TreeMap, VariableKeyHeader};
+use blart::{
+    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr, TreeMap,
+    VariableKeyHeader,
+};
 use criterion::{measurement::Measurement, Criterion};
 
 #[macro_use]
 mod common;
 
 fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
-    let dangling_ptr =
-        unsafe { NodePtr::new(NonNull::<InnerNode48<CString, usize, 16, VariableKeyHeader<16>>>::dangling().as_ptr()) };
+    let dangling_ptr = unsafe {
+        NodePtr::new(
+            NonNull::<InnerNode48<CString, usize, 16, VariableKeyHeader<16>>>::dangling().as_ptr(),
+        )
+    };
     let dangling_opaque = dangling_ptr.to_opaque();
     let count = 8u8;
     let skip = (256u32 / count as u32) as u8;

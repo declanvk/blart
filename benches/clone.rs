@@ -4,7 +4,7 @@ use blart::{
     tests_common::{
         generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
     },
-    AsBytes, TreeMap
+    AsBytes, TreeMap,
 };
 use criterion::{measurement::Measurement, Criterion, Throughput};
 

@@ -3,7 +3,7 @@ mod common;
 #[test]
 #[cfg(not(miri))]
 fn test_memory_usage() {
-    use blart::{TreeMap, tests_common};
+    use blart::{tests_common, TreeMap};
     use common::{get_profiler, test_heap};
 
     const KEY_LEVEL_WIDTH: [u8; 3] = [50, 1, 2];
