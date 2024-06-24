@@ -214,7 +214,9 @@ macro_rules! gen_iter {
                         ConcreteNodePtr::Node4(inner) => self.add_childs_rev(inner, current_depth),
                         ConcreteNodePtr::Node16(inner) => self.add_childs_rev(inner, current_depth),
                         ConcreteNodePtr::Node48(inner) => self.add_childs_rev(inner, current_depth),
-                        ConcreteNodePtr::Node256(inner) => self.add_childs_rev(inner, current_depth),
+                        ConcreteNodePtr::Node256(inner) => {
+                            self.add_childs_rev(inner, current_depth)
+                        },
                         ConcreteNodePtr::LeafNode(inner) => {
                             if self.handle_leaf(current_depth, inner) {
                                 return unsafe { Some(inner.$op()) };

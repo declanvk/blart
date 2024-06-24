@@ -3,7 +3,7 @@ mod common;
 #[test]
 #[cfg(not(miri))]
 fn test_memory_usage() {
-    use blart::{TreeMap, tests_common};
+    use blart::{tests_common, TreeMap};
     use common::{get_profiler, test_heap};
 
     const KEY_LENGTH_LIMIT: usize = u8::MAX as usize;
