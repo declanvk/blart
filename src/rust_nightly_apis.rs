@@ -284,7 +284,6 @@ pub(crate) use assume;
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(feature = "nightly")]
-#[macro_export]
 macro_rules! likely {
     ($b:expr) => {
         std::intrinsics::likely($b)
@@ -305,7 +304,6 @@ macro_rules! likely {
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(not(feature = "nightly"))]
-// #[macro_export]
 macro_rules! likely {
     ($b:expr) => {
         $b
@@ -328,7 +326,6 @@ pub(crate) use likely;
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(feature = "nightly")]
-#[macro_export]
 macro_rules! unlikely {
     ($b:expr) => {
         std::intrinsics::unlikely($b)
