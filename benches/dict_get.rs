@@ -25,7 +25,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let mut searches: Vec<_> = words.choose_multiple(&mut rng, 5_000).cloned().collect();
     searches.sort();
 
-    let mut tree: TreeMap<_, _> = words.into_iter().map(|s| (s, 0usize)).collect();
+    let tree: TreeMap<_, _> = words.into_iter().map(|s| (s, 0usize)).collect();
 
     let mut group = c.benchmark_group(format!("{prefix}"));
     group.throughput(criterion::Throughput::Bytes(bytes as u64));

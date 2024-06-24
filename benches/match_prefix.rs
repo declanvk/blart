@@ -1,4 +1,4 @@
-use std::{ffi::CString, ptr::NonNull, time::Duration};
+use std::{time::Duration};
 
 use blart::{
     InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, NodePtr, TreeMap, VariableKeyHeader,
@@ -22,12 +22,12 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let leaf_opaque = leaf_node_ptr.to_opaque();
 
     let key_small_match = &[0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    let key_small_match_padded = &[
+    let _key_small_match_padded = &[
         0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0,
     ];
     let key_small_mismatch = &[0u8, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-    let key_small_mismatch_padded = &[
+    let _key_small_mismatch_padded = &[
         0u8, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0,
     ];
@@ -36,7 +36,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ];
-    let key_large_match_padded = &[
+    let _key_large_match_padded = &[
         0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
@@ -44,7 +44,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         0u8, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ];
-    let key_large_mismatch_padded = &[
+    let _key_large_mismatch_padded = &[
         0u8, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];

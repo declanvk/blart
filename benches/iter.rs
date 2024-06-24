@@ -1,4 +1,4 @@
-use std::{ffi::CString, ptr::NonNull, time::Duration};
+use std::{ffi::CString, ptr::NonNull};
 
 use blart::{
     InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, Node, NodePtr, TreeMap, VariableKeyHeader,
@@ -29,7 +29,7 @@ fn iter_node<const NUM_PREFIX_BYTES: usize, M: Measurement, N: InnerNode<NUM_PRE
         }
 
         group.bench_function(format!("{size}").as_str(), |b| {
-            b.iter(|| unsafe {
+            b.iter(|| {
                 node.iter().for_each(|(k, n)| {
                     std::hint::black_box((k, n));
                 });
@@ -45,7 +45,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     iter_node::<16, _, InnerNode256<CString, usize, 16, VariableKeyHeader<16>>>(c, prefix, "n256", &[49, 100, 152, 204, 256]);
 
     let words = include_str!("dict.txt");
-    let mut tree: TreeMap<_, _> = words
+    let tree: TreeMap<_, _> = words
         .lines()
         .map(|s| (CString::new(s).unwrap(), 0usize))
         .collect();
