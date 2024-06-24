@@ -1,4 +1,4 @@
-cargo-features = ["profile-rustflags"]
+# cargo-features = ["profile-rustflags"]
 
 [package]
 name = "blart"
@@ -88,9 +88,9 @@ name = "clone"
 harness = false
 required-features = ["gen-benches-macro"]
 
-[profile.release]
-codegen-units = 1
-lto = "fat"
-panic = "abort"
-incremental = false
-rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]
+# [profile.release]
+# codegen-units = 1
+# lto = "fat"
+# panic = "abort"
+# incremental = false
+# rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]
