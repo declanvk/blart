@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use blart::{
-    InnerNode, InnerNode256, InnerNode48, LeafNode, NodePtr,
-    VariableKeyHeader,
-};
+use blart::{InnerNode, InnerNode256, InnerNode48, LeafNode, NodePtr, VariableKeyHeader};
 use criterion::{measurement::Measurement, Criterion};
 
 #[macro_use]
