@@ -53,11 +53,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         group.warm_up_time(Duration::from_secs(10));
         group.measurement_time(Duration::from_secs(30));
         group.bench_function("insert/asc", |b| {
-            b.iter_batched(
-                || words.clone(),
-                insert,
-                criterion::BatchSize::SmallInput,
-            )
+            b.iter_batched(|| words.clone(), insert, criterion::BatchSize::SmallInput)
         });
         group.bench_function("insert/desc", |b| {
             b.iter_batched(

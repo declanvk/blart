@@ -1,9 +1,6 @@
 use std::{ffi::CString, ptr::NonNull, time::Duration};
 
-use blart::{
-    InnerNode, InnerNode256, InnerNode48, NodePtr,
-    VariableKeyHeader,
-};
+use blart::{InnerNode, InnerNode256, InnerNode48, NodePtr, VariableKeyHeader};
 use criterion::{measurement::Measurement, Criterion};
 
 #[macro_use]
