@@ -47,7 +47,7 @@ fn collect_and_output_stats(tree: TreeMap<Box<[u8]>, ()>) -> Result<(), Box<dyn 
     println!("{stats:#?}");
 
     let overhead_bytes_per_key_byte =
-        (stats.total_inner_node_bytes as f64) / (stats.total_key_bytes as f64);
+        (stats.tree.mem_usage as f64) / (stats.leaf.sum_key_bytes as f64);
 
     println!("{overhead_bytes_per_key_byte} bytes of overhead, per byte of key stored in tree");
 
