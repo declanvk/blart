@@ -4,7 +4,7 @@ use blart::{
     tests_common::{
         generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
     },
-    AsBytes, TreeMap,
+    AsBytes, TreeMap
 };
 use criterion::{measurement::Measurement, Criterion, Throughput};
 
@@ -14,7 +14,7 @@ mod common;
 fn gen_group<M: Measurement, K: AsBytes + Clone>(
     c: &mut Criterion<M>,
     group: String,
-    mut keys: Vec<K>,
+    keys: Vec<K>,
 ) {
     let bytes = keys.iter().map(|k| k.as_bytes().len() as u64).sum();
     let mut tree = TreeMap::new();
@@ -50,7 +50,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     .collect();
 
     let words = include_str!("dict.txt");
-    let mut dict: Vec<_> = words.lines().map(|s| CString::new(s).unwrap()).collect();
+    let dict: Vec<_> = words.lines().map(|s| CString::new(s).unwrap()).collect();
 
     gen_group(c, format!("{prefix}/skewed"), skewed.clone());
     gen_group(c, format!("{prefix}/fixed_length"), fixed_length.clone());

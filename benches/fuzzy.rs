@@ -9,7 +9,7 @@ mod common;
 fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let words = include_str!("dict.txt");
     let mut bytes = 0;
-    let mut tree: TreeMap<_, _> = words
+    let tree: TreeMap<_, _> = words
         .lines()
         .map(|s| {
             let s = CString::new(s).unwrap();

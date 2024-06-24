@@ -15,12 +15,14 @@
         portable_simd
     )
 )]
-#![allow(
-    unstable_name_collisions,
-    internal_features,
-    clippy::type_complexity,
-    incomplete_features
+#![cfg_attr(
+    feature = "nightly",
+    allow(
+        incomplete_features,
+        internal_features
+    )
 )]
+#![allow(clippy::type_complexity, unstable_name_collisions)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,

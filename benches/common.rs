@@ -1,3 +1,4 @@
+#[allow(unused_macros)]
 macro_rules! gen_benches {
     ($bench:ident, $(($target:ident, $event:path)),+) => {
         #[cfg(all(feature = "bench-perf-events", target_arch = "x86_64"))]
