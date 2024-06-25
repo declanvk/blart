@@ -1,5 +1,3 @@
-use crate::VariableKeyHeader;
-
 use super::*;
 use std::mem;
 
@@ -10,7 +8,7 @@ use sptr::Strict;
 // pointer to a type with large and small alignment and back without issues.
 #[test]
 fn leaf_node_alignment() {
-    let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _, 16, VariableKeyHeader<16>>, 3>::new(
+    let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _, 16>, 3>::new(
         Box::into_raw(Box::new(LeafNode::new([], 3u8))),
     )
     .unwrap()
@@ -20,14 +18,14 @@ fn leaf_node_alignment() {
     #[repr(align(64))]
     struct LargeAlignment;
 
-    let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _, 16, VariableKeyHeader<16>>, 3>::new(
+    let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _, 16>, 3>::new(
         Box::into_raw(Box::new(LeafNode::new(LargeAlignment, 2u16))),
     )
     .unwrap()
     .cast::<OpaqueValue>();
     p1.set_data(0b011);
 
-    let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment, 16, VariableKeyHeader<16>>, 3>::new(
+    let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment, 16>, 3>::new(
         Box::into_raw(Box::new(LeafNode::new(1u64, LargeAlignment))),
     )
     .unwrap()
@@ -40,15 +38,15 @@ fn leaf_node_alignment() {
         // are required, even though the tests pass under normal execution otherwise (I
         // guess normal test execution doesn't care about leaked memory?)
         drop(Box::from_raw(
-            p0.cast::<LeafNode<[u8; 0], u8, 16, VariableKeyHeader<16>>>()
+            p0.cast::<LeafNode<[u8; 0], u8, 16>>()
                 .to_ptr(),
         ));
         drop(Box::from_raw(
-            p1.cast::<LeafNode<LargeAlignment, u16, 16, VariableKeyHeader<16>>>()
+            p1.cast::<LeafNode<LargeAlignment, u16, 16>>()
                 .to_ptr(),
         ));
         drop(Box::from_raw(
-            p2.cast::<LeafNode<u64, LargeAlignment, 16, VariableKeyHeader<16>>>()
+            p2.cast::<LeafNode<u64, LargeAlignment, 16>>()
                 .to_ptr(),
         ));
     }
@@ -56,20 +54,20 @@ fn leaf_node_alignment() {
 
 #[test]
 fn opaque_node_ptr_is_correct() {
-    let mut n4 = InnerNode4::<Box<[u8]>, usize, 16, VariableKeyHeader<16>>::empty();
-    let mut n16 = InnerNode16::<Box<[u8]>, usize, 16, VariableKeyHeader<16>>::empty();
-    let mut n48 = InnerNode48::<Box<[u8]>, usize, 16, VariableKeyHeader<16>>::empty();
-    let mut n256 = InnerNode256::<Box<[u8]>, usize, 16, VariableKeyHeader<16>>::empty();
+    let mut n4 = InnerNode4::<Box<[u8]>, usize, 16>::empty();
+    let mut n16 = InnerNode16::<Box<[u8]>, usize, 16>::empty();
+    let mut n48 = InnerNode48::<Box<[u8]>, usize, 16>::empty();
+    let mut n256 = InnerNode256::<Box<[u8]>, usize, 16>::empty();
 
     let n4_ptr = NodePtr::from(&mut n4).to_opaque();
     let n16_ptr = NodePtr::from(&mut n16).to_opaque();
     let n48_ptr = NodePtr::from(&mut n48).to_opaque();
     let n256_ptr = NodePtr::from(&mut n256).to_opaque();
 
-    assert!(n4_ptr.is::<InnerNode4<Box<[u8]>, usize, 16, VariableKeyHeader<16>>>());
-    assert!(n16_ptr.is::<InnerNode16<Box<[u8]>, usize, 16, VariableKeyHeader<16>>>());
-    assert!(n48_ptr.is::<InnerNode48<Box<[u8]>, usize, 16, VariableKeyHeader<16>>>());
-    assert!(n256_ptr.is::<InnerNode256<Box<[u8]>, usize, 16, VariableKeyHeader<16>>>());
+    assert!(n4_ptr.is::<InnerNode4<Box<[u8]>, usize, 16>>());
+    assert!(n16_ptr.is::<InnerNode16<Box<[u8]>, usize, 16>>());
+    assert!(n48_ptr.is::<InnerNode48<Box<[u8]>, usize, 16>>());
+    assert!(n256_ptr.is::<InnerNode256<Box<[u8]>, usize, 16>>());
 }
 
 // #[test]
@@ -112,57 +110,57 @@ fn opaque_node_ptr_is_correct() {
 #[test]
 fn node_alignment() {
     assert_eq!(
-        mem::align_of::<InnerNode4<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(),
         8
     );
     assert_eq!(
-        mem::align_of::<InnerNode16<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(),
         8
     );
     assert_eq!(
-        mem::align_of::<InnerNode48<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(),
         8
     );
     assert_eq!(
-        mem::align_of::<InnerNode256<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(),
         8
     );
     assert_eq!(
-        mem::align_of::<LeafNode<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(),
         8
     );
-    assert_eq!(mem::align_of::<VariableKeyHeader<16>>(), 8);
+    assert_eq!(mem::align_of::<Header<16>>(), 8);
 
     assert_eq!(
-        mem::align_of::<InnerNode4<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<InnerNode16<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<InnerNode48<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<InnerNode256<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(),
         mem::align_of::<OpaqueValue>()
     );
     assert_eq!(
-        mem::align_of::<LeafNode<Box<[u8]>, u8, 16, VariableKeyHeader<16>>>(),
+        mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(),
         mem::align_of::<OpaqueValue>()
     );
 
-    let n4 = InnerNode4::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
-    let n16 = InnerNode4::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
-    let n48 = InnerNode4::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
-    let n256 = InnerNode4::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+    let n16 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+    let n48 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+    let n256 = InnerNode4::<Box<[u8]>, (), 16>::empty();
 
-    let n4_ptr = (&n4 as *const InnerNode4<Box<[u8]>, (), 16, VariableKeyHeader<16>>).addr();
-    let n16_ptr = (&n16 as *const InnerNode4<Box<[u8]>, (), 16, VariableKeyHeader<16>>).addr();
-    let n48_ptr = (&n48 as *const InnerNode4<Box<[u8]>, (), 16, VariableKeyHeader<16>>).addr();
-    let n256_ptr = (&n256 as *const InnerNode4<Box<[u8]>, (), 16, VariableKeyHeader<16>>).addr();
+    let n4_ptr = (&n4 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+    let n16_ptr = (&n16 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+    let n48_ptr = (&n48 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+    let n256_ptr = (&n256 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
 
     // Ensure that there are 3 bits of unused space in the node pointer because of
     // the alignment.
@@ -264,7 +262,7 @@ fn inner_node_shrink_test<const NUM_PREFIX_BYTES: usize>(
 
 #[test]
 fn node4_lookup() {
-    let mut n = InnerNode4::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let mut n = InnerNode4::<Box<[u8]>, (), 16>::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -291,12 +289,12 @@ fn node4_lookup() {
 
 #[test]
 fn node4_write_child() {
-    inner_node_write_child_test(InnerNode4::<_, _, 16, VariableKeyHeader<16>>::empty(), 4)
+    inner_node_write_child_test(InnerNode4::<_, _, 16>::empty(), 4)
 }
 
 #[test]
 fn node4_remove_child() {
-    inner_node_remove_child_test(InnerNode4::<_, _, 16, VariableKeyHeader<16>>::empty(), 4)
+    inner_node_remove_child_test(InnerNode4::<_, _, 16>::empty(), 4)
 }
 
 // #[test]
@@ -307,7 +305,7 @@ fn node4_remove_child() {
 
 #[test]
 fn node4_grow() {
-    let mut n4 = InnerNode4::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let mut n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -330,14 +328,14 @@ fn node4_grow() {
 #[test]
 #[should_panic]
 fn node4_shrink() {
-    let n4 = InnerNode4::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
 
     n4.shrink();
 }
 
 #[test]
 fn node16_lookup() {
-    let mut n = InnerNode16::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let mut n = InnerNode16::<Box<[u8]>, (), 16>::empty();
     let mut l1 = LeafNode::new(Box::from([]), ());
     let mut l2 = LeafNode::new(Box::from([]), ());
     let mut l3 = LeafNode::new(Box::from([]), ());
@@ -364,12 +362,12 @@ fn node16_lookup() {
 
 #[test]
 fn node16_write_child() {
-    inner_node_write_child_test(InnerNode16::<_, _, 16, VariableKeyHeader<16>>::empty(), 16)
+    inner_node_write_child_test(InnerNode16::<_, _, 16>::empty(), 16)
 }
 
 #[test]
 fn node16_remove_child() {
-    inner_node_remove_child_test(InnerNode16::<_, _, 16, VariableKeyHeader<16>>::empty(), 16)
+    inner_node_remove_child_test(InnerNode16::<_, _, 16>::empty(), 16)
 }
 
 // #[test]
@@ -381,7 +379,7 @@ fn node16_remove_child() {
 #[test]
 #[should_panic]
 fn node16_grow_panic() {
-    let mut n16 = InnerNode16::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -403,7 +401,7 @@ fn node16_grow_panic() {
 
 #[test]
 fn node16_grow() {
-    let mut n16 = InnerNode16::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
     let mut v = Vec::new();
     for i in 0..16 {
         let mut l = LeafNode::new(vec![].into(), ());
@@ -421,18 +419,18 @@ fn node16_grow() {
 
 #[test]
 fn node16_shrink() {
-    inner_node_shrink_test(InnerNode16::<_, _, 16, VariableKeyHeader<16>>::empty(), 4);
+    inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 4);
 }
 
 #[test]
 #[should_panic]
 fn node16_shrink_too_many_children_panic() {
-    inner_node_shrink_test(InnerNode16::<_, _, 16, VariableKeyHeader<16>>::empty(), 5);
+    inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 5);
 }
 
 #[test]
 fn node48_lookup() {
-    let mut n = InnerNode48::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let mut n = InnerNode48::<Box<[u8]>, (), 16>::empty();
     let mut l1 = LeafNode::new(Box::from([]), ());
     let mut l2 = LeafNode::new(Box::from([]), ());
     let mut l3 = LeafNode::new(Box::from([]), ());
@@ -459,23 +457,23 @@ fn node48_lookup() {
 
 #[test]
 fn node48_write_child() {
-    inner_node_write_child_test(InnerNode48::<_, _, 16, VariableKeyHeader<16>>::empty(), 48)
+    inner_node_write_child_test(InnerNode48::<_, _, 16>::empty(), 48)
 }
 
 #[test]
 fn node48_remove_child() {
-    inner_node_remove_child_test(InnerNode48::<_, _, 16, VariableKeyHeader<16>>::empty(), 48)
+    inner_node_remove_child_test(InnerNode48::<_, _, 16>::empty(), 48)
 }
 
 #[test]
 #[should_panic]
 fn node48_write_child_full_panic() {
-    inner_node_write_child_test(InnerNode48::<_, _, 16, VariableKeyHeader<16>>::empty(), 49);
+    inner_node_write_child_test(InnerNode48::<_, _, 16>::empty(), 49);
 }
 
 #[test]
 fn node48_grow() {
-    let mut n48 = InnerNode48::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let mut n48 = InnerNode48::<Box<[u8]>, (), 16>::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
     let mut l3 = LeafNode::new(vec![].into(), ());
@@ -497,18 +495,18 @@ fn node48_grow() {
 
 #[test]
 fn node48_shrink() {
-    inner_node_shrink_test(InnerNode48::<_, _, 16, VariableKeyHeader<16>>::empty(), 16);
+    inner_node_shrink_test(InnerNode48::<_, _, 16>::empty(), 16);
 }
 
 #[test]
 #[should_panic]
 fn node48_shrink_too_many_children_panic() {
-    inner_node_shrink_test(InnerNode48::<_, _, 16, VariableKeyHeader<16>>::empty(), 17);
+    inner_node_shrink_test(InnerNode48::<_, _, 16>::empty(), 17);
 }
 
 #[test]
 fn node256_lookup() {
-    let mut n = InnerNode256::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let mut n = InnerNode256::<Box<[u8]>, (), 16>::empty();
     let mut l1 = LeafNode::new(Box::from([]), ());
     let mut l2 = LeafNode::new(Box::from([]), ());
     let mut l3 = LeafNode::new(Box::from([]), ());
@@ -532,7 +530,7 @@ fn node256_lookup() {
 #[test]
 fn node256_write_child() {
     inner_node_write_child_test(
-        InnerNode256::<_, _, 16, VariableKeyHeader<16>>::empty(),
+        InnerNode256::<_, _, 16>::empty(),
         256,
     )
 }
@@ -540,7 +538,7 @@ fn node256_write_child() {
 #[test]
 fn node256_remove_child() {
     inner_node_remove_child_test(
-        InnerNode256::<_, _, 16, VariableKeyHeader<16>>::empty(),
+        InnerNode256::<_, _, 16>::empty(),
         256,
     )
 }
@@ -548,20 +546,20 @@ fn node256_remove_child() {
 #[test]
 #[should_panic]
 fn node256_grow() {
-    let n = InnerNode256::<Box<[u8]>, (), 16, VariableKeyHeader<16>>::empty();
+    let n = InnerNode256::<Box<[u8]>, (), 16>::empty();
 
     n.grow();
 }
 
 #[test]
 fn node256_shrink() {
-    inner_node_shrink_test(InnerNode256::<_, _, 16, VariableKeyHeader<16>>::empty(), 48);
+    inner_node_shrink_test(InnerNode256::<_, _, 16>::empty(), 48);
 }
 
 #[test]
 #[should_panic]
 fn node256_shrink_too_many_children_panic() {
-    inner_node_shrink_test(InnerNode256::<_, _, 16, VariableKeyHeader<16>>::empty(), 49);
+    inner_node_shrink_test(InnerNode256::<_, _, 16>::empty(), 49);
 }
 
 // #[test]
@@ -584,7 +582,7 @@ fn node256_shrink_too_many_children_panic() {
 
 #[test]
 fn header_delete_prefix() {
-    let mut h = VariableKeyHeader::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8], 8);
+    let mut h = Header::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8], 8);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
@@ -608,7 +606,7 @@ fn header_delete_prefix() {
 #[test]
 #[should_panic]
 fn header_ltrim_prefix_too_many_bytes_panic() {
-    let mut h = VariableKeyHeader::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8], 8);
+    let mut h = Header::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8], 8);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
@@ -618,7 +616,7 @@ fn header_ltrim_prefix_too_many_bytes_panic() {
 #[test]
 #[should_panic]
 fn header_ltrim_prefix_non_stored_bytes_panic() {
-    let mut h = VariableKeyHeader::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 14);
+    let mut h = Header::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 14);
     assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(h.prefix_len(), 8);
 
@@ -630,11 +628,11 @@ fn header_ltrim_prefix_non_stored_bytes_panic() {
 
 type FixtureReturn<Node, const N: usize> = (
     Node,
-    [LeafNode<Box<[u8]>, (), 16, VariableKeyHeader<16>>; N],
-    [OpaqueNodePtr<Box<[u8]>, (), 16, VariableKeyHeader<16>>; N],
+    [LeafNode<Box<[u8]>, (), 16>; N],
+    [OpaqueNodePtr<Box<[u8]>, (), 16>; N],
 );
 
-fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16, VariableKeyHeader<16>>, 4> {
+fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {
     let mut n4 = InnerNode4::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
@@ -667,7 +665,7 @@ fn node4_iterate() {
     );
 }
 
-fn node16_fixture() -> FixtureReturn<InnerNode16<Box<[u8]>, (), 16, VariableKeyHeader<16>>, 4> {
+fn node16_fixture() -> FixtureReturn<InnerNode16<Box<[u8]>, (), 16>, 4> {
     let mut n4 = InnerNode16::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
@@ -697,7 +695,7 @@ fn node16_iterate() {
     )
 }
 
-fn node48_fixture() -> FixtureReturn<InnerNode48<Box<[u8]>, (), 16, VariableKeyHeader<16>>, 4> {
+fn node48_fixture() -> FixtureReturn<InnerNode48<Box<[u8]>, (), 16>, 4> {
     let mut n4 = InnerNode48::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());
@@ -734,7 +732,7 @@ fn node48_iterate() {
         .any(|(key_fragment, ptr)| key_fragment == 85 && ptr == l4_ptr));
 }
 
-fn node256_fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, (), 16, VariableKeyHeader<16>>, 4> {
+fn node256_fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, (), 16>, 4> {
     let mut n4 = InnerNode256::empty();
     let mut l1 = LeafNode::new(vec![].into(), ());
     let mut l2 = LeafNode::new(vec![].into(), ());

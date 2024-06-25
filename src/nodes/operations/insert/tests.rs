@@ -1,13 +1,13 @@
 use crate::{
     deallocate_tree, search_unchecked,
     tests_common::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
-    AsBytes, InnerNode, InnerNode4, InnerNodeCompressed, InsertPrefixError, LeafNode, NodeHeader,
-    NodePtr, NodeType, OpaqueNodePtr, VariableKeyHeader,
+    AsBytes, InnerNode, InnerNode4, InnerNodeCompressed, InsertPrefixError, LeafNode,
+    NodePtr, NodeType, OpaqueNodePtr,
 };
 
 #[test]
 fn insert_to_small_trees() {
-    let first_leaf: NodePtr<16, LeafNode<Box<_>, String, 16, VariableKeyHeader<16>>> =
+    let first_leaf: NodePtr<16, LeafNode<Box<_>, String, 16>> =
         NodePtr::allocate_node_ptr(LeafNode::new(Box::from([1, 2, 3, 4]), "1234".to_string()));
 
     let mut tree = first_leaf.to_opaque();
@@ -21,9 +21,9 @@ fn insert_to_small_trees() {
 
     let new_root: NodePtr<
         16,
-        InnerNodeCompressed<Box<[u8]>, String, 16, VariableKeyHeader<16>, 4>,
+        InnerNodeCompressed<Box<[u8]>, String, 16, 4>,
     > = tree
-        .cast::<InnerNode4<Box<[u8]>, String, 16, VariableKeyHeader<16>>>()
+        .cast::<InnerNode4<Box<[u8]>, String, 16>>()
         .unwrap();
 
     {
@@ -67,7 +67,7 @@ fn insert_into_left_skewed_tree_deallocate() {
     const KEY_LENGTH_LIMIT: usize = 16usize;
 
     let mut keys = generate_keys_skewed(KEY_LENGTH_LIMIT);
-    let mut current_root: OpaqueNodePtr<Box<[u8]>, usize, 16, VariableKeyHeader<16>> =
+    let mut current_root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
         NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
@@ -89,8 +89,8 @@ fn insert_into_left_skewed_tree_deallocate() {
 
 #[test]
 fn insert_prefix_key_errors() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16, VariableKeyHeader<16>>> =
-        NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16, VariableKeyHeader<16>>::new(
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> =
+        NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16>::new(
             Box::from([1, 2, 3, 4]),
             "1234".to_string(),
         ));
@@ -110,8 +110,8 @@ fn insert_prefix_key_errors() {
 
 #[test]
 fn insert_prefix_key_with_existing_prefix_errors() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16, VariableKeyHeader<16>>> =
-        NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16, VariableKeyHeader<16>>::new(
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> =
+        NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16>::new(
             Box::from([1, 2]),
             "12".to_string(),
         ));
@@ -131,8 +131,8 @@ fn insert_prefix_key_with_existing_prefix_errors() {
 
 #[test]
 fn insert_key_with_long_prefix_then_split() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, i32, 16, VariableKeyHeader<16>>> =
-        NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16, VariableKeyHeader<16>>::new(
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, i32, 16>> =
+        NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16>::new(
             Box::from([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]),
             0,
         ));
@@ -191,7 +191,7 @@ fn insert_split_prefix_at_implicit_byte() {
 
     let mut keys = KEYS.iter().map(|k| Box::<[u8]>::from(&k[..]));
 
-    let mut current_root: OpaqueNodePtr<Box<[u8]>, usize, 16, VariableKeyHeader<16>> =
+    let mut current_root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
         NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
@@ -213,7 +213,7 @@ fn insert_split_prefix_at_implicit_byte() {
 
 #[test]
 fn insert_fails_new_key_prefix_of_existing_entry() {
-    let mut current_root: OpaqueNodePtr<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
+    let mut current_root: OpaqueNodePtr<Box<[u8]>, i32, 16> =
         NodePtr::allocate_node_ptr(LeafNode::new(Box::<[u8]>::from(&[1, 2, 3, 4][..]), 0))
             .to_opaque();
     current_root = unsafe {
@@ -239,7 +239,7 @@ fn insert_fails_new_key_prefix_of_existing_entry() {
 
 #[test]
 fn insert_fails_existing_key_prefixed() {
-    let mut current_root: OpaqueNodePtr<Box<[u8]>, i32, 16, VariableKeyHeader<16>> =
+    let mut current_root: OpaqueNodePtr<Box<[u8]>, i32, 16> =
         NodePtr::allocate_node_ptr(LeafNode::new(Box::<[u8]>::from(&[1, 2, 3, 4][..]), 0))
             .to_opaque();
     current_root = unsafe {
@@ -277,16 +277,15 @@ fn insert_existing_key_overwrite() {
         .copied()
         .map(|(key, value)| (Box::<[u8]>::from(key), value));
 
-    let current_root: OpaqueNodePtr<Box<[u8]>, char, 16, VariableKeyHeader<16>> =
+    let current_root: OpaqueNodePtr<Box<[u8]>, char, 16> =
         setup_tree_from_entries(entries_it);
 
     unsafe fn get_value<
         K: AsBytes,
         V: Copy,
         const NUM_PREFIX_BYTES: usize,
-        H: NodeHeader<NUM_PREFIX_BYTES>,
     >(
-        n: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
+        n: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
     ) -> V {
         unsafe { *n.as_ref().value_ref() }
     }

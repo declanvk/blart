@@ -56,23 +56,9 @@ pub use bytes::*;
 pub use collections::*;
 pub use nodes::{visitor, *};
 
-/// ART type for keys with variable length
-pub type VariableTreeMap<K, V, const NUM_PREFIX_BYTES: usize> =
-    RawTreeMap<K, V, NUM_PREFIX_BYTES, nodes::VariableKeyHeader<NUM_PREFIX_BYTES>>;
-
 /// Standard ART type. The default is for variable key lengths, with 16 byte
 /// prefix
-pub type TreeMap<K, V> = VariableTreeMap<K, V, 16>;
-
-#[cfg(feature = "nightly")]
-/// ART type for keys with fixed length
-pub type FixedTreeMap<K, V, const NUM_PREFIX_BYTES: usize = { std::mem::size_of::<K>() }> =
-    RawTreeMap<K, V, NUM_PREFIX_BYTES, nodes::FixedKeyHeader<NUM_PREFIX_BYTES, K>>;
-
-#[cfg(not(feature = "nightly"))]
-/// ART type for keys with fixed length
-pub type FixedTreeMap<K, V, const NUM_PREFIX_BYTES: usize> =
-    RawTreeMap<K, V, NUM_PREFIX_BYTES, nodes::FixedKeyHeader<NUM_PREFIX_BYTES, K>>;
+pub type TreeMap<K, V> = RawTreeMap<K, V, 16>;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]
