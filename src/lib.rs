@@ -2,7 +2,6 @@
     feature = "nightly",
     feature(
         impl_trait_in_assoc_type,
-        generic_const_exprs,
         maybe_uninit_slice,
         maybe_uninit_uninit_array,
         const_maybe_uninit_uninit_array,
