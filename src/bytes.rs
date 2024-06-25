@@ -30,18 +30,16 @@ pub trait AsBytes {
 /// This trait is used to mark types which have a byte representation which is
 /// guaranteed to not be a prefix of any other value of the same type.
 ///
-/// # Safety
-///
-/// This trait can only be implemented if the above condition holds.
+/// # SAFETY
+///  - This trait can only be implemented if the above condition holds.
 pub unsafe trait NoPrefixesBytes: AsBytes {}
 
 /// This trait is used to mark types where the lexicographic ordering of their
 /// byte representation (as output by [`AsBytes::as_bytes`]) matches their
 /// normal ordering (as determined by [`Ord`]).
 ///
-/// # Safety
-///
-/// This trait can only be implemented if the above condition holds.
+/// # SAFETY
+///  - This trait can only be implemented if the above condition holds.
 pub unsafe trait OrderedBytes: AsBytes + Ord {}
 
 macro_rules! as_bytes_for_integer_like_types {
@@ -496,6 +494,10 @@ macro_rules! as_bytes_for_concat {
                         let mut sum = 0;
                         $(
                             let new_sum = sum + $ty.len();
+                            // SAFETY: This is safe because `sum` and `new_sum` are
+                            // being updated by the right amount for each of the concated
+                            // types `as_bytes` representation (i.e length), so it's impossible
+                            // for the `new_sum` in this case to exceed the original box length
                             unsafe {
                                 v
                                 .get_unchecked_mut(sum..new_sum)
@@ -507,6 +509,7 @@ macro_rules! as_bytes_for_concat {
 
                         let _ = sum;
 
+                        // SAFETY: We just filled the box with data, so it's safe
                         Self(unsafe { box_assume_init(v) }, PhantomData)
                     }
                 }
@@ -546,6 +549,9 @@ macro_rules! as_bytes_for_tuples {
             {
                 #[inline(always)]
                 fn as_bytes(&self) -> &[u8] {
+                    // SAFETY: All the types of this tuple are `Copy`
+                    // (they are trivial), so we can just reinterpret the
+                    // whole type as a slice of `u8`s
                     unsafe {
                         std::slice::from_raw_parts(
                             self as *const Self as *const u8,

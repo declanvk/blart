@@ -3,7 +3,7 @@
 
 /// Assuming all the elements are initialized, get a slice to them.
 ///
-/// # Safety
+/// # SAFETY
 ///
 /// It is up to the caller to guarantee that the `MaybeUninit<T>` elements
 /// really are in an initialized state.
@@ -40,7 +40,7 @@ pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
 
 /// Assuming all the elements are initialized, get a mutable slice to them.
 ///
-/// # Safety
+/// # SAFETY
 ///
 /// It is up to the caller to guarantee that the `MaybeUninit<T>` elements
 /// really are in an initialized state.
@@ -221,7 +221,7 @@ pub fn box_new_uninit_slice<T>(len: usize) -> Box<[std::mem::MaybeUninit<T>]> {
 
 /// Converts to `Box<[T], A>`.
 ///
-/// # Safety
+/// # SAFETY
 ///
 /// As with [`MaybeUninit::assume_init`],
 /// it is up to the caller to guarantee that the values
@@ -239,12 +239,14 @@ pub fn box_new_uninit_slice<T>(len: usize) -> Box<[std::mem::MaybeUninit<T>]> {
 pub unsafe fn box_assume_init<T>(b: Box<[std::mem::MaybeUninit<T>]>) -> Box<[T]> {
     #[cfg(feature = "nightly")]
     {
+        // SAFETY: Covered by condition of containing function
         unsafe { b.assume_init() }
     }
 
     #[cfg(not(feature = "nightly"))]
     {
         let raw = Box::into_raw(b);
+        // SAFETY: Covered by condition of containing function
         unsafe { Box::from_raw(raw as *mut [T]) }
     }
 }

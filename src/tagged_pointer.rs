@@ -54,8 +54,7 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// If the pointer is null, returns `None`. Otherwise, returns a tagged
     /// pointer.
     ///
-    /// # Panics
-    ///
+    /// # PANICS
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
     //
@@ -74,13 +73,11 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// Create a new non-null tagged pointer without verifying that it is
     /// non-null.
     ///
-    /// # Panics
-    ///
+    /// # PANICS
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
     ///
-    /// # Safety
-    ///
+    /// # SAFETY
     ///  - The `pointer` value must not be null.
     pub unsafe fn new_unchecked(pointer: *mut P) -> TaggedPointer<P, MIN_BITS> {
         // SAFETY: The non-zero safety requirement is defered to the caller of this
@@ -107,8 +104,7 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     ///
     /// Returns `None` if the given pointer is null.
     ///
-    /// # Panics
-    ///
+    /// # PANICS
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
     pub fn new_with_data(pointer: *mut P, data: usize) -> Option<TaggedPointer<P, MIN_BITS>> {
@@ -135,7 +131,7 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
 
     /// Update the data this tagged pointer carries to a new value.
     ///
-    /// # Panics
+    /// # PANICS
     ///  - Panics if any bits other than the lowest [`Self::NUM_BITS`] are
     ///    non-zero in the new `data` value.
     pub fn set_data(&mut self, data: usize) {
@@ -166,10 +162,9 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// This function will transfer the data bits from the original pointer to
     /// the new pointer.
     ///
-    /// # Errors
-    ///
-    ///  - This function will error if the alignment of the new type does not
-    ///    equal the alignment of the existing type. This is because the number
+    /// # SAFETY
+    ///  - The alignment of the new type must be equal to the 
+    ///    alignment of the existing type. This is because the number
     ///    of data-carrying bits could be different.
     pub fn cast<Q>(self) -> TaggedPointer<Q, MIN_BITS> {
         let data = self.to_data();

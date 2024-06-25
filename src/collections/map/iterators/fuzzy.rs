@@ -26,15 +26,24 @@ impl StackArena {
         let old_len = self.data.len();
         let new_len = old_len + self.n;
         self.data.resize_with(new_len, MaybeUninit::uninit);
+        // SAFETY: We just resized the vector, so it's safe
+        // to get a slice
         unsafe { self.data.get_unchecked_mut(old_len..new_len) }
     }
 
+    /// SAFETY: This function should only be called after [`Self::push`]
+    /// 
+    /// SAFETY: The passed `buffer` must have the exact same
+    /// size as the `n` from `new`
     pub fn pop_copy<'a, 'b>(
         &mut self,
         buffer: &'a mut &'b mut [MaybeUninit<usize>],
     ) -> Option<&'a mut &'b mut [usize]> {
         #[allow(unused_unsafe)]
         unsafe {
+            // SAFETY: Every time we call `Self::push` the
+            // vector is extended by `self.n`, so it's safe to
+            // assume this 
             assume!(self.data.len() % self.n == 0);
         }
 
@@ -44,10 +53,15 @@ impl StackArena {
 
         let begin = self.data.len() - self.n;
         let end = self.data.len();
+        // SAFETY: We just checked that the vector is not empty
+        // so we are sure that we have at least on `entry` (in
+        // this case `self.n`) elements in the vector
         let s = unsafe { &self.data.get_unchecked(begin..end) };
 
         #[allow(unused_unsafe)]
         unsafe {
+            // SAFETY: As said in the top level comment of the function,
+            // buffer length == self.n
             assume!(buffer.len() == s.len());
         }
 
@@ -55,6 +69,9 @@ impl StackArena {
 
         self.pop();
 
+        // SAFETY: We just copied the data from the vector, and since we
+        // expect after the `Self::push` call that the returned buffer is
+        // filled with initialized data, them is safe to transmute here
         Some(unsafe {
             std::mem::transmute::<&mut &mut [std::mem::MaybeUninit<usize>], &mut &mut [usize]>(
                 buffer,
@@ -62,11 +79,17 @@ impl StackArena {
         })
     }
 
+    /// SAFETY: This function should only be called after [`Self::push`]
     pub fn pop(&mut self) {
+        // SAFETY: Since the inner type of the vector is trivial
+        // we can just set the length to be the current one - self.n
         unsafe { self.data.set_len(self.data.len() - self.n) }
     }
 }
 
+/// SAFETY: `old` and `new` must have the same length, and be >= 1
+/// 
+/// SAFETY: `key` length + 1 == `new` or `old` length
 #[inline(always)]
 fn edit_dist(
     key: &[u8],
@@ -77,6 +100,7 @@ fn edit_dist(
 ) -> bool {
     #[allow(unused_unsafe)]
     unsafe {
+        // SAFETY: Convered by the top level comment
         assume!(old.len() == new.len());
         assume!(!old.is_empty());
         assume!(key.len() + 1 == old.len());
@@ -85,6 +109,8 @@ fn edit_dist(
     let first = *new[0].write(old[0] + 1);
     let mut keep = first <= max_edit_dist;
     for i in 1..new.len() {
+        // SAFETY: Given all of the safety requiments of the
+        // function this `unchecked` operations are safe
         unsafe {
             let b = *key.get_unchecked(i - 1) == c;
 
@@ -114,8 +140,10 @@ fn edit_dist(
     keep
 }
 
+/// SAFETY: `old_row` length == `new_row` length
 #[inline(always)]
 unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize>]) {
+    // SAFETY: It's safe to trasmute initialized data to unitialized
     let temp = unsafe {
         std::mem::transmute::<&mut &mut [usize], &mut &mut [std::mem::MaybeUninit<usize>]>(old_row)
     };
@@ -148,12 +176,13 @@ trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NU
         // We can use the fact that the first entry in the old_row holds,
         // the length of how many bytes we used so far, so this becomes de depth
 
-        // SAFETY: old_row len >= 1, since it's length is defined as
+        // SAFETY: `old_row` length >= 1, since it's length is defined as
         // key len + 1
         let (prefix, _) = unsafe { self.read_full_prefix(*old_row.first().unwrap_unchecked()) };
         let mut keep = true;
         for k in prefix {
             keep &= edit_dist(key, *k, old_row, new_row, max_edit_dist);
+            // SAFETY: We know that `old_row` length == `new_row` length
             unsafe { swap(old_row, new_row) };
         }
         keep
@@ -169,7 +198,7 @@ impl<
     > FuzzySearch<K, V, NUM_PREFIX_BYTES, H>
     for InnerNodeCompressed<K, V, NUM_PREFIX_BYTES, H, SIZE>
 where
-    Self: InnerNode<NUM_PREFIX_BYTES>,
+    Self: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
 {
     fn fuzzy_search(
         &self,
@@ -184,11 +213,10 @@ where
             return false;
         }
 
-        let (keys, nodes) = self.initialized_portion();
-        for (k, node) in keys.iter().zip(nodes) {
+        for (k, node) in self.iter() {
             let new_row = arena.push();
-            if edit_dist(key, *k, old_row, new_row, max_edit_dist) {
-                nodes_to_search.push(*node);
+            if edit_dist(key, k, old_row, new_row, max_edit_dist) {
+                nodes_to_search.push(node);
             } else {
                 arena.pop();
             }
@@ -213,14 +241,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             return false;
         }
 
-        let child_pointers = self.initialized_child_pointers();
-        for (k, index) in self.child_indices.iter().enumerate() {
-            if index.is_empty() {
-                continue;
-            }
+        for (k, node) in self.iter() {
             let new_row = arena.push();
-            if edit_dist(key, k as u8, old_row, new_row, max_edit_dist) {
-                let node = unsafe { *child_pointers.get_unchecked(usize::from(*index)) };
+            if edit_dist(key, k, old_row, new_row, max_edit_dist) {
                 nodes_to_search.push(node);
             } else {
                 arena.pop();
@@ -246,13 +269,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             return false;
         }
 
-        for (k, node) in self.child_pointers.iter().enumerate() {
-            let Some(node) = node else {
-                continue;
-            };
+        for (k, node) in self.iter() {
             let new_row = arena.push();
-            if edit_dist(key, k as u8, old_row, new_row, max_edit_dist) {
-                nodes_to_search.push(*node);
+            if edit_dist(key, k, old_row, new_row, max_edit_dist) {
+                nodes_to_search.push(node);
             } else {
                 arena.pop()
             }
@@ -274,11 +294,17 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         max_edit_dist: usize,
     ) -> bool {
         let current_len = old_row[0];
+        // SAFETY: Sice the `old_row` holds the current edit distance
+        // it's by construction that the first value of the buffer is the
+        // length of the already examined bytes of the key
         let remaining_key = unsafe { self.key_ref().as_bytes().get_unchecked(current_len..) };
         for k in remaining_key {
             edit_dist(key, *k, old_row, new_row, max_edit_dist);
+            // SAFETY: We know that `old_row` length == `new_row` length
             unsafe { swap(old_row, new_row) };
         }
+        // SAFETY: By the construction `old_row` always has at least one
+        // element 
         let edit_dist = unsafe { *old_row.last().unwrap_unchecked() };
 
         edit_dist <= max_edit_dist
@@ -362,6 +388,8 @@ macro_rules! gen_iter {
                 ) {
                     match node.to_node_ptr() {
                         ConcreteNodePtr::Node4(inner_ptr) => {
+                            // SAFETY: Since `Self` holds a mutable/shared reference
+                            // is safe to create a shared reference from it
                             let inner_node = unsafe { inner_ptr.as_ref() };
                             inner_node.fuzzy_search(
                                 &mut self.arena,
@@ -373,6 +401,8 @@ macro_rules! gen_iter {
                             );
                         },
                         ConcreteNodePtr::Node16(inner_ptr) => {
+                            // SAFETY: Since `Self` holds a mutable/shared reference
+                            // is safe to create a shared reference from it
                             let inner_node = unsafe { inner_ptr.as_ref() };
                             inner_node.fuzzy_search(
                                 &mut self.arena,
@@ -384,6 +414,8 @@ macro_rules! gen_iter {
                             );
                         },
                         ConcreteNodePtr::Node48(inner_ptr) => {
+                            // SAFETY: Since `Self` holds a mutable/shared reference
+                            // is safe to create a shared reference from it
                             let inner_node = unsafe { inner_ptr.as_ref() };
                             inner_node.fuzzy_search(
                                 &mut self.arena,
@@ -395,6 +427,8 @@ macro_rules! gen_iter {
                             );
                         },
                         ConcreteNodePtr::Node256(inner_ptr) => {
+                            // SAFETY: Since `Self` holds a mutable/shared reference
+                            // is safe to create a shared reference from it
                             let inner_node = unsafe { inner_ptr.as_ref() };
                             inner_node.fuzzy_search(
                                 &mut self.arena,
@@ -408,6 +442,8 @@ macro_rules! gen_iter {
                         ConcreteNodePtr::LeafNode(inner_ptr) => {
                             self.size -= 1;
 
+                            // SAFETY: Since `Self` holds a mutable/shared reference
+                            // is safe to create a shared reference from it
                             let inner_node = unsafe { inner_ptr.as_ref() };
                             if inner_node.fuzzy_search(
                                 &mut self.arena,
@@ -444,30 +480,40 @@ macro_rules! gen_iter {
     };
 }
 
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     Fuzzy,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     (&'a K, &'a V),
     as_key_value_ref
 );
+// SAFETY: Since we hold a mutable reference is safe to
+// create a mutable reference to the leaf
 gen_iter!(
     FuzzyMut,
     &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     FuzzyKeys,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     &'a K,
     as_key_ref
 );
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     FuzzyValues,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     &'a V,
     as_value_ref
 );
+// SAFETY: Since we hold a mutable reference is safe to
+// create a mutable reference to the leaf
 gen_iter!(
     FuzzyValuesMut,
     &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,

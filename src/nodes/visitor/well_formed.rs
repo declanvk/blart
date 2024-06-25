@@ -300,14 +300,12 @@ where
     /// Traverse the given tree and check that it is well-formed. Returns the
     /// number of nodes in the tree.
     ///
-    /// # Safety
-    ///
+    /// # SAFETY
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the given tree is not well-formed.
+    /// # ERRORS
+    ///  - Returns an error if the given tree is not well-formed.
     pub unsafe fn check(
         tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>> {
@@ -325,14 +323,12 @@ where
     /// Traverse the given tree and check that it is well-formed. Returns the
     /// number of nodes in the tree.
     ///
-    /// # Safety
-    ///
+    /// # SAFETY
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the given tree is not well-formed.
+    /// # ERRORS
+    ///  - Returns an error if the given tree is not well-formed.
     unsafe fn check_tree(
         tree: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
     ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES, H>> {
