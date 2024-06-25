@@ -20,7 +20,7 @@ use blart::TreeMap;
 
 // type inference lets us omit an explicit type signature (which
 // would be `TreeMap<&str, &str>` in this example).
-let mut movie_reviews = TreeMap::new();
+let mut movie_reviews: TreeMap<_, _> = TreeMap::new();
 
 // review some movies.
 let _ = movie_reviews.try_insert("Office Space",       "Deals with real issues in the workplace.").unwrap();
@@ -105,7 +105,13 @@ cargo +nightly fuzz coverage fuzz_raw_api && cargo cov -- show fuzz/target/"$TAR
 To run the benchmarks, install [`cargo-criterion`][cargo-criterion], then run:
 
 ```bash
-cargo +nightly criterion --history-id "$(git rev-parse --short HEAD)-0"
+cargo +nightly criterion --history-id "$(git rev-parse --short HEAD)-0" --features bench-perf-events
+```
+
+or
+
+```bash
+cargo bench --bench <bench_name> --features bench-perf-events
 ```
 
 If you get a "Permission denied" error, update perf_event_paranoid:
@@ -116,6 +122,26 @@ For further details please take a look at the following [link][superuser-run-per
 
 [cargo-criterion]: https://github.com/bheisler/cargo-criterion
 [superuser-run-perf]: https://superuser.com/questions/980632/run-perf-without-root-rights
+
+## Profiling
+
+I use a somewhat realistic benchmark: counting words in a text file. To get started, download a text file like:
+
+```bash
+curl -o data/Ulysses.txt https://www.gutenberg.org/cache/epub/4300/pg4300.txt
+```
+
+Then build the word count example using the `profiling` profile:
+
+```bash
+cargo build --profile profiling --exampleps
+```
+
+Then run the count words workload on the downloaded data while profiling:
+
+```bash
+samply record ./target/profiling/examples/count_words blart data/book-chapters-combined.txt
+```
 
 ## License
 

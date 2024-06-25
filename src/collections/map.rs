@@ -2,32 +2,31 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, delete_maximum_unchecked, delete_minimum_unchecked, delete_unchecked,
-    insert_unchecked, maximum_unchecked, minimum_unchecked, search_unchecked,
-    visitor::TreeStatsCollector, AsBytes, DeleteResult, InsertPrefixError, InsertResult, LeafNode,
-    NoPrefixesBytes, NodePtr, OpaqueNodePtr,
+    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
+    minimum_unchecked, rust_nightly_apis::hasher_write_length_prefix, search_for_delete_point,
+    search_for_insert_point, search_unchecked, AsBytes, DeletePoint, DeleteResult, InsertPoint,
+    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
+    NodePtr, OpaqueNodePtr,
 };
-use std::{
-    borrow::Borrow,
-    fmt::Debug,
-    hash::Hash,
-    mem::ManuallyDrop,
-    ops::{Index, RangeBounds},
-};
+use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Index};
 
+mod entry;
+mod entry_ref;
 mod iterators;
+pub use entry::*;
+pub use entry_ref::*;
 pub use iterators::*;
 
 /// An ordered map based on an adaptive radix tree.
-pub struct TreeMap<K, V> {
+pub struct RawTreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
-    root: Option<OpaqueNodePtr<K, V>>,
+    pub(crate) root: Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
 }
 
-impl<K, V> TreeMap<K, V> {
-    /// Create a new, empty [`TreeMap`].
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> RawTreeMap<K, V, NUM_PREFIX_BYTES> {
+    /// Create a new, empty [`crate::TreeMap`].
     ///
     /// This function will not pre-allocate anything.
     ///
@@ -41,71 +40,10 @@ impl<K, V> TreeMap<K, V> {
     /// assert!(map.is_empty());
     /// ```
     pub fn new() -> Self {
-        TreeMap {
+        RawTreeMap {
             num_entries: 0,
             root: None,
         }
-    }
-
-    /// Convert tree into a pointer to pointer to the root node.
-    ///
-    /// If there are no elements in the tree, then returns `None`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::{TreeMap, deallocate_tree};
-    ///
-    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
-    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-    ///
-    /// let root = map.into_raw().unwrap();
-    ///
-    /// // SAFETY: No other operation are access or mutating tree while dealloc happens
-    /// unsafe { deallocate_tree(root) }
-    /// ```
-    pub fn into_raw(self) -> Option<OpaqueNodePtr<K, V>> {
-        let drop_prevent = ManuallyDrop::new(self);
-
-        drop_prevent.root
-    }
-
-    /// Constructs a tree from a pointer to the root node.
-    ///
-    /// If `None` is passed, it constructs an empty tree.
-    ///
-    /// # Safety
-    ///
-    /// The pointer passed to this function must not be used in a second call to
-    /// `from_raw`, otherwise multiple safety issues could occur.
-    ///
-    /// Similarly, no other function can mutate the content of the tree under
-    /// `root` while this function executes.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
-    ///
-    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-    ///
-    /// let root = map.into_raw();
-    /// // SAFETY: The tree root came from previous `into_raw` call
-    /// let map2 = unsafe { TreeMap::from_raw(root) };
-    ///
-    /// assert_eq!(map2[[1, 2, 3].as_ref()], 'a');
-    /// ```
-    pub unsafe fn from_raw(root: Option<OpaqueNodePtr<K, V>>) -> Self {
-        let num_entries = if let Some(root) = root {
-            // SAFETY: The safety requirements on this function cover this call
-            unsafe { TreeStatsCollector::count_leaf_nodes(root) }
-        } else {
-            0
-        };
-
-        TreeMap { num_entries, root }
     }
 
     /// Clear the map, removing all elements.
@@ -252,6 +190,166 @@ impl<K, V> TreeMap<K, V> {
         }
     }
 
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![(&c"abd", &1), (&c"abc", &0)]);
+    /// ```
+    pub fn fuzzy<'a, 'b, Q>(
+        &'a self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        Fuzzy::new(self, key.as_bytes(), max_edit_dist)
+    }
+
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy_mut(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![(&c"abd", &mut 1), (&c"abc", &mut 0)]);
+    /// ```
+    pub fn fuzzy_mut<'a, 'b, Q>(
+        &'a mut self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> FuzzyMut<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        FuzzyMut::new(self, key.as_bytes(), max_edit_dist)
+    }
+
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy_keys(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![&c"abd", &c"abc"]);
+    /// ```
+    pub fn fuzzy_keys<'a, 'b, Q>(
+        &'a self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> FuzzyKeys<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        FuzzyKeys::new(self, key.as_bytes(), max_edit_dist)
+    }
+
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy_values(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![&1, &0]);
+    /// ```
+    pub fn fuzzy_values<'a, 'b, Q>(
+        &'a self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> FuzzyValues<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        FuzzyValues::new(self, key.as_bytes(), max_edit_dist)
+    }
+
+    /// Makes a fuzzy search in the tree by `key`,
+    /// returning all keys and values that are
+    /// less than or equal to `max_edit_dist`
+    ///
+    /// This is done by using Levenshtein distance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, _> = TreeMap::new();
+    ///
+    /// map.insert(c"abc", 0);
+    /// map.insert(c"abd", 1);
+    /// map.insert(c"abdefg", 2);
+    ///
+    /// let fuzzy: Vec<_> = map.fuzzy_values(c"ab", 2).collect();
+    /// assert_eq!(fuzzy, vec![&mut 1, &mut 0]);
+    /// ```
+    pub fn fuzzy_values_mut<'a, 'b, Q>(
+        &'a mut self,
+        key: &'b Q,
+        max_edit_dist: usize,
+    ) -> FuzzyValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        FuzzyValuesMut::new(self, key.as_bytes(), max_edit_dist)
+    }
+
     /// Returns true if the map contains a value for the specified key.
     ///
     /// # Examples
@@ -333,14 +431,9 @@ impl<K, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let DeleteResult {
-                deleted_leaf,
-                new_root,
-            } = unsafe { delete_minimum_unchecked(root) };
-
-            self.root = new_root;
-            self.num_entries -= 1;
-            Some(deleted_leaf.into_entry())
+            let delete_point = unsafe { find_minimum_to_delete(root) };
+            let delete_result = self.apply_delete_point(delete_point);
+            Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
         }
@@ -406,17 +499,63 @@ impl<K, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let DeleteResult {
-                deleted_leaf,
-                new_root,
-            } = unsafe { delete_maximum_unchecked(root) };
-
-            self.root = new_root;
-            self.num_entries -= 1;
-            Some(deleted_leaf.into_entry())
+            let delete_point = unsafe { find_maximum_to_delete(root) };
+            let delete_result = self.apply_delete_point(delete_point);
+            Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
         }
+    }
+
+    fn init_tree(
+        &mut self,
+        key: K,
+        value: V,
+    ) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>> {
+        let leaf = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
+        self.root = Some(leaf.to_opaque());
+        self.num_entries = 1;
+        leaf
+    }
+
+    fn apply_insert_point(
+        &mut self,
+        insert_point: InsertPoint<K, V, NUM_PREFIX_BYTES>,
+        key: K,
+        value: V,
+    ) -> InsertResult<K, V, NUM_PREFIX_BYTES>
+    where
+        K: AsBytes,
+    {
+        let insert_result = insert_point.apply(key, value);
+
+        self.root = Some(insert_result.new_root);
+
+        if insert_result.existing_leaf.is_none() {
+            // this was a strict add, not a replace. If there was an existing leaf we are
+            // removing and adding a leaf, so the number of entries stays the same
+            self.num_entries += 1;
+        }
+
+        insert_result
+    }
+
+    fn apply_delete_point(
+        &mut self,
+        delete_point: DeletePoint<K, V, NUM_PREFIX_BYTES>,
+    ) -> DeleteResult<K, V, NUM_PREFIX_BYTES>
+    where
+        K: AsBytes,
+    {
+        // SAFETY: The root is sure to not be `None`, since the we somehow got a
+        // `DeletePoint`. So the caller must have checked this
+        let delete_result = delete_point.apply(unsafe { self.root.unwrap_unchecked() });
+
+        self.root = delete_result.new_root;
+
+        self.num_entries -= 1;
+
+        delete_result
     }
 
     /// Insert a key-value pair into the map.
@@ -426,8 +565,8 @@ impl<K, V> TreeMap<K, V> {
     /// If the map did have this key present, the value is updated, and the old
     /// value is returned.
     ///
-    /// Unlike [`try_insert`][TreeMap::try_insert], this function will not
-    /// return an error, because the contract of the
+    /// Unlike [`try_insert`][crate::TreeMap::try_insert], this function will
+    /// not return an error, because the contract of the
     /// [`NoPrefixesBytes`][crate::bytes::NoPrefixesBytes] ensures that the
     /// given key type will never be a prefix of an existing value.
     ///
@@ -448,13 +587,8 @@ impl<K, V> TreeMap<K, V> {
     where
         K: NoPrefixesBytes,
     {
-        match self.try_insert(key, value) {
-            Ok(value) => value,
-            Err(_err) => unreachable!(
-                "This branch should be unreachable because of the safety contract of \
-                 `NoPrefixesBytes`"
-            ),
-        }
+        // This will never fail because of the safety contract of `NoPrefixesBytes`
+        unsafe { self.try_insert(key, value).unwrap_unchecked() }
     }
 
     /// Inserts a key-value pair into the map.
@@ -492,28 +626,11 @@ impl<K, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let InsertResult {
-                existing_leaf,
-                new_root,
-            } = unsafe { insert_unchecked(root, key, value)? };
-
-            self.root = Some(new_root);
-
-            if existing_leaf.is_none() {
-                // this was a strict add, not a replace. If there was an existing leaf we are
-                // removing and adding a leaf, so the number of entries stays the same
-                self.num_entries = self
-                    .num_entries
-                    .checked_add(1)
-                    .expect("should not overflow a usize");
-            }
-
-            Ok(existing_leaf.map(|leaf| leaf.into_entry().1))
+            let insert_point = unsafe { search_for_insert_point(root, &key)? };
+            let insert_result = self.apply_insert_point(insert_point, key, value);
+            Ok(insert_result.existing_leaf.map(|leaf| leaf.into_entry().1))
         } else {
-            self.root = Some(NodePtr::allocate_node_ptr(LeafNode::new(key, value)).to_opaque());
-
-            self.num_entries = 1;
-
+            self.init_tree(key, value);
             Ok(None)
         }
     }
@@ -543,20 +660,9 @@ impl<K, V> TreeMap<K, V> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let DeleteResult {
-                deleted_leaf,
-                new_root,
-            } = unsafe { delete_unchecked(root, key)? };
-
-            // The `delete_unchecked` returns early if the key was not found, we are
-            // guaranteed at this point that the leaf has been removed from the tree.
-            self.num_entries = self
-                .num_entries
-                .checked_sub(1)
-                .expect("should not underflow, inc/dec should be paired");
-
-            self.root = new_root;
-            Some(deleted_leaf.into_entry())
+            let delete_point = unsafe { search_for_delete_point(root, key)? };
+            let delete_result = self.apply_delete_point(delete_point);
+            Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
         }
@@ -586,6 +692,7 @@ impl<K, V> TreeMap<K, V> {
         self.remove_entry(key).map(|(_, v)| v)
     }
 
+    /*
     /// Retains only the elements specified by the predicate.
     ///
     /// In other words, remove all pairs (k, v) for which f(&k, &mut v) returns
@@ -627,7 +734,7 @@ impl<K, V> TreeMap<K, V> {
     // assert_eq!(a[&5], "f");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V>)
+    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V, NUM_PREFIX_BYTES>)
     where
         K: NoPrefixesBytes,
     {
@@ -744,7 +851,7 @@ impl<K, V> TreeMap<K, V> {
     // assert_eq!(b[[41].as_ref()], "e");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V>
+    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, NUM_PREFIX_BYTES>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -781,7 +888,7 @@ impl<K, V> TreeMap<K, V> {
     ///
     /// It is unspecified how many more elements will be subjected to the
     /// closure if a panic occurs in the closure, or a panic occurs while
-    /// dropping an element, or if the DrainFilter value is leaked.
+    /// dropping an element, or if the [`DrainFilter`] value is leaked.
     //
     // # Examples
     //
@@ -795,12 +902,13 @@ impl<K, V> TreeMap<K, V> {
     // assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
     // ```
     #[allow(dead_code)]
-    pub(crate) fn drain_filter<F>(&mut self, _pred: F) -> iterators::DrainFilter<K, V>
+    pub fn extract_if<'a, F>(&'a mut self, pred: F) -> ExtractIf<'a, K, V, F>
     where
         F: FnMut(&K, &mut V) -> bool,
     {
-        todo!()
+        ExtractIf::new(self, pred)
     }
+    */
 
     /// Creates a consuming iterator visiting all the keys, in sorted order. The
     /// map cannot be used after calling this. The iterator element type is `K`.
@@ -823,7 +931,7 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), 4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_keys(self) -> iterators::IntoKeys<K, V> {
+    pub fn into_keys(self) -> iterators::IntoKeys<K, V, NUM_PREFIX_BYTES> {
         iterators::IntoKeys::new(self)
     }
 
@@ -849,7 +957,7 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), 'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_values(self) -> iterators::IntoValues<K, V> {
+    pub fn into_values(self) -> iterators::IntoValues<K, V, NUM_PREFIX_BYTES> {
         iterators::IntoValues::new(self)
     }
 
@@ -873,8 +981,8 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), (&4, &'z'));
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn iter(&self) -> iterators::Iter<'_, K, V> {
-        iterators::Iter::new(self)
+    pub fn iter(&self) -> TreeIterator<'_, K, V, NUM_PREFIX_BYTES> {
+        TreeIterator::new(self)
     }
 
     /// Gets a mutable iterator over the entries of the map, sorted by key.
@@ -898,8 +1006,8 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn iter_mut(&mut self) -> iterators::IterMut<'_, K, V> {
-        iterators::IterMut::new(self)
+    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V, NUM_PREFIX_BYTES> {
+        TreeIteratorMut::new(self)
     }
 
     /// Gets an iterator over the keys of the map, in sorted order.
@@ -922,8 +1030,8 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), &4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn keys(&self) -> iterators::Keys<'_, K, V> {
-        iterators::Keys::new(self)
+    pub fn keys(&self) -> Keys<'_, K, V, NUM_PREFIX_BYTES> {
+        Keys::new(self)
     }
 
     /// Gets an iterator over the values of the map, in order by key.
@@ -946,8 +1054,8 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(iter.next().unwrap(), &'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn values(&self) -> iterators::Values<'_, K, V> {
-        iterators::Values::new(self)
+    pub fn values(&self) -> Values<'_, K, V, NUM_PREFIX_BYTES> {
+        Values::new(self)
     }
 
     /// Gets a mutable iterator over the values of the map, in order by key.
@@ -971,8 +1079,132 @@ impl<K, V> TreeMap<K, V> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn values_mut(&mut self) -> iterators::ValuesMut<'_, K, V> {
-        iterators::ValuesMut::new(self)
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V, NUM_PREFIX_BYTES> {
+        ValuesMut::new(self)
+    }
+
+    /// Gets an iterator over the entries of the map that start with `prefix`
+    ///
+    /// # Example
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::new();
+    /// map.insert(c"abcde", 0);
+    /// map.insert(c"abcdexxx", 0);
+    /// map.insert(c"abcdexxy", 0);
+    /// map.insert(c"abcdx", 0);
+    /// map.insert(c"abcx", 0);
+    /// map.insert(c"bx", 0);
+    ///
+    /// let p: Vec<_> = map.prefix(c"abcde".to_bytes()).collect();
+    ///
+    /// assert_eq!(p, vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
+    /// ```
+    pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+        Prefix::new(self, prefix)
+    }
+
+    /// Gets a mutable iterator over the entries of the map that start with
+    /// `prefix`
+    ///
+    /// # Example
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::new();
+    /// map.insert(c"abcde", 0);
+    /// map.insert(c"abcdexxx", 0);
+    /// map.insert(c"abcdexxy", 0);
+    /// map.insert(c"abcdx", 0);
+    /// map.insert(c"abcx", 0);
+    /// map.insert(c"bx", 0);
+    ///
+    /// let p: Vec<_> = map.prefix_mut(c"abcde".to_bytes()).collect();
+    ///
+    /// assert_eq!(p, vec![(&c"abcde", &mut 0), (&c"abcdexxx", &mut 0), (&c"abcdexxy", &mut 0)]);
+    /// ```
+    pub fn prefix_mut<'a, 'b>(
+        &'a mut self,
+        prefix: &'b [u8],
+    ) -> PrefixMut<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+        PrefixMut::new(self, prefix)
+    }
+
+    /// Gets an iterator over the keys of the map that start with `prefix`
+    ///
+    /// # Example
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::new();
+    /// map.insert(c"abcde", 0);
+    /// map.insert(c"abcdexxx", 0);
+    /// map.insert(c"abcdexxy", 0);
+    /// map.insert(c"abcdx", 0);
+    /// map.insert(c"abcx", 0);
+    /// map.insert(c"bx", 0);
+    ///
+    /// let p: Vec<_> = map.prefix_keys(c"abcde".to_bytes()).collect();
+    ///
+    /// assert_eq!(p, vec![&c"abcde", &c"abcdexxx", &c"abcdexxy"]);
+    /// ```
+    pub fn prefix_keys<'a, 'b>(
+        &'a self,
+        prefix: &'b [u8],
+    ) -> PrefixKeys<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+        PrefixKeys::new(self, prefix)
+    }
+
+    /// Gets an iterator over the values of the map that start with `prefix`
+    ///
+    /// # Example
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::new();
+    /// map.insert(c"abcde", 0);
+    /// map.insert(c"abcdexxx", 1);
+    /// map.insert(c"abcdexxy", 2);
+    /// map.insert(c"abcdx", 3);
+    /// map.insert(c"abcx", 4);
+    /// map.insert(c"bx", 5);
+    ///
+    /// let p: Vec<_> = map.prefix_values(c"abcde".to_bytes()).collect();
+    ///
+    /// assert_eq!(p, vec![&0, &1, &2]);
+    /// ```
+    pub fn prefix_values<'a, 'b>(
+        &'a self,
+        prefix: &'b [u8],
+    ) -> PrefixValues<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+        PrefixValues::new(self, prefix)
+    }
+
+    /// Gets a mutable iterator over the values of the map that start with
+    /// `prefix`
+    ///
+    /// # Example
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::new();
+    /// map.insert(c"abcde", 0);
+    /// map.insert(c"abcdexxx", 1);
+    /// map.insert(c"abcdexxy", 2);
+    /// map.insert(c"abcdx", 3);
+    /// map.insert(c"abcx", 4);
+    /// map.insert(c"bx", 5);
+    ///
+    /// let p: Vec<_> = map.prefix_values(c"abcde".to_bytes()).collect();
+    ///
+    /// assert_eq!(p, vec![&mut 0, &mut 1, &mut 2]);
+    /// ```
+    pub fn prefix_values_mut<'a, 'b>(
+        &'a mut self,
+        prefix: &'b [u8],
+    ) -> PrefixValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+        PrefixValuesMut::new(self, prefix)
     }
 
     /// Returns the number of elements in the map.
@@ -1007,33 +1239,136 @@ impl<K, V> TreeMap<K, V> {
     }
 }
 
-impl<K, V> Drop for TreeMap<K, V> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> RawTreeMap<K, V, NUM_PREFIX_BYTES> {
+    /// Tries to get the given key’s corresponding entry in the map for in-place
+    /// manipulation.
+    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, NUM_PREFIX_BYTES>, InsertPrefixError>
+    where
+        K: AsBytes,
+    {
+        let entry = match self.root {
+            Some(root) => {
+                // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
+                // that there are no other references (mutable or immutable) to this same
+                // object. Meaning that our access to the root node is unique and there are no
+                // other accesses to any node in the tree.
+                let insert_point = unsafe { search_for_insert_point(root, &key)? };
+                match insert_point.insert_type {
+                    Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
+                        map: self,
+                        leaf_node_ptr,
+                        grandparent_ptr_and_parent_key_byte: insert_point
+                            .grandparent_ptr_and_parent_key_byte,
+                        parent_ptr_and_child_key_byte: insert_point.parent_ptr_and_child_key_byte,
+                    }),
+                    _ => Entry::Vacant(VacantEntry {
+                        key,
+                        insert_point: Some(insert_point),
+                        map: self,
+                    }),
+                }
+            },
+            None => Entry::Vacant(VacantEntry {
+                key,
+                insert_point: None,
+                map: self,
+            }),
+        };
+        Ok(entry)
+    }
+
+    /// Tries to get the given key’s corresponding entry in the map for in-place
+    /// manipulation.
+    pub fn try_entry_ref<'a, 'b, Q>(
+        &'a mut self,
+        key: &'b Q,
+    ) -> Result<EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>, InsertPrefixError>
+    where
+        K: AsBytes + Borrow<Q> + From<&'b Q>,
+        Q: AsBytes + ?Sized,
+    {
+        let entry = match self.root {
+            Some(root) => {
+                // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
+                // that there are no other references (mutable or immutable) to this same
+                // object. Meaning that our access to the root node is unique and there are no
+                // other accesses to any node in the tree.
+                let insert_point = unsafe { search_for_insert_point(root, key)? };
+                match insert_point.insert_type {
+                    Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
+                        map: self,
+                        leaf_node_ptr,
+                        grandparent_ptr_and_parent_key_byte: insert_point
+                            .grandparent_ptr_and_parent_key_byte,
+                        parent_ptr_and_child_key_byte: insert_point.parent_ptr_and_child_key_byte,
+                    }),
+                    _ => EntryRef::Vacant(VacantEntryRef {
+                        key,
+                        insert_point: Some(insert_point),
+                        map: self,
+                    }),
+                }
+            },
+            None => EntryRef::Vacant(VacantEntryRef {
+                key,
+                insert_point: None,
+                map: self,
+            }),
+        };
+        Ok(entry)
+    }
+
+    /// Gets the given key’s corresponding entry in the map for in-place
+    /// manipulation.
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, NUM_PREFIX_BYTES>
+    where
+        K: NoPrefixesBytes,
+    {
+        // This will never fail because of the safety contract of `NoPrefixesBytes`
+        unsafe { self.try_entry(key).unwrap_unchecked() }
+    }
+
+    /// Gets the given key’s corresponding entry in the map for in-place
+    /// manipulation.
+    pub fn entry_ref<'a, 'b, Q>(
+        &'a mut self,
+        key: &'b Q,
+    ) -> EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>
+    where
+        K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
+        Q: NoPrefixesBytes + ?Sized,
+    {
+        // This will never fail because of the safety contract of `NoPrefixesBytes`
+        unsafe { self.try_entry_ref(key).unwrap_unchecked() }
+    }
+}
+
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Drop for RawTreeMap<K, V, NUM_PREFIX_BYTES> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<K, V> Clone for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Clone for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Clone + AsBytes,
     V: Clone,
 {
     fn clone(&self) -> Self {
-        let mut new_tree = TreeMap::new();
-
-        for (key, value) in self {
-            // This `panic!` should never happen because the previous tree was constructed
-            // with no prefixes, so putting it into a new tree will also have no prefixes
-            let _ = new_tree.try_insert(key.clone(), value.clone()).unwrap();
+        if let Some(root) = self.root {
+            Self {
+                root: Some(root.deep_clone()),
+                num_entries: self.num_entries,
+            }
+        } else {
+            Self::new()
         }
-
-        new_tree
     }
 }
 
-impl<K, V> Debug for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Debug for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
-    K: Debug,
+    K: Debug + AsBytes,
     V: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1041,13 +1376,14 @@ where
     }
 }
 
-impl<K, V> Default for TreeMap<K, V> {
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Default for RawTreeMap<K, V, NUM_PREFIX_BYTES> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, K, V> Extend<(&'a K, &'a V)> for TreeMap<K, V>
+impl<'a, K, V, const NUM_PREFIX_BYTES: usize> Extend<(&'a K, &'a V)>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Copy + NoPrefixesBytes,
     V: Copy,
@@ -1059,7 +1395,7 @@ where
     }
 }
 
-impl<K, V> Extend<(K, V)> for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Extend<(K, V)> for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
 {
@@ -1070,12 +1406,13 @@ where
     }
 }
 
-impl<K, V, const N: usize> From<[(K, V); N]> for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize, const N: usize> From<[(K, V); N]>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
 {
     fn from(arr: [(K, V); N]) -> Self {
-        let mut map = TreeMap::new();
+        let mut map = RawTreeMap::new();
         for (key, value) in arr {
             let _ = map.insert(key, value);
         }
@@ -1083,12 +1420,13 @@ where
     }
 }
 
-impl<K, V> FromIterator<(K, V)> for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> FromIterator<(K, V)>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
-        let mut map = TreeMap::new();
+        let mut map = RawTreeMap::new();
         for (key, value) in iter {
             let _ = map.insert(key, value);
         }
@@ -1096,20 +1434,20 @@ where
     }
 }
 
-impl<K, V> Hash for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Hash for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
-    K: Hash,
+    K: Hash + AsBytes,
     V: Hash,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        crate::nightly_rust_apis::hasher_write_length_prefix(state, self.num_entries);
+        hasher_write_length_prefix(state, self.num_entries);
         for elt in self {
             elt.hash(state);
         }
     }
 }
 
-impl<Q, K, V> Index<&Q> for TreeMap<K, V>
+impl<Q, K, V, const NUM_PREFIX_BYTES: usize> Index<&Q> for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
@@ -1121,26 +1459,32 @@ where
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a TreeMap<K, V> {
-    type IntoIter = iterators::Iter<'a, K, V>;
+impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
+    for &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>
+{
+    type IntoIter = TreeIterator<'a, K, V, NUM_PREFIX_BYTES>;
     type Item = (&'a K, &'a V);
 
     fn into_iter(self) -> Self::IntoIter {
-        TreeMap::iter(self)
+        self.iter()
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a mut TreeMap<K, V> {
-    type IntoIter = iterators::IterMut<'a, K, V>;
+impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
+    for &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>
+{
+    type IntoIter = TreeIteratorMut<'a, K, V, NUM_PREFIX_BYTES>;
     type Item = (&'a K, &'a mut V);
 
     fn into_iter(self) -> Self::IntoIter {
-        TreeMap::iter_mut(self)
+        self.iter_mut()
     }
 }
 
-impl<K, V> IntoIterator for TreeMap<K, V> {
-    type IntoIter = iterators::IntoIter<K, V>;
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
+{
+    type IntoIter = iterators::IntoIter<K, V, NUM_PREFIX_BYTES>;
     type Item = (K, V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1148,9 +1492,9 @@ impl<K, V> IntoIterator for TreeMap<K, V> {
     }
 }
 
-impl<K, V> Ord for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Ord for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
-    K: Ord,
+    K: Ord + AsBytes,
     V: Ord,
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -1158,9 +1502,9 @@ where
     }
 }
 
-impl<K, V> PartialOrd for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> PartialOrd for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
-    K: PartialOrd,
+    K: PartialOrd + AsBytes,
     V: PartialOrd,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -1168,29 +1512,53 @@ where
     }
 }
 
-impl<K, V> Eq for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Eq for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
-    K: Eq,
+    K: Eq + AsBytes,
     V: Eq,
 {
 }
 
-impl<K, V> PartialEq for TreeMap<K, V>
+impl<K, V, const NUM_PREFIX_BYTES: usize> PartialEq for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
-    K: PartialEq,
+    K: PartialEq + AsBytes,
     V: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.iter().eq(other.iter())
+        self.iter().eq(other.iter()) && self.num_entries == other.num_entries
     }
+}
+
+// SAFETY: This is safe to implement if `K` and `V` are also `Send`.
+// This container is safe to `Send` for the same reasons why other container
+// are also safe
+unsafe impl<K, V, const NUM_PREFIX_BYTES: usize> Send for RawTreeMap<K, V, NUM_PREFIX_BYTES>
+where
+    K: Send + AsBytes,
+    V: Send,
+{
+}
+
+// SAFETY: This is safe to implement if `K` and `V` are also `Sync`.
+// This container is safe to `Sync` for the same reasons why other container
+// are also safe
+unsafe impl<K, V, const NUM_PREFIX_BYTES: usize> Sync for RawTreeMap<K, V, NUM_PREFIX_BYTES>
+where
+    K: Sync + AsBytes,
+    V: Sync,
+{
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cmp::Ordering,
-        collections::hash_map::RandomState,
-        hash::{BuildHasher, Hasher},
+    use std::{cmp::Ordering, collections::hash_map::RandomState, hash::BuildHasher};
+
+    use crate::{
+        tests_common::{
+            generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
+            PrefixExpansion,
+        },
+        TreeMap,
     };
 
     use super::*;
@@ -1276,7 +1644,7 @@ mod tests {
     }
 
     fn build_tree_map<const N: usize>(keys: [&[u8]; N]) -> TreeMap<Box<[u8]>, usize> {
-        let mut map = TreeMap::new();
+        let mut map = RawTreeMap::new();
 
         for (value, key) in keys.into_iter().enumerate() {
             assert!(map.try_insert(key.into(), value).unwrap().is_none());
@@ -1385,7 +1753,7 @@ mod tests {
             }
         }
 
-        let mut map = TreeMap::new();
+        let mut map: TreeMap<_, _> = TreeMap::new();
 
         map.try_insert(Box::from(b"0000"), DropBomb::default())
             .unwrap();
@@ -1469,9 +1837,7 @@ mod tests {
     }
 
     fn hash_one(hasher_builder: &impl BuildHasher, value: impl Hash) -> u64 {
-        let mut hasher = hasher_builder.build_hasher();
-        value.hash(&mut hasher);
-        hasher.finish()
+        hasher_builder.hash_one(&value)
     }
 
     #[test]
@@ -1557,5 +1923,52 @@ mod tests {
         assert_eq!(tree.pop_first(), None);
         assert_eq!(tree.pop_last(), None);
         assert_eq!(tree.remove(&Box::from([])), None);
+    }
+
+    #[cfg(not(miri))]
+    #[test]
+    fn clone_tree_skewed() {
+        let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
+        for (v, k) in generate_keys_skewed(u8::MAX as usize).enumerate() {
+            tree.try_insert(k, v).unwrap();
+        }
+        let new_tree = tree.clone();
+        assert!(tree == new_tree);
+    }
+
+    #[cfg(not(miri))]
+    #[test]
+    fn clone_tree_fixed_length() {
+        let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
+        for (v, k) in generate_key_fixed_length([2; 8]).enumerate() {
+            tree.try_insert(k, v).unwrap();
+        }
+        let new_tree = tree.clone();
+        assert!(tree == new_tree);
+    }
+
+    #[cfg(not(miri))]
+    #[test]
+    fn clone_tree_with_prefix() {
+        let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
+        for (v, k) in generate_key_with_prefix(
+            [2; 8],
+            [
+                PrefixExpansion {
+                    base_index: 1,
+                    expanded_length: 12,
+                },
+                PrefixExpansion {
+                    base_index: 5,
+                    expanded_length: 8,
+                },
+            ],
+        )
+        .enumerate()
+        {
+            tree.try_insert(k, v).unwrap();
+        }
+        let new_tree = tree.clone();
+        assert!(tree == new_tree);
     }
 }

@@ -1,3 +1,5 @@
+# cargo-features = ["profile-rustflags"]
+
 [package]
 name = "blart"
 version = "0.1.2"
@@ -8,6 +10,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 keywords = ["tree", "map", "collection", "radix-tree"]
 categories = ["data-structures"]
+rust-version = "1.78"
 
 exclude = [
     "fuzz/",
@@ -18,29 +21,67 @@ exclude = [
 ]
 
 [dependencies]
+bytemuck = { version = "1.16.1", features = ["min_const_generics"] }
+paste = "1.0.15"
 sptr = "0.3.2"
-
-[dependencies.tinyvec]
-version = "1.6.0"
-features = ["std", "rustc_1_57"]
-
-[dependencies.bytemuck]
-version = "1.13.0"
-features = ["min_const_generics"]
 
 [features]
 nightly = []
+bench-perf-events = []
 
 [dev-dependencies]
-argh = "0.1.10"
-criterion = { version = "0.4.0", features = ["html_reports"] }
-dhat = "0.3.2"
-rustc-hash = "1.1.0"
-
-[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dev-dependencies]
-criterion-perf-events = "0.3.0"
-perfcnt = "0.8.0"
+argh = "0.1.12"
+criterion = "0.5.1"
+dhat = "0.3.3"
+paste = "1.0.15"
+# criterion-perf-events = "0.4.0"
+# perfcnt = "0.8.0"
+rand = "0.8.5"
+rustc-hash = "2.0.0"
 
 [[bench]]
-name = "map_apis"
+name = "generated_get"
 harness = false
+
+[[bench]]
+name = "generated_insert"
+harness = false
+
+[[bench]]
+name = "dict_insert"
+harness = false
+
+[[bench]]
+name = "fuzzy"
+harness = false
+
+[[bench]]
+name = "dict_get"
+harness = false
+
+[[bench]]
+name = "min_max"
+harness = false
+
+[[bench]]
+name = "match_prefix"
+harness = false
+
+[[bench]]
+name = "entry"
+harness = false
+
+[[bench]]
+name = "iter"
+harness = false
+
+[[bench]]
+name = "clone"
+harness = false
+
+# [profile.release]
+# codegen-units = 1
+# lto = "fat"
+# panic = "abort"
+# incremental = false
+# rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]

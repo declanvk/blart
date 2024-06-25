@@ -9,3 +9,7 @@ default.profraw
 
 # ide
 .vscode/
+
+# profiling workload data
+data/
+profile.json

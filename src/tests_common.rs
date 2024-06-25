@@ -1,10 +1,8 @@
 //! Helper function for writing tests
 
-use crate::{
-    visitor::{DotPrinter, DotPrinterSettings},
-    OpaqueNodePtr,
-};
-use std::{collections::HashSet, fmt, io, iter};
+use std::{collections::HashSet, iter};
+
+use crate::{AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a
 /// maximum value.
@@ -112,7 +110,6 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 /// ```
 ///
 /// # Panics
-///
 ///  - Panics if `max_len` is 0.
 ///  - Panics if `value_stops` is 0.
 pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
@@ -245,7 +242,6 @@ pub struct PrefixExpansion {
 /// ```
 ///
 /// # Panics
-///
 ///  - Panics if `base_key_len` is 0.
 ///  - Panics if `value_stops` is 0.
 ///  - Panics if any `PrefixExpansion` has `expanded_length` equal to 0.
@@ -320,29 +316,26 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
         .map(move |key| apply_expansions_to_key(&key, &full_key_template, &sorted_expansions))
 }
 
-/// Convert the given tree into the DOT format so it can be displayed by the
-/// graphiz package.
-///
-/// # Safety
-///  - There must be no concurrent modifications to the tree while this function
-///    runs.
-pub fn convert_tree_to_dot_string<K: fmt::Debug, V: fmt::Debug>(
-    root: OpaqueNodePtr<K, V>,
-    settings: DotPrinterSettings,
-) -> io::Result<String> {
-    let mut buffer = Vec::new();
+#[allow(dead_code)]
+pub(crate) unsafe fn insert_unchecked<'a, K, V, const NUM_PREFIX_BYTES: usize>(
+    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+    key: K,
+    value: V,
+) -> Result<InsertResult<'a, K, V, NUM_PREFIX_BYTES>, InsertPrefixError>
+where
+    K: AsBytes + 'a,
+{
+    use crate::search_for_insert_point;
 
-    // SAFETY: There are no concurrent mutation to the tree node or its children
-    unsafe { DotPrinter::print_tree(&mut buffer, &root, settings)? };
-
-    Ok(String::from_utf8(buffer).unwrap())
+    let insert_point = unsafe { search_for_insert_point(root, &key)? };
+    Ok(insert_point.apply(key, value))
 }
 
-#[cfg(test)]
-pub(crate) fn setup_tree_from_entries<V>(
+#[allow(dead_code)]
+pub(crate) fn setup_tree_from_entries<V, const NUM_PREFIX_BYTES: usize>(
     mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
-) -> OpaqueNodePtr<Box<[u8]>, V> {
-    use crate::{insert_unchecked, LeafNode, NodePtr};
+) -> OpaqueNodePtr<Box<[u8]>, V, NUM_PREFIX_BYTES> {
+    use crate::{LeafNode, NodePtr};
 
     let (first_key, first_value) = entries_it.next().unwrap();
 

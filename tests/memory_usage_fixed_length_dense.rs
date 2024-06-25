@@ -3,9 +3,7 @@ mod common;
 #[test]
 #[cfg(not(miri))]
 fn test_memory_usage() {
-    use blart::{
-        deallocate_tree, insert_unchecked, search_unchecked, tests_common, LeafNode, NodePtr,
-    };
+    use blart::{tests_common, TreeMap};
     use common::{get_profiler, test_heap};
 
     const KEY_LEVEL_WIDTH: [u8; 3] = [50, 1, 2];
@@ -19,25 +17,17 @@ fn test_memory_usage() {
     });
 
     {
-        let mut keys = keys.into_iter();
-        let mut current_root =
-            NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
+        let keys = keys.into_iter();
+        let mut tree = TreeMap::new();
 
         for (idx, key) in keys.enumerate() {
-            current_root = unsafe {
-                insert_unchecked(current_root, key, idx + 1)
-                    .unwrap()
-                    .new_root
-            };
+            tree.try_insert(key, idx).unwrap();
         }
 
         for (value, key) in tests_common::generate_key_fixed_length(KEY_LEVEL_WIDTH).enumerate() {
-            let search_result = unsafe { search_unchecked(current_root, &key) };
-
-            assert_eq!(search_result.unwrap().read().value_ref(), &value);
+            let result = tree.get(&key).unwrap();
+            assert_eq!(result, &value);
         }
-
-        unsafe { deallocate_tree(current_root) };
     }
 
     test_heap(&prof, |stats| {
@@ -45,7 +35,7 @@ fn test_memory_usage() {
         dhat::assert_eq!(stats.curr_bytes, 0);
 
         dhat::assert_eq!(stats.max_blocks, 398);
-        dhat::assert_eq!(stats.max_bytes, 18088);
+        dhat::assert_eq!(stats.max_bytes, 15960);
 
         let num_keys = KEY_LEVEL_WIDTH
             .iter()

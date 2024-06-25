@@ -1,7 +1,10 @@
+use crate::rust_nightly_apis::{box_assume_init, box_new_uninit_slice};
+use paste::paste;
 use std::{
-    borrow::Cow,
+    borrow::{Borrow, Cow},
     ffi::{CStr, CString, OsStr, OsString},
     io::{IoSlice, IoSliceMut},
+    marker::PhantomData,
     mem::ManuallyDrop,
     num::{
         NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
@@ -18,7 +21,7 @@ pub use ordered::*;
 /// Any type implementing `AsBytes` can be decomposed into bytes.
 ///
 /// The primary purpose of this trait is to allow different types to be used as
-/// keys on the [`TreeMap`][crate::map::TreeMap] and `TreeSet` types.
+/// keys on the [`crate::TreeMap`] and `TreeSet` types.
 pub trait AsBytes {
     /// View the current value as a byte array.
     fn as_bytes(&self) -> &[u8];
@@ -28,8 +31,7 @@ pub trait AsBytes {
 /// guaranteed to not be a prefix of any other value of the same type.
 ///
 /// # Safety
-///
-/// This trait can only be implemented if the above condition holds.
+///  - This trait can only be implemented if the above condition holds.
 pub unsafe trait NoPrefixesBytes: AsBytes {}
 
 /// This trait is used to mark types where the lexicographic ordering of their
@@ -37,8 +39,7 @@ pub unsafe trait NoPrefixesBytes: AsBytes {}
 /// normal ordering (as determined by [`Ord`]).
 ///
 /// # Safety
-///
-/// This trait can only be implemented if the above condition holds.
+///  - This trait can only be implemented if the above condition holds.
 pub unsafe trait OrderedBytes: AsBytes + Ord {}
 
 macro_rules! as_bytes_for_integer_like_types {
@@ -316,7 +317,7 @@ unsafe impl<'a, T> OrderedBytes for &'a T where T: OrderedBytes + ?Sized {}
 // SAFETY: This trait is safe to implement because the underlying
 // type is already implements `NoPrefixesBytes`, and the wrapper type would not
 // change that property
-unsafe impl<'a, T> NoPrefixesBytes for &'a T where T: NoPrefixesBytes {}
+unsafe impl<'a, T> NoPrefixesBytes for &'a T where T: NoPrefixesBytes + ?Sized {}
 
 impl<'a, T> AsBytes for &'a mut T
 where
@@ -424,6 +425,168 @@ impl<'a> AsBytes for IoSliceMut<'a> {
         self
     }
 }
+
+/// Concats two or more types that implement [`AsBytes`]. The construction of
+/// this type will allocate memory, since the concatenated bytes need to be in a
+/// flat buffer. If the types are [`Copy`] use tuple syntax which avoids
+/// allocating
+///
+/// If all of the types implement [`OrderedBytes`] then this type is also
+/// implements [`OrderedBytes`]
+///
+/// If all of the types implement [`NoPrefixesBytes`] then this type is also
+/// implements [`NoPrefixesBytes`]
+#[derive(Debug)]
+pub struct Concat<T>(Box<[u8]>, PhantomData<T>);
+
+impl<T> AsBytes for Concat<T> {
+    fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl<T> PartialEq for Concat<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> Eq for Concat<T> {}
+
+impl<T> PartialOrd for Concat<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for Concat<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+macro_rules! as_bytes_for_concat {
+    ($(($($ty:ident)+))+) => {
+        $(
+            paste! {
+                impl<$($ty, [< Q $ty >],)+> From<($(&[< Q $ty >],)*)> for Concat<($($ty,)+)>
+                where
+                    $(
+                        $ty: Borrow<[< Q $ty >]> + AsBytes,
+                        [< Q $ty >]: AsBytes + ?Sized,
+                    )+
+                {
+                    #[inline(always)]
+                    fn from(value: ($(&[< Q $ty >],)+)) -> Self {
+                        #[allow(non_snake_case)]
+                        let ($($ty,)+) = value;
+
+                        $(
+                            #[allow(non_snake_case)]
+                            let $ty = $ty.as_bytes();
+                        )+
+
+                        let mut sum = 0;
+                        $(sum += $ty.len();)+
+
+                        let mut v = box_new_uninit_slice(sum);
+
+                        let mut sum = 0;
+                        $(
+                            let new_sum = sum + $ty.len();
+                            // SAFETY: This is safe because `sum` and `new_sum` are
+                            // being updated by the right amount for each of the concated
+                            // types `as_bytes` representation (i.e length), so it's impossible
+                            // for the `new_sum` in this case to exceed the original box length
+                            unsafe {
+                                v
+                                .get_unchecked_mut(sum..new_sum)
+                                .copy_from_slice(
+                                    std::mem::transmute::<&[u8], &[std::mem::MaybeUninit<u8>]>($ty));
+                            }
+                            sum = new_sum;
+                        )+
+
+                        let _ = sum;
+
+                        // SAFETY: We just filled the box with data, so it's safe
+                        Self(unsafe { box_assume_init(v) }, PhantomData)
+                    }
+                }
+            }
+
+            // SAFETY: This trait is safe to implement because the underlying
+            // type is already implements `OrderedBytes`, and the `Ord` impl works the same
+            // way
+            unsafe impl<$($ty: OrderedBytes,)+> OrderedBytes for Concat<($($ty,)+)> {}
+
+            // SAFETY: This trait is safe to implement because the underlying
+            // type is already implements `NoPrefixesBytes`, and the wrapper type would not
+            // change that property
+            unsafe impl<$($ty: NoPrefixesBytes,)+> NoPrefixesBytes for Concat<($($ty,)+)> {}
+        )*
+    };
+}
+
+as_bytes_for_concat!(
+    (T0 T1)
+    (T0 T1 T2)
+    (T0 T1 T2 T3)
+    (T0 T1 T2 T3 T4)
+    (T0 T1 T2 T3 T4 T5)
+    (T0 T1 T2 T3 T4 T5 T6)
+    (T0 T1 T2 T3 T4 T5 T6 T7)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11)
+);
+
+macro_rules! as_bytes_for_tuples {
+    ($(($($ty:ident)+))+) => {
+        $(
+            impl<$($ty: AsBytes + Copy,)+> AsBytes for ($($ty,)+)
+            {
+                #[inline(always)]
+                fn as_bytes(&self) -> &[u8] {
+                    // SAFETY: All the types of this tuple are `Copy`
+                    // (they are trivial), so we can just reinterpret the
+                    // whole type as a slice of `u8`s
+                    unsafe {
+                        std::slice::from_raw_parts(
+                            self as *const Self as *const u8,
+                            std::mem::size_of::<Self>()
+                        )
+                    }
+                }
+            }
+
+            // SAFETY: This trait is safe to implement because the underlying
+            // type is already implements `OrderedBytes`, and the `Ord` impl works the same
+            // way
+            unsafe impl<$($ty: OrderedBytes + Copy,)+> OrderedBytes for ($($ty,)+) {}
+
+            // SAFETY: This trait is safe to implement because the underlying
+            // type is already implements `NoPrefixesBytes`, and the wrapper type would not
+            // change that property
+            unsafe impl<$($ty: NoPrefixesBytes + Copy,)+> NoPrefixesBytes for ($($ty,)+) {}
+        )*
+    };
+}
+
+as_bytes_for_tuples!(
+    (T0 T1)
+    (T0 T1 T2)
+    (T0 T1 T2 T3)
+    (T0 T1 T2 T3 T4)
+    (T0 T1 T2 T3 T4 T5)
+    (T0 T1 T2 T3 T4 T5 T6)
+    (T0 T1 T2 T3 T4 T5 T6 T7)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11)
+);
 
 #[cfg(test)]
 mod tests {

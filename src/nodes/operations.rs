@@ -1,34 +1,34 @@
 //! Trie node lookup and manipulation
 
-use crate::{ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
 
 mod insert;
-pub use insert::*;
+pub(crate) use insert::*;
 
 mod minmax;
-pub use minmax::*;
+pub(crate) use minmax::*;
 
 mod lookup;
-pub use lookup::*;
-
-mod iterator;
-pub use iterator::*;
+pub(crate) use lookup::*;
 
 mod delete;
-pub use delete::*;
+pub(crate) use delete::*;
 
 /// Deallocate the given node and all children of the given node.
 ///
 /// This will also deallocate the leaf nodes with their value type data.
 ///
 /// # Safety
-///
 ///  - This function must only be called once for this root node and all
 ///    descendants, otherwise a double-free could result.
-pub unsafe fn deallocate_tree<K, V>(root: OpaqueNodePtr<K, V>) {
-    fn deallocate_inner_node<K, V, N>(stack: &mut Vec<OpaqueNodePtr<K, V>>, inner_ptr: NodePtr<N>)
-    where
-        N: InnerNode<Key = K, Value = V>,
+pub unsafe fn deallocate_tree<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
+    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+) {
+    fn deallocate_inner_node<K: AsBytes, V, N, const NUM_PREFIX_BYTES: usize>(
+        stack: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+        inner_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
+    ) where
+        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
     {
         {
             // SAFETY: The scope of this reference is bounded and we enforce that no
@@ -41,7 +41,7 @@ pub unsafe fn deallocate_tree<K, V>(root: OpaqueNodePtr<K, V>) {
             // lifetime of the `inner_node` variable. By the safety requirements of the
             // `deallocate_tree` function, no other mutation of this node can happen while
             // this iterator is live.
-            let iter = unsafe { inner_node.iter() };
+            let iter = inner_node.iter();
             stack.extend(iter.map(|(_, child)| child));
         }
 

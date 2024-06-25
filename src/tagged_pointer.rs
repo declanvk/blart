@@ -20,86 +20,6 @@ use sptr::Strict;
 /// bits. As a result, we can cast safely because we know that the
 /// const-evaluation process & type-checking will ensure that the number of bits
 /// is sufficient.
-///
-/// # Examples
-///
-/// Here is an example of successfully tagging a pointer and retrieving the
-/// data:
-///
-/// ```rust
-/// use blart::tagged_pointer::TaggedPointer;
-///
-/// let pointee = "Hello world!";
-/// let pointer = Box::into_raw(Box::new(pointee));
-/// let tag_data = 0b101usize;
-///
-/// let mut tagged_pointer = TaggedPointer::<&str, 3>::new_with_data(pointer, tag_data).unwrap();
-///
-/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
-/// assert_eq!(tagged_pointer.to_data(), 0b101);
-///
-/// tagged_pointer.set_data(0b010);
-///
-/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
-/// assert_eq!(tagged_pointer.to_data(), 0b010);
-///
-/// // Collecting the data into `Box` to safely drop it
-/// unsafe {
-///     drop(Box::from_raw(tagged_pointer.to_ptr()));
-/// }
-/// ```
-///
-/// Here is an example of tagging a pointer, then casting it to a different type
-/// and retrieving the same data:
-///
-/// ```rust
-/// use blart::tagged_pointer::TaggedPointer;
-///
-/// let pointee = u64::MAX;
-/// let pointer = Box::into_raw(Box::new(pointee));
-/// let tag_data = 0b010usize;
-///
-/// let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, tag_data).unwrap();
-///
-/// assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);
-/// assert_eq!(tagged_pointer.to_data(), 0b010);
-///
-/// tagged_pointer.set_data(0b101);
-///
-/// let new_tagged_pointer = tagged_pointer.cast::<i64>();
-///
-/// assert_eq!(unsafe { *new_tagged_pointer.to_ptr() }, -1);
-/// assert_eq!(new_tagged_pointer.to_data(), 0b101);
-///
-/// unsafe {
-///     drop(Box::from_raw(tagged_pointer.to_ptr()));
-/// }
-/// ```
-#[cfg_attr(
-    not(miri),
-    doc = "",
-    doc = "Here is an example of a cast that fails to compile because the result type",
-    doc = "has insufficient alignment:",
-    doc = "",
-    doc = "```rust,compile_fail",
-    doc = "use blart::tagged_pointer::TaggedPointer;",
-    doc = "",
-    doc = "let pointee = u64::MAX;",
-    doc = "let pointer = Box::into_raw(Box::new(pointee));",
-    doc = "let tag_data = 0b010usize;",
-    doc = "",
-    doc = "let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, \
-           tag_data).unwrap();",
-    doc = "",
-    doc = "assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);",
-    doc = "assert_eq!(tagged_pointer.to_data(), 0b010);",
-    doc = "",
-    doc = "tagged_pointer.set_data(0b101);",
-    doc = "",
-    doc = "// This cast to `i32` causes the compilation failure",
-    doc = "let new_tagged_pointer = tagged_pointer.cast::<i32>();",
-    doc = "```"
-)]
 #[repr(transparent)]
 pub struct TaggedPointer<P, const MIN_BITS: u32>(NonNull<P>);
 
@@ -135,7 +55,6 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// pointer.
     ///
     /// # Panics
-    ///
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
     //
@@ -155,12 +74,10 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// non-null.
     ///
     /// # Panics
-    ///
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
     ///
     /// # Safety
-    ///
     ///  - The `pointer` value must not be null.
     pub unsafe fn new_unchecked(pointer: *mut P) -> TaggedPointer<P, MIN_BITS> {
         // SAFETY: The non-zero safety requirement is defered to the caller of this
@@ -188,7 +105,6 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// Returns `None` if the given pointer is null.
     ///
     /// # Panics
-    ///
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
     pub fn new_with_data(pointer: *mut P, data: usize) -> Option<TaggedPointer<P, MIN_BITS>> {
@@ -246,11 +162,10 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// This function will transfer the data bits from the original pointer to
     /// the new pointer.
     ///
-    /// # Errors
-    ///
-    ///  - This function will error if the alignment of the new type does not
-    ///    equal the alignment of the existing type. This is because the number
-    ///    of data-carrying bits could be different.
+    /// # Safety
+    ///  - The alignment of the new type must be equal to the alignment of the
+    ///    existing type. This is because the number of data-carrying bits could
+    ///    be different.
     pub fn cast<Q>(self) -> TaggedPointer<Q, MIN_BITS> {
         let data = self.to_data();
         let raw_ptr = self.to_ptr();
@@ -307,7 +222,7 @@ impl<P, const MIN_BITS: u32> Ord for TaggedPointer<P, MIN_BITS> {
 
 impl<P, const MIN_BITS: u32> PartialOrd for TaggedPointer<P, MIN_BITS> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
+        Some(self.0.cmp(&other.0))
     }
 }
 
@@ -321,7 +236,7 @@ impl<P, const MIN_BITS: u32> PartialEq for TaggedPointer<P, MIN_BITS> {
 
 impl<P, const MIN_BITS: u32> Clone for TaggedPointer<P, MIN_BITS> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 
@@ -347,6 +262,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn successful_tag() {
+        let pointee = "Hello world!";
+        let pointer = Box::into_raw(Box::new(pointee));
+        let tag_data = 0b101usize;
+
+        let mut tagged_pointer =
+            TaggedPointer::<&str, 3>::new_with_data(pointer, tag_data).unwrap();
+
+        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
+        assert_eq!(tagged_pointer.to_data(), 0b101);
+
+        tagged_pointer.set_data(0b010);
+
+        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
+        assert_eq!(tagged_pointer.to_data(), 0b010);
+
+        // Collecting the data into `Box` to safely drop it
+        unsafe {
+            drop(Box::from_raw(tagged_pointer.to_ptr()));
+        }
+    }
+
+    #[test]
+    fn cast_and_back() {
+        let pointee = u64::MAX;
+        let pointer = Box::into_raw(Box::new(pointee));
+        let tag_data = 0b010usize;
+
+        let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, tag_data).unwrap();
+
+        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);
+        assert_eq!(tagged_pointer.to_data(), 0b010);
+
+        tagged_pointer.set_data(0b101);
+
+        let new_tagged_pointer = tagged_pointer.cast::<i64>();
+
+        assert_eq!(unsafe { *new_tagged_pointer.to_ptr() }, -1);
+        assert_eq!(new_tagged_pointer.to_data(), 0b101);
+
+        unsafe {
+            drop(Box::from_raw(tagged_pointer.to_ptr()));
+        }
+    }
+
+    #[test]
     fn create_pointer_set_and_retrieve_data() {
         let raw_pointer = Box::into_raw(Box::new(10));
 
@@ -361,7 +322,9 @@ mod tests {
         assert_eq!(p.to_data(), 3);
         assert_eq!(unsafe { *p.to_ptr() }, 10);
 
-        unsafe { Box::from_raw(p.to_ptr()) };
+        unsafe {
+            let _ = Box::from_raw(p.to_ptr());
+        };
     }
 
     #[test]
@@ -376,7 +339,9 @@ mod tests {
         assert_eq!(unsafe { *p.to_ptr() }, 30);
         assert_eq!(p.to_data(), 0);
 
-        unsafe { Box::from_raw(p.to_ptr()) };
+        unsafe {
+            let _ = Box::from_raw(p.to_ptr());
+        };
     }
 
     #[test]
@@ -512,34 +477,19 @@ mod tests {
         );
 
         // Something weird about the representation of u128 on intel architectures:
-        // https://github.com/rust-lang/rust/issues/54341
-        if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
-            assert_eq!(
-                TaggedPointer::<u128, 3>::ALIGNMENT,
-                8,
-                "Target architecture [{}]",
-                std::env::consts::ARCH
-            );
-            assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 3);
+        // https://github.com/rust-lang/rust/issues/54341 - This was fixed in 1.77
+        assert_eq!(
+            TaggedPointer::<u128, 5>::ALIGNMENT,
+            16,
+            "Target architecture [{}]",
+            std::env::consts::ARCH
+        );
+        assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 4);
 
-            assert_eq!(
-                TaggedPointer::<u128, 3>::POINTER_MASK,
-                0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
-            );
-        } else {
-            assert_eq!(
-                TaggedPointer::<u128, 3>::ALIGNMENT,
-                16,
-                "Target architecture [{}]",
-                std::env::consts::ARCH
-            );
-            assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 4);
-
-            assert_eq!(
-                TaggedPointer::<u128, 3>::POINTER_MASK,
-                0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
-            );
-        }
+        assert_eq!(
+            TaggedPointer::<u128, 3>::POINTER_MASK,
+            0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
+        );
     }
 
     #[test]

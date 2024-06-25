@@ -1,18 +1,19 @@
 use std::borrow::Borrow;
 
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{
+    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr,
+};
 
 /// Search in the given tree for the value stored with the given key.
 ///
 /// # Safety
-///
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-pub unsafe fn search_unchecked<Q, K, V>(
-    root: OpaqueNodePtr<K, V>,
+pub unsafe fn search_unchecked<Q, K, V, const NUM_PREFIX_BYTES: usize>(
+    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
     key: &Q,
-) -> Option<NodePtr<LeafNode<K, V>>>
+) -> Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
@@ -64,16 +65,15 @@ where
 /// child for the key byte, it returns `None`.
 ///
 /// # Safety
-///
 ///  - No other access or mutation to the `inner_ptr` Node can happen while this
 ///    function runs.
-pub(crate) unsafe fn check_prefix_lookup_child<Q, K, V, N>(
-    inner_ptr: NodePtr<N>,
+pub(crate) unsafe fn check_prefix_lookup_child<Q, K, V, N, const NUM_PREFIX_BYTES: usize>(
+    inner_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
     key: &Q,
     current_depth: &mut usize,
-) -> Option<OpaqueNodePtr<K, V>>
+) -> Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>
 where
-    N: InnerNode<Key = K, Value = V>,
+    N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
 {
@@ -82,33 +82,33 @@ where
     // enforced the "no concurrent reads or writes" requirement on the
     // `search_unchecked` function.
     let inner_node = unsafe { inner_ptr.as_ref() };
-    let header = inner_node.header();
-    let matched_prefix_size = header.match_prefix(&key.as_bytes()[*current_depth..]);
-    if matched_prefix_size != header.prefix_size() {
-        return None;
+    let match_prefix = inner_node.match_prefix(key.as_bytes(), *current_depth);
+    match match_prefix {
+        MatchPrefixResult::Mismatch { .. } => None,
+        MatchPrefixResult::Match { matched_bytes } => {
+            // Since the prefix matched, advance the depth by the size of the prefix
+            *current_depth += matched_bytes;
+
+            let next_key_fragment = if *current_depth < key.as_bytes().len() {
+                key.as_bytes()[*current_depth]
+            } else {
+                // the key has insufficient bytes, it is a prefix of an existing key. Thus, the
+                // key must not exist in the tree by the requirements of the insert function
+                // (any key in the tree must not be the prefix of any other key in the tree)
+                return None;
+            };
+
+            let child_lookup = inner_node.lookup_child(next_key_fragment);
+
+            if child_lookup.is_some() {
+                // Since the prefix matched and it found a child, advance the depth by 1 more
+                // key byte
+                *current_depth += 1;
+            }
+
+            child_lookup
+        },
     }
-
-    // Since the prefix matched, advance the depth by the size of the prefix
-    *current_depth += matched_prefix_size;
-
-    let next_key_fragment = if *current_depth < key.as_bytes().len() {
-        key.as_bytes()[*current_depth]
-    } else {
-        // the key has insufficient bytes, it is a prefix of an existing key. Thus, the
-        // key must not exist in the tree by the requirements of the insert function
-        // (any key in the tree must not be the prefix of any other key in the tree)
-        return None;
-    };
-
-    let child_lookup = inner_node.lookup_child(next_key_fragment);
-
-    if child_lookup.is_some() {
-        // Since the prefix matched and it found a child, advance the depth by 1 more
-        // key byte
-        *current_depth += 1;
-    }
-
-    child_lookup
 }
 
 #[cfg(test)]

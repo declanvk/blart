@@ -1,3 +1,5 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "blart-fuzz"
 version = "0.0.0"
@@ -13,6 +15,7 @@ libfuzzer-sys = { version = "0.4.0", features = ["arbitrary-derive"] }
 
 [dependencies.blart]
 path = ".."
+# features = ["nightly"]
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -29,3 +32,6 @@ name = "fuzz_tree_map_api"
 path = "fuzz_targets/fuzz_tree_map_api.rs"
 test = false
 doc = false
+
+[profile.release]
+rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]

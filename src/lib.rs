@@ -1,16 +1,21 @@
 #![cfg_attr(
     feature = "nightly",
     feature(
-        hasher_prefixfree_extras,
-        is_sorted,
+        impl_trait_in_assoc_type,
         maybe_uninit_slice,
         maybe_uninit_uninit_array,
-        nonnull_slice_from_raw_parts,
+        const_maybe_uninit_uninit_array,
+        maybe_uninit_array_assume_init,
         slice_ptr_get,
+        hasher_prefixfree_extras,
+        new_uninit,
+        core_intrinsics,
         strict_provenance,
+        portable_simd
     )
 )]
-#![allow(unstable_name_collisions)]
+#![cfg_attr(feature = "nightly", allow(incomplete_features, internal_features))]
+#![allow(clippy::type_complexity, unstable_name_collisions)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,
@@ -38,15 +43,21 @@
 
 mod bytes;
 mod collections;
-mod nightly_rust_apis;
 mod nodes;
-pub mod tagged_pointer;
+mod tagged_pointer;
+
 #[doc(hidden)]
 pub mod tests_common;
 
+mod rust_nightly_apis;
+
 pub use bytes::*;
 pub use collections::*;
-pub use nodes::*;
+pub use nodes::{visitor, *};
+
+/// Standard ART type. The default is for variable key lengths, with 16 byte
+/// prefix
+pub type TreeMap<K, V> = RawTreeMap<K, V, 16>;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

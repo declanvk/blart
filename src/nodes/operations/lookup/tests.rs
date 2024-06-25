@@ -5,17 +5,17 @@ use crate::{
 
 #[test]
 fn lookup_on_non_copy_leaf() {
-    let mut l1: LeafNode<Box<[u8]>, String> =
+    let mut l1: LeafNode<Box<[u8]>, String, 16> =
         LeafNode::new(Box::from([1, 2, 3]), "Hello world my name is".into());
-    let mut l2: LeafNode<Box<[u8]>, String> = LeafNode::new(Box::from([1, 2, 4]), "geregog".into());
+    let mut l2: LeafNode<Box<[u8]>, String, 16> =
+        LeafNode::new(Box::from([1, 2, 4]), "geregog".into());
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
 
-    let mut inner_node = InnerNode4::empty();
+    let mut inner_node = InnerNode4::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(3, l1_ptr);
     inner_node.write_child(4, l2_ptr);
 
@@ -35,7 +35,7 @@ fn lookup_on_non_copy_leaf() {
 
 #[test]
 fn lookup_on_leaf() {
-    let mut leaf: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut leaf: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3]), 123);
     let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
 
     // SAFETY: The type parameter (`i32`) matches the type that the leaf was
@@ -54,20 +54,19 @@ fn lookup_on_leaf() {
 
 #[test]
 fn lookup_on_full_node4() {
-    let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 1]), 121);
-    let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 2]), 122);
-    let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3]), 123);
-    let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4]), 124);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 1]), 121);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 2]), 122);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4]), 124);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode4::empty();
+    let mut inner_node = InnerNode4::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(1, l1_ptr);
     inner_node.write_child(2, l2_ptr);
     inner_node.write_child(3, l3_ptr);
@@ -117,7 +116,7 @@ fn lookup_on_full_node4() {
 
 #[test]
 fn lookup_on_empty_nodes() {
-    let mut n4 = InnerNode4::<Box<[u8]>, ()>::empty();
+    let mut n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
     let mut n16 = InnerNode16::empty();
     let mut n48 = InnerNode48::empty();
     let mut n256 = InnerNode256::empty();
@@ -147,20 +146,19 @@ fn lookup_on_empty_nodes() {
 
 #[test]
 fn lookup_on_node16() {
-    let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 1]), 121);
-    let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 2]), 122);
-    let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3]), 123);
-    let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4]), 124);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 1]), 121);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 2]), 122);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4]), 124);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode16::empty();
+    let mut inner_node = InnerNode16::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(1, l1_ptr);
     inner_node.write_child(2, l2_ptr);
     inner_node.write_child(3, l3_ptr);
@@ -210,20 +208,19 @@ fn lookup_on_node16() {
 
 #[test]
 fn lookup_on_node48() {
-    let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 1]), 121);
-    let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 2]), 122);
-    let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3]), 123);
-    let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4]), 124);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 1]), 121);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 2]), 122);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4]), 124);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode48::empty();
+    let mut inner_node = InnerNode48::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(1, l1_ptr);
     inner_node.write_child(2, l2_ptr);
     inner_node.write_child(3, l3_ptr);
@@ -273,20 +270,19 @@ fn lookup_on_node48() {
 
 #[test]
 fn lookup_on_node256() {
-    let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 1]), 121);
-    let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 2]), 122);
-    let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3]), 123);
-    let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4]), 124);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 1]), 121);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 2]), 122);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3]), 123);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4]), 124);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode256::empty();
+    let mut inner_node = InnerNode256::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    inner_node.header.extend_prefix(&[1, 2]);
     inner_node.write_child(1, l1_ptr);
     inner_node.write_child(2, l2_ptr);
     inner_node.write_child(3, l3_ptr);
@@ -365,33 +361,30 @@ fn lookup_on_n16_n4_layer_tree() {
     //                                                     │ Value │    124784    │
     //                                                     └───────┴──────────────┘
 
-    let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
-    let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
-    let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
-    let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut n4_left = InnerNode4::empty();
-    let mut n4_right = InnerNode4::empty();
-    let mut n16 = InnerNode16::empty();
+    let mut n4_left = InnerNode4::from_prefix(&[5, 6], 2);
+    let mut n4_right = InnerNode4::from_prefix(&[7, 8], 2);
+    let mut n16 = InnerNode16::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    n4_left.header.extend_prefix(&[5, 6]);
     n4_left.write_child(1, l1_ptr);
     n4_left.write_child(2, l2_ptr);
 
-    n4_right.header.extend_prefix(&[7, 8]);
     n4_right.write_child(3, l3_ptr);
     n4_right.write_child(4, l4_ptr);
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    n16.header.extend_prefix(&[1, 2]);
     n16.write_child(3, n4_left_ptr);
     n16.write_child(4, n4_right_ptr);
 
@@ -448,33 +441,30 @@ fn lookup_on_n16_n4_layer_tree() {
 
 #[test]
 fn lookup_on_n48_n4_layer_tree() {
-    let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
-    let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
-    let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
-    let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut n4_left = InnerNode4::empty();
-    let mut n4_right = InnerNode4::empty();
-    let mut n48 = InnerNode4::empty();
+    let mut n4_left = InnerNode4::from_prefix(&[5, 6], 2);
+    let mut n4_right = InnerNode4::from_prefix(&[7, 8], 2);
+    let mut n48 = InnerNode4::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    n4_left.header.extend_prefix(&[5, 6]);
     n4_left.write_child(1, l1_ptr);
     n4_left.write_child(2, l2_ptr);
 
-    n4_right.header.extend_prefix(&[7, 8]);
     n4_right.write_child(3, l3_ptr);
     n4_right.write_child(4, l4_ptr);
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    n48.header.extend_prefix(&[1, 2]);
     n48.write_child(3, n4_left_ptr);
     n48.write_child(4, n4_right_ptr);
 
@@ -531,33 +521,30 @@ fn lookup_on_n48_n4_layer_tree() {
 
 #[test]
 fn lookup_on_n256_n4_layer_tree() {
-    let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
-    let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
-    let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
-    let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut n4_left = InnerNode4::empty();
-    let mut n4_right = InnerNode4::empty();
-    let mut n256 = InnerNode256::empty();
+    let mut n4_left = InnerNode4::from_prefix(&[5, 6], 2);
+    let mut n4_right = InnerNode4::from_prefix(&[7, 8], 2);
+    let mut n256 = InnerNode256::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    n4_left.header.extend_prefix(&[5, 6]);
     n4_left.write_child(1, l1_ptr);
     n4_left.write_child(2, l2_ptr);
 
-    n4_right.header.extend_prefix(&[7, 8]);
     n4_right.write_child(3, l3_ptr);
     n4_right.write_child(4, l4_ptr);
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    n256.header.extend_prefix(&[1, 2]);
     n256.write_child(3, n4_left_ptr);
     n256.write_child(4, n4_right_ptr);
 
@@ -614,33 +601,30 @@ fn lookup_on_n256_n4_layer_tree() {
 
 #[test]
 fn lookup_on_n4_n4_layer_tree() {
-    let mut l1: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
-    let mut l2: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
-    let mut l3: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
-    let mut l4: LeafNode<Box<[u8]>, i32> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
+    let mut l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 1]), 123561);
+    let mut l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 3, 5, 6, 2]), 123562);
+    let mut l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 3]), 124783);
+    let mut l4: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::from([1, 2, 4, 7, 8, 4]), 124784);
 
     let l1_ptr = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut n4_left = InnerNode4::empty();
-    let mut n4_right = InnerNode4::empty();
-    let mut n4 = InnerNode4::empty();
+    let mut n4_left = InnerNode4::from_prefix(&[5, 6], 2);
+    let mut n4_right = InnerNode4::from_prefix(&[7, 8], 2);
+    let mut n4 = InnerNode4::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
-    n4_left.header.extend_prefix(&[5, 6]);
     n4_left.write_child(1, l1_ptr);
     n4_left.write_child(2, l2_ptr);
 
-    n4_right.header.extend_prefix(&[7, 8]);
     n4_right.write_child(3, l3_ptr);
     n4_right.write_child(4, l4_ptr);
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    n4.header.extend_prefix(&[1, 2]);
     n4.write_child(3, n4_left_ptr);
     n4.write_child(4, n4_right_ptr);
 
