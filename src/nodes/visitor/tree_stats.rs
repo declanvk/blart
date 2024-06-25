@@ -15,7 +15,7 @@ impl TreeStatsCollector {
     /// Run the tree stats collection on the given root node, then return the
     /// accumalated stats.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
     pub unsafe fn collect<
@@ -33,7 +33,7 @@ impl TreeStatsCollector {
 
     /// Iterate through the given tree and return the number of leaf nodes.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
     pub unsafe fn count_leaf_nodes<

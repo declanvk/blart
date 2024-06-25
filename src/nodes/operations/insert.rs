@@ -481,14 +481,14 @@ pub enum InsertSearchResultType<
 /// Perform an iterative search for the insert point for the given key,
 /// starting at the given root node.
 ///
-/// # SAFETY
+/// # Safety
 ///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
 ///    tree
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
 ///
-/// # ERRORS
+/// # Errors
 ///  - If the given `key` is a prefix of an existing key, this function will
 ///    return an error.
 pub unsafe fn search_for_insert_point<K, V, Q, const NUM_PREFIX_BYTES: usize, H>(

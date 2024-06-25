@@ -601,7 +601,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// If the map did have this key present, the value is updated, and the old
     /// value is returned.
     ///
-    /// # ERRORS
+    /// # Errors
     ///  - If the map has an existing key, such that the new key is a prefix of
     ///    the existing key or vice versa, then it returns an error.
     ///

@@ -12,7 +12,7 @@ use crate::{
 /// remaining after the delete. Compressing the node involves prepending the
 /// inner node key prefix and child key byte to the child's key prefix.
 ///
-/// # SAFETY
+/// # Safety
 ///  - `inner_node_ptr` must be a unique pointer to the node and must not have
 ///    any other mutable references.
 ///  - There must not be any mutable references to the children of the given
@@ -102,7 +102,7 @@ unsafe fn remove_child_from_inner_node_and_compress<
 
 /// Delete the given non-root leaf node.
 ///
-/// # SAFETY
+/// # Safety
 ///  - `parent_node_ptr` must be a unique pointer to the node and must not have
 ///    any other mutable references.
 ///  - There must not be any other mutable references to any children of the
@@ -256,7 +256,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Handle the logic of deleting a leaf node from the tree, after it has
     /// been found.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the
     ///    underlying tree
     ///  - This function cannot be called concurrently to any reads or writes of
@@ -313,7 +313,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 /// This function also returns information that will be required in the delete
 /// process, like the parent and possibly grandparent nodes.
 ///
-/// # SAFETY
+/// # Safety
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
@@ -387,7 +387,7 @@ where
 /// Find the minimum leaf in the tree and return the information necessary to
 /// delete it.
 ///
-/// # SAFETY
+/// # Safety
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
@@ -430,7 +430,7 @@ pub unsafe fn find_minimum_to_delete<
 /// Find the maximum leaf in the tree and return the information necessary to
 /// delete it.
 ///
-/// # SAFETY
+/// # Safety
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.

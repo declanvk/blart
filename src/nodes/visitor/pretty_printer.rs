@@ -27,7 +27,7 @@ pub struct DotPrinter<O: Write> {
 impl<O: Write> DotPrinter<O> {
     /// Write the dot-format of the given tree to the given output.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
     pub unsafe fn print<K, V, const NUM_PREFIX_BYTES: usize, H>(
@@ -46,7 +46,7 @@ impl<O: Write> DotPrinter<O> {
 
     /// Write the dot-format of the given tree to the given output.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
     unsafe fn print_tree<K, V, const NUM_PREFIX_BYTES: usize, H>(

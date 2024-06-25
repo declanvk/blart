@@ -69,7 +69,7 @@ impl NodeType {
 
     /// Converts a u8 value to a [`NodeType`]
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - `src` must be a valid variant from the enum
     pub const unsafe fn from_u8(src: u8) -> NodeType {
         // SAFETY: `NodeType` is repr(u8)
@@ -79,7 +79,7 @@ impl NodeType {
     /// Return true if an [`InnerNode`] with the given [`NodeType`] and
     /// specified number of children should be shrunk.
     ///
-    /// # PANICS
+    /// # Panics
     ///  - Panics if `node_type` equals [`NodeType::Leaf`]
     pub fn should_shrink_inner_node(self, num_children: usize) -> bool {
         match self {
@@ -247,7 +247,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Get a mutable reference to the header if the underlying node has a
     /// header field, otherwise return `None`.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'h is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -272,7 +272,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Get a mutable reference to the header, this doesn't check if the pointer
     /// is to an inner node.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - The pointer must be to an inner node
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'h is arbitrarily chosen and does not necessarily reflect the actual
@@ -343,7 +343,7 @@ pub struct NodePtr<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>>(Non
 impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFIX_BYTES, N> {
     /// Create a safe pointer to a [`Node`].
     ///
-    /// # SAFETY
+    /// # Safety
     /// - Given pointer must be non-null, aligned, and valid for reads or writes
     ///   of a value of N type.
     pub unsafe fn new(ptr: *mut N) -> Self {
@@ -363,7 +363,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFI
     /// Deallocate a [`Node`] object created with the
     /// [`NodePtr::allocate_node_ptr`] function.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - This function can only be called once for a given node object.
     #[must_use]
     pub unsafe fn deallocate_node_ptr(node: Self) -> N {
@@ -376,7 +376,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFI
     ///
     /// Neither value is dropped.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - The node the `dest` pointers points to must not get accessed (read or
     ///    written) through any other pointers concurrent to this modification.
     pub unsafe fn replace(dest: Self, new_value: N) -> N {
@@ -404,7 +404,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFI
 
     /// Returns a shared reference to the value.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -419,7 +419,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFI
 
     /// Returns a unique mutable reference to the node.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the node. In particular, for the duration of this
@@ -451,7 +451,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a shared reference to the key and value of the pointed to
     /// [`LeafNode`].
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -470,7 +470,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a unique mutable reference to the key and value of the pointed
     /// to [`LeafNode`].
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the node. In particular, for the duration of this
@@ -490,7 +490,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a unique mutable reference to the key and value of the pointed
     /// to [`LeafNode`].
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -510,7 +510,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a unique mutable reference to the key and value of the pointed
     /// to [`LeafNode`].
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -531,7 +531,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a unique mutable reference to the key and value of the pointed
     /// to [`LeafNode`].
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the node. In particular, for the duration of this
@@ -738,7 +738,7 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
     /// If the key fragment already exists in the node, overwrite the existing
     /// child pointer.
     ///
-    /// # PANICS
+    /// # Panics
     ///  - Panics when the node is full.
     fn write_child(
         &mut self,
@@ -762,7 +762,7 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
     /// Shrink this node into the next smaller class, copying over children and
     /// prefix information.
     ///
-    /// # PANICS
+    /// # Panics
     ///  - Panics if the new, smaller node size does not have enough capacity to
     ///    hold all the children.
     fn shrink(&self) -> Self::ShrunkNode;
@@ -775,7 +775,7 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
     /// Create an iterator over all (key bytes, child pointers) in this inner
     /// node.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - The iterator type does not carry any lifetime, so the caller of this
     ///    function must enforce that the lifetime of the iterator does not
     ///    overlap with any mutating operations on the node.
@@ -784,7 +784,7 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - `current_depth` > key len
     #[inline(always)]
     fn match_prefix(
@@ -841,7 +841,7 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
 
     /// Returns the minimum child pointer from this node and it's key
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - Since this is a [`InnerNode`] we assume that the we hava at least one
     ///    child, (more strictly we have 2, because with one child the node
     ///    would have collapsed) so in this way we can avoid the [`Option`].
@@ -856,7 +856,7 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
 
     /// Returns the maximum child pointer from this node and it's key
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - Since this is a [`InnerNode`] we assume that the we hava at least one
     ///    child, (more strictly we have 2, because with one child the node
     ///    would have collapsed) so in this way we can avoid the [`Option`].
@@ -1007,7 +1007,7 @@ impl<
 
     /// Writes a child to the node by check the order of insertion
     ///
-    /// # PANICS
+    /// # Panics
     ///  - This functions assumes that the write is gonna be inbound (i.e the
     ///    check for a full node is done previously to the call of this
     ///    function)
@@ -1059,7 +1059,7 @@ impl<
 
     /// Writes a child to the node without bounds check or order
     ///
-    /// # SAFETY
+    /// # Safety
     /// - This functions assumes that the write is gonna be inbound (i.e the
     ///   check for a full node is done previously to the call of this function)
     pub unsafe fn write_child_unchecked(
@@ -1074,7 +1074,7 @@ impl<
 
     /// Writes a child to the node without bounds check or order
     ///
-    /// # SAFETY
+    /// # Safety
     ///  - This functions assumes that the write is gonna be inbound (i.e the
     ///    check for a full node is done previously to the call of this
     ///    function)

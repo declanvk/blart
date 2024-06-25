@@ -31,13 +31,12 @@ use std::{
 ///
 /// [`Hash`] and [`Eq`] [documentation](https://doc.rust-lang.org/1.68.2/std/hash/trait.Hash.html#hash-and-eq)
 ///
-/// # SAFETY
-///
-/// This trait is unsafe because implementing it implies that the
-/// [`Mapped<Self>`] type will implement [`OrderedBytes`], so the safety
-/// requirements must be upheld. Namely, that the ordering of values of the
-/// [`BytesMapping::Domain`] type must be equal to the ordering of those same
-/// values translated to the the [`BytesMapping::Bytes`] type.
+/// # Safety
+///  - This trait is unsafe because implementing it implies that the
+///    [`Mapped<Self>`] type will implement [`OrderedBytes`], so the safety
+///    requirements must be upheld. Namely, that the ordering of values of the
+///    [`BytesMapping::Domain`] type must be equal to the ordering of those same
+///    values translated to the the [`BytesMapping::Bytes`] type.
 pub unsafe trait BytesMapping {
     /// The unconverted type that has a specific ordering
     type Domain;
