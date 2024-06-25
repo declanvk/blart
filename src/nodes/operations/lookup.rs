@@ -1,8 +1,7 @@
 use std::borrow::Borrow;
 
 use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr,
-    OpaqueNodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr,
 };
 
 /// Search in the given tree for the value stored with the given key.
@@ -18,7 +17,6 @@ pub unsafe fn search_unchecked<Q, K, V, const NUM_PREFIX_BYTES: usize>(
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
-    
 {
     let mut current_node = root;
     let mut current_depth = 0;
@@ -78,7 +76,6 @@ where
     N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
-    
 {
     // SAFETY: The lifetime produced from this is bounded to this scope and does not
     // escape. Further, no other code mutates the node referenced, which is further

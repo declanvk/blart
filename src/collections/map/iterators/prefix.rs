@@ -1,6 +1,4 @@
-use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap,
-};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_add_childs {
@@ -67,26 +65,15 @@ macro_rules! gen_add_childs {
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s with a specific prefix
-        pub struct $name<
-            'a,
-            'b,
-            K: AsBytes,
-            V,
-            const NUM_PREFIX_BYTES: usize,     
-        > {
+        pub struct $name<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
             nodes: VecDeque<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, usize)>,
             size: usize,
             _tree: $tree,
             prefix: &'b [u8],
         }
 
-        impl<
-                'a,
-                'b,
-                K: AsBytes,
-                V,
-                const NUM_PREFIX_BYTES: usize,
-            > $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+            $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
         {
             gen_add_childs!(add_childs, push_back_rev_iter, push_back);
 
@@ -161,13 +148,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<
-                'a,
-                'b,
-                K: AsBytes,
-                V,
-                const NUM_PREFIX_BYTES: usize,
-            > Iterator for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Iterator
+            for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
         {
             type Item = $ret;
 
@@ -200,13 +182,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<
-                'a,
-                'b,
-                K: AsBytes,
-                V,
-                const NUM_PREFIX_BYTES: usize,
-            > DoubleEndedIterator for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> DoubleEndedIterator
+            for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
                 while let Some((node, current_depth)) = self.nodes.pop_front() {
@@ -228,13 +205,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<
-                'a,
-                'b,
-                K: AsBytes,
-                V,
-                const NUM_PREFIX_BYTES: usize,
-            > FusedIterator for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FusedIterator
+            for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
         {
         }
     };

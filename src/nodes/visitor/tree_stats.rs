@@ -2,8 +2,7 @@ use std::ops::Add;
 
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode,
-    RawTreeMap,
+    AsBytes, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, RawTreeMap,
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -18,12 +17,7 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn collect<
-        K: AsBytes,
-        V,
-        const NUM_PREFIX_BYTES: usize,
-        
-    >(
+    pub unsafe fn collect<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
         tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     ) -> Option<TreeStats> {
         let mut collector = TreeStatsCollector;
@@ -36,18 +30,13 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn count_leaf_nodes<
-        K: AsBytes,
-        V,
-        const NUM_PREFIX_BYTES: usize,
-        
-    >(
+    pub unsafe fn count_leaf_nodes<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
         tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     ) -> usize {
         struct LeafNodeCounter;
 
-        impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-            Visitor<K, V, NUM_PREFIX_BYTES> for LeafNodeCounter
+        impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Visitor<K, V, NUM_PREFIX_BYTES>
+            for LeafNodeCounter
         {
             type Output = usize;
 
@@ -59,10 +48,7 @@ impl TreeStatsCollector {
                 o1 + o2
             }
 
-            fn visit_leaf(
-                &mut self,
-                _t: &crate::LeafNode<K, V, NUM_PREFIX_BYTES>,
-            ) -> Self::Output {
+            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
                 1
             }
         }
@@ -105,16 +91,8 @@ pub struct InnerNodeStats {
 }
 
 impl InnerNodeStats {
-    fn aggregate_data<
-        K: AsBytes,
-        V,
-        const NUM_PREFIX_BYTES: usize,
-        
-        N,
-    >(
-        &mut self,
-        t: &N,
-    ) where
+    fn aggregate_data<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, N>(&mut self, t: &N)
+    where
         N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
     {
         self.count += 1;
@@ -249,11 +227,9 @@ impl TreeStats {
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Visitor<K, V, NUM_PREFIX_BYTES>
-    for TreeStatsCollector
+impl<K, V, const NUM_PREFIX_BYTES: usize> Visitor<K, V, NUM_PREFIX_BYTES> for TreeStatsCollector
 where
     K: AsBytes,
-    
 {
     type Output = TreeStats;
 

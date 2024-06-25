@@ -38,7 +38,6 @@ impl<O: Write> DotPrinter<O> {
     where
         K: Debug + AsBytes,
         V: Debug,
-        
     {
         tree.root
             .map(|root| unsafe { Self::print_tree(output, &root, settings) })
@@ -57,7 +56,6 @@ impl<O: Write> DotPrinter<O> {
     where
         K: Debug + AsBytes,
         V: Debug,
-        
     {
         let mut visitor = DotPrinter {
             output,
@@ -150,7 +148,6 @@ where
     K: Debug + AsBytes,
     T: Debug,
     O: Write,
-    
 {
     type Output = io::Result<usize>;
 
@@ -174,10 +171,7 @@ where
         self.write_inner_node(t)
     }
 
-    fn visit_node256(
-        &mut self,
-        t: &crate::InnerNode256<K, T, NUM_PREFIX_BYTES>,
-    ) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T, NUM_PREFIX_BYTES>) -> Self::Output {
         self.write_inner_node(t)
     }
 
@@ -211,7 +205,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{deallocate_tree};
+    use crate::deallocate_tree;
 
     use super::*;
 

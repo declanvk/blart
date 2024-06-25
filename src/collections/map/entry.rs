@@ -1,14 +1,11 @@
 use std::mem::replace;
 
-use crate::{
-    AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap,
-};
+use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap};
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
 pub struct OccupiedEntry<'a, K, V, const NUM_PREFIX_BYTES: usize>
 where
     K: AsBytes,
-    
 {
     pub(crate) leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
 
@@ -18,14 +15,12 @@ where
     pub(crate) grandparent_ptr_and_parent_key_byte:
         Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
     /// Used for the removal
-    pub(crate) parent_ptr_and_child_key_byte:
-        Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
+    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
 }
 
 impl<'a, K, V, const NUM_PREFIX_BYTES: usize> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES>
 where
     K: AsBytes,
-    
 {
     /// Gets a reference to the value in the entry.
     pub fn get(&self) -> &V {
@@ -94,7 +89,6 @@ where
 pub struct VacantEntry<'a, K, V, const NUM_PREFIX_BYTES: usize>
 where
     K: AsBytes,
-    
 {
     pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     pub(crate) key: K,
@@ -104,7 +98,6 @@ where
 impl<'a, K, V, const NUM_PREFIX_BYTES: usize> VacantEntry<'a, K, V, NUM_PREFIX_BYTES>
 where
     K: AsBytes,
-    
 {
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a mutable reference to it.
@@ -157,7 +150,6 @@ where
 pub enum Entry<'a, K, V, const NUM_PREFIX_BYTES: usize>
 where
     K: AsBytes,
-    
 {
     /// A view into an occupied entry in a HashMap. It is part of the [`Entry`]
     /// enum.
@@ -170,7 +162,6 @@ where
 impl<'a, K, V, const NUM_PREFIX_BYTES: usize> Entry<'a, K, V, NUM_PREFIX_BYTES>
 where
     K: AsBytes,
-    
 {
     /// Provides in-place mutable access to an occupied entry before any
     /// potential inserts into the map.

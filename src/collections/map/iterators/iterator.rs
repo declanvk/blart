@@ -4,20 +4,13 @@ use std::{collections::VecDeque, iter::FusedIterator};
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s
-        pub struct $name<
-            'a,
-            K: AsBytes,
-            V,
-            const NUM_PREFIX_BYTES: usize,
-        > {
+        pub struct $name<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
             nodes: VecDeque<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
             size: usize,
             _tree: $tree,
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-            $name<'a, K, V, NUM_PREFIX_BYTES>
-        {
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> $name<'a, K, V, NUM_PREFIX_BYTES> {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
             pub(crate) fn new(tree: $tree) -> Self {
@@ -58,8 +51,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-            Iterator for $name<'a, K, V, NUM_PREFIX_BYTES>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Iterator
+            for $name<'a, K, V, NUM_PREFIX_BYTES>
         {
             type Item = $ret;
 
@@ -92,8 +85,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-            DoubleEndedIterator for $name<'a, K, V, NUM_PREFIX_BYTES>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> DoubleEndedIterator
+            for $name<'a, K, V, NUM_PREFIX_BYTES>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
                 while let Some(node) = self.nodes.pop_front() {
@@ -113,13 +106,13 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-            FusedIterator for $name<'a, K, V, NUM_PREFIX_BYTES>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FusedIterator
+            for $name<'a, K, V, NUM_PREFIX_BYTES>
         {
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-            ExactSizeIterator for $name<'a, K, V, NUM_PREFIX_BYTES>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> ExactSizeIterator
+            for $name<'a, K, V, NUM_PREFIX_BYTES>
         {
             fn len(&self) -> usize {
                 self.size
