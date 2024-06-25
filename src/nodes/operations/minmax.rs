@@ -2,7 +2,7 @@ use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodeHeader, NodePtr, 
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
-/// # SAFETY
+/// # Safety
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
@@ -32,7 +32,7 @@ pub unsafe fn minimum_unchecked<
 
 /// Search for the leaf with the maximum key, by lexicographic ordering.
 ///
-/// # SAFETY
+/// # Safety
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.

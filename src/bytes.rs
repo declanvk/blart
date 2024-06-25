@@ -30,7 +30,7 @@ pub trait AsBytes {
 /// This trait is used to mark types which have a byte representation which is
 /// guaranteed to not be a prefix of any other value of the same type.
 ///
-/// # SAFETY
+/// # Safety
 ///  - This trait can only be implemented if the above condition holds.
 pub unsafe trait NoPrefixesBytes: AsBytes {}
 
@@ -38,7 +38,7 @@ pub unsafe trait NoPrefixesBytes: AsBytes {}
 /// byte representation (as output by [`AsBytes::as_bytes`]) matches their
 /// normal ordering (as determined by [`Ord`]).
 ///
-/// # SAFETY
+/// # Safety
 ///  - This trait can only be implemented if the above condition holds.
 pub unsafe trait OrderedBytes: AsBytes + Ord {}
 

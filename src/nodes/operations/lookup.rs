@@ -7,7 +7,7 @@ use crate::{
 
 /// Search in the given tree for the value stored with the given key.
 ///
-/// # SAFETY
+/// # Safety
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
@@ -66,7 +66,7 @@ where
 /// If the prefix does not match, it returns `None`. If there is no matching
 /// child for the key byte, it returns `None`.
 ///
-/// # SAFETY
+/// # Safety
 ///  - No other access or mutation to the `inner_ptr` Node can happen while this
 ///    function runs.
 pub(crate) unsafe fn check_prefix_lookup_child<Q, K, V, N, const NUM_PREFIX_BYTES: usize, H>(

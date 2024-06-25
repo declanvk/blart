@@ -76,7 +76,7 @@ impl<const NUM_PREFIX_BYTES: usize> RawHeader<NUM_PREFIX_BYTES> {
     /// Left trim by `len`, copies the remaining data to the beging of the
     /// prefix
     ///
-    /// # PANICS
+    /// # Panics
     ///  - If `len` > length of the prefix
     #[inline(always)]
     fn ltrim_by(&mut self, len: usize) {
@@ -213,7 +213,7 @@ pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq +
     /// Left trim by `len`, copies the remaining data to the beging of the
     /// prefix
     ///
-    /// # PANICS
+    /// # Panics
     ///  - If `len` > length of the prefix
     fn ltrim_by(&mut self, len: usize);
 

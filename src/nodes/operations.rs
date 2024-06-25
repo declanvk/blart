@@ -18,7 +18,7 @@ pub(crate) use delete::*;
 ///
 /// This will also deallocate the leaf nodes with their value type data.
 ///
-/// # SAFETY
+/// # Safety
 ///  - This function must only be called once for this root node and all
 ///    descendants, otherwise a double-free could result.
 pub unsafe fn deallocate_tree<
