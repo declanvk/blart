@@ -550,6 +550,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     where
         K: AsBytes,
     {
+        // SAFETY: The root is sure to not be `None`, since the we somehow got a `DeletePoint`.
+        // So the caller must have checked this
         let delete_result = delete_point.apply(unsafe { self.root.unwrap_unchecked() });
 
         self.root = delete_result.new_root;
@@ -599,7 +601,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// If the map did have this key present, the value is updated, and the old
     /// value is returned.
     ///
-    /// # Errors
+    /// # ERRORS
     ///  - If the map has an existing key, such that the new key is a prefix of
     ///    the existing key or vice versa, then it returns an error.
     ///
@@ -1402,6 +1404,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     {
         let entry = match self.root {
             Some(root) => {
+                // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
+                // that there are no other references (mutable or immutable) to this same
+                // object. Meaning that our access to the root node is unique and there are no
+                // other accesses to any node in the tree.
                 let insert_point = unsafe { search_for_insert_point(root, &key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
@@ -1439,6 +1445,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     {
         let entry = match self.root {
             Some(root) => {
+                // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
+                // that there are no other references (mutable or immutable) to this same
+                // object. Meaning that our access to the root node is unique and there are no
+                // other accesses to any node in the tree.
                 let insert_point = unsafe { search_for_insert_point(root, key)? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
@@ -1470,6 +1480,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     where
         K: NoPrefixesBytes,
     {
+        // This will never fail because of the safety contract of `NoPrefixesBytes`
         unsafe { self.try_entry(key).unwrap_unchecked() }
     }
 
@@ -1483,6 +1494,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
         Q: NoPrefixesBytes + ?Sized,
     {
+        // This will never fail because of the safety contract of `NoPrefixesBytes`
         unsafe { self.try_entry_ref(key).unwrap_unchecked() }
     }
 }
@@ -1690,6 +1702,9 @@ where
     }
 }
 
+// SAFETY: This is safe to implement if `K` and `V` are also `Send`.
+// This container is safe to `Send` for the same reasons why other container
+// are also safe
 unsafe impl<K, V, H, const NUM_PREFIX_BYTES: usize> Send for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
 where
     K: Send + AsBytes,
@@ -1698,6 +1713,9 @@ where
 {
 }
 
+// SAFETY: This is safe to implement if `K` and `V` are also `Sync`.
+// This container is safe to `Sync` for the same reasons why other container
+// are also safe
 unsafe impl<K, V, H, const NUM_PREFIX_BYTES: usize> Sync for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
 where
     K: Sync + AsBytes,

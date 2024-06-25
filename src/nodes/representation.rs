@@ -67,16 +67,19 @@ impl NodeType {
         }
     }
 
-    /// Attempt to convert a u8 value to a [`NodeType`], returning None if there
-    /// is no match.
-    pub const fn from_u8(src: u8) -> NodeType {
+    /// Converts a u8 value to a [`NodeType`]
+    /// 
+    /// # SAFETY
+    ///  - `src` must be a valid variant from the enum
+    pub const unsafe fn from_u8(src: u8) -> NodeType {
+        // SAFETY: `NodeType` is repr(u8)
         unsafe { std::mem::transmute::<u8, NodeType>(src) }
     }
 
     /// Return true if an [`InnerNode`] with the given [`NodeType`] and
     /// specified number of children should be shrunk.
     ///
-    /// # Panics
+    /// # PANICS
     ///  - Panics if `node_type` equals [`NodeType::Leaf`]
     pub fn should_shrink_inner_node(self, num_children: usize) -> bool {
         match self {
@@ -236,15 +239,15 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     /// Retrieve the runtime node type information.
     pub fn node_type(self) -> NodeType {
-        // PANIC SAFETY: We know that we can convert the usize into a `NodeType` because
+        // SAFETY: We know that we can convert the usize into a `NodeType` because
         // we have only stored `NodeType` values into this pointer
-        NodeType::from_u8(self.0.to_data() as u8)
+        unsafe { NodeType::from_u8(self.0.to_data() as u8) }
     }
 
     /// Get a mutable reference to the header if the underlying node has a
     /// header field, otherwise return `None`.
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'h is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -266,6 +269,16 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         Some(header_ptr)
     }
 
+    /// Get a mutable reference to the header, this doesn't check if the pointer is
+    /// to an inner node.
+    ///
+    /// # SAFETY
+    ///  - The pointer must be to an inner node
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
+    ///    'h is arbitrarily chosen and does not necessarily reflect the actual
+    ///    lifetime of the data. In particular, for the duration of this
+    ///    lifetime, the memory the pointer points to must not get accessed
+    ///    (read or written) through any other pointer.
     pub(crate) unsafe fn header_mut_uncheked<'h>(self) -> &'h mut H {
         unsafe { &mut *self.0.cast::<H>().to_ptr() }
     }
@@ -276,6 +289,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         K: Clone,
         V: Clone,
     {
+        // SAFETY: We hold a shared reference, so it's safe to make
+        // a shared reference from it
         match self.to_node_ptr() {
             ConcreteNodePtr::Node4(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
             ConcreteNodePtr::Node16(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
@@ -328,10 +343,9 @@ pub struct NodePtr<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>>(Non
 impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFIX_BYTES, N> {
     /// Create a safe pointer to a [`Node`].
     ///
-    /// # Safety
-    ///
-    /// Given pointer must be non-null, aligned, and valid for reads or writes
-    /// of a value of N type.
+    /// # SAFETY
+    /// - Given pointer must be non-null, aligned, and valid for reads or writes
+    ///   of a value of N type.
     pub unsafe fn new(ptr: *mut N) -> Self {
         // SAFETY: The safety requirements of this function match the
         // requirements of `NonNull::new_unchecked`.
@@ -349,8 +363,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFI
     /// Deallocate a [`Node`] object created with the
     /// [`NodePtr::allocate_node_ptr`] function.
     ///
-    /// # Safety
-    ///
+    /// # SAFETY
     ///  - This function can only be called once for a given node object.
     #[must_use]
     pub unsafe fn deallocate_node_ptr(node: Self) -> N {
@@ -363,7 +376,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFI
     ///
     /// Neither value is dropped.
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - The node the `dest` pointers points to must not get accessed (read or
     ///    written) through any other pointers concurrent to this modification.
     pub unsafe fn replace(dest: Self, new_value: N) -> N {
@@ -391,7 +404,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFI
 
     /// Returns a shared reference to the value.
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -406,7 +419,7 @@ impl<const NUM_PREFIX_BYTES: usize, N: Node<NUM_PREFIX_BYTES>> NodePtr<NUM_PREFI
 
     /// Returns a unique mutable reference to the node.
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the node. In particular, for the duration of this
@@ -438,7 +451,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a shared reference to the key and value of the pointed to
     /// [`LeafNode`].
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -457,7 +470,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a unique mutable reference to the key and value of the pointed
     /// to [`LeafNode`].
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the node. In particular, for the duration of this
@@ -477,7 +490,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a unique mutable reference to the key and value of the pointed
     /// to [`LeafNode`].
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -497,7 +510,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a unique mutable reference to the key and value of the pointed
     /// to [`LeafNode`].
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -518,7 +531,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// Returns a unique mutable reference to the key and value of the pointed
     /// to [`LeafNode`].
     ///
-    /// # Safety
+    /// # SAFETY
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the node. In particular, for the duration of this
@@ -725,9 +738,8 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
     /// If the key fragment already exists in the node, overwrite the existing
     /// child pointer.
     ///
-    /// # Panics
-    ///
-    /// Panics when the node is full.
+    /// # PANICS
+    ///  - Panics when the node is full.
     fn write_child(
         &mut self,
         key_fragment: u8,
@@ -750,10 +762,9 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
     /// Shrink this node into the next smaller class, copying over children and
     /// prefix information.
     ///
-    /// # Panics
-    ///
-    /// Panics if the new, smaller node size does not have enough capacity to
-    /// hold all the children.
+    /// # PANICS
+    ///  - Panics if the new, smaller node size does not have enough capacity to
+    ///    hold all the children.
     fn shrink(&self) -> Self::ShrunkNode;
 
     /// Returns true if this node has no more space to store children.
@@ -764,19 +775,17 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
     /// Create an iterator over all (key bytes, child pointers) in this inner
     /// node.
     ///
-    /// # Safety
-    ///
-    /// The iterator type does not carry any lifetime, so the caller of this
-    /// function must enforce that the lifetime of the iterator does not overlap
-    /// with any mutating operations on the node.
+    /// # SAFETY
+    ///  - The iterator type does not carry any lifetime, so the caller of this
+    ///    function must enforce that the lifetime of the iterator does not overlap
+    ///    with any mutating operations on the node.
     fn iter(&self) -> Self::Iter<'_>;
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
     ///
-    /// # Safety
-    ///
-    /// `current_depth` > key len
+    /// # SAFETY
+    ///  - `current_depth` > key len
     #[inline(always)]
     fn match_prefix(
         &self,
@@ -832,13 +841,12 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
 
     /// Returns the minimum child pointer from this node and it's key
     ///
-    /// # Safety
-    ///
-    /// Since this is a [`InnerNode`] we assume that the we hava at least one
-    /// child, (more strictly we have 2, because with one child the node
-    /// would have collapsed) so in this way we can avoid the [`Option`].
-    /// This is safe because if we had, no childs this current node should
-    /// have been deleted.
+    /// # SAFETY
+    ///  - Since this is a [`InnerNode`] we assume that the we hava at least one
+    ///    child, (more strictly we have 2, because with one child the node
+    ///    would have collapsed) so in this way we can avoid the [`Option`].
+    ///    This is safe because if we had, no childs this current node should
+    ///    have been deleted.
     fn min(
         &self,
     ) -> (
@@ -848,13 +856,12 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
 
     /// Returns the maximum child pointer from this node and it's key
     ///
-    /// # Safety
-    ///
-    /// Since this is a [`InnerNode`] we assume that the we hava at least one
-    /// child, (more strictly we have 2, because with one child the node
-    /// would have collapsed) so in this way we can avoid the [`Option`].
-    /// This is safe because if we had, no childs this current node should
-    /// have been deleted.
+    /// # SAFETY
+    ///  - Since this is a [`InnerNode`] we assume that the we hava at least one
+    ///    child, (more strictly we have 2, because with one child the node
+    ///    would have collapsed) so in this way we can avoid the [`Option`].
+    ///    This is safe because if we had, no childs this current node should
+    ///    have been deleted.
     fn max(
         &self,
     ) -> (
@@ -1000,11 +1007,10 @@ impl<
 
     /// Writes a child to the node by check the order of insertion
     ///
-    /// # Panics
-    ///
-    /// This functions assumes that the write is gonna be inbound
-    /// (i.e the check for a full node is done previously to the call of this
-    /// function)
+    /// # PANICS
+    ///  - This functions assumes that the write is gonna be inbound
+    ///    (i.e the check for a full node is done previously to the call of this
+    ///    function)
     fn write_child_inner(
         &mut self,
         key_fragment: u8,
@@ -1053,11 +1059,10 @@ impl<
 
     /// Writes a child to the node without bounds check or order
     ///
-    /// # Safety
-    ///
-    /// This functions assumes that the write is gonna be inbound
-    /// (i.e the check for a full node is done previously to the call of this
-    /// function)
+    /// # SAFETY
+    /// - This functions assumes that the write is gonna be inbound
+    ///   (i.e the check for a full node is done previously to the call of this
+    ///   function)
     pub unsafe fn write_child_unchecked(
         &mut self,
         key_fragment: u8,
@@ -1070,11 +1075,10 @@ impl<
 
     /// Writes a child to the node without bounds check or order
     ///
-    /// # Safety
-    ///
-    /// This functions assumes that the write is gonna be inbound
-    /// (i.e the check for a full node is done previously to the call of this
-    /// function)
+    /// # SAFETY
+    ///  - This functions assumes that the write is gonna be inbound
+    ///    (i.e the check for a full node is done previously to the call of this
+    ///    function)
     unsafe fn write_child_at(
         &mut self,
         idx: usize,
@@ -1325,6 +1329,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
         let (keys, children) = self.initialized_portion();
+        // SAFETY: Convered by the containing function
         unsafe {
             (
                 keys.first().copied().unwrap_unchecked(),
@@ -1335,6 +1340,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
         let (keys, children) = self.initialized_portion();
+        // SAFETY: Convered by the containing function
         unsafe {
             (
                 keys.last().copied().unwrap_unchecked(),
@@ -1362,6 +1368,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 {
     #[cfg(feature = "nightly")]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        // SAFETY: Even though the type is marked is uninit data, when
+        // crated this is filled with inited data, we just use it to
+        // remind us that a portion might be unitialized 
         let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
         let cmp = u8x16::splat(key_fragment)
             .simd_eq(u8x16::from_array(keys))
@@ -1392,6 +1401,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         match self.lookup_child_index(key_fragment) {
             Some(child_index) => WritePoint::Existing(child_index),
             None => {
+                // SAFETY: Even though the type is marked is uninit data, when
+                // crated this is filled with inited data, we just use it to
+                // remind us that a portion might be unitialized 
                 let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
                 let cmp = u8x16::splat(key_fragment)
                     .simd_lt(u8x16::from_array(keys))
@@ -1487,6 +1499,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
         let (keys, children) = self.initialized_portion();
+        // SAFETY: Convered by the containing function
         unsafe {
             (
                 keys.first().copied().unwrap_unchecked(),
@@ -1497,6 +1510,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
         let (keys, children) = self.initialized_portion();
+        // SAFETY: Convered by the containing function
         unsafe {
             (
                 keys.last().copied().unwrap_unchecked(),
@@ -1788,10 +1802,6 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     fn grow(&self) -> Self::GrownNode {
         let header = self.header.clone();
         let mut child_pointers = [None; 256];
-        // SAFETY: This iterator lives only for the lifetime of this function, which
-        // does not mutate the `InnerNode48` (guaranteed by reference).
-        // let iter = unsafe { InnerNode48Iter::new(self) };
-
         let initialized_child_pointers = self.initialized_child_pointers();
         for (key_fragment, idx) in self.child_indices.iter().enumerate() {
             if idx.is_empty() {
@@ -1880,12 +1890,16 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
                 .filter_map(|(key, idx)| {
                     (!idx.is_empty()).then_some((key as u8, usize::from(*idx)))
                 })
+                // SAFETY: By the construction of `Self` idx, must always
+                // be inbounds
                 .map(|(key, idx)| unsafe { (key, *child_pointers.get_unchecked(idx)) })
         }
     }
 
     #[cfg(feature = "nightly")]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
+        // SAFETY: Since `RestrictedNodeIndex` is 
+        // repr(u8) is safe to transmute it
         let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
         let empty = u8x64::splat(48);
         let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
@@ -1947,6 +1961,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     #[cfg(feature = "nightly")]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
+        // SAFETY: Since `RestrictedNodeIndex` is 
+        // repr(u8) is safe to transmute it
         let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
         let empty = u8x64::splat(48);
         let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
@@ -2016,11 +2032,15 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         let node_ref = node.as_mut_safe();
         for (idx, (key_fragment, child_pointer)) in self.iter().enumerate() {
             let child_pointer = child_pointer.deep_clone();
+            // SAFETY: This iterator is bound to have a maximum of
+            // 256 iterations, so its safe to unwrap the result
             node_ref.child_indices[usize::from(key_fragment)] =
                 unsafe { RestrictedNodeIndex::try_from(idx).unwrap_unchecked() };
 
             #[allow(unused_unsafe)]
             unsafe {
+                // SAFETY: This idx is in bounds, since the number
+                // of iterations is always <= 48 (i.e 0-47)
                 assume!(idx < node_ref.child_pointers.len());
             }
             node_ref.child_pointers[idx].write(child_pointer);
@@ -2178,6 +2198,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     #[cfg(feature = "nightly")]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
+        // SAFETY: Due to niche optimization Option<NonNull> has the same
+        // size as NonNull and NonNull has the same size as usize
+        // so it's safe to transmute
         let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
         let empty = usizex64::splat(0);
         let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
@@ -2209,6 +2232,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             assume!(key < self.child_pointers.len());
         }
 
+        // SAFETY: Convered by the containing function
         (key as u8, unsafe {
             self.child_pointers[key].unwrap_unchecked()
         })
@@ -2227,6 +2251,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     #[cfg(feature = "nightly")]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
+        // SAFETY: Due to niche optimization Option<NonNull> has the same
+        // size as NonNull and NonNull has the same size as usize
+        // so it's safe to transmute
         let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
         let empty = usizex64::splat(0);
         let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
@@ -2260,6 +2287,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             assume!(key < self.child_pointers.len());
         }
 
+        // SAFETY: Convered by the containing function
         (key as u8, unsafe {
             self.child_pointers[key].unwrap_unchecked()
         })
@@ -2318,6 +2346,8 @@ mod stable_iters {
                     continue;
                 }
                 let key = key as u8;
+                // SAFETY: This idx is in bounds, since the number
+                // of iterations is always <= 48 (i.e 0-47)
                 let child_pointer =
                     unsafe { *self.child_pointers.get_unchecked(usize::from(*idx)) };
                 return Some((key, child_pointer));
@@ -2335,6 +2365,8 @@ mod stable_iters {
                     continue;
                 }
                 let key = key as u8;
+                // SAFETY: This idx is in bounds, since the number
+                // of iterations is always <= 48 (i.e 0-47)
                 let child_pointer =
                     unsafe { *self.child_pointers.get_unchecked(usize::from(*idx)) };
                 return Some((key, child_pointer));

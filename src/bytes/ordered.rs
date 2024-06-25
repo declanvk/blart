@@ -31,7 +31,7 @@ use std::{
 ///
 /// [`Hash`] and [`Eq`] [documentation](https://doc.rust-lang.org/1.68.2/std/hash/trait.Hash.html#hash-and-eq)
 ///
-/// # Safety
+/// # SAFETY
 ///
 /// This trait is unsafe because implementing it implies that the
 /// [`Mapped<Self>`] type will implement [`OrderedBytes`], so the safety

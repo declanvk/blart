@@ -76,9 +76,8 @@ impl<const NUM_PREFIX_BYTES: usize> RawHeader<NUM_PREFIX_BYTES> {
     /// Left trim by `len`, copies the remaining data to the beging of the
     /// prefix
     ///
-    /// # Panics
-    ///
-    /// If `len` > length of the prefix
+    /// # PANICS
+    ///  - If `len` > length of the prefix
     #[inline(always)]
     fn ltrim_by(&mut self, len: usize) {
         self.prefix_len -= len as u32;
@@ -214,9 +213,8 @@ pub trait NodeHeader<const NUM_PREFIX_BYTES: usize>: Debug + Clone + PartialEq +
     /// Left trim by `len`, copies the remaining data to the beging of the
     /// prefix
     ///
-    /// # Panics
-    ///
-    /// If `len` > length of the prefix
+    /// # PANICS
+    ///  - If `len` > length of the prefix
     fn ltrim_by(&mut self, len: usize);
 
     /// Left trim by `len`, copies the remaining data to the beging of the
@@ -283,6 +281,8 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
     ) {
         self.0.prefix_len -= len as u32;
 
+        // SAFETY: Since have a mutable reference
+        // is safe to create a shared reference from it
         let leaf_key = unsafe { leaf_ptr.as_key_ref().as_bytes() };
 
         let begin = depth + len;
@@ -326,6 +326,9 @@ impl<const NUM_PREFIX_BYTES: usize> NodeHeader<NUM_PREFIX_BYTES>
             // function
             let (_, min_child) = node.min();
             let leaf_ptr = unsafe { minimum_unchecked(min_child) };
+
+            // SAFETY: Since have a shared reference
+            // is safe to create a shared reference from it
             let leaf = unsafe { leaf_ptr.as_ref() };
             let leaf = leaf.key_ref().as_bytes();
 
@@ -385,6 +388,9 @@ impl<const NUM_PREFIX_BYTES: usize, K1: Copy + Eq + Debug + Sized> NodeHeader<NU
             "FixedKeyHeader::ltrim_by_with_leaf should never be called"
         );
 
+        // SAFETY: By the definition of the FixedKeyHeader we know that the maximum
+        // key legnth is <= NUM_PREFIX_BYTES, so we will never have to reconstruct
+        // the key from a leaf, so it's safe to assume that this function is never called
         #[cfg(not(debug_assertions))]
         unsafe {
             std::hint::unreachable_unchecked()

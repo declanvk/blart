@@ -9,6 +9,8 @@ macro_rules! gen_add_childs {
         where
             N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
         {
+            // SAFETY: Since `Self` holds a mutable/shared reference
+            // is safe to create a shared reference from it
             let inner = unsafe { inner.as_ref() };
             // Given that the invariant of the algorithm is that
             // all nodes prior to the current one make part of
@@ -135,6 +137,8 @@ macro_rules! gen_iter {
                 inner: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>,
             ) -> bool {
                 self.size -= 1;
+                // SAFETY: Since `Self` holds a mutable/shared reference
+                // is safe to create a shared reference from it
                 let key = unsafe { inner.as_key_ref().as_bytes() };
 
                 // In this case we consumed more bytes than the
@@ -241,30 +245,40 @@ macro_rules! gen_iter {
     };
 }
 
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     Prefix,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     (&'a K, &'a V),
     as_key_value_ref
 );
+// SAFETY: Since we hold a mutable reference is safe to
+// create a mutable reference to the leaf
 gen_iter!(
     PrefixMut,
     &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     PrefixKeys,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     &'a K,
     as_key_ref
 );
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     PrefixValues,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     &'a V,
     as_value_ref
 );
+// SAFETY: Since we hold a mutable reference is safe to
+// create a mutable reference to the leaf
 gen_iter!(
     PrefixValuesMut,
     &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,

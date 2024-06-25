@@ -275,6 +275,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
                     // and the whole process should be already finished
                     assume!(key_bytes_used + mismatch.matched_bytes < key_bytes.len());
                 }
+                // SAFETY: We hold a mutable reference, so creating
+                // a mutable reference is safe
                 let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
 
@@ -288,7 +290,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
                 let mut new_n4 = InnerNode4::from_prefix(prefix, mismatch.matched_bytes);
 
                 unsafe {
-                    // write the old node and new leaf in order
+                    // SAFETY: This is a new node 4 so it's empty and we have
+                    // space for writing new children. We also check the order
+                    // of the keys before writing
                     if mismatch.prefix_byte < key_byte {
                         new_n4
                             .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
@@ -338,6 +342,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
                 new_key_bytes_used,
             } => {
                 let key_bytes = key.as_bytes();
+                // SAFETY: We hold a mutable reference, so creating a shared reference is safe
                 let leaf_bytes = unsafe { leaf_node_ptr.as_key_ref().as_bytes() };
 
                 #[allow(unused_unsafe)]
@@ -367,6 +372,9 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
                 let new_leaf_node_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
 
                 unsafe {
+                    // SAFETY: This is a new node 4 so it's empty and we have
+                    // space for writing new children. We also check the order
+                    // of the keys before writing
                     if leaf_node_key_byte < new_leaf_node_key_byte {
                         new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
                         new_n4.write_child_unchecked(
@@ -473,18 +481,16 @@ pub enum InsertSearchResultType<
 /// Perform an iterative search for the insert point for the given key,
 /// starting at the given root node.
 ///
-/// # Safety
-///
+/// # SAFETY
 ///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
 ///    tree
 ///  - This function cannot be called concurrently to any reads or writes of the
 ///    `root` node or any child node of `root`. This function will arbitrarily
 ///    read or write to any child in the given tree.
 ///
-/// # Errors
-///
-/// If the given `key` is a prefix of an existing key, this function will return
-/// an error.
+/// # ERRORS
+///  - If the given `key` is a prefix of an existing key, this function will return
+///    an error.
 pub unsafe fn search_for_insert_point<K, V, Q, const NUM_PREFIX_BYTES: usize, H>(
     root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
     key: &Q,

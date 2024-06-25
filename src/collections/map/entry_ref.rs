@@ -29,6 +29,8 @@ where
 {
     /// Gets a reference to the value in the entry.
     pub fn get(&self) -> &V {
+        // SAFETY: This is safe because `Self` has an mutable reference
+        // so it's safe to generate a shared reference from this mutable reference
         unsafe { self.leaf_node_ptr.as_value_ref() }
     }
 
@@ -38,11 +40,15 @@ where
     /// the destruction of the Entry value, see
     /// [`OccupiedEntryRef::into_mut`].
     pub fn get_mut(&mut self) -> &mut V {
+        // SAFETY: This is safe because `Self` has an mutable reference
+        // so it's safe to generate a mutable reference from this mutable reference
         unsafe { self.leaf_node_ptr.as_value_mut() }
     }
 
     /// Sets the value of the entry, and returns the entry’s old value.
     pub fn insert(&mut self, value: V) -> V {
+        // SAFETY: This is safe because `Self` has an mutable reference
+        // so it's safe to generate a mutable reference from this mutable reference
         let leaf_value = unsafe { self.leaf_node_ptr.as_value_mut() };
         replace(leaf_value, value)
     }
@@ -53,11 +59,15 @@ where
     /// If you need multiple references to the [`OccupiedEntryRef`], see
     /// [`OccupiedEntryRef::get_mut`].
     pub fn into_mut(self) -> &'a mut V {
+        // SAFETY: This is safe because `Self` has an mutable reference
+        // so it's safe to generate a mutable reference from this mutable reference
         unsafe { self.leaf_node_ptr.as_value_mut() }
     }
 
     /// Gets a reference to the key in the entry.
     pub fn key(&self) -> &K {
+        // SAFETY: This is safe because `Self` has an mutable reference
+        // so it's safe to generate a shared reference from this mutable reference
         unsafe { self.leaf_node_ptr.as_key_ref() }
     }
 
@@ -104,6 +114,8 @@ where
     /// Sets the value of the entry with the [`VacantEntryRef`]’s key, and
     /// returns a mutable reference to it.
     pub fn insert(self, value: V) -> &'a mut V {
+        // SAFETY: This is safe because `Self` has an shared reference
+        // so it's safe to generate a mutable reference from this shared reference
         unsafe { self.insert_entry(value).leaf_node_ptr.as_value_mut() }
     }
 
@@ -178,6 +190,8 @@ where
     {
         match self {
             EntryRef::Occupied(entry) => {
+                // SAFETY: This is safe because `Self` has an shared reference
+                // so it's safe to generate a mutable reference from this shared reference
                 f(unsafe { entry.leaf_node_ptr.as_value_mut() });
                 EntryRef::Occupied(entry)
             },

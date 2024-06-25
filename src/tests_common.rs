@@ -40,7 +40,7 @@ use crate::{AsBytes, InsertPrefixError, InsertResult, NodeHeader, OpaqueNodePtr}
 /// [0, 0, 0, 0, 0, 0, 0, 0, 0, 255]
 /// ```
 ///
-/// # Panics
+/// # PANICS
 ///  - Panics if `max_len` is 0.
 pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
     assert!(max_len > 0, "the fixed key length must be greater than 0");
@@ -109,8 +109,7 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 /// [255, 255, 255]
 /// ```
 ///
-/// # Panics
-///
+/// # PANICS
 ///  - Panics if `max_len` is 0.
 ///  - Panics if `value_stops` is 0.
 pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
@@ -242,8 +241,7 @@ pub struct PrefixExpansion {
 /// [255, 255, 255, 255, 255]
 /// ```
 ///
-/// # Panics
-///
+/// # PANICS
 ///  - Panics if `base_key_len` is 0.
 ///  - Panics if `value_stops` is 0.
 ///  - Panics if any `PrefixExpansion` has `expanded_length` equal to 0.

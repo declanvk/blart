@@ -2,18 +2,10 @@ use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodeHeader, NodePtr, 
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
-/// # Safety
-///
+/// # SAFETY
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-///
-/// # Panics
-///
-///  - Panics if the tree at the root node is not well-formed. A well-formed
-///    tree:
-///    - Does not have any loops
-///    - All inner nodes have at least one child
 #[inline(always)]
 pub unsafe fn minimum_unchecked<
     K: AsBytes,
@@ -40,18 +32,10 @@ pub unsafe fn minimum_unchecked<
 
 /// Search for the leaf with the maximum key, by lexicographic ordering.
 ///
-/// # Safety
-///
+/// # SAFETY
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-///
-/// # Panics
-///
-///  - Panics if the tree at the root node is not well-formed. A well-formed
-///    tree:
-///    - Does not have any loops
-///    - All inner nodes have at least one child
 #[inline(always)]
 pub unsafe fn maximum_unchecked<
     K: AsBytes,

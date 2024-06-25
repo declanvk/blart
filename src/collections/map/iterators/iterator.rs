@@ -33,6 +33,8 @@ macro_rules! gen_iter {
             where
                 N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
             {
+                // SAFETY: Since `Self` holds a mutable/shared reference
+                // is safe to create a shared reference from it
                 unsafe {
                     inner
                         .as_ref()
@@ -46,6 +48,8 @@ macro_rules! gen_iter {
             where
                 N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
             {
+                // SAFETY: Since `Self` holds a mutable/shared reference
+                // is safe to create a shared reference from it
                 unsafe {
                     inner
                         .as_ref()
@@ -125,30 +129,40 @@ macro_rules! gen_iter {
     };
 }
 
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     TreeIterator,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     (&'a K, &'a V),
     as_key_value_ref
 );
+// SAFETY: Since we hold a mutable reference is safe to
+// create a mutable reference to the leaf
 gen_iter!(
     TreeIteratorMut,
     &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     Keys,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     &'a K,
     as_key_ref
 );
+// SAFETY: Since we hold a shared reference is safe to
+// create a shared reference to the leaf
 gen_iter!(
     Values,
     &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
     &'a V,
     as_value_ref
 );
+// SAFETY: Since we hold a mutable reference is safe to
+// create a mutable reference to the leaf
 gen_iter!(
     ValuesMut,
     &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
