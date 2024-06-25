@@ -79,10 +79,6 @@ harness = false
 name = "clone"
 harness = false
 
-[[bench]]
-name = "fixed_header"
-harness = false
-
 # [profile.release]
 # codegen-units = 1
 # lto = "fat"
