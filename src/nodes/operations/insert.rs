@@ -1,17 +1,13 @@
 use crate::{
     rust_nightly_apis::{assume, likely, unlikely},
-    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch, NodePtr, OpaqueNodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch,
+    NodePtr, OpaqueNodePtr,
 };
 use std::{borrow::Borrow, error::Error, fmt, marker::PhantomData, ops::ControlFlow};
 
 /// The results of a successful tree insert
 #[derive(Debug)]
-pub struct InsertResult<
-    'a,
-    K: AsBytes,
-    V,
-    const NUM_PREFIX_BYTES: usize,
-> {
+pub struct InsertResult<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     /// Pointer to the leaf
     pub leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
     /// The existing leaf referenced by the insert key, if present
@@ -56,11 +52,7 @@ impl Error for InsertPrefixError {}
 ///
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
-pub struct InsertPoint<
-    K: AsBytes,
-    V,
-    const NUM_PREFIX_BYTES: usize,
-> {
+pub struct InsertPoint<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     /// The grandparent node pointer and key byte that points to the parent node
     /// insert point.
     ///
@@ -87,21 +79,13 @@ pub struct InsertPoint<
     pub root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-    InsertPoint<K, V, NUM_PREFIX_BYTES>
-{
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> InsertPoint<K, V, NUM_PREFIX_BYTES> {
     pub fn apply<'a>(self, key: K, value: V) -> InsertResult<'a, K, V, NUM_PREFIX_BYTES>
     where
         K: AsBytes + 'a,
         V: 'a,
     {
-        fn write_new_child_in_existing_node<
-            'a,
-            K,
-            V,
-            const NUM_PREFIX_BYTES: usize,
-            
-        >(
+        fn write_new_child_in_existing_node<'a, K, V, const NUM_PREFIX_BYTES: usize>(
             inner_node_ptr: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
             new_leaf_node: LeafNode<K, V, NUM_PREFIX_BYTES>,
             key_bytes_used: usize,
@@ -113,14 +97,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
             K: AsBytes + 'a,
             V: 'a,
         {
-            fn write_new_child_in_existing_inner_node<
-                'a,
-                K,
-                V,
-                N,
-                const NUM_PREFIX_BYTES: usize,
-                
-            >(
+            fn write_new_child_in_existing_inner_node<'a, K, V, N, const NUM_PREFIX_BYTES: usize>(
                 inner_node_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
                 new_leaf_node: LeafNode<K, V, NUM_PREFIX_BYTES>,
                 key_bytes_used: usize,
@@ -187,23 +164,12 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
         }
 
         /// Write a new child node to an inner node at the specified key byte.
-        fn parent_write_child<
-            K: AsBytes,
-            V,
-            const NUM_PREFIX_BYTES: usize,
-            
-        >(
+        fn parent_write_child<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
             parent_inner_node: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
             key_byte: u8,
             new_child: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
         ) {
-            fn write_inner_node<
-                K: AsBytes,
-                V,
-                N,
-                const NUM_PREFIX_BYTES: usize,
-                
-            >(
+            fn write_inner_node<K: AsBytes, V, N, const NUM_PREFIX_BYTES: usize>(
                 parent_inner_node: NodePtr<NUM_PREFIX_BYTES, N>,
                 key_byte: u8,
                 new_child: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
@@ -430,11 +396,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
 }
 
 /// The type of insert
-pub enum InsertSearchResultType<
-    K: AsBytes,
-    V,
-    const NUM_PREFIX_BYTES: usize,
-> {
+pub enum InsertSearchResultType<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     /// An insert where an inner node had a differing prefix from the key.
     ///
     /// This insert type will create a new inner node with the portion of
@@ -494,7 +456,6 @@ pub unsafe fn search_for_insert_point<K, V, Q, const NUM_PREFIX_BYTES: usize>(
 where
     K: AsBytes + Borrow<Q>,
     Q: AsBytes + ?Sized,
-    
 {
     #[allow(clippy::type_complexity)]
     fn test_prefix_identify_insert<K, V, N, const NUM_PREFIX_BYTES: usize>(
@@ -511,7 +472,6 @@ where
     where
         N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
         K: AsBytes,
-        
     {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not
         // escape. Further, no other code mutates the node referenced, which is further

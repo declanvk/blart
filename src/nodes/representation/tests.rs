@@ -8,9 +8,9 @@ use sptr::Strict;
 // pointer to a type with large and small alignment and back without issues.
 #[test]
 fn leaf_node_alignment() {
-    let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _, 16>, 3>::new(
-        Box::into_raw(Box::new(LeafNode::new([], 3u8))),
-    )
+    let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _, 16>, 3>::new(Box::into_raw(Box::new(
+        LeafNode::new([], 3u8),
+    )))
     .unwrap()
     .cast::<OpaqueValue>();
     p0.set_data(0b001);
@@ -18,16 +18,16 @@ fn leaf_node_alignment() {
     #[repr(align(64))]
     struct LargeAlignment;
 
-    let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _, 16>, 3>::new(
-        Box::into_raw(Box::new(LeafNode::new(LargeAlignment, 2u16))),
-    )
+    let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _, 16>, 3>::new(Box::into_raw(Box::new(
+        LeafNode::new(LargeAlignment, 2u16),
+    )))
     .unwrap()
     .cast::<OpaqueValue>();
     p1.set_data(0b011);
 
-    let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment, 16>, 3>::new(
-        Box::into_raw(Box::new(LeafNode::new(1u64, LargeAlignment))),
-    )
+    let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment, 16>, 3>::new(Box::into_raw(Box::new(
+        LeafNode::new(1u64, LargeAlignment),
+    )))
     .unwrap()
     .cast::<OpaqueValue>();
     p2.set_data(0b111);
@@ -38,16 +38,13 @@ fn leaf_node_alignment() {
         // are required, even though the tests pass under normal execution otherwise (I
         // guess normal test execution doesn't care about leaked memory?)
         drop(Box::from_raw(
-            p0.cast::<LeafNode<[u8; 0], u8, 16>>()
-                .to_ptr(),
+            p0.cast::<LeafNode<[u8; 0], u8, 16>>().to_ptr(),
         ));
         drop(Box::from_raw(
-            p1.cast::<LeafNode<LargeAlignment, u16, 16>>()
-                .to_ptr(),
+            p1.cast::<LeafNode<LargeAlignment, u16, 16>>().to_ptr(),
         ));
         drop(Box::from_raw(
-            p2.cast::<LeafNode<u64, LargeAlignment, 16>>()
-                .to_ptr(),
+            p2.cast::<LeafNode<u64, LargeAlignment, 16>>().to_ptr(),
         ));
     }
 }
@@ -109,26 +106,11 @@ fn opaque_node_ptr_is_correct() {
 // }
 #[test]
 fn node_alignment() {
-    assert_eq!(
-        mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(),
-        8
-    );
-    assert_eq!(
-        mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(),
-        8
-    );
-    assert_eq!(
-        mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(),
-        8
-    );
-    assert_eq!(
-        mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(),
-        8
-    );
-    assert_eq!(
-        mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(),
-        8
-    );
+    assert_eq!(mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(), 8);
+    assert_eq!(mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(), 8);
+    assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(), 8);
     assert_eq!(mem::align_of::<Header<16>>(), 8);
 
     assert_eq!(
@@ -529,18 +511,12 @@ fn node256_lookup() {
 
 #[test]
 fn node256_write_child() {
-    inner_node_write_child_test(
-        InnerNode256::<_, _, 16>::empty(),
-        256,
-    )
+    inner_node_write_child_test(InnerNode256::<_, _, 16>::empty(), 256)
 }
 
 #[test]
 fn node256_remove_child() {
-    inner_node_remove_child_test(
-        InnerNode256::<_, _, 16>::empty(),
-        256,
-    )
+    inner_node_remove_child_test(InnerNode256::<_, _, 16>::empty(), 256)
 }
 
 #[test]

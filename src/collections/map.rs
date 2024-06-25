@@ -18,17 +18,14 @@ pub use entry_ref::*;
 pub use iterators::*;
 
 /// An ordered map based on an adaptive radix tree.
-pub struct RawTreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-{
+pub struct RawTreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
     pub(crate) root: Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-    RawTreeMap<K, V, NUM_PREFIX_BYTES>
-{
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> RawTreeMap<K, V, NUM_PREFIX_BYTES> {
     /// Create a new, empty [`crate::TreeMap`].
     ///
     /// This function will not pre-allocate anything.
@@ -1242,15 +1239,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-    RawTreeMap<K, V, NUM_PREFIX_BYTES>
-{
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> RawTreeMap<K, V, NUM_PREFIX_BYTES> {
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn try_entry(
-        &mut self,
-        key: K,
-    ) -> Result<Entry<K, V, NUM_PREFIX_BYTES>, InsertPrefixError>
+    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, NUM_PREFIX_BYTES>, InsertPrefixError>
     where
         K: AsBytes,
     {
@@ -1351,9 +1343,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Drop
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
-{
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Drop for RawTreeMap<K, V, NUM_PREFIX_BYTES> {
     fn drop(&mut self) {
         self.clear();
     }
@@ -1380,16 +1370,13 @@ impl<K, V, const NUM_PREFIX_BYTES: usize> Debug for RawTreeMap<K, V, NUM_PREFIX_
 where
     K: Debug + AsBytes,
     V: Debug,
-    
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Default
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
-{
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Default for RawTreeMap<K, V, NUM_PREFIX_BYTES> {
     fn default() -> Self {
         Self::new()
     }
@@ -1400,7 +1387,6 @@ impl<'a, K, V, const NUM_PREFIX_BYTES: usize> Extend<(&'a K, &'a V)>
 where
     K: Copy + NoPrefixesBytes,
     V: Copy,
-    
 {
     fn extend<T: IntoIterator<Item = (&'a K, &'a V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1409,11 +1395,9 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Extend<(K, V)>
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Extend<(K, V)> for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
-    
 {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1426,7 +1410,6 @@ impl<K, V, const NUM_PREFIX_BYTES: usize, const N: usize> From<[(K, V); N]>
     for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
-    
 {
     fn from(arr: [(K, V); N]) -> Self {
         let mut map = RawTreeMap::new();
@@ -1441,7 +1424,6 @@ impl<K, V, const NUM_PREFIX_BYTES: usize> FromIterator<(K, V)>
     for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
-    
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let mut map = RawTreeMap::new();
@@ -1469,7 +1451,6 @@ impl<Q, K, V, const NUM_PREFIX_BYTES: usize> Index<&Q> for RawTreeMap<K, V, NUM_
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
-    
 {
     type Output = V;
 
@@ -1515,7 +1496,6 @@ impl<K, V, const NUM_PREFIX_BYTES: usize> Ord for RawTreeMap<K, V, NUM_PREFIX_BY
 where
     K: Ord + AsBytes,
     V: Ord,
-    
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.iter().cmp(other.iter())
@@ -1526,7 +1506,6 @@ impl<K, V, const NUM_PREFIX_BYTES: usize> PartialOrd for RawTreeMap<K, V, NUM_PR
 where
     K: PartialOrd + AsBytes,
     V: PartialOrd,
-    
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.iter().partial_cmp(other.iter())
@@ -1537,7 +1516,6 @@ impl<K, V, const NUM_PREFIX_BYTES: usize> Eq for RawTreeMap<K, V, NUM_PREFIX_BYT
 where
     K: Eq + AsBytes,
     V: Eq,
-    
 {
 }
 
@@ -1545,7 +1523,6 @@ impl<K, V, const NUM_PREFIX_BYTES: usize> PartialEq for RawTreeMap<K, V, NUM_PRE
 where
     K: PartialEq + AsBytes,
     V: PartialEq,
-    
 {
     fn eq(&self, other: &Self) -> bool {
         self.iter().eq(other.iter()) && self.num_entries == other.num_entries
@@ -1559,7 +1536,6 @@ unsafe impl<K, V, const NUM_PREFIX_BYTES: usize> Send for RawTreeMap<K, V, NUM_P
 where
     K: Send + AsBytes,
     V: Send,
-    
 {
 }
 
@@ -1570,7 +1546,6 @@ unsafe impl<K, V, const NUM_PREFIX_BYTES: usize> Sync for RawTreeMap<K, V, NUM_P
 where
     K: Sync + AsBytes,
     V: Sync,
-    
 {
 }
 

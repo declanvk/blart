@@ -1,14 +1,11 @@
 use std::{borrow::Borrow, mem::replace};
 
-use crate::{
-    AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap,
-};
+use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap};
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
 pub struct OccupiedEntryRef<'a, K, V, const NUM_PREFIX_BYTES: usize>
 where
     K: AsBytes,
-    
 {
     pub(crate) leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
 
@@ -18,14 +15,12 @@ where
     pub(crate) grandparent_ptr_and_parent_key_byte:
         Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
     /// Used for the removal
-    pub(crate) parent_ptr_and_child_key_byte:
-        Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
+    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
 }
 
 impl<'a, K, V, const NUM_PREFIX_BYTES: usize> OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES>
 where
     K: AsBytes,
-    
 {
     /// Gets a reference to the value in the entry.
     pub fn get(&self) -> &V {
@@ -97,7 +92,6 @@ pub struct VacantEntryRef<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
-    
 {
     pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     pub(crate) key: &'b Q,
@@ -109,7 +103,6 @@ impl<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
-    
 {
     /// Sets the value of the entry with the [`VacantEntryRef`]’s key, and
     /// returns a mutable reference to it.
@@ -165,7 +158,6 @@ pub enum EntryRef<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
-    
 {
     /// A view into an occupied entry in a HashMap. It is part of the
     /// [`EntryRef`] enum.
@@ -175,12 +167,10 @@ where
     Vacant(VacantEntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>),
 }
 
-impl<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize>
-    EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>
+impl<'a, 'b, K, V, Q, const NUM_PREFIX_BYTES: usize> EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
-    
 {
     /// Provides in-place mutable access to an occupied entry before any
     /// potential inserts into the map.
@@ -305,10 +295,7 @@ where
 
     /// Similar to [`EntryRef::or_insert_with_key`] but yields an
     /// [`OccupiedEntryRef`]
-    pub fn or_insert_with_key_entry<F>(
-        self,
-        f: F,
-    ) -> OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES>
+    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntryRef<'a, K, V, NUM_PREFIX_BYTES>
     where
         F: FnOnce(&Q) -> V,
     {

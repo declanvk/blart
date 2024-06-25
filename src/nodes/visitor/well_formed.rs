@@ -30,12 +30,7 @@ impl<const LEN: usize> PartialEq<[u8; LEN]> for KeyPrefix {
 
 /// An issue with the well-formed-ness of the tree. See the documentation on
 /// [`WellFormedChecker`] for more context.
-pub enum MalformedTreeError<
-    K: AsBytes,
-    V,
-    const NUM_PREFIX_BYTES: usize,
-    
-> {
+pub enum MalformedTreeError<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     /// A loop was observed between nodes
     LoopFound {
         /// The node that was observed more than once while traversing the tree
@@ -69,11 +64,9 @@ pub enum MalformedTreeError<
     EmptyTreeWithLen,
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> fmt::Debug
-    for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const NUM_PREFIX_BYTES: usize> fmt::Debug for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
 where
     K: AsBytes,
-    
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -114,7 +107,6 @@ impl<K, V, const NUM_PREFIX_BYTES: usize> fmt::Display
     for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
 where
     K: AsBytes,
-    
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -282,12 +274,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Error
 /// "well-formed" (by the definition given above) if the checker returns
 /// `Ok(())`.
 #[derive(Debug)]
-pub struct WellFormedChecker<
-    K: AsBytes,
-    V,
-    const NUM_PREFIX_BYTES: usize,
-    
-> {
+pub struct WellFormedChecker<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     current_key_prefix: Vec<u8>,
     seen_nodes: HashMap<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, KeyPrefix>,
 }
@@ -295,7 +282,6 @@ pub struct WellFormedChecker<
 impl<K, V, const NUM_PREFIX_BYTES: usize> WellFormedChecker<K, V, NUM_PREFIX_BYTES>
 where
     K: AsBytes + Clone,
-    
 {
     /// Traverse the given tree and check that it is well-formed. Returns the
     /// number of nodes in the tree.
@@ -417,7 +403,6 @@ impl<K, V, const NUM_PREFIX_BYTES: usize> Visitor<K, V, NUM_PREFIX_BYTES>
     for WellFormedChecker<K, V, NUM_PREFIX_BYTES>
 where
     K: Clone + AsBytes,
-    
 {
     type Output = Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES>>;
 
@@ -443,10 +428,7 @@ where
         self.visit_inner_node(t)
     }
 
-    fn visit_node256(
-        &mut self,
-        t: &crate::InnerNode256<K, V, NUM_PREFIX_BYTES>,
-    ) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
@@ -484,8 +466,7 @@ mod tests {
             .enumerate()
             .map(|(idx, key)| (key, idx));
 
-        let root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
-            setup_tree_from_entries(keys);
+        let root: OpaqueNodePtr<Box<[u8]>, usize, 16> = setup_tree_from_entries(keys);
         // 4  * 3 * 2
         assert_eq!(num_leaves, 24);
 
@@ -513,12 +494,9 @@ mod tests {
         // have to allocate in this one because miri didn't like us using `&mut _` to
         // make loops
 
-        let l1: LeafNode<Box<[u8]>, i32, 16> =
-            LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let l2: LeafNode<Box<[u8]>, i32, 16> =
-            LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let l3: LeafNode<Box<[u8]>, i32, 16> =
-            LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let l1: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let l2: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let l3: LeafNode<Box<[u8]>, i32, 16> = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
 
         let l1_ptr = NodePtr::allocate_node_ptr(l1);
         let l2_ptr = NodePtr::allocate_node_ptr(l2);

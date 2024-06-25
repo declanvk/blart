@@ -7,12 +7,7 @@ use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePt
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn minimum_unchecked<
-    K: AsBytes,
-    V,
-    const NUM_PREFIX_BYTES: usize,
-    
->(
+pub unsafe fn minimum_unchecked<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
     root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
 ) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>> {
     let mut current_node = root;
@@ -37,12 +32,7 @@ pub unsafe fn minimum_unchecked<
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn maximum_unchecked<
-    K: AsBytes,
-    V,
-    const NUM_PREFIX_BYTES: usize,
-    
->(
+pub unsafe fn maximum_unchecked<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
     root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
 ) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>> {
     let mut current_node = root;

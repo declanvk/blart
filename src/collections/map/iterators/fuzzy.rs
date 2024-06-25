@@ -1,6 +1,7 @@
 use crate::{
     rust_nightly_apis::{assume, box_new_uninit_slice},
-    AsBytes, ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode, OpaqueNodePtr, RawTreeMap,
+    AsBytes, ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
+    OpaqueNodePtr, RawTreeMap,
 };
 use std::{iter::FusedIterator, mem::MaybeUninit};
 
@@ -188,13 +189,8 @@ trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     }
 }
 
-impl<
-        K: AsBytes,
-        V,
-        const NUM_PREFIX_BYTES: usize,
-        const SIZE: usize,
-    > FuzzySearch<K, V, NUM_PREFIX_BYTES>
-    for InnerNodeCompressed<K, V, NUM_PREFIX_BYTES, SIZE>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, const SIZE: usize>
+    FuzzySearch<K, V, NUM_PREFIX_BYTES> for InnerNodeCompressed<K, V, NUM_PREFIX_BYTES, SIZE>
 where
     Self: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
 {
@@ -223,8 +219,8 @@ where
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-    FuzzySearch<K, V, NUM_PREFIX_BYTES> for InnerNode48<K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_BYTES>
+    for InnerNode48<K, V, NUM_PREFIX_BYTES>
 {
     fn fuzzy_search(
         &self,
@@ -251,8 +247,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-    FuzzySearch<K, V, NUM_PREFIX_BYTES> for InnerNode256<K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_BYTES>
+    for InnerNode256<K, V, NUM_PREFIX_BYTES>
 {
     fn fuzzy_search(
         &self,
@@ -279,8 +275,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-    FuzzySearch<K, V, NUM_PREFIX_BYTES> for LeafNode<K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_BYTES>
+    for LeafNode<K, V, NUM_PREFIX_BYTES>
 {
     fn fuzzy_search(
         &self,
@@ -312,13 +308,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s with a within a specifix edit distance
-        pub struct $name<
-            'a,
-            'b,
-            K: AsBytes,
-            V,
-            const NUM_PREFIX_BYTES: usize,
-        > {
+        pub struct $name<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
             nodes_to_search: Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
             old_row: Box<[MaybeUninit<usize>]>,
             new_row: Box<[MaybeUninit<usize>]>,
@@ -330,13 +320,8 @@ macro_rules! gen_iter {
             _tree: $tree,
         }
 
-        impl<
-                'a,
-                'b,
-                K: AsBytes,
-                V,
-                const NUM_PREFIX_BYTES: usize,
-            > $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+            $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
         {
             pub(crate) fn new(tree: $tree, key: &'b [u8], max_edit_dist: usize) -> Self {
                 let mut arena = StackArena::new(key.len() + 1);
@@ -362,13 +347,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<
-                'a,
-                'b,
-                K: AsBytes,
-                V,
-                const NUM_PREFIX_BYTES: usize,            
-            > Iterator for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Iterator
+            for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
         {
             type Item = $ret;
 
@@ -462,13 +442,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<
-                'a,
-                'b,
-                K: AsBytes,
-                V,
-                const NUM_PREFIX_BYTES: usize,
-            > FusedIterator for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FusedIterator
+            for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
         {
         }
     };
