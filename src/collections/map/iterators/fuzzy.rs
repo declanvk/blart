@@ -32,7 +32,7 @@ impl StackArena {
     }
 
     /// SAFETY: This function should only be called after [`Self::push`]
-    /// 
+    ///
     /// SAFETY: The passed `buffer` must have the exact same
     /// size as the `n` from `new`
     pub fn pop_copy<'a, 'b>(
@@ -43,7 +43,7 @@ impl StackArena {
         unsafe {
             // SAFETY: Every time we call `Self::push` the
             // vector is extended by `self.n`, so it's safe to
-            // assume this 
+            // assume this
             assume!(self.data.len() % self.n == 0);
         }
 
@@ -88,7 +88,7 @@ impl StackArena {
 }
 
 /// SAFETY: `old` and `new` must have the same length, and be >= 1
-/// 
+///
 /// SAFETY: `key` length + 1 == `new` or `old` length
 #[inline(always)]
 fn edit_dist(
@@ -304,7 +304,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             unsafe { swap(old_row, new_row) };
         }
         // SAFETY: By the construction `old_row` always has at least one
-        // element 
+        // element
         let edit_dist = unsafe { *old_row.last().unwrap_unchecked() };
 
         edit_dist <= max_edit_dist

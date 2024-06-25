@@ -68,7 +68,7 @@ impl NodeType {
     }
 
     /// Converts a u8 value to a [`NodeType`]
-    /// 
+    ///
     /// # SAFETY
     ///  - `src` must be a valid variant from the enum
     pub const unsafe fn from_u8(src: u8) -> NodeType {
@@ -269,8 +269,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         Some(header_ptr)
     }
 
-    /// Get a mutable reference to the header, this doesn't check if the pointer is
-    /// to an inner node.
+    /// Get a mutable reference to the header, this doesn't check if the pointer
+    /// is to an inner node.
     ///
     /// # SAFETY
     ///  - The pointer must be to an inner node
@@ -777,8 +777,8 @@ pub trait InnerNode<const NUM_PREFIX_BYTES: usize>: Node<NUM_PREFIX_BYTES> + Siz
     ///
     /// # SAFETY
     ///  - The iterator type does not carry any lifetime, so the caller of this
-    ///    function must enforce that the lifetime of the iterator does not overlap
-    ///    with any mutating operations on the node.
+    ///    function must enforce that the lifetime of the iterator does not
+    ///    overlap with any mutating operations on the node.
     fn iter(&self) -> Self::Iter<'_>;
 
     /// Compares the compressed path of a node with the key and returns the
@@ -1008,8 +1008,8 @@ impl<
     /// Writes a child to the node by check the order of insertion
     ///
     /// # PANICS
-    ///  - This functions assumes that the write is gonna be inbound
-    ///    (i.e the check for a full node is done previously to the call of this
+    ///  - This functions assumes that the write is gonna be inbound (i.e the
+    ///    check for a full node is done previously to the call of this
     ///    function)
     fn write_child_inner(
         &mut self,
@@ -1060,9 +1060,8 @@ impl<
     /// Writes a child to the node without bounds check or order
     ///
     /// # SAFETY
-    /// - This functions assumes that the write is gonna be inbound
-    ///   (i.e the check for a full node is done previously to the call of this
-    ///   function)
+    /// - This functions assumes that the write is gonna be inbound (i.e the
+    ///   check for a full node is done previously to the call of this function)
     pub unsafe fn write_child_unchecked(
         &mut self,
         key_fragment: u8,
@@ -1076,8 +1075,8 @@ impl<
     /// Writes a child to the node without bounds check or order
     ///
     /// # SAFETY
-    ///  - This functions assumes that the write is gonna be inbound
-    ///    (i.e the check for a full node is done previously to the call of this
+    ///  - This functions assumes that the write is gonna be inbound (i.e the
+    ///    check for a full node is done previously to the call of this
     ///    function)
     unsafe fn write_child_at(
         &mut self,
@@ -1370,7 +1369,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         // SAFETY: Even though the type is marked is uninit data, when
         // crated this is filled with inited data, we just use it to
-        // remind us that a portion might be unitialized 
+        // remind us that a portion might be unitialized
         let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
         let cmp = u8x16::splat(key_fragment)
             .simd_eq(u8x16::from_array(keys))
@@ -1403,7 +1402,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
             None => {
                 // SAFETY: Even though the type is marked is uninit data, when
                 // crated this is filled with inited data, we just use it to
-                // remind us that a portion might be unitialized 
+                // remind us that a portion might be unitialized
                 let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
                 let cmp = u8x16::splat(key_fragment)
                     .simd_lt(u8x16::from_array(keys))
@@ -1898,7 +1897,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     #[cfg(feature = "nightly")]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
-        // SAFETY: Since `RestrictedNodeIndex` is 
+        // SAFETY: Since `RestrictedNodeIndex` is
         // repr(u8) is safe to transmute it
         let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
         let empty = u8x64::splat(48);
@@ -1961,7 +1960,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     #[cfg(feature = "nightly")]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>) {
-        // SAFETY: Since `RestrictedNodeIndex` is 
+        // SAFETY: Since `RestrictedNodeIndex` is
         // repr(u8) is safe to transmute it
         let child_indices: &[u8; 256] = unsafe { std::mem::transmute(&self.child_indices) };
         let empty = u8x64::splat(48);
