@@ -550,8 +550,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     where
         K: AsBytes,
     {
-        // SAFETY: The root is sure to not be `None`, since the we somehow got a `DeletePoint`.
-        // So the caller must have checked this
+        // SAFETY: The root is sure to not be `None`, since the we somehow got a
+        // `DeletePoint`. So the caller must have checked this
         let delete_result = delete_point.apply(unsafe { self.root.unwrap_unchecked() });
 
         self.root = delete_result.new_root;

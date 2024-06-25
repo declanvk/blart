@@ -489,8 +489,8 @@ pub enum InsertSearchResultType<
 ///    read or write to any child in the given tree.
 ///
 /// # ERRORS
-///  - If the given `key` is a prefix of an existing key, this function will return
-///    an error.
+///  - If the given `key` is a prefix of an existing key, this function will
+///    return an error.
 pub unsafe fn search_for_insert_point<K, V, Q, const NUM_PREFIX_BYTES: usize, H>(
     root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
     key: &Q,

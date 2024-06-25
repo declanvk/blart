@@ -163,9 +163,9 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// the new pointer.
     ///
     /// # SAFETY
-    ///  - The alignment of the new type must be equal to the 
-    ///    alignment of the existing type. This is because the number
-    ///    of data-carrying bits could be different.
+    ///  - The alignment of the new type must be equal to the alignment of the
+    ///    existing type. This is because the number of data-carrying bits could
+    ///    be different.
     pub fn cast<Q>(self) -> TaggedPointer<Q, MIN_BITS> {
         let data = self.to_data();
         let raw_ptr = self.to_ptr();

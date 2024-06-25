@@ -390,7 +390,8 @@ impl<const NUM_PREFIX_BYTES: usize, K1: Copy + Eq + Debug + Sized> NodeHeader<NU
 
         // SAFETY: By the definition of the FixedKeyHeader we know that the maximum
         // key legnth is <= NUM_PREFIX_BYTES, so we will never have to reconstruct
-        // the key from a leaf, so it's safe to assume that this function is never called
+        // the key from a leaf, so it's safe to assume that this function is never
+        // called
         #[cfg(not(debug_assertions))]
         unsafe {
             std::hint::unreachable_unchecked()
