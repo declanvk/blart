@@ -6,7 +6,7 @@ mod well_formed;
 
 use crate::{
     AsBytes, ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48,
-    LeafNode, Node, NodeHeader, NodePtr, OpaqueNodePtr,
+    LeafNode, Node, NodePtr, OpaqueNodePtr,
 };
 pub use pretty_printer::*;
 pub use tree_stats::*;
@@ -14,14 +14,14 @@ pub use well_formed::*;
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.
-pub trait Visitable<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> {
+pub trait Visitable<K: AsBytes, T, const NUM_PREFIX_BYTES: usize> {
     /// This function provides the default traversal behavior for the
     /// implementing type.
     ///
     /// The implementation should call `visit_with(visitor)` for all relevant
     /// sub-fields of the type. If there are no relevant sub-fields, it should
     /// just produce the default output.
-    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(&self, visitor: &mut V)
+    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(&self, visitor: &mut V)
         -> V::Output;
 
     /// This function will traverse the implementing type and execute any
@@ -32,10 +32,10 @@ pub trait Visitable<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<
     /// for [`InnerNode4`] looks like:
     ///
     /// ```rust,compile_fail
-    /// impl<K, T, H> Visitable<K, T, NUM_PREFIX_BYTES, H> for InnerNode4<K, T, H> {
+    /// impl<K, T> Visitable<K, T, NUM_PREFIX_BYTES> for InnerNode4<K, T> {
     ///     ...
     ///  
-    ///     fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(&self, visitor: &mut V) -> V::Output {
+    ///     fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(&self, visitor: &mut V) -> V::Output {
     ///         visitor.visit_node4(self)
     ///     }
     /// }
@@ -43,15 +43,15 @@ pub trait Visitable<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<
     ///
     /// The call to `visitor.visit_node4(self)` allows the visitor to execute
     /// specific handling logic.
-    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(&self, visitor: &mut V) -> V::Output {
+    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(&self, visitor: &mut V) -> V::Output {
         self.super_visit_with(visitor)
     }
 }
 
-impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    Visitable<K, T, NUM_PREFIX_BYTES, H> for OpaqueNodePtr<K, T, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize>
+    Visitable<K, T, NUM_PREFIX_BYTES> for OpaqueNodePtr<K, T, NUM_PREFIX_BYTES>
 {
-    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(
+    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(
         &self,
         visitor: &mut V,
     ) -> V::Output {
@@ -69,11 +69,10 @@ impl<
         K: AsBytes,
         T,
         const NUM_PREFIX_BYTES: usize,
-        H: NodeHeader<NUM_PREFIX_BYTES>,
-        N: Node<NUM_PREFIX_BYTES> + Visitable<K, T, NUM_PREFIX_BYTES, H>,
-    > Visitable<K, T, NUM_PREFIX_BYTES, H> for NodePtr<NUM_PREFIX_BYTES, N>
+        N: Node<NUM_PREFIX_BYTES> + Visitable<K, T, NUM_PREFIX_BYTES>,
+    > Visitable<K, T, NUM_PREFIX_BYTES> for NodePtr<NUM_PREFIX_BYTES, N>
 {
-    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(
+    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(
         &self,
         visitor: &mut V,
     ) -> V::Output {
@@ -82,84 +81,84 @@ impl<
     }
 }
 
-impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    Visitable<K, T, NUM_PREFIX_BYTES, H> for InnerNode4<K, T, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize>
+    Visitable<K, T, NUM_PREFIX_BYTES> for InnerNode4<K, T, NUM_PREFIX_BYTES>
 {
-    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(
+    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(
         &self,
         visitor: &mut V,
     ) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
 
-    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(&self, visitor: &mut V) -> V::Output {
+    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_node4(self)
     }
 }
 
-impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    Visitable<K, T, NUM_PREFIX_BYTES, H> for InnerNode16<K, T, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize>
+    Visitable<K, T, NUM_PREFIX_BYTES> for InnerNode16<K, T, NUM_PREFIX_BYTES>
 {
-    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(
+    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(
         &self,
         visitor: &mut V,
     ) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
 
-    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(&self, visitor: &mut V) -> V::Output {
+    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_node16(self)
     }
 }
 
-impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    Visitable<K, T, NUM_PREFIX_BYTES, H> for InnerNode48<K, T, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize>
+    Visitable<K, T, NUM_PREFIX_BYTES> for InnerNode48<K, T, NUM_PREFIX_BYTES>
 {
-    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(
+    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(
         &self,
         visitor: &mut V,
     ) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
 
-    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(&self, visitor: &mut V) -> V::Output {
+    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_node48(self)
     }
 }
 
-impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    Visitable<K, T, NUM_PREFIX_BYTES, H> for InnerNode256<K, T, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize>
+    Visitable<K, T, NUM_PREFIX_BYTES> for InnerNode256<K, T, NUM_PREFIX_BYTES>
 {
-    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(
+    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(
         &self,
         visitor: &mut V,
     ) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
 
-    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(&self, visitor: &mut V) -> V::Output {
+    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_node256(self)
     }
 }
 
-impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    Visitable<K, T, NUM_PREFIX_BYTES, H> for LeafNode<K, T, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, T, const NUM_PREFIX_BYTES: usize>
+    Visitable<K, T, NUM_PREFIX_BYTES> for LeafNode<K, T, NUM_PREFIX_BYTES>
 {
-    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(
+    fn super_visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(
         &self,
         visitor: &mut V,
     ) -> V::Output {
         visitor.default_output()
     }
 
-    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES, H>>(&self, visitor: &mut V) -> V::Output {
+    fn visit_with<V: Visitor<K, T, NUM_PREFIX_BYTES>>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_leaf(self)
     }
 }
 
 /// The `Visitor` trait allows creating new operations on the radix tree by
 /// overriding specific handling methods for each of the node types.
-pub trait Visitor<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>:
+pub trait Visitor<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>:
     Sized
 {
     /// The type of value that the visitor produces.
@@ -172,27 +171,27 @@ pub trait Visitor<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NU
     fn combine_output(&self, o1: Self::Output, o2: Self::Output) -> Self::Output;
 
     /// Visit a [`InnerNode4`].
-    fn visit_node4(&mut self, t: &InnerNode4<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node4(&mut self, t: &InnerNode4<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         t.super_visit_with(self)
     }
 
     /// Visit a [`InnerNode16`].
-    fn visit_node16(&mut self, t: &InnerNode16<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node16(&mut self, t: &InnerNode16<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         t.super_visit_with(self)
     }
 
     /// Visit a [`InnerNode48`].
-    fn visit_node48(&mut self, t: &InnerNode48<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node48(&mut self, t: &InnerNode48<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         t.super_visit_with(self)
     }
 
     /// Visit a [`InnerNode256`].
-    fn visit_node256(&mut self, t: &InnerNode256<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node256(&mut self, t: &InnerNode256<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         t.super_visit_with(self)
     }
 
     /// Visit a [`LeafNode`].
-    fn visit_leaf(&mut self, t: &LeafNode<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &LeafNode<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         t.super_visit_with(self)
     }
 }
@@ -201,10 +200,9 @@ fn combine_inner_node_child_output<
     K: AsBytes,
     T,
     const NUM_PREFIX_BYTES: usize,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
-    V: Visitor<K, T, NUM_PREFIX_BYTES, H>,
+    V: Visitor<K, T, NUM_PREFIX_BYTES>,
 >(
-    mut iter: impl Iterator<Item = (u8, OpaqueNodePtr<K, T, NUM_PREFIX_BYTES, H>)>,
+    mut iter: impl Iterator<Item = (u8, OpaqueNodePtr<K, T, NUM_PREFIX_BYTES>)>,
     visitor: &mut V,
 ) -> V::Output {
     if let Some((_, first)) = iter.next() {

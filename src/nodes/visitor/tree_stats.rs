@@ -2,7 +2,7 @@ use std::ops::Add;
 
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, NodeHeader,
+    AsBytes, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode,
     RawTreeMap,
 };
 
@@ -22,9 +22,9 @@ impl TreeStatsCollector {
         K: AsBytes,
         V,
         const NUM_PREFIX_BYTES: usize,
-        H: NodeHeader<NUM_PREFIX_BYTES>,
+        
     >(
-        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     ) -> Option<TreeStats> {
         let mut collector = TreeStatsCollector;
 
@@ -40,14 +40,14 @@ impl TreeStatsCollector {
         K: AsBytes,
         V,
         const NUM_PREFIX_BYTES: usize,
-        H: NodeHeader<NUM_PREFIX_BYTES>,
+        
     >(
-        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     ) -> usize {
         struct LeafNodeCounter;
 
-        impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            Visitor<K, V, NUM_PREFIX_BYTES, H> for LeafNodeCounter
+        impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+            Visitor<K, V, NUM_PREFIX_BYTES> for LeafNodeCounter
         {
             type Output = usize;
 
@@ -61,7 +61,7 @@ impl TreeStatsCollector {
 
             fn visit_leaf(
                 &mut self,
-                _t: &crate::LeafNode<K, V, NUM_PREFIX_BYTES, H>,
+                _t: &crate::LeafNode<K, V, NUM_PREFIX_BYTES>,
             ) -> Self::Output {
                 1
             }
@@ -109,13 +109,13 @@ impl InnerNodeStats {
         K: AsBytes,
         V,
         const NUM_PREFIX_BYTES: usize,
-        H: NodeHeader<NUM_PREFIX_BYTES>,
+        
         N,
     >(
         &mut self,
         t: &N,
     ) where
-        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
+        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
     {
         self.count += 1;
         self.total_slots += N::TYPE.upper_capacity();
@@ -249,11 +249,11 @@ impl TreeStats {
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> Visitor<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Visitor<K, V, NUM_PREFIX_BYTES>
     for TreeStatsCollector
 where
     K: AsBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     type Output = TreeStats;
 
@@ -272,35 +272,35 @@ where
         }
     }
 
-    fn visit_node4(&mut self, t: &InnerNode4<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node4(&mut self, t: &InnerNode4<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node4.aggregate_data(t);
         output.tree.aggregate_data(t);
         output
     }
 
-    fn visit_node16(&mut self, t: &InnerNode16<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node16(&mut self, t: &InnerNode16<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node16.aggregate_data(t);
         output.tree.aggregate_data(t);
         output
     }
 
-    fn visit_node48(&mut self, t: &InnerNode48<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node48(&mut self, t: &InnerNode48<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node48.aggregate_data(t);
         output.tree.aggregate_data(t);
         output
     }
 
-    fn visit_node256(&mut self, t: &InnerNode256<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node256(&mut self, t: &InnerNode256<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node256.aggregate_data(t);
         output.tree.aggregate_data(t);
         output
     }
 
-    fn visit_leaf(&mut self, t: &LeafNode<K, V, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &LeafNode<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
         let mut output = TreeStats::default();
         output.leaf.count += 1;
         output.leaf.sum_key_bytes += t.key_ref().as_bytes().len();

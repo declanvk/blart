@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodeHeader, NodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr,
     OpaqueNodePtr,
 };
 
@@ -11,14 +11,14 @@ use crate::{
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-pub unsafe fn search_unchecked<Q, K, V, const NUM_PREFIX_BYTES: usize, H>(
-    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
+pub unsafe fn search_unchecked<Q, K, V, const NUM_PREFIX_BYTES: usize>(
+    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
     key: &Q,
-) -> Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>>>
+) -> Option<NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     let mut current_node = root;
     let mut current_depth = 0;
@@ -69,16 +69,16 @@ where
 /// # Safety
 ///  - No other access or mutation to the `inner_ptr` Node can happen while this
 ///    function runs.
-pub(crate) unsafe fn check_prefix_lookup_child<Q, K, V, N, const NUM_PREFIX_BYTES: usize, H>(
+pub(crate) unsafe fn check_prefix_lookup_child<Q, K, V, N, const NUM_PREFIX_BYTES: usize>(
     inner_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
     key: &Q,
     current_depth: &mut usize,
-) -> Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>
+) -> Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>
 where
-    N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
+    N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     // SAFETY: The lifetime produced from this is bounded to this scope and does not
     // escape. Further, no other code mutates the node referenced, which is further

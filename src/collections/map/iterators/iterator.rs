@@ -1,4 +1,4 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodeHeader, NodePtr, OpaqueNodePtr, RawTreeMap};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, RawTreeMap};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_iter {
@@ -9,15 +9,14 @@ macro_rules! gen_iter {
             K: AsBytes,
             V,
             const NUM_PREFIX_BYTES: usize,
-            H: NodeHeader<NUM_PREFIX_BYTES>,
         > {
-            nodes: VecDeque<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
+            nodes: VecDeque<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
             size: usize,
             _tree: $tree,
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+            $name<'a, K, V, NUM_PREFIX_BYTES>
         {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
@@ -31,7 +30,7 @@ macro_rules! gen_iter {
 
             fn push_back_rev_iter<N>(&mut self, inner: NodePtr<NUM_PREFIX_BYTES, N>)
             where
-                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
+                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
             {
                 // SAFETY: Since `Self` holds a mutable/shared reference
                 // is safe to create a shared reference from it
@@ -46,7 +45,7 @@ macro_rules! gen_iter {
 
             fn push_front<N>(&mut self, inner: NodePtr<NUM_PREFIX_BYTES, N>)
             where
-                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
+                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
             {
                 // SAFETY: Since `Self` holds a mutable/shared reference
                 // is safe to create a shared reference from it
@@ -59,8 +58,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            Iterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+            Iterator for $name<'a, K, V, NUM_PREFIX_BYTES>
         {
             type Item = $ret;
 
@@ -93,8 +92,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            DoubleEndedIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+            DoubleEndedIterator for $name<'a, K, V, NUM_PREFIX_BYTES>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
                 while let Some(node) = self.nodes.pop_front() {
@@ -114,13 +113,13 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            FusedIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+            FusedIterator for $name<'a, K, V, NUM_PREFIX_BYTES>
         {
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-            ExactSizeIterator for $name<'a, K, V, NUM_PREFIX_BYTES, H>
+        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+            ExactSizeIterator for $name<'a, K, V, NUM_PREFIX_BYTES>
         {
             fn len(&self) -> usize {
                 self.size
@@ -133,7 +132,7 @@ macro_rules! gen_iter {
 // create a shared reference to the leaf
 gen_iter!(
     TreeIterator,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     (&'a K, &'a V),
     as_key_value_ref
 );
@@ -141,7 +140,7 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     TreeIteratorMut,
-    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
@@ -149,7 +148,7 @@ gen_iter!(
 // create a shared reference to the leaf
 gen_iter!(
     Keys,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a K,
     as_key_ref
 );
@@ -157,7 +156,7 @@ gen_iter!(
 // create a shared reference to the leaf
 gen_iter!(
     Values,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a V,
     as_value_ref
 );
@@ -165,7 +164,7 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     ValuesMut,
-    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a mut V,
     as_value_mut
 );

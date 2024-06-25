@@ -1,6 +1,6 @@
 //! Trie node lookup and manipulation
 
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodeHeader, NodePtr, OpaqueNodePtr};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr};
 
 mod insert;
 pub(crate) use insert::*;
@@ -25,21 +25,21 @@ pub unsafe fn deallocate_tree<
     K: AsBytes,
     V,
     const NUM_PREFIX_BYTES: usize,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 >(
-    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
+    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
 ) {
     fn deallocate_inner_node<
         K: AsBytes,
         V,
         N,
         const NUM_PREFIX_BYTES: usize,
-        H: NodeHeader<NUM_PREFIX_BYTES>,
+        
     >(
-        stack: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
+        stack: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
         inner_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
     ) where
-        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V, Header = H>,
+        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
     {
         {
             // SAFETY: The scope of this reference is bounded and we enforce that no

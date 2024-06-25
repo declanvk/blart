@@ -1,6 +1,6 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeHeader, NodeType, OpaqueNodePtr, RawTreeMap,
+    AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
 };
 use std::{
     fmt::Debug,
@@ -30,15 +30,15 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn print<K, V, const NUM_PREFIX_BYTES: usize, H>(
+    pub unsafe fn print<K, V, const NUM_PREFIX_BYTES: usize>(
         output: O,
-        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES, H>,
+        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where
         K: Debug + AsBytes,
         V: Debug,
-        H: NodeHeader<NUM_PREFIX_BYTES>,
+        
     {
         tree.root
             .map(|root| unsafe { Self::print_tree(output, &root, settings) })
@@ -49,15 +49,15 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    unsafe fn print_tree<K, V, const NUM_PREFIX_BYTES: usize, H>(
+    unsafe fn print_tree<K, V, const NUM_PREFIX_BYTES: usize>(
         output: O,
-        tree: &OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>,
+        tree: &OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
         settings: DotPrinterSettings,
     ) -> io::Result<()>
     where
         K: Debug + AsBytes,
         V: Debug,
-        H: NodeHeader<NUM_PREFIX_BYTES>,
+        
     {
         let mut visitor = DotPrinter {
             output,
@@ -145,12 +145,12 @@ impl<O: Write> DotPrinter<O> {
     }
 }
 
-impl<K, T, O, const NUM_PREFIX_BYTES: usize, H> Visitor<K, T, NUM_PREFIX_BYTES, H> for DotPrinter<O>
+impl<K, T, O, const NUM_PREFIX_BYTES: usize> Visitor<K, T, NUM_PREFIX_BYTES> for DotPrinter<O>
 where
     K: Debug + AsBytes,
     T: Debug,
     O: Write,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     type Output = io::Result<usize>;
 
@@ -162,26 +162,26 @@ where
         unimplemented!("this visitor should never combine outputs")
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node4(&mut self, t: &crate::InnerNode4<K, T, NUM_PREFIX_BYTES>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node16(&mut self, t: &crate::InnerNode16<K, T, NUM_PREFIX_BYTES>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_node48(&mut self, t: &crate::InnerNode48<K, T, NUM_PREFIX_BYTES>) -> Self::Output {
         self.write_inner_node(t)
     }
 
     fn visit_node256(
         &mut self,
-        t: &crate::InnerNode256<K, T, NUM_PREFIX_BYTES, H>,
+        t: &crate::InnerNode256<K, T, NUM_PREFIX_BYTES>,
     ) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T, NUM_PREFIX_BYTES, H>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T, NUM_PREFIX_BYTES>) -> Self::Output {
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;
@@ -211,13 +211,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{deallocate_tree, VariableKeyHeader};
+    use crate::{deallocate_tree};
 
     use super::*;
 
     #[test]
     fn simple_tree_output_to_dot() {
-        let root: OpaqueNodePtr<Box<[u8]>, usize, 16, VariableKeyHeader<16>> =
+        let root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
             crate::tests_common::setup_tree_from_entries(
                 crate::tests_common::generate_key_fixed_length([3, 3])
                     .enumerate()

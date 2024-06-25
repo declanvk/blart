@@ -6,7 +6,7 @@ use crate::{
     minimum_unchecked, rust_nightly_apis::hasher_write_length_prefix, search_for_delete_point,
     search_for_insert_point, search_unchecked, AsBytes, DeletePoint, DeleteResult, InsertPoint,
     InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
-    NodeHeader, NodePtr, OpaqueNodePtr,
+    NodePtr, OpaqueNodePtr,
 };
 use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Index};
 
@@ -18,16 +18,16 @@ pub use entry_ref::*;
 pub use iterators::*;
 
 /// An ordered map based on an adaptive radix tree.
-pub struct RawTreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
+pub struct RawTreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
 {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
-    pub(crate) root: Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES, H>>,
+    pub(crate) root: Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+    RawTreeMap<K, V, NUM_PREFIX_BYTES>
 {
     /// Create a new, empty [`crate::TreeMap`].
     ///
@@ -217,7 +217,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         &'a self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    ) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -249,7 +249,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         &'a mut self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    ) -> FuzzyMut<'a, 'b, K, V, NUM_PREFIX_BYTES>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -281,7 +281,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         &'a self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyKeys<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    ) -> FuzzyKeys<'a, 'b, K, V, NUM_PREFIX_BYTES>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -313,7 +313,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         &'a self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyValues<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    ) -> FuzzyValues<'a, 'b, K, V, NUM_PREFIX_BYTES>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -345,7 +345,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         &'a mut self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H>
+    ) -> FuzzyValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -514,7 +514,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
         &mut self,
         key: K,
         value: V,
-    ) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES, H>> {
+    ) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>> {
         let leaf = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
         self.root = Some(leaf.to_opaque());
         self.num_entries = 1;
@@ -523,10 +523,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     fn apply_insert_point(
         &mut self,
-        insert_point: InsertPoint<K, V, NUM_PREFIX_BYTES, H>,
+        insert_point: InsertPoint<K, V, NUM_PREFIX_BYTES>,
         key: K,
         value: V,
-    ) -> InsertResult<K, V, NUM_PREFIX_BYTES, H>
+    ) -> InsertResult<K, V, NUM_PREFIX_BYTES>
     where
         K: AsBytes,
     {
@@ -545,8 +545,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     fn apply_delete_point(
         &mut self,
-        delete_point: DeletePoint<K, V, NUM_PREFIX_BYTES, H>,
-    ) -> DeleteResult<K, V, NUM_PREFIX_BYTES, H>
+        delete_point: DeletePoint<K, V, NUM_PREFIX_BYTES>,
+    ) -> DeleteResult<K, V, NUM_PREFIX_BYTES>
     where
         K: AsBytes,
     {
@@ -737,7 +737,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     // assert_eq!(a[&5], "f");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V, NUM_PREFIX_BYTES, H>)
+    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V, NUM_PREFIX_BYTES>)
     where
         K: NoPrefixesBytes,
     {
@@ -770,7 +770,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     // assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
     // ```
     #[allow(dead_code)]
-    pub(crate) fn range<Q, R>(&self, _range: R) -> iterators::Range<K, V, H>
+    pub(crate) fn range<Q, R>(&self, _range: R) -> iterators::Range<K, V>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -817,7 +817,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     // assert_eq!(map["Cheryl"], 200);
     // ```
     #[allow(dead_code)]
-    pub(crate) fn range_mut<Q, R>(&mut self, _range: R) -> iterators::RangeMut<K, V, H>
+    pub(crate) fn range_mut<Q, R>(&mut self, _range: R) -> iterators::RangeMut<K, V>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -854,7 +854,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     // assert_eq!(b[[41].as_ref()], "e");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, NUM_PREFIX_BYTES, H>
+    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, NUM_PREFIX_BYTES>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -934,7 +934,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), 4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_keys(self) -> iterators::IntoKeys<K, V, NUM_PREFIX_BYTES, H> {
+    pub fn into_keys(self) -> iterators::IntoKeys<K, V, NUM_PREFIX_BYTES> {
         iterators::IntoKeys::new(self)
     }
 
@@ -960,7 +960,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), 'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_values(self) -> iterators::IntoValues<K, V, NUM_PREFIX_BYTES, H> {
+    pub fn into_values(self) -> iterators::IntoValues<K, V, NUM_PREFIX_BYTES> {
         iterators::IntoValues::new(self)
     }
 
@@ -984,7 +984,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), (&4, &'z'));
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn iter(&self) -> TreeIterator<'_, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn iter(&self) -> TreeIterator<'_, K, V, NUM_PREFIX_BYTES> {
         TreeIterator::new(self)
     }
 
@@ -1009,7 +1009,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V, NUM_PREFIX_BYTES> {
         TreeIteratorMut::new(self)
     }
 
@@ -1033,7 +1033,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), &4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn keys(&self) -> Keys<'_, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn keys(&self) -> Keys<'_, K, V, NUM_PREFIX_BYTES> {
         Keys::new(self)
     }
 
@@ -1057,7 +1057,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), &'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn values(&self) -> Values<'_, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn values(&self) -> Values<'_, K, V, NUM_PREFIX_BYTES> {
         Values::new(self)
     }
 
@@ -1082,7 +1082,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V, NUM_PREFIX_BYTES> {
         ValuesMut::new(self)
     }
 
@@ -1104,7 +1104,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     ///
     /// assert_eq!(p, vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
     /// ```
-    pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, NUM_PREFIX_BYTES> {
         Prefix::new(self, prefix)
     }
 
@@ -1130,7 +1130,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     pub fn prefix_mut<'a, 'b>(
         &'a mut self,
         prefix: &'b [u8],
-    ) -> PrefixMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    ) -> PrefixMut<'a, 'b, K, V, NUM_PREFIX_BYTES> {
         PrefixMut::new(self, prefix)
     }
 
@@ -1155,7 +1155,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     pub fn prefix_keys<'a, 'b>(
         &'a self,
         prefix: &'b [u8],
-    ) -> PrefixKeys<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    ) -> PrefixKeys<'a, 'b, K, V, NUM_PREFIX_BYTES> {
         PrefixKeys::new(self, prefix)
     }
 
@@ -1180,7 +1180,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     pub fn prefix_values<'a, 'b>(
         &'a self,
         prefix: &'b [u8],
-    ) -> PrefixValues<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    ) -> PrefixValues<'a, 'b, K, V, NUM_PREFIX_BYTES> {
         PrefixValues::new(self, prefix)
     }
 
@@ -1206,7 +1206,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     pub fn prefix_values_mut<'a, 'b>(
         &'a mut self,
         prefix: &'b [u8],
-    ) -> PrefixValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES, H> {
+    ) -> PrefixValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES> {
         PrefixValuesMut::new(self, prefix)
     }
 
@@ -1242,15 +1242,15 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>>
-    RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
+    RawTreeMap<K, V, NUM_PREFIX_BYTES>
 {
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
     pub fn try_entry(
         &mut self,
         key: K,
-    ) -> Result<Entry<K, V, NUM_PREFIX_BYTES, H>, InsertPrefixError>
+    ) -> Result<Entry<K, V, NUM_PREFIX_BYTES>, InsertPrefixError>
     where
         K: AsBytes,
     {
@@ -1290,7 +1290,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     pub fn try_entry_ref<'a, 'b, Q>(
         &'a mut self,
         key: &'b Q,
-    ) -> Result<EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>, InsertPrefixError>
+    ) -> Result<EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>, InsertPrefixError>
     where
         K: AsBytes + Borrow<Q> + From<&'b Q>,
         Q: AsBytes + ?Sized,
@@ -1328,7 +1328,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
 
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, NUM_PREFIX_BYTES, H>
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, NUM_PREFIX_BYTES>
     where
         K: NoPrefixesBytes,
     {
@@ -1341,7 +1341,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     pub fn entry_ref<'a, 'b, Q>(
         &'a mut self,
         key: &'b Q,
-    ) -> EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES, H>
+    ) -> EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>
     where
         K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
         Q: NoPrefixesBytes + ?Sized,
@@ -1351,19 +1351,18 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Drop
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Drop
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> Clone for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Clone for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Clone + AsBytes,
     V: Clone,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn clone(&self) -> Self {
         if let Some(root) = self.root {
@@ -1377,31 +1376,31 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> Debug for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Debug for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Debug + AsBytes,
     V: Debug,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> Default
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Default
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a, K, V, const NUM_PREFIX_BYTES: usize, H> Extend<(&'a K, &'a V)>
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<'a, K, V, const NUM_PREFIX_BYTES: usize> Extend<(&'a K, &'a V)>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Copy + NoPrefixesBytes,
     V: Copy,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     fn extend<T: IntoIterator<Item = (&'a K, &'a V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1410,11 +1409,11 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> Extend<(K, V)>
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Extend<(K, V)>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1423,11 +1422,11 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H, const N: usize> From<[(K, V); N]>
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize, const N: usize> From<[(K, V); N]>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     fn from(arr: [(K, V); N]) -> Self {
         let mut map = RawTreeMap::new();
@@ -1438,11 +1437,11 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H> FromIterator<(K, V)>
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> FromIterator<(K, V)>
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: NoPrefixesBytes,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         let mut map = RawTreeMap::new();
@@ -1453,11 +1452,10 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, H1> Hash for RawTreeMap<K, V, NUM_PREFIX_BYTES, H1>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Hash for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Hash + AsBytes,
     V: Hash,
-    H1: NodeHeader<NUM_PREFIX_BYTES>,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         hasher_write_length_prefix(state, self.num_entries);
@@ -1467,11 +1465,11 @@ where
     }
 }
 
-impl<Q, K, V, const NUM_PREFIX_BYTES: usize, H> Index<&Q> for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<Q, K, V, const NUM_PREFIX_BYTES: usize> Index<&Q> for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     type Output = V;
 
@@ -1480,10 +1478,10 @@ where
     }
 }
 
-impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator
-    for &'a RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
+    for &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>
 {
-    type IntoIter = TreeIterator<'a, K, V, NUM_PREFIX_BYTES, H>;
+    type IntoIter = TreeIterator<'a, K, V, NUM_PREFIX_BYTES>;
     type Item = (&'a K, &'a V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1491,10 +1489,10 @@ impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_
     }
 }
 
-impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator
-    for &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
+    for &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>
 {
-    type IntoIter = TreeIteratorMut<'a, K, V, NUM_PREFIX_BYTES, H>;
+    type IntoIter = TreeIteratorMut<'a, K, V, NUM_PREFIX_BYTES>;
     type Item = (&'a K, &'a mut V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1502,10 +1500,10 @@ impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTES>> IntoIterator
-    for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
+    for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 {
-    type IntoIter = iterators::IntoIter<K, V, NUM_PREFIX_BYTES, H>;
+    type IntoIter = iterators::IntoIter<K, V, NUM_PREFIX_BYTES>;
     type Item = (K, V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1513,41 +1511,41 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, H: NodeHeader<NUM_PREFIX_BYTE
     }
 }
 
-impl<K, V, H, const NUM_PREFIX_BYTES: usize> Ord for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Ord for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Ord + AsBytes,
     V: Ord,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.iter().cmp(other.iter())
     }
 }
 
-impl<K, V, H, const NUM_PREFIX_BYTES: usize> PartialOrd for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> PartialOrd for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: PartialOrd + AsBytes,
     V: PartialOrd,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.iter().partial_cmp(other.iter())
     }
 }
 
-impl<K, V, H, const NUM_PREFIX_BYTES: usize> Eq for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> Eq for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Eq + AsBytes,
     V: Eq,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
 }
 
-impl<K, V, H, const NUM_PREFIX_BYTES: usize> PartialEq for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+impl<K, V, const NUM_PREFIX_BYTES: usize> PartialEq for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: PartialEq + AsBytes,
     V: PartialEq,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
     fn eq(&self, other: &Self) -> bool {
         self.iter().eq(other.iter()) && self.num_entries == other.num_entries
@@ -1557,22 +1555,22 @@ where
 // SAFETY: This is safe to implement if `K` and `V` are also `Send`.
 // This container is safe to `Send` for the same reasons why other container
 // are also safe
-unsafe impl<K, V, H, const NUM_PREFIX_BYTES: usize> Send for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+unsafe impl<K, V, const NUM_PREFIX_BYTES: usize> Send for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Send + AsBytes,
     V: Send,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
 }
 
 // SAFETY: This is safe to implement if `K` and `V` are also `Sync`.
 // This container is safe to `Sync` for the same reasons why other container
 // are also safe
-unsafe impl<K, V, H, const NUM_PREFIX_BYTES: usize> Sync for RawTreeMap<K, V, NUM_PREFIX_BYTES, H>
+unsafe impl<K, V, const NUM_PREFIX_BYTES: usize> Sync for RawTreeMap<K, V, NUM_PREFIX_BYTES>
 where
     K: Sync + AsBytes,
     V: Sync,
-    H: NodeHeader<NUM_PREFIX_BYTES>,
+    
 {
 }
 

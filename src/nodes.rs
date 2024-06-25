@@ -7,6 +7,6 @@ mod header;
 
 pub mod visitor;
 
-pub use header::*;
+pub(crate) use header::*;
 pub(crate) use operations::*;
 pub use representation::*;
