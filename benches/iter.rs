@@ -1,9 +1,6 @@
 use std::{ffi::CString, ptr::NonNull};
 
-use blart::{
-    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr, TreeMap,
-    VariableKeyHeader,
-};
+use blart::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr, TreeMap};
 use criterion::{measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
@@ -20,7 +17,7 @@ fn iter_node<const NUM_PREFIX_BYTES: usize, M: Measurement, N: InnerNode<NUM_PRE
     let bytes: Vec<_> = (0..=255u8).collect();
 
     let dangling_ptr = unsafe {
-        NodePtr::new(NonNull::<InnerNode48<_, _, NUM_PREFIX_BYTES, _>>::dangling().as_ptr())
+        NodePtr::new(NonNull::<InnerNode48<_, _, NUM_PREFIX_BYTES>>::dangling().as_ptr())
     };
     let dangling_opaque = dangling_ptr.to_opaque();
 
@@ -42,25 +39,10 @@ fn iter_node<const NUM_PREFIX_BYTES: usize, M: Measurement, N: InnerNode<NUM_PRE
 }
 
 fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
-    iter_node::<16, _, InnerNode4<CString, usize, 16, VariableKeyHeader<16>>>(
-        c,
-        prefix,
-        "n4",
-        &[1, 4],
-    );
-    iter_node::<16, _, InnerNode16<CString, usize, 16, VariableKeyHeader<16>>>(
-        c,
-        prefix,
-        "n16",
-        &[5, 12, 16],
-    );
-    iter_node::<16, _, InnerNode48<CString, usize, 16, VariableKeyHeader<16>>>(
-        c,
-        prefix,
-        "n48",
-        &[17, 32, 48],
-    );
-    iter_node::<16, _, InnerNode256<CString, usize, 16, VariableKeyHeader<16>>>(
+    iter_node::<16, _, InnerNode4<CString, usize, 16>>(c, prefix, "n4", &[1, 4]);
+    iter_node::<16, _, InnerNode16<CString, usize, 16>>(c, prefix, "n16", &[5, 12, 16]);
+    iter_node::<16, _, InnerNode48<CString, usize, 16>>(c, prefix, "n48", &[17, 32, 48]);
+    iter_node::<16, _, InnerNode256<CString, usize, 16>>(
         c,
         prefix,
         "n256",
