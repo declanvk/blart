@@ -3,22 +3,21 @@ use std::mem::replace;
 use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
-pub struct OccupiedEntry<'a, K, V, const NUM_PREFIX_BYTES: usize>
+pub struct OccupiedEntry<'a, K, V, const PREFIX_LEN: usize>
 where
     K: AsBytes,
 {
-    pub(crate) leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
+    pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 
     /// Used for the removal
-    pub(crate) map: &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
+    pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN>,
     /// Used for the removal
-    pub(crate) grandparent_ptr_and_parent_key_byte:
-        Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
+    pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     /// Used for the removal
-    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
+    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
 }
 
-impl<'a, K, V, const NUM_PREFIX_BYTES: usize> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES>
+impl<'a, K, V, const PREFIX_LEN: usize> OccupiedEntry<'a, K, V, PREFIX_LEN>
 where
     K: AsBytes,
 {
@@ -86,16 +85,16 @@ where
 }
 
 /// A view into a vacant entry in a HashMap. It is part of the [`Entry`] enum.
-pub struct VacantEntry<'a, K, V, const NUM_PREFIX_BYTES: usize>
+pub struct VacantEntry<'a, K, V, const PREFIX_LEN: usize>
 where
     K: AsBytes,
 {
-    pub(crate) map: &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
+    pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN>,
     pub(crate) key: K,
-    pub(crate) insert_point: Option<InsertPoint<K, V, NUM_PREFIX_BYTES>>,
+    pub(crate) insert_point: Option<InsertPoint<K, V, PREFIX_LEN>>,
 }
 
-impl<'a, K, V, const NUM_PREFIX_BYTES: usize> VacantEntry<'a, K, V, NUM_PREFIX_BYTES>
+impl<'a, K, V, const PREFIX_LEN: usize> VacantEntry<'a, K, V, PREFIX_LEN>
 where
     K: AsBytes,
 {
@@ -109,7 +108,7 @@ where
 
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a [`OccupiedEntry`].
-    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES> {
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN> {
         let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
             match self.insert_point {
                 Some(insert_point) => {
@@ -147,19 +146,19 @@ where
 ///A view into a single entry in a map, which may either be vacant or occupied.
 //
 //This enum is constructed from the entry method on HashMap.
-pub enum Entry<'a, K, V, const NUM_PREFIX_BYTES: usize>
+pub enum Entry<'a, K, V, const PREFIX_LEN: usize>
 where
     K: AsBytes,
 {
     /// A view into an occupied entry in a HashMap. It is part of the [`Entry`]
     /// enum.
-    Occupied(OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES>),
+    Occupied(OccupiedEntry<'a, K, V, PREFIX_LEN>),
     /// A view into a vacant entry in a HashMap. It is part of the [`Entry`]
     /// enum.
-    Vacant(VacantEntry<'a, K, V, NUM_PREFIX_BYTES>),
+    Vacant(VacantEntry<'a, K, V, PREFIX_LEN>),
 }
 
-impl<'a, K, V, const NUM_PREFIX_BYTES: usize> Entry<'a, K, V, NUM_PREFIX_BYTES>
+impl<'a, K, V, const PREFIX_LEN: usize> Entry<'a, K, V, PREFIX_LEN>
 where
     K: AsBytes,
 {
@@ -181,7 +180,7 @@ where
     }
 
     /// Sets the value of the entry, and returns an [`OccupiedEntry`].
-    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES> {
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN> {
         match self {
             Entry::Occupied(mut entry) => {
                 entry.insert(value);
@@ -254,7 +253,7 @@ where
     }
 
     /// Similar to [`Entry::or_default`] but yields an [`OccupiedEntry`]
-    pub fn or_default_entry(self) -> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES>
+    pub fn or_default_entry(self) -> OccupiedEntry<'a, K, V, PREFIX_LEN>
     where
         V: Default,
     {
@@ -265,7 +264,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES> {
+    pub fn or_insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN> {
         match self {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(entry) => entry.insert_entry(value),
@@ -273,7 +272,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert_with`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES>
+    pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, PREFIX_LEN>
     where
         F: FnOnce() -> V,
     {
@@ -284,7 +283,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert_with_key`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, NUM_PREFIX_BYTES>
+    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, PREFIX_LEN>
     where
         F: FnOnce(&K) -> V,
     {

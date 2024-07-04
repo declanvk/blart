@@ -30,11 +30,11 @@ impl<const LEN: usize> PartialEq<[u8; LEN]> for KeyPrefix {
 
 /// An issue with the well-formed-ness of the tree. See the documentation on
 /// [`WellFormedChecker`] for more context.
-pub enum MalformedTreeError<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
+pub enum MalformedTreeError<K: AsBytes, V, const PREFIX_LEN: usize> {
     /// A loop was observed between nodes
     LoopFound {
         /// The node that was observed more than once while traversing the tree
-        node_ptr: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+        node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
         /// The key prefix when the node was first observed
         first_observed: KeyPrefix,
         /// The key prefix when the node was observed a second time
@@ -64,7 +64,7 @@ pub enum MalformedTreeError<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     EmptyTreeWithLen,
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> fmt::Debug for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for MalformedTreeError<K, V, PREFIX_LEN>
 where
     K: AsBytes,
 {
@@ -103,8 +103,7 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> fmt::Display
-    for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> fmt::Display for MalformedTreeError<K, V, PREFIX_LEN>
 where
     K: AsBytes,
 {
@@ -156,8 +155,7 @@ where
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Clone
-    for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const PREFIX_LEN: usize> Clone for MalformedTreeError<K, V, PREFIX_LEN>
 where
     K: Clone,
 {
@@ -193,8 +191,7 @@ where
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> PartialEq
-    for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const PREFIX_LEN: usize> PartialEq for MalformedTreeError<K, V, PREFIX_LEN>
 where
     K: Eq,
 {
@@ -247,15 +244,9 @@ where
     }
 }
 
-impl<K: Eq + AsBytes, V, const NUM_PREFIX_BYTES: usize> Eq
-    for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
-{
-}
+impl<K: Eq + AsBytes, V, const PREFIX_LEN: usize> Eq for MalformedTreeError<K, V, PREFIX_LEN> {}
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Error
-    for MalformedTreeError<K, V, NUM_PREFIX_BYTES>
-{
-}
+impl<K: AsBytes, V, const PREFIX_LEN: usize> Error for MalformedTreeError<K, V, PREFIX_LEN> {}
 
 /// A visitor of the radix tree which checks that the tree is well-formed.
 ///
@@ -274,12 +265,12 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Error
 /// "well-formed" (by the definition given above) if the checker returns
 /// `Ok(())`.
 #[derive(Debug)]
-pub struct WellFormedChecker<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
+pub struct WellFormedChecker<K: AsBytes, V, const PREFIX_LEN: usize> {
     current_key_prefix: Vec<u8>,
-    seen_nodes: HashMap<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, KeyPrefix>,
+    seen_nodes: HashMap<OpaqueNodePtr<K, V, PREFIX_LEN>, KeyPrefix>,
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> WellFormedChecker<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> WellFormedChecker<K, V, PREFIX_LEN>
 where
     K: AsBytes + Clone,
 {
@@ -293,8 +284,8 @@ where
     /// # Errors
     ///  - Returns an error if the given tree is not well-formed.
     pub unsafe fn check(
-        tree: &TreeMap<K, V, NUM_PREFIX_BYTES>,
-    ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES>> {
+        tree: &TreeMap<K, V, PREFIX_LEN>,
+    ) -> Result<usize, MalformedTreeError<K, V, PREFIX_LEN>> {
         tree.root
             .map(|root| unsafe { Self::check_tree(root) })
             .unwrap_or_else(|| {
@@ -316,8 +307,8 @@ where
     /// # Errors
     ///  - Returns an error if the given tree is not well-formed.
     unsafe fn check_tree(
-        tree: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
-    ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES>> {
+        tree: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> Result<usize, MalformedTreeError<K, V, PREFIX_LEN>> {
         let mut visitor = WellFormedChecker {
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
@@ -332,15 +323,15 @@ where
     fn visit_inner_node<N>(
         &mut self,
         inner_node: &N,
-    ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES>>
+    ) -> Result<usize, MalformedTreeError<K, V, PREFIX_LEN>>
     where
-        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
     {
         let original_key_prefix_len = self.current_key_prefix.len();
 
         // update running key prefix with inner node partial prefix
         // TODO: Fix this, here the we should return the full reconstructed prefix if
-        // prefix len > NUM_PREFIX_BYTES
+        // prefix len > PREFIX_LEN
         self.current_key_prefix
             .extend(inner_node.read_full_prefix(original_key_prefix_len).0);
 
@@ -399,12 +390,12 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Visitor<K, V, NUM_PREFIX_BYTES>
-    for WellFormedChecker<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN>
+    for WellFormedChecker<K, V, PREFIX_LEN>
 where
     K: Clone + AsBytes,
 {
-    type Output = Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES>>;
+    type Output = Result<usize, MalformedTreeError<K, V, PREFIX_LEN>>;
 
     fn default_output(&self) -> Self::Output {
         // Chose zero so that any places that call `default_output` don't influce the
@@ -416,23 +407,23 @@ where
         Ok(o1? + o2?)
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_node4(&mut self, t: &crate::InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_node16(&mut self, t: &crate::InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_node48(&mut self, t: &crate::InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
         if !t.key_ref().as_bytes().starts_with(&self.current_key_prefix) {
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::PrefixMismatch {

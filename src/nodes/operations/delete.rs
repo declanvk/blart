@@ -18,12 +18,12 @@ use crate::{
 ///  - There must not be any mutable references to the children of the given
 ///    inner node either.
 unsafe fn remove_child_from_inner_node_and_compress<
-    const NUM_PREFIX_BYTES: usize,
-    N: InnerNode<NUM_PREFIX_BYTES>,
+    const PREFIX_LEN: usize,
+    N: InnerNode<PREFIX_LEN>,
 >(
-    inner_node_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
+    inner_node_ptr: NodePtr<PREFIX_LEN, N>,
     key_fragment: u8,
-) -> Option<OpaqueNodePtr<N::Key, N::Value, NUM_PREFIX_BYTES>> {
+) -> Option<OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>> {
     // SAFETY: The `inner_node` reference is scoped to this function and dropped
     // before cases where the inner node is deallocated. It is a unique reference,
     // by the safety requirements of the containing function.
@@ -53,8 +53,8 @@ unsafe fn remove_child_from_inner_node_and_compress<
         if let Some(child_header) = unsafe { child_node_ptr.header_mut() } {
             // Construct the new prefix, by concatenating the parent header, child_key_byte,
             // child header Here we can use the fact that the header of both the
-            // child and the parent can hold up to NUM_PREFIX_BYTES, so if for
-            // example the parent header len >= NUM_PREFIX_BYTES, the
+            // child and the parent can hold up to PREFIX_LEN, so if for
+            // example the parent header len >= PREFIX_LEN, the
             // new child header will hold only this bytes since the size is alredy greater
             // than the capacity so we can "clear" the child prefix, by setting
             // the len to 0 and repopulate by pushing the parent
@@ -111,12 +111,12 @@ unsafe fn remove_child_from_inner_node_and_compress<
 ///    have any other mutable references.
 ///  - `leaf_node_ptr` must be a unique pointer to the node and not have any
 ///    other mutable references.
-unsafe fn inner_delete_non_root_unchecked<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-    leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
-    (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8),
-    grandparent_node_ptr: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
-    original_root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
-) -> DeleteResult<K, V, NUM_PREFIX_BYTES> {
+unsafe fn inner_delete_non_root_unchecked<K: AsBytes, V, const PREFIX_LEN: usize>(
+    leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+    (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V, PREFIX_LEN>, u8),
+    grandparent_node_ptr: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
+    original_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+) -> DeleteResult<K, V, PREFIX_LEN> {
     let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
         ConcreteNodePtr::Node4(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
@@ -194,35 +194,33 @@ unsafe fn inner_delete_non_root_unchecked<K: AsBytes, V, const NUM_PREFIX_BYTES:
 
 /// The results of a successful delete operation
 #[derive(Debug)]
-pub struct DeleteResult<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
+pub struct DeleteResult<K: AsBytes, V, const PREFIX_LEN: usize> {
     /// The new root node for the tree, after the delete has been applied.
     ///
     /// If `None`, that means the tree is now empty.
-    pub new_root: Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+    pub new_root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
     /// The leaf node that was successfully deleted.
-    pub deleted_leaf: LeafNode<K, V, NUM_PREFIX_BYTES>,
+    pub deleted_leaf: LeafNode<K, V, PREFIX_LEN>,
 }
 
-pub struct DeletePoint<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
+pub struct DeletePoint<K: AsBytes, V, const PREFIX_LEN: usize> {
     /// The grandparent node of the leaf that will be deleted and the key byte
     /// that was used to continue search.
     ///
     /// If there is no grandparent, this value is `None`.
-    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
+    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
 
     /// The parent node of the leaf that will be deleted and the key byte that
     /// was used to continue search.
     ///
     /// If the leaf node to delete is also the root, then this value is `None`.
     /// If the grandparent node is present, this value also must be present.
-    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
+    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     /// The node to delete.
-    pub leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
+    pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> std::fmt::Debug
-    for DeletePoint<K, V, NUM_PREFIX_BYTES>
-{
+impl<K: AsBytes, V, const PREFIX_LEN: usize> std::fmt::Debug for DeletePoint<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeleteSearchResult")
             .field(
@@ -235,7 +233,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> std::fmt::Debug
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> DeletePoint<K, V, NUM_PREFIX_BYTES> {
+impl<K: AsBytes, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
     /// Handle the logic of deleting a leaf node from the tree, after it has
     /// been found.
     ///
@@ -245,10 +243,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> DeletePoint<K, V, NUM_PREFIX_
     ///  - This function cannot be called concurrently to any reads or writes of
     ///    the `root` node or any child node of `root`. This function will
     ///    arbitrarily read or write to any child in the given tree.
-    pub fn apply(
-        self,
-        root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
-    ) -> DeleteResult<K, V, NUM_PREFIX_BYTES> {
+    pub fn apply(self, root: OpaqueNodePtr<K, V, PREFIX_LEN>) -> DeleteResult<K, V, PREFIX_LEN> {
         let DeletePoint {
             grandparent_ptr_and_parent_key_byte: grandparent_node_ptr,
             parent_ptr_and_child_key_byte: parent_node_ptr,
@@ -300,10 +295,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> DeletePoint<K, V, NUM_PREFIX_
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-pub unsafe fn search_for_delete_point<Q, K, V, const NUM_PREFIX_BYTES: usize>(
-    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+pub unsafe fn search_for_delete_point<Q, K, V, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key: &Q,
-) -> Option<DeletePoint<K, V, NUM_PREFIX_BYTES>>
+) -> Option<DeletePoint<K, V, PREFIX_LEN>>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
@@ -374,9 +369,9 @@ where
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn find_minimum_to_delete<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
-) -> DeletePoint<K, V, NUM_PREFIX_BYTES> {
+pub unsafe fn find_minimum_to_delete<K: AsBytes, V, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+) -> DeletePoint<K, V, PREFIX_LEN> {
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;
@@ -412,9 +407,9 @@ pub unsafe fn find_minimum_to_delete<K: AsBytes, V, const NUM_PREFIX_BYTES: usiz
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn find_maximum_to_delete<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
-) -> DeletePoint<K, V, NUM_PREFIX_BYTES> {
+pub unsafe fn find_maximum_to_delete<K: AsBytes, V, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+) -> DeletePoint<K, V, PREFIX_LEN> {
     let mut current_grandparent = None;
     let mut current_parent = None;
     let mut current_node = root;

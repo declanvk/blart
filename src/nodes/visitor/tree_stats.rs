@@ -17,8 +17,8 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn collect<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-        tree: &TreeMap<K, V, NUM_PREFIX_BYTES>,
+    pub unsafe fn collect<K: AsBytes, V, const PREFIX_LEN: usize>(
+        tree: &TreeMap<K, V, PREFIX_LEN>,
     ) -> Option<TreeStats> {
         let mut collector = TreeStatsCollector;
 
@@ -30,14 +30,12 @@ impl TreeStatsCollector {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub unsafe fn count_leaf_nodes<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-        tree: &TreeMap<K, V, NUM_PREFIX_BYTES>,
+    pub unsafe fn count_leaf_nodes<K: AsBytes, V, const PREFIX_LEN: usize>(
+        tree: &TreeMap<K, V, PREFIX_LEN>,
     ) -> usize {
         struct LeafNodeCounter;
 
-        impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Visitor<K, V, NUM_PREFIX_BYTES>
-            for LeafNodeCounter
-        {
+        impl<K: AsBytes, V, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN> for LeafNodeCounter {
             type Output = usize;
 
             fn default_output(&self) -> Self::Output {
@@ -48,7 +46,7 @@ impl TreeStatsCollector {
                 o1 + o2
             }
 
-            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
                 1
             }
         }
@@ -91,15 +89,15 @@ pub struct InnerNodeStats {
 }
 
 impl InnerNodeStats {
-    fn aggregate_data<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, N>(&mut self, t: &N)
+    fn aggregate_data<K: AsBytes, V, const PREFIX_LEN: usize, N>(&mut self, t: &N)
     where
-        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
     {
         self.count += 1;
         self.total_slots += N::TYPE.upper_capacity();
         self.sum_slots += t.header().num_children();
 
-        self.total_header_bytes += NUM_PREFIX_BYTES;
+        self.total_header_bytes += PREFIX_LEN;
         self.sum_prefix_len_bytes += t.header().prefix_len();
         self.sum_capped_prefix_len_bytes += t.header().capped_prefix_len();
         self.max_prefix_len_bytes = self.max_prefix_len_bytes.max(t.header().prefix_len());
@@ -227,7 +225,7 @@ impl TreeStats {
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Visitor<K, V, NUM_PREFIX_BYTES> for TreeStatsCollector
+impl<K, V, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN> for TreeStatsCollector
 where
     K: AsBytes,
 {
@@ -248,35 +246,35 @@ where
         }
     }
 
-    fn visit_node4(&mut self, t: &InnerNode4<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_node4(&mut self, t: &InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node4.aggregate_data(t);
         output.tree.aggregate_data(t);
         output
     }
 
-    fn visit_node16(&mut self, t: &InnerNode16<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_node16(&mut self, t: &InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node16.aggregate_data(t);
         output.tree.aggregate_data(t);
         output
     }
 
-    fn visit_node48(&mut self, t: &InnerNode48<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_node48(&mut self, t: &InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node48.aggregate_data(t);
         output.tree.aggregate_data(t);
         output
     }
 
-    fn visit_node256(&mut self, t: &InnerNode256<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_node256(&mut self, t: &InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
         let mut output = t.super_visit_with(self);
         output.node256.aggregate_data(t);
         output.tree.aggregate_data(t);
         output
     }
 
-    fn visit_leaf(&mut self, t: &LeafNode<K, V, NUM_PREFIX_BYTES>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
         let mut output = TreeStats::default();
         output.leaf.count += 1;
         output.leaf.sum_key_bytes += t.key_ref().as_bytes().len();

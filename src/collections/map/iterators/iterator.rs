@@ -4,13 +4,13 @@ use std::{collections::VecDeque, iter::FusedIterator};
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s
-        pub struct $name<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
-            nodes: VecDeque<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+        pub struct $name<'a, K: AsBytes, V, const PREFIX_LEN: usize> {
+            nodes: VecDeque<OpaqueNodePtr<K, V, PREFIX_LEN>>,
             size: usize,
             _tree: $tree,
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> $name<'a, K, V, NUM_PREFIX_BYTES> {
+        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN> {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
             pub(crate) fn new(tree: $tree) -> Self {
@@ -21,9 +21,9 @@ macro_rules! gen_iter {
                 }
             }
 
-            fn push_back_rev_iter<N>(&mut self, inner: NodePtr<NUM_PREFIX_BYTES, N>)
+            fn push_back_rev_iter<N>(&mut self, inner: NodePtr<PREFIX_LEN, N>)
             where
-                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
             {
                 // SAFETY: Since `Self` holds a mutable/shared reference
                 // is safe to create a shared reference from it
@@ -36,9 +36,9 @@ macro_rules! gen_iter {
                 };
             }
 
-            fn push_front<N>(&mut self, inner: NodePtr<NUM_PREFIX_BYTES, N>)
+            fn push_front<N>(&mut self, inner: NodePtr<PREFIX_LEN, N>)
             where
-                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
             {
                 // SAFETY: Since `Self` holds a mutable/shared reference
                 // is safe to create a shared reference from it
@@ -51,9 +51,7 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Iterator
-            for $name<'a, K, V, NUM_PREFIX_BYTES>
-        {
+        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> Iterator for $name<'a, K, V, PREFIX_LEN> {
             type Item = $ret;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -85,8 +83,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> DoubleEndedIterator
-            for $name<'a, K, V, NUM_PREFIX_BYTES>
+        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> DoubleEndedIterator
+            for $name<'a, K, V, PREFIX_LEN>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
                 while let Some(node) = self.nodes.pop_front() {
@@ -106,13 +104,13 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FusedIterator
-            for $name<'a, K, V, NUM_PREFIX_BYTES>
+        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
+            for $name<'a, K, V, PREFIX_LEN>
         {
         }
 
-        impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> ExactSizeIterator
-            for $name<'a, K, V, NUM_PREFIX_BYTES>
+        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> ExactSizeIterator
+            for $name<'a, K, V, PREFIX_LEN>
         {
             fn len(&self) -> usize {
                 self.size
@@ -125,7 +123,7 @@ macro_rules! gen_iter {
 // create a shared reference to the leaf
 gen_iter!(
     TreeIterator,
-    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, PREFIX_LEN>,
     (&'a K, &'a V),
     as_key_value_ref
 );
@@ -133,31 +131,21 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     TreeIteratorMut,
-    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a mut TreeMap<K, V, PREFIX_LEN>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
-gen_iter!(
-    Keys,
-    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
-    &'a K,
-    as_key_ref
-);
+gen_iter!(Keys, &'a TreeMap<K, V, PREFIX_LEN>, &'a K, as_key_ref);
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
-gen_iter!(
-    Values,
-    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
-    &'a V,
-    as_value_ref
-);
+gen_iter!(Values, &'a TreeMap<K, V, PREFIX_LEN>, &'a V, as_value_ref);
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
     ValuesMut,
-    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a mut TreeMap<K, V, PREFIX_LEN>,
     &'a mut V,
     as_value_mut
 );

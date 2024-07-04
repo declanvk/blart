@@ -70,11 +70,11 @@ fn opaque_node_ptr_is_correct() {
 #[test]
 #[cfg(target_pointer_width = "64")]
 fn node_sizes() {
-    const DEFAULT_NUM_PREFIX_BYTES: usize = 4;
-    const EXPECTED_HEADER_SIZE: usize = DEFAULT_NUM_PREFIX_BYTES.next_multiple_of(8) + 8;
+    const DEFAULT_PREFIX_LEN: usize = 4;
+    const EXPECTED_HEADER_SIZE: usize = DEFAULT_PREFIX_LEN.next_multiple_of(8) + 8;
 
     assert_eq!(
-        mem::size_of::<Header<DEFAULT_NUM_PREFIX_BYTES>>(),
+        mem::size_of::<Header<DEFAULT_PREFIX_LEN>>(),
         EXPECTED_HEADER_SIZE
     );
     // key map: 4 * (1 byte) = 4 bytes
@@ -83,34 +83,34 @@ fn node_sizes() {
     // 4 bytes of padding are inserted after the `keys` field to align the field to
     // an 8 byte boundary.
     assert_eq!(
-        mem::size_of::<InnerNode4<Box<[u8]>, usize, DEFAULT_NUM_PREFIX_BYTES>>(),
+        mem::size_of::<InnerNode4<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
         EXPECTED_HEADER_SIZE + 40
     );
     // key map: 16 * (1 byte) = 16 bytes
     // child map: 16 * (8 bytes (on 64-bit platform)) = 128
     assert_eq!(
-        mem::size_of::<InnerNode16<Box<[u8]>, usize, DEFAULT_NUM_PREFIX_BYTES>>(),
+        mem::size_of::<InnerNode16<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
         EXPECTED_HEADER_SIZE + 144
     );
     // key map: 256 * (1 byte) = 256 bytes
     // child map: 48 * (8 bytes (on 64-bit platform)) = 384
     assert_eq!(
-        mem::size_of::<InnerNode48<Box<[u8]>, usize, DEFAULT_NUM_PREFIX_BYTES>>(),
+        mem::size_of::<InnerNode48<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
         EXPECTED_HEADER_SIZE + 640
     );
     // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
     assert_eq!(
-        mem::size_of::<InnerNode256<Box<[u8]>, usize, DEFAULT_NUM_PREFIX_BYTES>>(),
+        mem::size_of::<InnerNode256<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
         EXPECTED_HEADER_SIZE + 2048
     );
 
     // Assert that pointer is expected size and has non-null optimization
     assert_eq!(
-        mem::size_of::<Option<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_NUM_PREFIX_BYTES>>>(),
+        mem::size_of::<Option<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_PREFIX_LEN>>>(),
         8
     );
     assert_eq!(
-        mem::size_of::<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_NUM_PREFIX_BYTES>>(),
+        mem::size_of::<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_PREFIX_LEN>>(),
         8
     );
 }
@@ -163,8 +163,8 @@ fn node_alignment() {
     assert!(n256_ptr.trailing_zeros() >= 3);
 }
 
-fn inner_node_write_child_test<const NUM_PREFIX_BYTES: usize>(
-    mut node: impl InnerNode<NUM_PREFIX_BYTES, Key = Box<[u8]>, Value = ()>,
+fn inner_node_write_child_test<const PREFIX_LEN: usize>(
+    mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
     num_children: usize,
 ) {
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
@@ -192,8 +192,8 @@ fn inner_node_write_child_test<const NUM_PREFIX_BYTES: usize>(
     assert!(node.is_full());
 }
 
-fn inner_node_remove_child_test<const NUM_PREFIX_BYTES: usize>(
-    mut node: impl InnerNode<NUM_PREFIX_BYTES, Key = Box<[u8]>, Value = ()>,
+fn inner_node_remove_child_test<const PREFIX_LEN: usize>(
+    mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
     num_children: usize,
 ) {
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
@@ -228,8 +228,8 @@ fn inner_node_remove_child_test<const NUM_PREFIX_BYTES: usize>(
     assert!(!node.is_full());
 }
 
-fn inner_node_shrink_test<const NUM_PREFIX_BYTES: usize>(
-    mut node: impl InnerNode<NUM_PREFIX_BYTES, Key = Box<[u8]>, Value = ()>,
+fn inner_node_shrink_test<const PREFIX_LEN: usize>(
+    mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
     num_children: usize,
 ) {
     let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
@@ -554,7 +554,7 @@ fn node256_shrink_too_many_children_panic() {
 //     let mut h = Header::empty();
 
 //     h.extend_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
-//     h.ltrim_prefix(NUM_PREFIX_BYTES);
+//     h.ltrim_prefix(PREFIX_LEN);
 //     // 6 bytes are represented
 
 //     assert_eq!(h.match_prefix(&[1, 2, 3]), 0);
