@@ -150,7 +150,7 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
     std::mem::swap(temp, new_row);
 }
 
-trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
+trait FuzzySearch<K: AsBytes, V, const PREFIX_LEN: usize> {
     #[allow(clippy::too_many_arguments)]
     fn fuzzy_search(
         &self,
@@ -158,7 +158,7 @@ trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         max_edit_dist: usize,
     ) -> bool;
 
@@ -171,7 +171,7 @@ trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
         max_edit_dist: usize,
     ) -> bool
     where
-        Self: InnerNode<NUM_PREFIX_BYTES>,
+        Self: InnerNode<PREFIX_LEN>,
     {
         // We can use the fact that the first entry in the old_row holds,
         // the length of how many bytes we used so far, so this becomes de depth
@@ -189,10 +189,10 @@ trait FuzzySearch<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize, const SIZE: usize>
-    FuzzySearch<K, V, NUM_PREFIX_BYTES> for InnerNodeCompressed<K, V, NUM_PREFIX_BYTES, SIZE>
+impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize> FuzzySearch<K, V, PREFIX_LEN>
+    for InnerNodeCompressed<K, V, PREFIX_LEN, SIZE>
 where
-    Self: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+    Self: InnerNode<PREFIX_LEN, Key = K, Value = V>,
 {
     fn fuzzy_search(
         &self,
@@ -200,7 +200,7 @@ where
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         max_edit_dist: usize,
     ) -> bool {
         if !self.fuzzy_search_prefix(key, old_row, new_row, max_edit_dist) {
@@ -219,8 +219,8 @@ where
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_BYTES>
-    for InnerNode48<K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
+    for InnerNode48<K, V, PREFIX_LEN>
 {
     fn fuzzy_search(
         &self,
@@ -228,7 +228,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         max_edit_dist: usize,
     ) -> bool {
         if !self.fuzzy_search_prefix(key, old_row, new_row, max_edit_dist) {
@@ -247,8 +247,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_BYTES>
-    for InnerNode256<K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
+    for InnerNode256<K, V, PREFIX_LEN>
 {
     fn fuzzy_search(
         &self,
@@ -256,7 +256,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         max_edit_dist: usize,
     ) -> bool {
         if !self.fuzzy_search_prefix(key, old_row, new_row, max_edit_dist) {
@@ -275,8 +275,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_BYTES>
-    for LeafNode<K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
+    for LeafNode<K, V, PREFIX_LEN>
 {
     fn fuzzy_search(
         &self,
@@ -284,7 +284,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_
         key: &[u8],
         old_row: &mut &mut [usize],
         new_row: &mut &mut [MaybeUninit<usize>],
-        _nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+        _nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         max_edit_dist: usize,
     ) -> bool {
         let current_len = old_row[0];
@@ -308,8 +308,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FuzzySearch<K, V, NUM_PREFIX_
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s with a within a specifix edit distance
-        pub struct $name<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
-            nodes_to_search: Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+        pub struct $name<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> {
+            nodes_to_search: Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
             old_row: Box<[MaybeUninit<usize>]>,
             new_row: Box<[MaybeUninit<usize>]>,
             arena: StackArena,
@@ -320,9 +320,7 @@ macro_rules! gen_iter {
             _tree: $tree,
         }
 
-        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize>
-            $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
-        {
+        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, 'b, K, V, PREFIX_LEN> {
             pub(crate) fn new(tree: $tree, key: &'b [u8], max_edit_dist: usize) -> Self {
                 let mut arena = StackArena::new(key.len() + 1);
                 let n = arena.size();
@@ -347,8 +345,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Iterator
-            for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> Iterator
+            for $name<'a, 'b, K, V, PREFIX_LEN>
         {
             type Item = $ret;
 
@@ -442,8 +440,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, 'b, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> FusedIterator
-            for $name<'a, 'b, K, V, NUM_PREFIX_BYTES>
+        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
+            for $name<'a, 'b, K, V, PREFIX_LEN>
         {
         }
     };
@@ -453,7 +451,7 @@ macro_rules! gen_iter {
 // create a shared reference to the leaf
 gen_iter!(
     Fuzzy,
-    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, PREFIX_LEN>,
     (&'a K, &'a V),
     as_key_value_ref
 );
@@ -461,23 +459,18 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     FuzzyMut,
-    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a mut TreeMap<K, V, PREFIX_LEN>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
-gen_iter!(
-    FuzzyKeys,
-    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
-    &'a K,
-    as_key_ref
-);
+gen_iter!(FuzzyKeys, &'a TreeMap<K, V, PREFIX_LEN>, &'a K, as_key_ref);
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
 gen_iter!(
     FuzzyValues,
-    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, PREFIX_LEN>,
     &'a V,
     as_value_ref
 );
@@ -485,7 +478,7 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     FuzzyValuesMut,
-    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a mut TreeMap<K, V, PREFIX_LEN>,
     &'a mut V,
     as_value_mut
 );

@@ -269,8 +269,8 @@ fn insert_existing_key_overwrite() {
 
     let current_root: OpaqueNodePtr<Box<[u8]>, char, 16> = setup_tree_from_entries(entries_it);
 
-    unsafe fn get_value<K: AsBytes, V: Copy, const NUM_PREFIX_BYTES: usize>(
-        n: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
+    unsafe fn get_value<K: AsBytes, V: Copy, const PREFIX_LEN: usize>(
+        n: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     ) -> V {
         unsafe { *n.as_ref().value_ref() }
     }

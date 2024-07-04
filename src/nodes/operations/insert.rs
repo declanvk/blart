@@ -7,13 +7,13 @@ use std::{borrow::Borrow, error::Error, fmt, marker::PhantomData, ops::ControlFl
 
 /// The results of a successful tree insert
 #[derive(Debug)]
-pub struct InsertResult<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
+pub struct InsertResult<'a, K: AsBytes, V, const PREFIX_LEN: usize> {
     /// Pointer to the leaf
-    pub leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
+    pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     /// The existing leaf referenced by the insert key, if present
-    pub existing_leaf: Option<LeafNode<K, V, NUM_PREFIX_BYTES>>,
+    pub existing_leaf: Option<LeafNode<K, V, PREFIX_LEN>>,
     /// The new tree root after the successful insert
-    pub new_root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+    pub new_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 
     pub marker: PhantomData<(&'a mut K, &'a V)>,
 }
@@ -52,7 +52,7 @@ impl Error for InsertPrefixError {}
 ///
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
-pub struct InsertPoint<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
+pub struct InsertPoint<K: AsBytes, V, const PREFIX_LEN: usize> {
     /// The grandparent node pointer and key byte that points to the parent node
     /// insert point.
     ///
@@ -63,50 +63,50 @@ pub struct InsertPoint<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     ///
     /// This is only used during the removal in the entry, and it's not a lot
     /// extra work or space to keep track
-    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
+    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     /// The parent node pointer and key byte that points to the main node
     /// insert point.
     ///
     /// In the case that the root node is the main insert point, this will
     /// have a `None` value.
-    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
+    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     /// The type of operation that needs to be performed to insert the key
-    pub insert_type: InsertSearchResultType<K, V, NUM_PREFIX_BYTES>,
+    pub insert_type: InsertSearchResultType<K, V, PREFIX_LEN>,
     /// The number of bytes that were read from the key to find the insert
     /// point.
     pub key_bytes_used: usize,
     /// Current root of the tree, used in the apply
-    pub root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+    pub root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> InsertPoint<K, V, NUM_PREFIX_BYTES> {
-    pub fn apply<'a>(self, key: K, value: V) -> InsertResult<'a, K, V, NUM_PREFIX_BYTES>
+impl<K: AsBytes, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
+    pub fn apply<'a>(self, key: K, value: V) -> InsertResult<'a, K, V, PREFIX_LEN>
     where
         K: AsBytes + 'a,
         V: 'a,
     {
-        fn write_new_child_in_existing_node<'a, K, V, const NUM_PREFIX_BYTES: usize>(
-            inner_node_ptr: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
-            new_leaf_node: LeafNode<K, V, NUM_PREFIX_BYTES>,
+        fn write_new_child_in_existing_node<'a, K, V, const PREFIX_LEN: usize>(
+            inner_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
+            new_leaf_node: LeafNode<K, V, PREFIX_LEN>,
             key_bytes_used: usize,
         ) -> (
-            OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
-            NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
+            OpaqueNodePtr<K, V, PREFIX_LEN>,
+            NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
         )
         where
             K: AsBytes + 'a,
             V: 'a,
         {
-            fn write_new_child_in_existing_inner_node<'a, K, V, N, const NUM_PREFIX_BYTES: usize>(
-                inner_node_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
-                new_leaf_node: LeafNode<K, V, NUM_PREFIX_BYTES>,
+            fn write_new_child_in_existing_inner_node<'a, K, V, N, const PREFIX_LEN: usize>(
+                inner_node_ptr: NodePtr<PREFIX_LEN, N>,
+                new_leaf_node: LeafNode<K, V, PREFIX_LEN>,
                 key_bytes_used: usize,
             ) -> (
-                OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
-                NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
+                OpaqueNodePtr<K, V, PREFIX_LEN>,
+                NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
             )
             where
-                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
                 K: AsBytes + 'a,
                 V: 'a,
             {
@@ -164,17 +164,17 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> InsertPoint<K, V, NUM_PREFIX_
         }
 
         /// Write a new child node to an inner node at the specified key byte.
-        fn parent_write_child<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-            parent_inner_node: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+        fn parent_write_child<K: AsBytes, V, const PREFIX_LEN: usize>(
+            parent_inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
             key_byte: u8,
-            new_child: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+            new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
         ) {
-            fn write_inner_node<K: AsBytes, V, N, const NUM_PREFIX_BYTES: usize>(
-                parent_inner_node: NodePtr<NUM_PREFIX_BYTES, N>,
+            fn write_inner_node<K: AsBytes, V, N, const PREFIX_LEN: usize>(
+                parent_inner_node: NodePtr<PREFIX_LEN, N>,
                 key_byte: u8,
-                new_child: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+                new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
             ) where
-                N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
             {
                 // SAFETY: The lifetime produced from this is bounded to this scope and does not
                 // escape. Further, no other code mutates the node referenced, which is further
@@ -396,16 +396,16 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> InsertPoint<K, V, NUM_PREFIX_
 }
 
 /// The type of insert
-pub enum InsertSearchResultType<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
+pub enum InsertSearchResultType<K: AsBytes, V, const PREFIX_LEN: usize> {
     /// An insert where an inner node had a differing prefix from the key.
     ///
     /// This insert type will create a new inner node with the portion of
     /// the prefix that did match, and update the existing inner node
     MismatchPrefix {
         /// Data about the matching if the prefix
-        mismatch: Mismatch<K, V, NUM_PREFIX_BYTES>,
+        mismatch: Mismatch<K, V, PREFIX_LEN>,
         /// A pointer to the inner node which had a mismatched prefix
-        mismatched_inner_node_ptr: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+        mismatched_inner_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
     },
     /// An insert where the node to be added matched all the way up to a
     /// leaf node.
@@ -414,7 +414,7 @@ pub enum InsertSearchResultType<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     /// existing leaf and the new leaf as children to that node.
     SplitLeaf {
         /// A pointer to the leaf node that will be split
-        leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
+        leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
         new_key_bytes_used: usize,
     },
     /// Exact match of the leaf was found
@@ -422,7 +422,7 @@ pub enum InsertSearchResultType<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     /// This insert type will replace the older leaf with a new one
     Exact {
         /// A pointer to the leaf node that will be split
-        leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
+        leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     },
     /// An insert where the search terminated at an existing inner node that
     /// did not have a child with the key byte.
@@ -432,7 +432,7 @@ pub enum InsertSearchResultType<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
     IntoExisting {
         /// A pointer to the existing inner node which will be updated to
         /// contain the new child leaf node
-        inner_node_ptr: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+        inner_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
     },
 }
 
@@ -449,28 +449,25 @@ pub enum InsertSearchResultType<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> {
 /// # Errors
 ///  - If the given `key` is a prefix of an existing key, this function will
 ///    return an error.
-pub unsafe fn search_for_insert_point<K, V, Q, const NUM_PREFIX_BYTES: usize>(
-    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+pub unsafe fn search_for_insert_point<K, V, Q, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key: &Q,
-) -> Result<InsertPoint<K, V, NUM_PREFIX_BYTES>, InsertPrefixError>
+) -> Result<InsertPoint<K, V, PREFIX_LEN>, InsertPrefixError>
 where
     K: AsBytes + Borrow<Q>,
     Q: AsBytes + ?Sized,
 {
     #[allow(clippy::type_complexity)]
-    fn test_prefix_identify_insert<K, V, N, const NUM_PREFIX_BYTES: usize>(
-        inner_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
+    fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
+        inner_ptr: NodePtr<PREFIX_LEN, N>,
         key: &[u8],
         current_depth: &mut usize,
     ) -> Result<
-        ControlFlow<
-            Mismatch<K, V, NUM_PREFIX_BYTES>,
-            Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
-        >,
+        ControlFlow<Mismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>,
         InsertPrefixError,
     >
     where
-        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
         K: AsBytes,
     {
         // SAFETY: The lifetime produced from this is bounded to this scope and does not

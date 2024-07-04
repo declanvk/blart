@@ -21,14 +21,14 @@ pub(crate) use delete::*;
 /// # Safety
 ///  - This function must only be called once for this root node and all
 ///    descendants, otherwise a double-free could result.
-pub unsafe fn deallocate_tree<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-    root: OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>,
+pub unsafe fn deallocate_tree<K: AsBytes, V, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 ) {
-    fn deallocate_inner_node<K: AsBytes, V, N, const NUM_PREFIX_BYTES: usize>(
-        stack: &mut Vec<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
-        inner_ptr: NodePtr<NUM_PREFIX_BYTES, N>,
+    fn deallocate_inner_node<K: AsBytes, V, N, const PREFIX_LEN: usize>(
+        stack: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
+        inner_ptr: NodePtr<PREFIX_LEN, N>,
     ) where
-        N: InnerNode<NUM_PREFIX_BYTES, Key = K, Value = V>,
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
     {
         {
             // SAFETY: The scope of this reference is bounded and we enforce that no

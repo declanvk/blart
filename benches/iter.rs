@@ -7,7 +7,7 @@ use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 #[macro_use]
 mod common;
 
-fn iter_node<const NUM_PREFIX_BYTES: usize, M: Measurement, N: InnerNode<NUM_PREFIX_BYTES>>(
+fn iter_node<const PREFIX_LEN: usize, M: Measurement, N: InnerNode<PREFIX_LEN>>(
     c: &mut Criterion<M>,
     prefix: &str,
     ty: &str,
@@ -16,9 +16,8 @@ fn iter_node<const NUM_PREFIX_BYTES: usize, M: Measurement, N: InnerNode<NUM_PRE
     let mut rng = StdRng::seed_from_u64(69420);
     let bytes: Vec<_> = (0..=255u8).collect();
 
-    let dangling_ptr = unsafe {
-        NodePtr::new(NonNull::<InnerNode48<_, _, NUM_PREFIX_BYTES>>::dangling().as_ptr())
-    };
+    let dangling_ptr =
+        unsafe { NodePtr::new(NonNull::<InnerNode48<_, _, PREFIX_LEN>>::dangling().as_ptr()) };
     let dangling_opaque = dangling_ptr.to_opaque();
 
     let mut group = c.benchmark_group(format!("{prefix}/{ty}"));

@@ -18,11 +18,11 @@ pub use entry_ref::*;
 pub use iterators::*;
 
 /// An ordered map based on an adaptive radix tree.
-pub struct TreeMap<K: AsBytes, V, const NUM_PREFIX_BYTES: usize = 16> {
+pub struct TreeMap<K: AsBytes, V, const PREFIX_LEN: usize = 16> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
-    pub(crate) root: Option<OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>>,
+    pub(crate) root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
 }
 
 impl<K: AsBytes, V> TreeMap<K, V> {
@@ -45,7 +45,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTES> {
+impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// Create a new, empty [`crate::TreeMap`].
     ///
     /// This function will not pre-allocate anything.
@@ -234,7 +234,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
         &'a self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> Fuzzy<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    ) -> Fuzzy<'a, 'b, K, V, PREFIX_LEN>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -266,7 +266,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
         &'a mut self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyMut<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    ) -> FuzzyMut<'a, 'b, K, V, PREFIX_LEN>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -298,7 +298,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
         &'a self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyKeys<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    ) -> FuzzyKeys<'a, 'b, K, V, PREFIX_LEN>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -330,7 +330,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
         &'a self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyValues<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    ) -> FuzzyValues<'a, 'b, K, V, PREFIX_LEN>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -362,7 +362,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
         &'a mut self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES>
+    ) -> FuzzyValuesMut<'a, 'b, K, V, PREFIX_LEN>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -527,11 +527,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
         }
     }
 
-    fn init_tree(
-        &mut self,
-        key: K,
-        value: V,
-    ) -> NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>> {
+    fn init_tree(&mut self, key: K, value: V) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
         let leaf = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
         self.root = Some(leaf.to_opaque());
         self.num_entries = 1;
@@ -540,10 +536,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
 
     fn apply_insert_point(
         &mut self,
-        insert_point: InsertPoint<K, V, NUM_PREFIX_BYTES>,
+        insert_point: InsertPoint<K, V, PREFIX_LEN>,
         key: K,
         value: V,
-    ) -> InsertResult<K, V, NUM_PREFIX_BYTES>
+    ) -> InsertResult<K, V, PREFIX_LEN>
     where
         K: AsBytes,
     {
@@ -562,8 +558,8 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
 
     fn apply_delete_point(
         &mut self,
-        delete_point: DeletePoint<K, V, NUM_PREFIX_BYTES>,
-    ) -> DeleteResult<K, V, NUM_PREFIX_BYTES>
+        delete_point: DeletePoint<K, V, PREFIX_LEN>,
+    ) -> DeleteResult<K, V, PREFIX_LEN>
     where
         K: AsBytes,
     {
@@ -754,7 +750,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     // assert_eq!(a[&5], "f");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V, NUM_PREFIX_BYTES>)
+    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V, PREFIX_LEN>)
     where
         K: NoPrefixesBytes,
     {
@@ -871,7 +867,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     // assert_eq!(b[[41].as_ref()], "e");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, NUM_PREFIX_BYTES>
+    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, PREFIX_LEN>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -951,7 +947,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), 4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_keys(self) -> iterators::IntoKeys<K, V, NUM_PREFIX_BYTES> {
+    pub fn into_keys(self) -> iterators::IntoKeys<K, V, PREFIX_LEN> {
         iterators::IntoKeys::new(self)
     }
 
@@ -977,7 +973,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), 'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_values(self) -> iterators::IntoValues<K, V, NUM_PREFIX_BYTES> {
+    pub fn into_values(self) -> iterators::IntoValues<K, V, PREFIX_LEN> {
         iterators::IntoValues::new(self)
     }
 
@@ -1001,7 +997,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), (&4, &'z'));
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn iter(&self) -> TreeIterator<'_, K, V, NUM_PREFIX_BYTES> {
+    pub fn iter(&self) -> TreeIterator<'_, K, V, PREFIX_LEN> {
         TreeIterator::new(self)
     }
 
@@ -1026,7 +1022,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V, NUM_PREFIX_BYTES> {
+    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V, PREFIX_LEN> {
         TreeIteratorMut::new(self)
     }
 
@@ -1050,7 +1046,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), &4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn keys(&self) -> Keys<'_, K, V, NUM_PREFIX_BYTES> {
+    pub fn keys(&self) -> Keys<'_, K, V, PREFIX_LEN> {
         Keys::new(self)
     }
 
@@ -1074,7 +1070,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     /// assert_eq!(iter.next().unwrap(), &'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn values(&self) -> Values<'_, K, V, NUM_PREFIX_BYTES> {
+    pub fn values(&self) -> Values<'_, K, V, PREFIX_LEN> {
         Values::new(self)
     }
 
@@ -1099,7 +1095,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V, NUM_PREFIX_BYTES> {
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V, PREFIX_LEN> {
         ValuesMut::new(self)
     }
 
@@ -1121,7 +1117,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     ///
     /// assert_eq!(p, vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
     /// ```
-    pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+    pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, PREFIX_LEN> {
         Prefix::new(self, prefix)
     }
 
@@ -1147,7 +1143,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     pub fn prefix_mut<'a, 'b>(
         &'a mut self,
         prefix: &'b [u8],
-    ) -> PrefixMut<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+    ) -> PrefixMut<'a, 'b, K, V, PREFIX_LEN> {
         PrefixMut::new(self, prefix)
     }
 
@@ -1169,10 +1165,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     ///
     /// assert_eq!(p, vec![&c"abcde", &c"abcdexxx", &c"abcdexxy"]);
     /// ```
-    pub fn prefix_keys<'a, 'b>(
-        &'a self,
-        prefix: &'b [u8],
-    ) -> PrefixKeys<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+    pub fn prefix_keys<'a, 'b>(&'a self, prefix: &'b [u8]) -> PrefixKeys<'a, 'b, K, V, PREFIX_LEN> {
         PrefixKeys::new(self, prefix)
     }
 
@@ -1197,7 +1190,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     pub fn prefix_values<'a, 'b>(
         &'a self,
         prefix: &'b [u8],
-    ) -> PrefixValues<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+    ) -> PrefixValues<'a, 'b, K, V, PREFIX_LEN> {
         PrefixValues::new(self, prefix)
     }
 
@@ -1223,7 +1216,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     pub fn prefix_values_mut<'a, 'b>(
         &'a mut self,
         prefix: &'b [u8],
-    ) -> PrefixValuesMut<'a, 'b, K, V, NUM_PREFIX_BYTES> {
+    ) -> PrefixValuesMut<'a, 'b, K, V, PREFIX_LEN> {
         PrefixValuesMut::new(self, prefix)
     }
 
@@ -1259,10 +1252,10 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTES> {
+impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, NUM_PREFIX_BYTES>, InsertPrefixError>
+    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, PREFIX_LEN>, InsertPrefixError>
     where
         K: AsBytes,
     {
@@ -1302,7 +1295,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     pub fn try_entry_ref<'a, 'b, Q>(
         &'a mut self,
         key: &'b Q,
-    ) -> Result<EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>, InsertPrefixError>
+    ) -> Result<EntryRef<'a, 'b, K, V, Q, PREFIX_LEN>, InsertPrefixError>
     where
         K: AsBytes + Borrow<Q> + From<&'b Q>,
         Q: AsBytes + ?Sized,
@@ -1340,7 +1333,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
 
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, NUM_PREFIX_BYTES>
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, PREFIX_LEN>
     where
         K: NoPrefixesBytes,
     {
@@ -1350,10 +1343,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
 
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn entry_ref<'a, 'b, Q>(
-        &'a mut self,
-        key: &'b Q,
-    ) -> EntryRef<'a, 'b, K, V, Q, NUM_PREFIX_BYTES>
+    pub fn entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> EntryRef<'a, 'b, K, V, Q, PREFIX_LEN>
     where
         K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
         Q: NoPrefixesBytes + ?Sized,
@@ -1363,13 +1353,13 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> TreeMap<K, V, NUM_PREFIX_BYTE
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Drop for TreeMap<K, V, NUM_PREFIX_BYTES> {
+impl<K: AsBytes, V, const PREFIX_LEN: usize> Drop for TreeMap<K, V, PREFIX_LEN> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Clone for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> Clone for TreeMap<K, V, PREFIX_LEN>
 where
     K: Clone + AsBytes,
     V: Clone,
@@ -1386,7 +1376,7 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Debug for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> Debug for TreeMap<K, V, PREFIX_LEN>
 where
     K: Debug + AsBytes,
     V: Debug,
@@ -1396,14 +1386,13 @@ where
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> Default for TreeMap<K, V, NUM_PREFIX_BYTES> {
+impl<K: AsBytes, V, const PREFIX_LEN: usize> Default for TreeMap<K, V, PREFIX_LEN> {
     fn default() -> Self {
         Self::with_prefix_len()
     }
 }
 
-impl<'a, K, V, const NUM_PREFIX_BYTES: usize> Extend<(&'a K, &'a V)>
-    for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<'a, K, V, const PREFIX_LEN: usize> Extend<(&'a K, &'a V)> for TreeMap<K, V, PREFIX_LEN>
 where
     K: Copy + NoPrefixesBytes,
     V: Copy,
@@ -1415,7 +1404,7 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Extend<(K, V)> for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> Extend<(K, V)> for TreeMap<K, V, PREFIX_LEN>
 where
     K: NoPrefixesBytes,
 {
@@ -1426,8 +1415,7 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize, const N: usize> From<[(K, V); N]>
-    for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize, const N: usize> From<[(K, V); N]> for TreeMap<K, V, PREFIX_LEN>
 where
     K: NoPrefixesBytes,
 {
@@ -1440,7 +1428,7 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> FromIterator<(K, V)> for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> FromIterator<(K, V)> for TreeMap<K, V, PREFIX_LEN>
 where
     K: NoPrefixesBytes,
 {
@@ -1453,7 +1441,7 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Hash for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> Hash for TreeMap<K, V, PREFIX_LEN>
 where
     K: Hash + AsBytes,
     V: Hash,
@@ -1466,7 +1454,7 @@ where
     }
 }
 
-impl<Q, K, V, const NUM_PREFIX_BYTES: usize> Index<&Q> for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<Q, K, V, const PREFIX_LEN: usize> Index<&Q> for TreeMap<K, V, PREFIX_LEN>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
@@ -1478,10 +1466,8 @@ where
     }
 }
 
-impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
-    for &'a TreeMap<K, V, NUM_PREFIX_BYTES>
-{
-    type IntoIter = TreeIterator<'a, K, V, NUM_PREFIX_BYTES>;
+impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator for &'a TreeMap<K, V, PREFIX_LEN> {
+    type IntoIter = TreeIterator<'a, K, V, PREFIX_LEN>;
     type Item = (&'a K, &'a V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1489,10 +1475,10 @@ impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
     }
 }
 
-impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
-    for &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator
+    for &'a mut TreeMap<K, V, PREFIX_LEN>
 {
-    type IntoIter = TreeIteratorMut<'a, K, V, NUM_PREFIX_BYTES>;
+    type IntoIter = TreeIteratorMut<'a, K, V, PREFIX_LEN>;
     type Item = (&'a K, &'a mut V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1500,10 +1486,8 @@ impl<'a, K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
     }
 }
 
-impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
-    for TreeMap<K, V, NUM_PREFIX_BYTES>
-{
-    type IntoIter = iterators::IntoIter<K, V, NUM_PREFIX_BYTES>;
+impl<K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator for TreeMap<K, V, PREFIX_LEN> {
+    type IntoIter = iterators::IntoIter<K, V, PREFIX_LEN>;
     type Item = (K, V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1511,7 +1495,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIterator
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Ord for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> Ord for TreeMap<K, V, PREFIX_LEN>
 where
     K: Ord + AsBytes,
     V: Ord,
@@ -1521,7 +1505,7 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> PartialOrd for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> PartialOrd for TreeMap<K, V, PREFIX_LEN>
 where
     K: PartialOrd + AsBytes,
     V: PartialOrd,
@@ -1531,14 +1515,14 @@ where
     }
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> Eq for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> Eq for TreeMap<K, V, PREFIX_LEN>
 where
     K: Eq + AsBytes,
     V: Eq,
 {
 }
 
-impl<K, V, const NUM_PREFIX_BYTES: usize> PartialEq for TreeMap<K, V, NUM_PREFIX_BYTES>
+impl<K, V, const PREFIX_LEN: usize> PartialEq for TreeMap<K, V, PREFIX_LEN>
 where
     K: PartialEq + AsBytes,
     V: PartialEq,
@@ -1551,7 +1535,7 @@ where
 // SAFETY: This is safe to implement if `K` and `V` are also `Send`.
 // This container is safe to `Send` for the same reasons why other container
 // are also safe
-unsafe impl<K, V, const NUM_PREFIX_BYTES: usize> Send for TreeMap<K, V, NUM_PREFIX_BYTES>
+unsafe impl<K, V, const PREFIX_LEN: usize> Send for TreeMap<K, V, PREFIX_LEN>
 where
     K: Send + AsBytes,
     V: Send,
@@ -1561,7 +1545,7 @@ where
 // SAFETY: This is safe to implement if `K` and `V` are also `Sync`.
 // This container is safe to `Sync` for the same reasons why other container
 // are also safe
-unsafe impl<K, V, const NUM_PREFIX_BYTES: usize> Sync for TreeMap<K, V, NUM_PREFIX_BYTES>
+unsafe impl<K, V, const PREFIX_LEN: usize> Sync for TreeMap<K, V, PREFIX_LEN>
 where
     K: Sync + AsBytes,
     V: Sync,
