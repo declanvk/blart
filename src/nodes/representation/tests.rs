@@ -67,43 +67,54 @@ fn opaque_node_ptr_is_correct() {
     assert!(n256_ptr.is::<InnerNode256<Box<[u8]>, usize, 16>>());
 }
 
-// #[test]
-// #[cfg(target_pointer_width = "64")]
-// fn node_sizes() {
-//     const EXPECTED_HEADER_SIZE: usize = 40;
+#[test]
+#[cfg(target_pointer_width = "64")]
+fn node_sizes() {
+    const DEFAULT_NUM_PREFIX_BYTES: usize = 4;
+    const EXPECTED_HEADER_SIZE: usize = DEFAULT_NUM_PREFIX_BYTES.next_multiple_of(8) + 8;
 
-//     assert_eq!(mem::size_of::<Header>(), EXPECTED_HEADER_SIZE);
-//     // key map: 4 * (1 byte) = 4 bytes
-//     // child map: 4 * (8 bytes (on 64-bit platform)) = 32
-//     //
-//     // 4 bytes of padding are inserted after the `keys` field to align the
-// field to     // an 8 byte boundary.
-//     assert_eq!(
-//         mem::size_of::<InnerNode4<Box<[u8]>, usize>>(),
-//         EXPECTED_HEADER_SIZE + 40
-//     );
-//     // key map: 16 * (1 byte) = 16 bytes
-//     // child map: 16 * (8 bytes (on 64-bit platform)) = 128
-//     assert_eq!(
-//         mem::size_of::<InnerNode16<Box<[u8]>, usize>>(),
-//         EXPECTED_HEADER_SIZE + 144
-//     );
-//     // key map: 256 * (1 byte) = 256 bytes
-//     // child map: 48 * (8 bytes (on 64-bit platform)) = 384
-//     assert_eq!(
-//         mem::size_of::<InnerNode48<Box<[u8]>, usize>>(),
-//         EXPECTED_HEADER_SIZE + 640
-//     );
-//     // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
-//     assert_eq!(
-//         mem::size_of::<InnerNode256<Box<[u8]>, usize>>(),
-//         EXPECTED_HEADER_SIZE + 2048
-//     );
+    assert_eq!(
+        mem::size_of::<Header<DEFAULT_NUM_PREFIX_BYTES>>(),
+        EXPECTED_HEADER_SIZE
+    );
+    // key map: 4 * (1 byte) = 4 bytes
+    // child map: 4 * (8 bytes (on 64-bit platform)) = 32
+    //
+    // 4 bytes of padding are inserted after the `keys` field to align the field to
+    // an 8 byte boundary.
+    assert_eq!(
+        mem::size_of::<InnerNode4<Box<[u8]>, usize, DEFAULT_NUM_PREFIX_BYTES>>(),
+        EXPECTED_HEADER_SIZE + 40
+    );
+    // key map: 16 * (1 byte) = 16 bytes
+    // child map: 16 * (8 bytes (on 64-bit platform)) = 128
+    assert_eq!(
+        mem::size_of::<InnerNode16<Box<[u8]>, usize, DEFAULT_NUM_PREFIX_BYTES>>(),
+        EXPECTED_HEADER_SIZE + 144
+    );
+    // key map: 256 * (1 byte) = 256 bytes
+    // child map: 48 * (8 bytes (on 64-bit platform)) = 384
+    assert_eq!(
+        mem::size_of::<InnerNode48<Box<[u8]>, usize, DEFAULT_NUM_PREFIX_BYTES>>(),
+        EXPECTED_HEADER_SIZE + 640
+    );
+    // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
+    assert_eq!(
+        mem::size_of::<InnerNode256<Box<[u8]>, usize, DEFAULT_NUM_PREFIX_BYTES>>(),
+        EXPECTED_HEADER_SIZE + 2048
+    );
 
-//     // Assert that pointer is expected size and has non-null optimization
-//     assert_eq!(mem::size_of::<Option<OpaqueNodePtr<Box<[u8]>, ()>>>(), 8);
-//     assert_eq!(mem::size_of::<OpaqueNodePtr<Box<[u8]>, ()>>(), 8);
-// }
+    // Assert that pointer is expected size and has non-null optimization
+    assert_eq!(
+        mem::size_of::<Option<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_NUM_PREFIX_BYTES>>>(),
+        8
+    );
+    assert_eq!(
+        mem::size_of::<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_NUM_PREFIX_BYTES>>(),
+        8
+    );
+}
+
 #[test]
 fn node_alignment() {
     assert_eq!(mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(), 8);

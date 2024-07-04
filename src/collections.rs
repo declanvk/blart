@@ -1,2 +1,2 @@
 pub mod map;
-pub use map::RawTreeMap;
+pub use map::TreeMap;

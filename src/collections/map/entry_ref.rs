@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, mem::replace};
 
-use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap};
+use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 
 /// A view into an occupied entry in a HashMap. It is part of the Entry enum.
 pub struct OccupiedEntryRef<'a, K, V, const NUM_PREFIX_BYTES: usize>
@@ -10,7 +10,7 @@ where
     pub(crate) leaf_node_ptr: NodePtr<NUM_PREFIX_BYTES, LeafNode<K, V, NUM_PREFIX_BYTES>>,
 
     /// Used for the removal
-    pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    pub(crate) map: &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
     /// Used for the removal
     pub(crate) grandparent_ptr_and_parent_key_byte:
         Option<(OpaqueNodePtr<K, V, NUM_PREFIX_BYTES>, u8)>,
@@ -93,7 +93,7 @@ where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
 {
-    pub(crate) map: &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    pub(crate) map: &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
     pub(crate) key: &'b Q,
     pub(crate) insert_point: Option<InsertPoint<K, V, NUM_PREFIX_BYTES>>,
 }

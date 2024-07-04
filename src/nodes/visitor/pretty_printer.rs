@@ -1,6 +1,6 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
+    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
 };
 use std::{
     fmt::Debug,
@@ -32,7 +32,7 @@ impl<O: Write> DotPrinter<O> {
     ///    children nodes must not get mutated.
     pub unsafe fn print<K, V, const NUM_PREFIX_BYTES: usize>(
         output: O,
-        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+        tree: &TreeMap<K, V, NUM_PREFIX_BYTES>,
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where

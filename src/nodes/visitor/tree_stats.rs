@@ -2,7 +2,7 @@ use std::ops::Add;
 
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, RawTreeMap,
+    AsBytes, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, TreeMap,
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -18,7 +18,7 @@ impl TreeStatsCollector {
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
     pub unsafe fn collect<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+        tree: &TreeMap<K, V, NUM_PREFIX_BYTES>,
     ) -> Option<TreeStats> {
         let mut collector = TreeStatsCollector;
 
@@ -31,7 +31,7 @@ impl TreeStatsCollector {
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
     pub unsafe fn count_leaf_nodes<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+        tree: &TreeMap<K, V, NUM_PREFIX_BYTES>,
     ) -> usize {
         struct LeafNodeCounter;
 

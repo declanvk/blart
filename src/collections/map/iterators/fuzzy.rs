@@ -1,7 +1,7 @@
 use crate::{
     rust_nightly_apis::{assume, box_new_uninit_slice},
     AsBytes, ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
-    OpaqueNodePtr, RawTreeMap,
+    OpaqueNodePtr, TreeMap,
 };
 use std::{iter::FusedIterator, mem::MaybeUninit};
 
@@ -453,7 +453,7 @@ macro_rules! gen_iter {
 // create a shared reference to the leaf
 gen_iter!(
     Fuzzy,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
     (&'a K, &'a V),
     as_key_value_ref
 );
@@ -461,7 +461,7 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     FuzzyMut,
-    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
@@ -469,7 +469,7 @@ gen_iter!(
 // create a shared reference to the leaf
 gen_iter!(
     FuzzyKeys,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a K,
     as_key_ref
 );
@@ -477,7 +477,7 @@ gen_iter!(
 // create a shared reference to the leaf
 gen_iter!(
     FuzzyValues,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a V,
     as_value_ref
 );
@@ -485,7 +485,7 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     FuzzyValuesMut,
-    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a mut V,
     as_value_mut
 );

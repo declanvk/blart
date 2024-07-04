@@ -1,6 +1,6 @@
 use crate::{
     nodes::visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, RawTreeMap,
+    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
 };
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -293,7 +293,7 @@ where
     /// # Errors
     ///  - Returns an error if the given tree is not well-formed.
     pub unsafe fn check(
-        tree: &RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+        tree: &TreeMap<K, V, NUM_PREFIX_BYTES>,
     ) -> Result<usize, MalformedTreeError<K, V, NUM_PREFIX_BYTES>> {
         tree.root
             .map(|root| unsafe { Self::check_tree(root) })

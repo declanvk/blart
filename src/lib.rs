@@ -44,20 +44,15 @@
 mod bytes;
 mod collections;
 mod nodes;
+mod rust_nightly_apis;
 mod tagged_pointer;
 
 #[doc(hidden)]
 pub mod tests_common;
 
-mod rust_nightly_apis;
-
 pub use bytes::*;
 pub use collections::*;
 pub use nodes::{visitor, *};
-
-/// Standard ART type. The default is for variable key lengths, with 16 byte
-/// prefix
-pub type TreeMap<K, V> = RawTreeMap<K, V, 16>;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]
