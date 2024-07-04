@@ -49,6 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // this struct is used for its debug repr
 struct WordStats<'b> {
     num_unique: u64,
     first_word: &'b [u8],
