@@ -2,7 +2,8 @@ use std::{borrow::Borrow, mem::replace};
 
 use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 
-/// A view into an occupied entry in a HashMap. It is part of the Entry enum.
+/// A view into an occupied entry in a [`TreeMap`]. It is part of the
+/// [`EntryRef`][super::EntryRef] enum.
 pub struct OccupiedEntryRef<'a, K, V, const PREFIX_LEN: usize>
 where
     K: AsBytes,
@@ -85,7 +86,7 @@ where
     }
 }
 
-/// A view into a vacant entry in a HashMap. It is part of the [`EntryRef`]
+/// A view into a vacant entry in a [`TreeMap`]. It is part of the [`EntryRef`]
 /// enum.
 pub struct VacantEntryRef<'a, 'b, K, V, Q, const PREFIX_LEN: usize>
 where
@@ -149,19 +150,17 @@ where
     }
 }
 
-///A view into a single entry in a map, which may either be vacant or occupied.
-//
-//This enum is constructed from the entry method on HashMap.
+/// A view into a single entry in a map, which may either be vacant or occupied.
+///
+/// This enum is constructed from the entry method on [`TreeMap`].
 pub enum EntryRef<'a, 'b, K, V, Q, const PREFIX_LEN: usize>
 where
     K: AsBytes + Borrow<Q> + From<&'b Q>,
     Q: AsBytes + ?Sized,
 {
-    /// A view into an occupied entry in a HashMap. It is part of the
-    /// [`EntryRef`] enum.
+    /// A view into an occupied entry in a [`TreeMap`].
     Occupied(OccupiedEntryRef<'a, K, V, PREFIX_LEN>),
-    /// A view into a vacant entry in a HashMap. It is part of the [`EntryRef`]
-    /// enum.
+    /// A view into a vacant entry in a [`TreeMap`].
     Vacant(VacantEntryRef<'a, 'b, K, V, Q, PREFIX_LEN>),
 }
 
