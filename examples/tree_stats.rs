@@ -41,10 +41,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn collect_and_output_stats(tree: TreeMap<Box<[u8]>, ()>) -> Result<(), Box<dyn Error>> {
-    // SAFETY: There are no concurrent mutation to the tree node or its children
-    let stats = unsafe { TreeStatsCollector::collect(&tree).unwrap() };
+    let stats = TreeStatsCollector::collect(&tree).unwrap();
 
-    println!("{stats:#?}");
+    println!("{stats}");
 
     let overhead_bytes_per_key_byte =
         (stats.tree.mem_usage as f64) / (stats.leaf.sum_key_bytes as f64);

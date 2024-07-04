@@ -8,29 +8,31 @@ use crate::{
 /// A visitor of the radix tree which collects statistics about the tree, like
 /// how many inner nodes of each type, how many leaves
 #[derive(Debug)]
-pub struct TreeStatsCollector;
+pub struct TreeStatsCollector {
+    current: TreeStats,
+}
 
 impl TreeStatsCollector {
     /// Run the tree stats collection on the given root node, then return the
-    /// accumalated stats.
-    ///
-    /// # Safety
-    ///  - For the duration of this function, the given node and all its
-    ///    children nodes must not get mutated.
-    pub unsafe fn collect<K: AsBytes, V, const PREFIX_LEN: usize>(
+    /// accumulated stats.
+    pub fn collect<K: AsBytes, V, const PREFIX_LEN: usize>(
         tree: &TreeMap<K, V, PREFIX_LEN>,
     ) -> Option<TreeStats> {
-        let mut collector = TreeStatsCollector;
+        if let Some(root) = tree.root {
+            let mut collector = TreeStatsCollector {
+                current: TreeStats::default(),
+            };
 
-        tree.root.map(|root| root.visit_with(&mut collector))
+            root.visit_with(&mut collector);
+
+            Some(collector.current)
+        } else {
+            None
+        }
     }
 
     /// Iterate through the given tree and return the number of leaf nodes.
-    ///
-    /// # Safety
-    ///  - For the duration of this function, the given node and all its
-    ///    children nodes must not get mutated.
-    pub unsafe fn count_leaf_nodes<K: AsBytes, V, const PREFIX_LEN: usize>(
+    pub fn count_leaf_nodes<K: AsBytes, V, const PREFIX_LEN: usize>(
         tree: &TreeMap<K, V, PREFIX_LEN>,
     ) -> usize {
         struct LeafNodeCounter;
@@ -186,7 +188,7 @@ impl Add for LeafStats {
 }
 
 /// Collection of stats about the number of nodes types present in a tree
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TreeStats {
     /// Stats for [`InnerNode4`][crate::nodes::InnerNode4]s
     pub node4: InnerNodeStats,
@@ -229,61 +231,48 @@ impl<K, V, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN> for TreeStatsColle
 where
     K: AsBytes,
 {
-    type Output = TreeStats;
+    type Output = ();
 
     fn default_output(&self) -> Self::Output {
-        TreeStats::default()
+        ()
     }
 
-    fn combine_output(&self, o1: Self::Output, o2: Self::Output) -> Self::Output {
-        TreeStats {
-            node4: o1.node4 + o2.node4,
-            node16: o1.node16 + o2.node16,
-            node48: o1.node48 + o2.node48,
-            node256: o1.node256 + o2.node256,
-            tree: o1.tree + o2.tree,
-            leaf: o1.leaf + o2.leaf,
-        }
+    fn combine_output(&self, _: Self::Output, _: Self::Output) -> Self::Output {
+        ()
     }
 
     fn visit_node4(&mut self, t: &InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
-        let mut output = t.super_visit_with(self);
-        output.node4.aggregate_data(t);
-        output.tree.aggregate_data(t);
-        output
+        t.super_visit_with(self);
+        self.current.node4.aggregate_data(t);
+        self.current.tree.aggregate_data(t);
     }
 
     fn visit_node16(&mut self, t: &InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
-        let mut output = t.super_visit_with(self);
-        output.node16.aggregate_data(t);
-        output.tree.aggregate_data(t);
-        output
+        t.super_visit_with(self);
+        self.current.node16.aggregate_data(t);
+        self.current.tree.aggregate_data(t);
     }
 
     fn visit_node48(&mut self, t: &InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
-        let mut output = t.super_visit_with(self);
-        output.node48.aggregate_data(t);
-        output.tree.aggregate_data(t);
-        output
+        t.super_visit_with(self);
+        self.current.node48.aggregate_data(t);
+        self.current.tree.aggregate_data(t);
     }
 
     fn visit_node256(&mut self, t: &InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
-        let mut output = t.super_visit_with(self);
-        output.node256.aggregate_data(t);
-        output.tree.aggregate_data(t);
-        output
+        t.super_visit_with(self);
+        self.current.node256.aggregate_data(t);
+        self.current.tree.aggregate_data(t);
     }
 
     fn visit_leaf(&mut self, t: &LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
-        let mut output = TreeStats::default();
-        output.leaf.count += 1;
-        output.leaf.sum_key_bytes += t.key_ref().as_bytes().len();
-        output.leaf.mem_usage += std::mem::size_of_val(t);
-        output
+        self.current.leaf.count += 1;
+        self.current.leaf.sum_key_bytes += t.key_ref().as_bytes().len();
+        self.current.leaf.mem_usage += std::mem::size_of_val(t);
     }
 }
 
-impl std::fmt::Debug for TreeStats {
+impl std::fmt::Display for TreeStats {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let TreeStats {
@@ -292,30 +281,24 @@ impl std::fmt::Debug for TreeStats {
             node48,
             node256,
             tree,
-            leaf,
+            ..
         } = self;
-        f.debug_struct("TreeStats")
-            .field("node4", &node4)
-            .field("node16", &node16)
-            .field("node48", &node48)
-            .field("node256", &node256)
-            .field("tree", &tree)
-            .field("leaf", &leaf)
-            .finish()
-            .and(f.write_str("\n"))
-            .and(f.write_fmt(format_args!("memory usage (inner nodes):        {} bytes\n", tree.mem_usage)))
-            .and(f.write_fmt(format_args!("memory usage (inner nodes + leaf): {} bytes\n", self.total_memory_usage())))
-            .and(f.write_fmt(format_args!("bytes/entry:                       {:.5}\n", self.bytes_per_entry())))
-            .and(f.write_fmt(format_args!("bytes/entry (with leaf):           {:.5}\n", self.bytes_per_entry_with_leaf())))
-            .and(f.write_fmt(format_args!("avg prefix length:                 {:.5} bytes\n", tree.avg_prefix_len())))
-            .and(f.write_fmt(format_args!("avg capped prefix length:          {:.5} bytes\n", tree.avg_capped_prefix_len())))
-            .and(f.write_fmt(format_args!("% used header bytes (0-1):         {:.5}\n", tree.percentage_header_bytes())))
-            .and(f.write_fmt(format_args!("% used slots (0-1):                {:.5}\n", tree.percentage_slots())))
-            .and(f.write_fmt(format_args!("n4 size:                           {:?} bytes\n", node4.node_size())))
-            .and(f.write_fmt(format_args!("n16 size:                          {:?} bytes\n", node16.node_size())))
-            .and(f.write_fmt(format_args!("n48 size:                          {:?} bytes\n", node48.node_size())))
-            .and(f.write_fmt(format_args!("n256 size:                         {:?} bytes\n", node256.node_size())))
-            .and(f.write_fmt(format_args!("max prefix length:                 {} bytes", tree.max_prefix_len_bytes)))
+        write!(f, "{:#?}", self)?;
+        f.write_str("\n")?;
+        f.write_fmt(format_args!("memory usage (inner nodes):        {} bytes\n", tree.mem_usage))?;
+        f.write_fmt(format_args!("memory usage (inner nodes + leaf): {} bytes\n", self.total_memory_usage()))?;
+        f.write_fmt(format_args!("bytes/entry:                       {:.5}\n", self.bytes_per_entry()))?;
+        f.write_fmt(format_args!("bytes/entry (with leaf):           {:.5}\n", self.bytes_per_entry_with_leaf()))?;
+        f.write_fmt(format_args!("avg prefix length:                 {:.5} bytes\n", tree.avg_prefix_len()))?;
+        f.write_fmt(format_args!("avg capped prefix length:          {:.5} bytes\n", tree.avg_capped_prefix_len()))?;
+        f.write_fmt(format_args!("% used header bytes (0-1):         {:.5}\n", tree.percentage_header_bytes()))?;
+        f.write_fmt(format_args!("% used slots (0-1):                {:.5}\n", tree.percentage_slots()))?;
+        f.write_fmt(format_args!("n4 size:                           {:?} bytes\n", node4.node_size()))?;
+        f.write_fmt(format_args!("n16 size:                          {:?} bytes\n", node16.node_size()))?;
+        f.write_fmt(format_args!("n48 size:                          {:?} bytes\n", node48.node_size()))?;
+        f.write_fmt(format_args!("n256 size:                         {:?} bytes\n", node256.node_size()))?;
+        f.write_fmt(format_args!("max prefix length:                 {} bytes", tree.max_prefix_len_bytes))?;
+        Ok(())
     }
 }
 
@@ -333,7 +316,7 @@ mod tests {
         {
             tree.try_insert(k, v).unwrap();
         }
-        let stats = unsafe { TreeStatsCollector::collect(&tree).unwrap() };
+        let stats = TreeStatsCollector::collect(&tree).unwrap();
 
         let expected_inner = InnerNodeStats {
             count: 15,
@@ -368,7 +351,7 @@ mod tests {
         {
             tree.try_insert(k, v).unwrap();
         }
-        let stats = unsafe { TreeStatsCollector::collect(&tree).unwrap() };
+        let stats = TreeStatsCollector::collect(&tree).unwrap();
 
         let node4 = InnerNodeStats {
             count: 16,
