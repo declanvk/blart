@@ -1,4 +1,4 @@
-use crate::{AsBytes, RawTreeMap};
+use crate::{AsBytes, TreeMap};
 
 /// An owning iterator over the entries of a `TreeMap`.
 ///
@@ -8,11 +8,11 @@ use crate::{AsBytes, RawTreeMap};
 /// [`into_iter`]: IntoIterator::into_iter
 /// [`IntoIterator`]: core::iter::IntoIterator
 pub struct IntoIter<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
-    RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    TreeMap<K, V, NUM_PREFIX_BYTES>,
 );
 
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoIter<K, V, NUM_PREFIX_BYTES> {
-    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES>) -> Self {
+    pub(crate) fn new(tree: TreeMap<K, V, NUM_PREFIX_BYTES>) -> Self {
         IntoIter(tree)
     }
 }
@@ -46,7 +46,7 @@ impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> DoubleEndedIterator
 pub struct IntoKeys<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(IntoIter<K, V, NUM_PREFIX_BYTES>);
 
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoKeys<K, V, NUM_PREFIX_BYTES> {
-    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES>) -> Self {
+    pub(crate) fn new(tree: TreeMap<K, V, NUM_PREFIX_BYTES>) -> Self {
         IntoKeys(IntoIter::new(tree))
     }
 }
@@ -78,7 +78,7 @@ pub struct IntoValues<K: AsBytes, V, const NUM_PREFIX_BYTES: usize>(
 );
 
 impl<K: AsBytes, V, const NUM_PREFIX_BYTES: usize> IntoValues<K, V, NUM_PREFIX_BYTES> {
-    pub(crate) fn new(tree: RawTreeMap<K, V, NUM_PREFIX_BYTES>) -> Self {
+    pub(crate) fn new(tree: TreeMap<K, V, NUM_PREFIX_BYTES>) -> Self {
         IntoValues(IntoIter::new(tree))
     }
 }

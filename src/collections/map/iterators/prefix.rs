@@ -1,4 +1,4 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawTreeMap};
+use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_add_childs {
@@ -216,7 +216,7 @@ macro_rules! gen_iter {
 // create a shared reference to the leaf
 gen_iter!(
     Prefix,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
     (&'a K, &'a V),
     as_key_value_ref
 );
@@ -224,7 +224,7 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     PrefixMut,
-    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
@@ -232,7 +232,7 @@ gen_iter!(
 // create a shared reference to the leaf
 gen_iter!(
     PrefixKeys,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a K,
     as_key_ref
 );
@@ -240,7 +240,7 @@ gen_iter!(
 // create a shared reference to the leaf
 gen_iter!(
     PrefixValues,
-    &'a RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a TreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a V,
     as_value_ref
 );
@@ -248,7 +248,7 @@ gen_iter!(
 // create a mutable reference to the leaf
 gen_iter!(
     PrefixValuesMut,
-    &'a mut RawTreeMap<K, V, NUM_PREFIX_BYTES>,
+    &'a mut TreeMap<K, V, NUM_PREFIX_BYTES>,
     &'a mut V,
     as_value_mut
 );
