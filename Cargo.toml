@@ -78,10 +78,3 @@ harness = false
 [[bench]]
 name = "clone"
 harness = false
-
-# [profile.release]
-# codegen-units = 1
-# lto = "fat"
-# panic = "abort"
-# incremental = false
-# rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]

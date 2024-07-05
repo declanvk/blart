@@ -13,3 +13,6 @@ default.profraw
 # profiling workload data
 data/
 profile.json
+
+# coverage info
+lcov.info

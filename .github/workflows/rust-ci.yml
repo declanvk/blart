@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -30,60 +29,5 @@ jobs:
         with:
           toolchain: ${{matrix.rust}}
 
-      - name: Build
-        if: matrix.rust != 'nightly'
-        run: cargo build --all-targets
-
-      - name: Build with 'nightly' feature
-        if: matrix.rust == 'nightly'
-        run: cargo build --all-targets --features nightly
-
-      - name: Test
-        if: matrix.rust != 'nightly'
-        run: cargo test --all-targets
-
-      - name: Test with 'nightly' feature
-        if: matrix.rust == 'nightly'
-        run: cargo test --all-targets --features nightly
-
-  format:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v3
-
-      - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
-
-      - name: Check format
-        run: cargo fmt -- --check
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v3
-
-      - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy
-
-      - name: Lint
-        run: cargo clippy --all-features
-
-  miri:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v3
-
-      - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: miri
-
-      - name: Run miri tests
-        run: cargo miri test
+      - name: Run full test script
+        run: ./scripts/full-test "${{matrix.rust}}"
