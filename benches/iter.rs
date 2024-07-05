@@ -58,7 +58,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     group.warm_up_time(std::time::Duration::from_secs(5));
     group.measurement_time(std::time::Duration::from_secs(15));
 
-    group.bench_function("dict/foward", |b| {
+    group.bench_function("dict/forward", |b| {
         b.iter(|| {
             tree.iter().for_each(|(k, v)| {
                 std::hint::black_box((k, v));

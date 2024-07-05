@@ -224,7 +224,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header<PREFIX_LEN>> {
         let header_ptr = match self.node_type() {
             NodeType::Node4 | NodeType::Node16 | NodeType::Node48 | NodeType::Node256 => unsafe {
-                self.header_mut_uncheked()
+                self.header_mut_unchecked()
             },
             NodeType::Leaf => {
                 return None;
@@ -247,7 +247,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get accessed
     ///    (read or written) through any other pointer.
-    pub(crate) unsafe fn header_mut_uncheked<'h>(self) -> &'h mut Header<PREFIX_LEN> {
+    pub(crate) unsafe fn header_mut_unchecked<'h>(self) -> &'h mut Header<PREFIX_LEN> {
         unsafe { &mut *self.0.cast::<Header<PREFIX_LEN>>().to_ptr() }
     }
 
@@ -328,7 +328,7 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     ///  - This function can only be called once for a given node object.
     #[must_use]
     pub unsafe fn deallocate_node_ptr(node: Self) -> N {
-        // SAFETY: Covered by safety condition on functiom
+        // SAFETY: Covered by safety condition on function
         unsafe { *Box::from_raw(node.to_ptr()) }
     }
 
@@ -554,7 +554,7 @@ pub trait Node<const PREFIX_LEN: usize>: private::Sealed {
     /// The runtime type of the node.
     const TYPE: NodeType;
 
-    /// The key type carried by the leafe nodes
+    /// The key type carried by the leaf nodes
     type Key: AsBytes;
 
     /// The value type carried by the leaf nodes
@@ -737,20 +737,20 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
     /// Returns the minimum child pointer from this node and it's key
     ///
     /// # Safety
-    ///  - Since this is a [`InnerNode`] we assume that the we hava at least one
+    ///  - Since this is a [`InnerNode`] we assume that the we have at least one
     ///    child, (more strictly we have 2, because with one child the node
     ///    would have collapsed) so in this way we can avoid the [`Option`].
-    ///    This is safe because if we had, no childs this current node should
+    ///    This is safe because if we had no children this current node should
     ///    have been deleted.
     fn min(&self) -> (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>);
 
     /// Returns the maximum child pointer from this node and it's key
     ///
     /// # Safety
-    ///  - Since this is a [`InnerNode`] we assume that the we hava at least one
+    ///  - Since this is a [`InnerNode`] we assume that the we have at least one
     ///    child, (more strictly we have 2, because with one child the node
     ///    would have collapsed) so in this way we can avoid the [`Option`].
-    ///    This is safe because if we had, no childs this current node should
+    ///    This is safe because if we had, no children this current node should
     ///    have been deleted.
     fn max(&self) -> (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>);
 
@@ -890,7 +890,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize>
                 #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: This is by construction, since the number of children
-                    // is always <= maximum number o keys (childrens) that we can hold
+                    // is always <= maximum number of keys (children) that we can hold
                     assume!(num_children <= self.keys.len());
 
                     // SAFETY: When we are shifting children, because a new minimum one
@@ -911,7 +911,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize>
             },
         };
         unsafe {
-            // SAFETY: The check for a full node is done previsouly to the call
+            // SAFETY: The check for a full node is done previously to the call
             // of this function, so it's safe to assume that the new child index is
             // in bounds
             self.write_child_at(idx, key_fragment, child_pointer);
@@ -998,7 +998,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize>
             // SAFETY: By construction the number of children in the header
             // is kept in sync with the number of children written in the node
             // and if this number exceeds the maximum len the node should have
-            // alredy grown. So we know for a fact that that num_children <= node len
+            // already grown. So we know for a fact that that num_children <= node len
             assume!(num_children <= self.keys.len());
             assume!(num_children <= self.child_pointers.len());
 
@@ -1049,7 +1049,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize>
             // SAFETY: By construction the number of children in the header
             // is kept in sync with the number of children written in the node
             // and if this number exceeds the maximum len the node should have
-            // alredy grown. So we know for a fact that that num_children <= node len
+            // already grown. So we know for a fact that that num_children <= node len
             assume!(num_children <= self.child_pointers.len());
 
             // SAFETY: We know that the new size is >= old size, so this is safe
@@ -1175,7 +1175,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let (keys, children) = self.initialized_portion();
-        // SAFETY: Convered by the containing function
+        // SAFETY: Covered by the containing function
         unsafe {
             (
                 keys.first().copied().unwrap_unchecked(),
@@ -1186,7 +1186,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
 
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let (keys, children) = self.initialized_portion();
-        // SAFETY: Convered by the containing function
+        // SAFETY: Covered by the containing function
         unsafe {
             (
                 keys.last().copied().unwrap_unchecked(),
@@ -1214,8 +1214,8 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed
     #[cfg(feature = "nightly")]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         // SAFETY: Even though the type is marked is uninit data, when
-        // crated this is filled with inited data, we just use it to
-        // remind us that a portion might be unitialized
+        // crated this is filled with initialized data, we just use it to
+        // remind us that a portion might be uninitialized
         let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
         let cmp = u8x16::splat(key_fragment)
             .simd_eq(u8x16::from_array(keys))
@@ -1247,8 +1247,8 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed
             Some(child_index) => WritePoint::Existing(child_index),
             None => {
                 // SAFETY: Even though the type is marked is uninit data, when
-                // crated this is filled with inited data, we just use it to
-                // remind us that a portion might be unitialized
+                // crated this is filled with initialized data, we just use it to
+                // remind us that a portion might be uninitialized
                 let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
                 let cmp = u8x16::splat(key_fragment)
                     .simd_lt(u8x16::from_array(keys))
@@ -1334,7 +1334,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let (keys, children) = self.initialized_portion();
-        // SAFETY: Convered by the containing function
+        // SAFETY: Covered by the containing function
         unsafe {
             (
                 keys.first().copied().unwrap_unchecked(),
@@ -1345,7 +1345,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
 
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let (keys, children) = self.initialized_portion();
-        // SAFETY: Convered by the containing function
+        // SAFETY: Covered by the containing function
         unsafe {
             (
                 keys.last().copied().unwrap_unchecked(),
@@ -1528,7 +1528,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
             #[allow(unused_unsafe)]
             unsafe {
                 // SAFETY: If `idx` is out of bounds we have more than
-                // 48 childs in this node, so it should have already
+                // 48 children in this node, so it should have already
                 // grown. So it's safe to assume that it's in bounds
                 assume!(idx < child_pointers.len());
             }
@@ -1547,13 +1547,13 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
             // SAFETY: By construction the number of children in the header
             // is kept in sync with the number of children written in the node
             // and if this number exceeds the maximum len the node should have
-            // alredy grown. So we know for a fact that that num_children <= node len.
+            // already grown. So we know for a fact that that num_children <= node len.
             //
             // With this we know that child_index is <= 47, because at the 48th time
             // calling this function for writing, the current len will bet 47, and
             // after this insert we increment it to 48, so this symbolizes that the
             // node is full and before calling this function again the node should
-            // have alredy grown
+            // have already grown
             self.child_indices[key_fragment_idx] =
                 unsafe { RestrictedNodeIndex::try_from(child_index).unwrap_unchecked() };
             self.header.inc_num_children();
@@ -1563,7 +1563,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
             usize::from(self.child_indices[key_fragment_idx])
         };
 
-        // SAFETY: This index can be up to <= 47 as decribed above
+        // SAFETY: This index can be up to <= 47 as described above
         #[allow(unused_unsafe)]
         unsafe {
             assume!(child_index < self.child_pointers.len());
@@ -1577,8 +1577,8 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
             return None;
         }
 
-        // Replace child pointer with unitialized value, even though it may possibly be
-        // overwritten by the compaction step
+        // Replace child pointer with uninitialized value, even though it may possibly
+        // be overwritten by the compaction step
         let child_ptr = mem::replace(
             &mut self.child_pointers[usize::from(restricted_index)],
             MaybeUninit::uninit(),
@@ -2023,11 +2023,11 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
 
         unsafe {
             // SAFETY: key can be at up to 256, but we know that we have
-            // at least one inner child, it's guarentee to be in bounds
+            // at least one inner child, it's guarantee to be in bounds
             assume!(key < self.child_pointers.len());
         }
 
-        // SAFETY: Convered by the containing function
+        // SAFETY: Covered by the containing function
         (key as u8, unsafe {
             self.child_pointers[key].unwrap_unchecked()
         })
@@ -2082,7 +2082,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
             assume!(key < self.child_pointers.len());
         }
 
-        // SAFETY: Convered by the containing function
+        // SAFETY: covered by the containing function
         (key as u8, unsafe {
             self.child_pointers[key].unwrap_unchecked()
         })

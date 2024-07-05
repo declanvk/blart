@@ -73,7 +73,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         usize::from(self.num_children)
     }
 
-    /// Left trim by `len`, copies the remaining data to the beging of the
+    /// Left trim by `len`, copies the remaining data to the beginning of the
     /// prefix
     ///
     /// # Panics
@@ -179,9 +179,9 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         if likely!(len <= PREFIX_LEN) {
             (self.read_prefix(), None)
         } else {
-            // SAFETY: By construction a InnerNode, must have >= 1 childs, this
+            // SAFETY: By construction a InnerNode, must have >= 1 children, this
             // is even more strict since in the case of 1 child the node can be
-            // collapsed, so a InnserNode must have >= 2 childs, so it's safe
+            // collapsed, so a InnerNode must have >= 2 children, so it's safe
             // to search for the minium. And the same applies to the `minimum_unchecked`
             // function
             let (_, min_child) = node.min();

@@ -230,7 +230,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 }
                 // SAFETY: We hold a mutable reference, so creating
                 // a mutable reference is safe
-                let header = unsafe { mismatched_inner_node_ptr.header_mut_uncheked() };
+                let header = unsafe { mismatched_inner_node_ptr.header_mut_unchecked() };
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
 
                 let new_leaf_pointer = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
@@ -300,7 +300,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
 
                 #[allow(unused_unsafe)]
                 unsafe {
-                    // SAFETY: When reaching this point in the insertion proccess this invarants
+                    // SAFETY: When reaching this point in the insertion process this invariant
                     // should always be true, due to the check of [`InsertPrefixError`] which
                     // guarantees that the amount of bytes used is always < len of the key or key in
                     // the leaf if this was not true, then a

@@ -1,7 +1,7 @@
 use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 use std::{collections::VecDeque, iter::FusedIterator};
 
-macro_rules! gen_add_childs {
+macro_rules! gen_add_children {
     ($name:ident, $f1:ident, $f2:ident) => {
         fn $name<N>(&mut self, inner: NodePtr<PREFIX_LEN, N>, current_depth: usize)
         where
@@ -46,7 +46,7 @@ macro_rules! gen_add_childs {
                 return;
             }
 
-            // If there is some remaning bytes we need to consider
+            // If there is some remaining bytes we need to consider
             // the node key that matches the first character of
             // the searched prefix, so we find a children with this
             // key and only consider this one
@@ -73,9 +73,9 @@ macro_rules! gen_iter {
         }
 
         impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, 'b, K, V, PREFIX_LEN> {
-            gen_add_childs!(add_childs, push_back_rev_iter, push_back);
+            gen_add_children!(add_children, push_back_rev_iter, push_back);
 
-            gen_add_childs!(add_childs_rev, push_front, push_front);
+            gen_add_children!(add_children_rev, push_front, push_front);
 
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
@@ -154,10 +154,10 @@ macro_rules! gen_iter {
             fn next(&mut self) -> Option<Self::Item> {
                 while let Some((node, current_depth)) = self.nodes.pop_back() {
                     match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner) => self.add_childs(inner, current_depth),
-                        ConcreteNodePtr::Node16(inner) => self.add_childs(inner, current_depth),
-                        ConcreteNodePtr::Node48(inner) => self.add_childs(inner, current_depth),
-                        ConcreteNodePtr::Node256(inner) => self.add_childs(inner, current_depth),
+                        ConcreteNodePtr::Node4(inner) => self.add_children(inner, current_depth),
+                        ConcreteNodePtr::Node16(inner) => self.add_children(inner, current_depth),
+                        ConcreteNodePtr::Node48(inner) => self.add_children(inner, current_depth),
+                        ConcreteNodePtr::Node256(inner) => self.add_children(inner, current_depth),
                         ConcreteNodePtr::LeafNode(inner) => {
                             if self.handle_leaf(current_depth, inner) {
                                 return unsafe { Some(inner.$op()) };
@@ -186,11 +186,17 @@ macro_rules! gen_iter {
             fn next_back(&mut self) -> Option<Self::Item> {
                 while let Some((node, current_depth)) = self.nodes.pop_front() {
                     match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner) => self.add_childs_rev(inner, current_depth),
-                        ConcreteNodePtr::Node16(inner) => self.add_childs_rev(inner, current_depth),
-                        ConcreteNodePtr::Node48(inner) => self.add_childs_rev(inner, current_depth),
+                        ConcreteNodePtr::Node4(inner) => {
+                            self.add_children_rev(inner, current_depth)
+                        },
+                        ConcreteNodePtr::Node16(inner) => {
+                            self.add_children_rev(inner, current_depth)
+                        },
+                        ConcreteNodePtr::Node48(inner) => {
+                            self.add_children_rev(inner, current_depth)
+                        },
                         ConcreteNodePtr::Node256(inner) => {
-                            self.add_childs_rev(inner, current_depth)
+                            self.add_children_rev(inner, current_depth)
                         },
                         ConcreteNodePtr::LeafNode(inner) => {
                             if self.handle_leaf(current_depth, inner) {

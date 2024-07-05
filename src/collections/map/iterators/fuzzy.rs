@@ -100,7 +100,7 @@ fn edit_dist(
 ) -> bool {
     #[allow(unused_unsafe)]
     unsafe {
-        // SAFETY: Convered by the top level comment
+        // SAFETY: Covered by the top level comment
         assume!(old.len() == new.len());
         assume!(!old.is_empty());
         assume!(key.len() + 1 == old.len());
@@ -109,7 +109,7 @@ fn edit_dist(
     let first = *new[0].write(old[0] + 1);
     let mut keep = first <= max_edit_dist;
     for i in 1..new.len() {
-        // SAFETY: Given all of the safety requiments of the
+        // SAFETY: Given all of the safety requirements of the
         // function this `unchecked` operations are safe
         unsafe {
             let b = *key.get_unchecked(i - 1) == c;
@@ -143,7 +143,7 @@ fn edit_dist(
 /// SAFETY: `old_row` length == `new_row` length
 #[inline(always)]
 unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize>]) {
-    // SAFETY: It's safe to trasmute initialized data to unitialized
+    // SAFETY: It's safe to transmute initialized data to uninitialized
     let temp = unsafe {
         std::mem::transmute::<&mut &mut [usize], &mut &mut [std::mem::MaybeUninit<usize>]>(old_row)
     };
@@ -287,7 +287,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
         max_edit_dist: usize,
     ) -> bool {
         let current_len = old_row[0];
-        // SAFETY: Sice the `old_row` holds the current edit distance
+        // SAFETY: Since the `old_row` holds the current edit distance
         // it's by construction that the first value of the buffer is the
         // length of the already examined bytes of the key
         let remaining_key = unsafe { self.key_ref().as_bytes().get_unchecked(current_len..) };
@@ -306,7 +306,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
 
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
-        /// An iterator over all the `LeafNode`s with a within a specifix edit distance
+        /// An iterator over all the `LeafNode`s within a specific edit distance
         pub struct $name<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> {
             nodes_to_search: Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
             old_row: Box<[MaybeUninit<usize>]>,

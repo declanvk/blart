@@ -398,7 +398,7 @@ where
     type Output = Result<usize, MalformedTreeError<K, V, PREFIX_LEN>>;
 
     fn default_output(&self) -> Self::Output {
-        // Chose zero so that any places that call `default_output` don't influce the
+        // Chose zero so that any places that call `default_output` don't influence the
         // overall count
         Ok(0)
     }

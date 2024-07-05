@@ -468,7 +468,7 @@ mod tests {
     );
 
     #[test]
-    fn test_orded_ip_types() {
+    fn test_ordered_ip_types() {
         assert_bytes_isomorphism_contract::<ToOctets<Ipv4Addr>>(
             Ipv4Addr::LOCALHOST,
             Ipv4Addr::BROADCAST,

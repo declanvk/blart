@@ -58,8 +58,8 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
     //
-    // The API can take a raw pointer here because it does not derefence the pointer in the body of
-    // the function.
+    // The API can take a raw pointer here because it does not dereference the pointer in the body
+    // of the function.
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(pointer: *mut P) -> Option<TaggedPointer<P, MIN_BITS>> {
         if pointer.is_null() {
@@ -80,7 +80,7 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// # Safety
     ///  - The `pointer` value must not be null.
     pub unsafe fn new_unchecked(pointer: *mut P) -> TaggedPointer<P, MIN_BITS> {
-        // SAFETY: The non-zero safety requirement is defered to the caller of this
+        // SAFETY: The non-zero safety requirement is deferred to the caller of this
         // function, who must provide a non-null (non-zero) pointer. This
         // assumes that null is always a zero value.
         let unchecked_ptr = unsafe { NonNull::new_unchecked(pointer) };

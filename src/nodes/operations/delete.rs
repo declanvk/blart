@@ -52,14 +52,17 @@ unsafe fn remove_child_from_inner_node_and_compress<
         // `if` block.
         if let Some(child_header) = unsafe { child_node_ptr.header_mut() } {
             // Construct the new prefix, by concatenating the parent header, child_key_byte,
-            // child header Here we can use the fact that the header of both the
-            // child and the parent can hold up to PREFIX_LEN, so if for
-            // example the parent header len >= PREFIX_LEN, the
-            // new child header will hold only this bytes since the size is alredy greater
-            // than the capacity so we can "clear" the child prefix, by setting
-            // the len to 0 and repopulate by pushing the parent
-            // header, child_key_byte, child prefix. If the header if alredy full we don't
-            // copy, just increment the len by the size
+            // child header.
+            //
+            // Here we can use the fact that the header of both the child and the parent can
+            // hold up to PREFIX_LEN, so if for example the parent header len >=
+            // PREFIX_LEN, the new child header will hold only this bytes since
+            // the size is already greater than the capacity.
+            //
+            // so we can "clear" the child prefix, by setting the len to 0 and repopulate by
+            // pushing the parent header, child_key_byte, child prefix. If the
+            // header if already full we don't copy, just increment the len by
+            // the size.
             let parent_header = inner_node.header();
             let parent_prefix = parent_header.read_prefix();
             let parent_len = parent_header.prefix_len();
@@ -259,11 +262,11 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
                     deleted_leaf: leaf_node,
                 }
             },
-            (None, Some(granparent_node_ptr)) => {
+            (None, Some(grandparent_node_ptr)) => {
                 // search_for_node_to_delete should maintain this invariant
                 panic!(
                     "This should be impossible, to have missing parent node and present \
-                     grandparent node [{granparent_node_ptr:?}]",
+                     grandparent node [{grandparent_node_ptr:?}]",
                 );
             },
             (Some(parent_node_ptr), grandparent_node_ptr) => unsafe {
