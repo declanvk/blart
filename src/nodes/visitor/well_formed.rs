@@ -277,17 +277,17 @@ where
     /// Traverse the given tree and check that it is well-formed. Returns the
     /// number of nodes in the tree.
     ///
-    /// # Safety
-    ///  - For the duration of this function, the given node and all its
-    ///    children nodes must not get mutated.
-    ///
     /// # Errors
     ///  - Returns an error if the given tree is not well-formed.
-    pub unsafe fn check(
+    pub fn check(
         tree: &TreeMap<K, V, PREFIX_LEN>,
     ) -> Result<usize, MalformedTreeError<K, V, PREFIX_LEN>> {
         tree.root
-            .map(|root| unsafe { Self::check_tree(root) })
+            .map(|root| {
+                // SAFETY: Since we get a reference to the TreeMap, we know no
+                // mutation can happen to any of the nodes
+                unsafe { Self::check_tree(root) }
+            })
             .unwrap_or_else(|| {
                 if tree.is_empty() {
                     Ok(0)
@@ -474,10 +474,7 @@ mod tests {
         tree.insert(CString::new("2XX1XXXXXXXXXXXXXXXXXXXXXX2").unwrap(), 3);
         tree.insert(CString::new("2XX2").unwrap(), 4);
 
-        assert_eq!(
-            unsafe { WellFormedChecker::check_tree(tree.root.unwrap()) },
-            Ok(7)
-        );
+        assert_eq!(WellFormedChecker::check(&tree), Ok(7));
     }
 
     #[test]

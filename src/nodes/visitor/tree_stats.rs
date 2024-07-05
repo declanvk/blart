@@ -233,13 +233,9 @@ where
 {
     type Output = ();
 
-    fn default_output(&self) -> Self::Output {
-        ()
-    }
+    fn default_output(&self) -> Self::Output {}
 
-    fn combine_output(&self, _: Self::Output, _: Self::Output) -> Self::Output {
-        ()
-    }
+    fn combine_output(&self, _: Self::Output, _: Self::Output) -> Self::Output {}
 
     fn visit_node4(&mut self, t: &InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
         t.super_visit_with(self);

@@ -26,11 +26,7 @@ pub struct DotPrinter<O: Write> {
 
 impl<O: Write> DotPrinter<O> {
     /// Write the dot-format of the given tree to the given output.
-    ///
-    /// # Safety
-    ///  - For the duration of this function, the given node and all its
-    ///    children nodes must not get mutated.
-    pub unsafe fn print<K, V, const PREFIX_LEN: usize>(
+    pub fn print<K, V, const PREFIX_LEN: usize>(
         output: O,
         tree: &TreeMap<K, V, PREFIX_LEN>,
         settings: DotPrinterSettings,
@@ -39,8 +35,11 @@ impl<O: Write> DotPrinter<O> {
         K: Debug + AsBytes,
         V: Debug,
     {
-        tree.root
-            .map(|root| unsafe { Self::print_tree(output, &root, settings) })
+        tree.root.map(|root| {
+            // SAFETY: Since we get a reference to the `TreeMap`, we know the
+            // node and all descendants will not be mutated
+            unsafe { Self::print_tree(output, &root, settings) }
+        })
     }
 
     /// Write the dot-format of the given tree to the given output.
