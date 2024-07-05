@@ -25,9 +25,18 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install ${{matrix.rust}} toolchain
+        if: matrix.rust == 'nightly'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{matrix.rust}}
+          components: miri rustfmt clippy
+      
+      - name: Install ${{matrix.rust}} toolchain
+        if: matrix.rust != 'nightly'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{matrix.rust}}
+          components: rustfmt clippy
 
       - name: Run full test script
         run: ./scripts/full-test.sh "${{matrix.rust}}"
