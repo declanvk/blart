@@ -582,9 +582,9 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// value is returned.
     ///
     /// Unlike [`try_insert`][crate::TreeMap::try_insert], this function will
-    /// not return an error, because the contract of the
-    /// [`NoPrefixesBytes`][crate::bytes::NoPrefixesBytes] ensures that the
-    /// given key type will never be a prefix of an existing value.
+    /// not return an error, because the contract of the [`NoPrefixesBytes`]
+    /// ensures that the given key type will never be a prefix of an existing
+    /// value.
     ///
     /// # Examples
     ///

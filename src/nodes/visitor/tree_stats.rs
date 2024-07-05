@@ -190,22 +190,22 @@ impl Add for LeafStats {
 /// Collection of stats about the number of nodes types present in a tree
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TreeStats {
-    /// Stats for [`InnerNode4`][crate::nodes::InnerNode4]s
+    /// Stats for [`InnerNode4`]s
     pub node4: InnerNodeStats,
 
-    /// Stats for [`InnerNode16`][crate::nodes::InnerNode16]s
+    /// Stats for [`InnerNode16`]s
     pub node16: InnerNodeStats,
 
-    /// Stats for [`InnerNode48`][crate::nodes::InnerNode48]s
+    /// Stats for [`InnerNode48`]s
     pub node48: InnerNodeStats,
 
-    /// Stats for [`InnerNode256`][crate::nodes::InnerNode256]s
+    /// Stats for [`InnerNode256`]s
     pub node256: InnerNodeStats,
 
     /// Stats for the whole tree
     pub tree: InnerNodeStats,
 
-    /// Number of [`LeafNode`][crate::nodes::LeafNode]s present in the
+    /// Number of [`LeafNode`]s present in the
     /// tree.
     pub leaf: LeafStats,
 }

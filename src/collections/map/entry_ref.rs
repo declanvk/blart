@@ -3,7 +3,7 @@ use std::{borrow::Borrow, mem::replace};
 use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 
 /// A view into an occupied entry in a [`TreeMap`]. It is part of the
-/// [`EntryRef`][super::EntryRef] enum.
+/// [`EntryRef`] enum.
 pub struct OccupiedEntryRef<'a, K, V, const PREFIX_LEN: usize>
 where
     K: AsBytes,

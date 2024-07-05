@@ -229,7 +229,7 @@ pub fn box_new_uninit_slice<T>(len: usize) -> Box<[std::mem::MaybeUninit<T>]> {
 /// Calling this when the content is not yet fully initialized
 /// causes immediate undefined behavior.
 ///
-/// [`MaybeUninit::assume_init`]: mem::MaybeUninit::assume_init
+/// [`MaybeUninit::assume_init`]: std::mem::MaybeUninit::assume_init
 ///
 /// **This is a unstable API copied from the Rust standard library, tracking
 /// issue is [#63291][issue-63291]**
