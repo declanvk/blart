@@ -28,6 +28,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{matrix.rust}}
+          component: miri rustfmt clippy
 
       - name: Run full test script
         run: ./scripts/full-test.sh "${{matrix.rust}}"
