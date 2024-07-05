@@ -61,7 +61,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         self.prefix_len as usize
     }
 
-    /// Minimum between [`Self::prefix_len`] and [`PREFIX_LEN`]
+    /// Minimum between [`Self::prefix_len`] and `PREFIX_LEN`.
     #[inline(always)]
     pub fn capped_prefix_len(&self) -> usize {
         (self.prefix_len as usize).min(PREFIX_LEN)
