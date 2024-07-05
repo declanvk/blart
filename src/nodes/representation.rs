@@ -2115,7 +2115,6 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     }
 }
 
-#[allow(dead_code)]
 mod stable_iters {
     use super::*;
 

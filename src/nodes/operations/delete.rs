@@ -75,8 +75,6 @@ unsafe fn remove_child_from_inner_node_and_compress<
         // SAFETY: Since this function requires a unique pointer to the original
         // `inner_node_ptr`, we know that no other code will deallocate the pointer
         unsafe {
-            #[allow(dropping_references)]
-            drop(inner_node);
             drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
         }
 
@@ -89,8 +87,6 @@ unsafe fn remove_child_from_inner_node_and_compress<
         // SAFETY: Since this function requires a unique pointer to the original
         // `inner_node_ptr`, we know that no other code will deallocate the pointer
         unsafe {
-            #[allow(dropping_references)]
-            drop(inner_node);
             drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
         }
 

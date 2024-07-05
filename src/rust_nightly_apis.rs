@@ -72,58 +72,6 @@ pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
     }
 }
 
-/// Gets a pointer to the first element of the array.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#63569][issue-63569]**
-///
-/// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
-#[allow(dead_code)]
-#[inline(always)]
-pub fn maybe_uninit_slice_as_ptr<T>(this: &[std::mem::MaybeUninit<T>]) -> *const T {
-    #[cfg(feature = "nightly")]
-    {
-        std::mem::MaybeUninit::slice_as_ptr(this)
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        this.as_ptr() as *const T
-    }
-}
-
-/// Returns a raw pointer to an element, without doing bounds checking.
-///
-/// Calling this method with an out-of-bounds index or when `data` is not
-/// dereferenceable is *[undefined behavior]* even if the resulting pointer is
-/// not used.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#74265][issue-74265]**
-///
-/// [issue-74265]: https://github.com/rust-lang/rust/issues/74265
-/// [undefined behavior]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
-#[allow(dead_code)]
-#[inline(always)]
-pub unsafe fn non_null_get_unchecked_mut<T>(
-    data: std::ptr::NonNull<[T]>,
-    index: usize,
-) -> std::ptr::NonNull<T> {
-    #[cfg(feature = "nightly")]
-    {
-        // SAFETY: Covered by condition of containing function
-        unsafe { std::ptr::NonNull::get_unchecked_mut(data, index) }
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        // SAFETY: the caller ensures that `self` is dereferenceable and `index`
-        // in-bounds. As a consequence, the resulting pointer cannot be null.
-
-        unsafe { std::ptr::NonNull::new_unchecked(data.as_ptr().cast::<T>().add(index)) }
-    }
-}
-
 /// Writes a length prefix into this hasher, as part of being prefix-free.
 ///
 /// If you're implementing [`Hash`] for a custom collection, call this before

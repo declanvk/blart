@@ -151,7 +151,6 @@ unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize
 }
 
 trait FuzzySearch<K: AsBytes, V, const PREFIX_LEN: usize> {
-    #[allow(clippy::too_many_arguments)]
     fn fuzzy_search(
         &self,
         arena: &mut StackArena,
@@ -326,7 +325,6 @@ macro_rules! gen_iter {
                 let n = arena.size();
                 let s = arena.push();
 
-                #[allow(clippy::needless_range_loop)]
                 for i in 0..n {
                     s[i].write(i);
                 }

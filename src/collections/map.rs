@@ -713,7 +713,6 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// In other words, remove all pairs (k, v) for which f(&k, &mut v) returns
     /// false. The elements are visited in ascending key order.
-    #[allow(dead_code)]
     pub(crate) fn retain<F>(&mut self, f: F)
     where
         F: FnMut(&K, &mut V) -> bool,

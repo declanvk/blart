@@ -20,18 +20,10 @@ pub struct InsertResult<'a, K: AsBytes, V, const PREFIX_LEN: usize> {
 
 /// Attempted to insert a key which was a prefix of an existing key in
 /// the tree.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InsertPrefixError {
     /// The inserted key
     pub byte_repr: Box<[u8]>,
-}
-
-impl fmt::Debug for InsertPrefixError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("InsertPrefixError")
-            .field("byte_repr", &self.byte_repr)
-            .finish()
-    }
 }
 
 impl fmt::Display for InsertPrefixError {
@@ -128,8 +120,6 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     // SAFETY: The `deallocate_node_ptr` function is only called a
                     // single time.
                     unsafe {
-                        #[allow(dropping_references)]
-                        drop(inner_node);
                         drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
                     };
 
@@ -457,7 +447,6 @@ where
     K: AsBytes + Borrow<Q>,
     Q: AsBytes + ?Sized,
 {
-    #[allow(clippy::type_complexity)]
     fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
         inner_ptr: NodePtr<PREFIX_LEN, N>,
         key: &[u8],
