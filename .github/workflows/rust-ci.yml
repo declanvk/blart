@@ -30,4 +30,4 @@ jobs:
           toolchain: ${{matrix.rust}}
 
       - name: Run full test script
-        run: ./scripts/full-test "${{matrix.rust}}"
+        run: ./scripts/full-test.sh "${{matrix.rust}}"
