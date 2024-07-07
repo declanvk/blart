@@ -1,6 +1,6 @@
 //! Trie node representation
 
-use crate::{rust_nightly_apis::assume, tagged_pointer::TaggedPointer, AsBytes, Header};
+use crate::{rust_nightly_apis::assume, tagged_pointer::TaggedPointer, AsBytes};
 use std::{
     borrow::Borrow,
     fmt,
@@ -11,6 +11,9 @@ use std::{
     ops::Range,
     ptr::{self, NonNull},
 };
+
+mod header;
+pub(crate) use header::*;
 
 mod inner_node_256;
 pub use inner_node_256::*;
