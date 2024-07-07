@@ -224,6 +224,7 @@ gen_iter!(
     (&'a K, &'a V),
     as_key_value_ref
 );
+
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
@@ -232,9 +233,11 @@ gen_iter!(
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
+
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
 gen_iter!(PrefixKeys, &'a TreeMap<K, V, PREFIX_LEN>, &'a K, as_key_ref);
+
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
 gen_iter!(
@@ -243,6 +246,7 @@ gen_iter!(
     &'a V,
     as_value_ref
 );
+
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
