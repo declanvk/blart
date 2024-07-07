@@ -310,3 +310,111 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
     for Node256Iter<'a, K, V, PREFIX_LEN>
 {
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        nodes::representation::tests::{
+            inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
+            FixtureReturn,
+        },
+        LeafNode,
+    };
+
+    use super::*;
+
+    #[test]
+    fn lookup() {
+        let mut n = InnerNode256::<Box<[u8]>, (), 16>::empty();
+        let mut l1 = LeafNode::new(Box::from([]), ());
+        let mut l2 = LeafNode::new(Box::from([]), ());
+        let mut l3 = LeafNode::new(Box::from([]), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        assert!(n.lookup_child(123).is_none());
+
+        n.header.inc_num_children();
+        n.header.inc_num_children();
+        n.header.inc_num_children();
+
+        n.child_pointers[1] = Some(l1_ptr);
+        n.child_pointers[123] = Some(l2_ptr);
+        n.child_pointers[3] = Some(l3_ptr);
+
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+    }
+
+    #[test]
+    fn write_child() {
+        inner_node_write_child_test(InnerNode256::<_, _, 16>::empty(), 256)
+    }
+
+    #[test]
+    #[should_panic]
+    fn write_child_full_panic() {
+        inner_node_write_child_test(InnerNode256::<_, _, 16>::empty(), 257)
+    }
+
+    #[test]
+    fn remove_child() {
+        inner_node_remove_child_test(InnerNode256::<_, _, 16>::empty(), 256)
+    }
+
+    #[test]
+    #[should_panic]
+    fn grow() {
+        let n = InnerNode256::<Box<[u8]>, (), 16>::empty();
+
+        n.grow();
+    }
+
+    #[test]
+    fn shrink() {
+        inner_node_shrink_test(InnerNode256::<_, _, 16>::empty(), 48);
+    }
+
+    #[test]
+    #[should_panic]
+    fn shrink_too_many_children_panic() {
+        inner_node_shrink_test(InnerNode256::<_, _, 16>::empty(), 49);
+    }
+
+    fn fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, (), 16>, 4> {
+        let mut n4 = InnerNode256::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let mut l4 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+        let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+        n4.write_child(3, l1_ptr);
+        n4.write_child(255, l2_ptr);
+        n4.write_child(0u8, l3_ptr);
+        n4.write_child(85, l4_ptr);
+
+        (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
+    }
+
+    #[test]
+    fn iterate() {
+        let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = fixture();
+
+        assert!(node
+            .iter()
+            .any(|(key_fragment, ptr)| key_fragment == 3 && ptr == l1_ptr));
+        assert!(node
+            .iter()
+            .any(|(key_fragment, ptr)| key_fragment == 255 && ptr == l2_ptr));
+        assert!(node
+            .iter()
+            .any(|(key_fragment, ptr)| key_fragment == 0u8 && ptr == l3_ptr));
+        assert!(node
+            .iter()
+            .any(|(key_fragment, ptr)| key_fragment == 85 && ptr == l4_ptr));
+    }
+}

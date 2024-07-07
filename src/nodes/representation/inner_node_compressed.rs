@@ -619,3 +619,247 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
         self.inner_deep_clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        nodes::representation::tests::{
+            inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
+            FixtureReturn,
+        },
+        LeafNode,
+    };
+
+    use super::*;
+
+    #[test]
+    fn node4_lookup() {
+        let mut n = InnerNode4::<Box<[u8]>, (), 16>::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        assert!(n.lookup_child(123).is_none());
+
+        n.header.inc_num_children();
+        n.header.inc_num_children();
+        n.header.inc_num_children();
+
+        n.keys[0].write(3);
+        n.keys[1].write(123);
+        n.keys[2].write(1);
+
+        n.child_pointers[0].write(l1_ptr);
+        n.child_pointers[1].write(l2_ptr);
+        n.child_pointers[2].write(l3_ptr);
+
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+    }
+
+    #[test]
+    fn node4_write_child() {
+        inner_node_write_child_test(InnerNode4::<_, _, 16>::empty(), 4)
+    }
+
+    #[test]
+    fn node4_remove_child() {
+        inner_node_remove_child_test(InnerNode4::<_, _, 16>::empty(), 4)
+    }
+
+    // #[test]
+    // #[should_panic]
+    // fn node4_write_child_full_panic() {
+    //     inner_node_write_child_test(InnerNode4::<_, _, 16>::empty(), 5);
+    // }
+
+    #[test]
+    fn node4_grow() {
+        let mut n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n4.write_child(3, l1_ptr);
+        n4.write_child(123, l2_ptr);
+        n4.write_child(1, l3_ptr);
+
+        let n16 = n4.grow();
+
+        assert_eq!(n16.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n16.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n16.lookup_child(1), Some(l3_ptr));
+        assert_eq!(n16.lookup_child(4), None);
+    }
+
+    #[test]
+    #[should_panic]
+    fn node4_shrink() {
+        let n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+
+        n4.shrink();
+    }
+
+    #[test]
+    fn node16_lookup() {
+        let mut n = InnerNode16::<Box<[u8]>, (), 16>::empty();
+        let mut l1 = LeafNode::new(Box::from([]), ());
+        let mut l2 = LeafNode::new(Box::from([]), ());
+        let mut l3 = LeafNode::new(Box::from([]), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        assert!(n.lookup_child(123).is_none());
+
+        n.header.inc_num_children();
+        n.header.inc_num_children();
+        n.header.inc_num_children();
+
+        n.keys[0].write(3);
+        n.keys[1].write(123);
+        n.keys[2].write(1);
+
+        n.child_pointers[0].write(l1_ptr);
+        n.child_pointers[1].write(l2_ptr);
+        n.child_pointers[2].write(l3_ptr);
+
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+    }
+
+    #[test]
+    fn node16_write_child() {
+        inner_node_write_child_test(InnerNode16::<_, _, 16>::empty(), 16)
+    }
+
+    #[test]
+    fn node16_remove_child() {
+        inner_node_remove_child_test(InnerNode16::<_, _, 16>::empty(), 16)
+    }
+
+    // #[test]
+    // #[should_panic]
+    // fn node16_write_child_full_panic() {
+    //     inner_node_write_child_test(InnerNode16::<_, _, 16>::empty(), 17);
+    // }
+
+    #[test]
+    #[should_panic]
+    fn node16_grow_panic() {
+        let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        n16.write_child(3, l1_ptr);
+        n16.write_child(123, l2_ptr);
+        n16.write_child(1, l3_ptr);
+
+        let n48 = n16.grow();
+
+        assert_eq!(n48.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n48.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n48.lookup_child(1), Some(l3_ptr));
+        assert_eq!(n48.lookup_child(4), None);
+    }
+
+    #[test]
+    fn node16_grow() {
+        let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
+        let mut v = Vec::new();
+        for i in 0..16 {
+            let mut l = LeafNode::new(vec![].into(), ());
+            let l_ptr = NodePtr::from(&mut l).to_opaque();
+            v.push(l_ptr);
+            n16.write_child(i * 2, l_ptr);
+        }
+
+        let n48 = n16.grow();
+
+        for i in 0..16 {
+            assert_eq!(n48.lookup_child(i * 2), Some(v[i as usize]));
+        }
+    }
+
+    #[test]
+    fn node16_shrink() {
+        inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 4);
+    }
+
+    #[test]
+    #[should_panic]
+    fn node16_shrink_too_many_children_panic() {
+        inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 5);
+    }
+
+    fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {
+        let mut n4 = InnerNode4::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let mut l4 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+        let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+        n4.write_child(3, l1_ptr);
+        n4.write_child(255, l2_ptr);
+        n4.write_child(0u8, l3_ptr);
+        n4.write_child(85, l4_ptr);
+
+        (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
+    }
+
+    #[test]
+    fn node4_iterate() {
+        let (n4, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node4_fixture();
+
+        assert_eq!(
+            [(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr)]
+                .into_iter()
+                .collect::<Vec<(u8, _)>>(),
+            n4.iter().collect::<Vec<_>>(),
+            "expected values did not match for range [{:?}]",
+            ..
+        );
+    }
+
+    fn node16_fixture() -> FixtureReturn<InnerNode16<Box<[u8]>, (), 16>, 4> {
+        let mut n4 = InnerNode16::empty();
+        let mut l1 = LeafNode::new(vec![].into(), ());
+        let mut l2 = LeafNode::new(vec![].into(), ());
+        let mut l3 = LeafNode::new(vec![].into(), ());
+        let mut l4 = LeafNode::new(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+        let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+        n4.write_child(3, l1_ptr);
+        n4.write_child(255, l2_ptr);
+        n4.write_child(0u8, l3_ptr);
+        n4.write_child(85, l4_ptr);
+
+        (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
+    }
+
+    #[test]
+    fn node16_iterate() {
+        let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node16_fixture();
+
+        let pairs = node.iter().collect::<Vec<_>>();
+        assert_eq!(
+            pairs,
+            &[(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr),]
+        )
+    }
+}

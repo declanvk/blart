@@ -24,9 +24,6 @@ pub use inner_node_48::*;
 mod inner_node_compressed;
 pub use inner_node_compressed::*;
 
-#[cfg(test)]
-mod tests;
-
 /// The representation of inner nodes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -812,4 +809,270 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for LeafNode<K, V,
     type Value = V;
 
     const TYPE: NodeType = NodeType::Leaf;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem;
+
+    #[cfg(not(feature = "nightly"))]
+    use sptr::Strict;
+
+    // This test is important because it verifies that we can transform a tagged
+    // pointer to a type with large and small alignment and back without issues.
+    #[test]
+    fn leaf_node_alignment() {
+        let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _, 16>, 3>::new(Box::into_raw(Box::new(
+            LeafNode::new([], 3u8),
+        )))
+        .unwrap()
+        .cast::<OpaqueValue>();
+        p0.set_data(0b001);
+
+        #[repr(align(64))]
+        struct LargeAlignment;
+
+        let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _, 16>, 3>::new(Box::into_raw(
+            Box::new(LeafNode::new(LargeAlignment, 2u16)),
+        ))
+        .unwrap()
+        .cast::<OpaqueValue>();
+        p1.set_data(0b011);
+
+        let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment, 16>, 3>::new(Box::into_raw(
+            Box::new(LeafNode::new(1u64, LargeAlignment)),
+        ))
+        .unwrap()
+        .cast::<OpaqueValue>();
+        p2.set_data(0b111);
+
+        unsafe {
+            // These tests apparently leak memory in Miri's POV unless we explicitly cast
+            // them back to the original type when we deallocate. The `.cast` calls
+            // are required, even though the tests pass under normal execution otherwise (I
+            // guess normal test execution doesn't care about leaked memory?)
+            drop(Box::from_raw(
+                p0.cast::<LeafNode<[u8; 0], u8, 16>>().to_ptr(),
+            ));
+            drop(Box::from_raw(
+                p1.cast::<LeafNode<LargeAlignment, u16, 16>>().to_ptr(),
+            ));
+            drop(Box::from_raw(
+                p2.cast::<LeafNode<u64, LargeAlignment, 16>>().to_ptr(),
+            ));
+        }
+    }
+
+    #[test]
+    fn opaque_node_ptr_is_correct() {
+        let mut n4 = InnerNode4::<Box<[u8]>, usize, 16>::empty();
+        let mut n16 = InnerNode16::<Box<[u8]>, usize, 16>::empty();
+        let mut n48 = InnerNode48::<Box<[u8]>, usize, 16>::empty();
+        let mut n256 = InnerNode256::<Box<[u8]>, usize, 16>::empty();
+
+        let n4_ptr = NodePtr::from(&mut n4).to_opaque();
+        let n16_ptr = NodePtr::from(&mut n16).to_opaque();
+        let n48_ptr = NodePtr::from(&mut n48).to_opaque();
+        let n256_ptr = NodePtr::from(&mut n256).to_opaque();
+
+        assert!(n4_ptr.is::<InnerNode4<Box<[u8]>, usize, 16>>());
+        assert!(n16_ptr.is::<InnerNode16<Box<[u8]>, usize, 16>>());
+        assert!(n48_ptr.is::<InnerNode48<Box<[u8]>, usize, 16>>());
+        assert!(n256_ptr.is::<InnerNode256<Box<[u8]>, usize, 16>>());
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn node_sizes() {
+        const DEFAULT_PREFIX_LEN: usize = 4;
+        const EXPECTED_HEADER_SIZE: usize = DEFAULT_PREFIX_LEN.next_multiple_of(8) + 8;
+
+        assert_eq!(
+            mem::size_of::<Header<DEFAULT_PREFIX_LEN>>(),
+            EXPECTED_HEADER_SIZE
+        );
+        // key map: 4 * (1 byte) = 4 bytes
+        // child map: 4 * (8 bytes (on 64-bit platform)) = 32
+        //
+        // 4 bytes of padding are inserted after the `keys` field to align the field to
+        // an 8 byte boundary.
+        assert_eq!(
+            mem::size_of::<InnerNode4<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
+            EXPECTED_HEADER_SIZE + 40
+        );
+        // key map: 16 * (1 byte) = 16 bytes
+        // child map: 16 * (8 bytes (on 64-bit platform)) = 128
+        assert_eq!(
+            mem::size_of::<InnerNode16<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
+            EXPECTED_HEADER_SIZE + 144
+        );
+        // key map: 256 * (1 byte) = 256 bytes
+        // child map: 48 * (8 bytes (on 64-bit platform)) = 384
+        assert_eq!(
+            mem::size_of::<InnerNode48<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
+            EXPECTED_HEADER_SIZE + 640
+        );
+        // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
+        assert_eq!(
+            mem::size_of::<InnerNode256<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
+            EXPECTED_HEADER_SIZE + 2048
+        );
+
+        // Assert that pointer is expected size and has non-null optimization
+        assert_eq!(
+            mem::size_of::<Option<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_PREFIX_LEN>>>(),
+            8
+        );
+        assert_eq!(
+            mem::size_of::<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_PREFIX_LEN>>(),
+            8
+        );
+    }
+
+    #[test]
+    fn node_alignment() {
+        assert_eq!(mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(), 8);
+        assert_eq!(mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(), 8);
+        assert_eq!(mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(), 8);
+        assert_eq!(mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(), 8);
+        assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(), 8);
+        assert_eq!(mem::align_of::<Header<16>>(), 8);
+
+        assert_eq!(
+            mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(),
+            mem::align_of::<OpaqueValue>()
+        );
+        assert_eq!(
+            mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(),
+            mem::align_of::<OpaqueValue>()
+        );
+        assert_eq!(
+            mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(),
+            mem::align_of::<OpaqueValue>()
+        );
+        assert_eq!(
+            mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(),
+            mem::align_of::<OpaqueValue>()
+        );
+        assert_eq!(
+            mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(),
+            mem::align_of::<OpaqueValue>()
+        );
+
+        let n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+        let n16 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+        let n48 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+        let n256 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+
+        let n4_ptr = (&n4 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+        let n16_ptr = (&n16 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+        let n48_ptr = (&n48 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+        let n256_ptr = (&n256 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+
+        // Ensure that there are 3 bits of unused space in the node pointer because of
+        // the alignment.
+        assert!(n4_ptr.trailing_zeros() >= 3);
+        assert!(n16_ptr.trailing_zeros() >= 3);
+        assert!(n48_ptr.trailing_zeros() >= 3);
+        assert!(n256_ptr.trailing_zeros() >= 3);
+    }
+
+    pub(crate) fn inner_node_write_child_test<const PREFIX_LEN: usize>(
+        mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+        num_children: usize,
+    ) {
+        let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
+
+        assert!(!node.is_full());
+        {
+            let leaf_pointers = leaves
+                .iter_mut()
+                .map(|leaf| NodePtr::from(leaf).to_opaque())
+                .collect::<Vec<_>>();
+
+            for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+                node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+            }
+
+            for (idx, leaf_pointer) in leaf_pointers.into_iter().enumerate() {
+                assert_eq!(
+                    node.lookup_child(u8::try_from(idx).unwrap()),
+                    Some(leaf_pointer)
+                );
+            }
+        }
+
+        assert!(node.is_full());
+    }
+
+    pub fn inner_node_remove_child_test<const PREFIX_LEN: usize>(
+        mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+        num_children: usize,
+    ) {
+        let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
+
+        assert!(!node.is_full());
+        {
+            let leaf_pointers = leaves
+                .iter_mut()
+                .map(|leaf| NodePtr::from(leaf).to_opaque())
+                .collect::<Vec<_>>();
+
+            for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+                node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+            }
+
+            for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+                assert_eq!(
+                    node.lookup_child(u8::try_from(idx).unwrap()),
+                    Some(leaf_pointer)
+                );
+            }
+
+            for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+                assert_eq!(
+                    node.remove_child(u8::try_from(idx).unwrap()),
+                    Some(leaf_pointer)
+                );
+
+                assert_eq!(node.lookup_child(u8::try_from(idx).unwrap()), None);
+            }
+        }
+        assert!(!node.is_full());
+    }
+
+    pub(crate) fn inner_node_shrink_test<const PREFIX_LEN: usize>(
+        mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+        num_children: usize,
+    ) {
+        let mut leaves = vec![LeafNode::new(vec![].into(), ()); num_children];
+
+        let leaf_pointers = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect::<Vec<_>>();
+
+        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        }
+
+        let shrunk_node = node.shrink();
+
+        for (idx, leaf_pointer) in leaf_pointers.into_iter().enumerate() {
+            assert_eq!(
+                shrunk_node.lookup_child(u8::try_from(idx).unwrap()),
+                Some(leaf_pointer)
+            );
+        }
+    }
+
+    // --------------------------------------- ITERATORS
+    // ---------------------------------------
+
+    pub(crate) type FixtureReturn<Node, const N: usize> = (
+        Node,
+        [LeafNode<Box<[u8]>, (), 16>; N],
+        [OpaqueNodePtr<Box<[u8]>, (), 16>; N],
+    );
 }
