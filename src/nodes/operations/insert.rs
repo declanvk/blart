@@ -7,7 +7,7 @@ use std::{borrow::Borrow, error::Error, fmt, marker::PhantomData, ops::ControlFl
 
 /// The results of a successful tree insert
 #[derive(Debug)]
-pub struct InsertResult<'a, K: AsBytes, V, const PREFIX_LEN: usize> {
+pub struct InsertResult<'a, K, V, const PREFIX_LEN: usize> {
     /// Pointer to the leaf
     pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     /// The existing leaf referenced by the insert key, if present
@@ -44,7 +44,7 @@ impl Error for InsertPrefixError {}
 ///
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
-pub struct InsertPoint<K: AsBytes, V, const PREFIX_LEN: usize> {
+pub struct InsertPoint<K, V, const PREFIX_LEN: usize> {
     /// The grandparent node pointer and key byte that points to the parent node
     /// insert point.
     ///
@@ -71,7 +71,7 @@ pub struct InsertPoint<K: AsBytes, V, const PREFIX_LEN: usize> {
     pub root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
     pub fn apply<'a>(self, key: K, value: V) -> InsertResult<'a, K, V, PREFIX_LEN>
     where
         K: AsBytes + 'a,
@@ -386,7 +386,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
 }
 
 /// The type of insert
-pub enum InsertSearchResultType<K: AsBytes, V, const PREFIX_LEN: usize> {
+pub enum InsertSearchResultType<K, V, const PREFIX_LEN: usize> {
     /// An insert where an inner node had a differing prefix from the key.
     ///
     /// This insert type will create a new inner node with the portion of

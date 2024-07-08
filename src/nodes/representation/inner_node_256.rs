@@ -1,6 +1,6 @@
 use crate::{
-    rust_nightly_apis::maybe_uninit_uninit_array, AsBytes, Header, InnerNode, InnerNode48, Node,
-    NodePtr, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
+    rust_nightly_apis::maybe_uninit_uninit_array, Header, InnerNode, InnerNode48, Node, NodePtr,
+    NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
 use std::{
     fmt,
@@ -16,14 +16,14 @@ use std::{
 
 /// Node that references between 49 and 256 children
 #[repr(C, align(8))]
-pub struct InnerNode256<K: AsBytes, V, const PREFIX_LEN: usize> {
+pub struct InnerNode256<K, V, const PREFIX_LEN: usize> {
     /// The common node fields.
     pub header: Header<PREFIX_LEN>,
     /// An array that directly maps a key byte (as index) to a child node.
     pub child_pointers: [Option<OpaqueNodePtr<K, V, PREFIX_LEN>>; 256],
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode256<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode256<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode256")
             .field("header", &self.header)
@@ -32,7 +32,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode256<K, V, P
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Clone for InnerNode256<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Clone for InnerNode256<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -41,16 +41,14 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Clone for InnerNode256<K, V, PREFIX
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode256<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode256<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node256;
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
-    for InnerNode256<K, V, PREFIX_LEN>
-{
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V, PREFIX_LEN> {
     type GrownNode = Self;
     #[cfg(not(feature = "nightly"))]
     type Iter<'a> = Node256Iter<'a, K, V, PREFIX_LEN> where Self: 'a;
@@ -144,8 +142,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     fn range(
         &self,
         bound: impl std::ops::RangeBounds<u8>,
-    ) -> impl Iterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + DoubleEndedIterator
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + FusedIterator {
         let start = bound.start_bound().map(|val| usize::from(*val));
         let key_offset = match bound.start_bound() {
@@ -155,7 +152,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
         };
         let end = bound.end_bound().map(|val| usize::from(*val));
 
-        (&self.child_pointers[(start, end)])
+        self.child_pointers[(start, end)]
             .iter()
             .enumerate()
             .filter_map(move |(key, child)| {
@@ -293,12 +290,12 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
 
 /// TODO
 #[cfg(not(feature = "nightly"))]
-pub struct Node256Iter<'a, K: AsBytes, V, const PREFIX_LEN: usize> {
+pub struct Node256Iter<'a, K, V, const PREFIX_LEN: usize> {
     pub(crate) it: Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>>,
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> Iterator for Node256Iter<'a, K, V, PREFIX_LEN> {
+impl<'a, K, V, const PREFIX_LEN: usize> Iterator for Node256Iter<'a, K, V, PREFIX_LEN> {
     type Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -313,9 +310,7 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> Iterator for Node256Iter<'a, K,
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> DoubleEndedIterator
-    for Node256Iter<'a, K, V, PREFIX_LEN>
-{
+impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node256Iter<'a, K, V, PREFIX_LEN> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some((key, node)) = self.it.next_back() {
             match node {
@@ -328,10 +323,7 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> DoubleEndedIterator
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
-    for Node256Iter<'a, K, V, PREFIX_LEN>
-{
-}
+impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for Node256Iter<'a, K, V, PREFIX_LEN> {}
 
 #[cfg(test)]
 mod tests {

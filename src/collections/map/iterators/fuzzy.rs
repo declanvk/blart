@@ -171,6 +171,7 @@ trait FuzzySearch<K: AsBytes, V, const PREFIX_LEN: usize> {
     ) -> bool
     where
         Self: InnerNode<PREFIX_LEN>,
+        Self::Key: AsBytes,
     {
         // We can use the fact that the first entry in the old_row holds,
         // the length of how many bytes we used so far, so this becomes de depth

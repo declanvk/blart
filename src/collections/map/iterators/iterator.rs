@@ -1,16 +1,16 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, TreeMap};
+use crate::{ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, TreeMap};
 use std::{collections::VecDeque, iter::FusedIterator};
 
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s
-        pub struct $name<'a, K: AsBytes, V, const PREFIX_LEN: usize> {
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
             nodes: VecDeque<OpaqueNodePtr<K, V, PREFIX_LEN>>,
             size: usize,
             _tree: $tree,
         }
 
-        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K, V, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN> {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
             pub(crate) fn new(tree: $tree) -> Self {
@@ -51,7 +51,7 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> Iterator for $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K, V, const PREFIX_LEN: usize> Iterator for $name<'a, K, V, PREFIX_LEN> {
             type Item = $ret;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -83,7 +83,7 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> DoubleEndedIterator
+        impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator
             for $name<'a, K, V, PREFIX_LEN>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
@@ -104,14 +104,9 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
-            for $name<'a, K, V, PREFIX_LEN>
-        {
-        }
+        impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for $name<'a, K, V, PREFIX_LEN> {}
 
-        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> ExactSizeIterator
-            for $name<'a, K, V, PREFIX_LEN>
-        {
+        impl<'a, K, V, const PREFIX_LEN: usize> ExactSizeIterator for $name<'a, K, V, PREFIX_LEN> {
             fn len(&self) -> usize {
                 self.size
             }

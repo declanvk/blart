@@ -174,7 +174,10 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
     ) -> (
         &'a [u8],
         Option<NodePtr<PREFIX_LEN, LeafNode<N::Key, N::Value, PREFIX_LEN>>>,
-    ) {
+    )
+    where
+        N::Key: AsBytes,
+    {
         let len = self.prefix_len();
         if likely!(len <= PREFIX_LEN) {
             (self.read_prefix(), None)

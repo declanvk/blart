@@ -3,8 +3,8 @@ use crate::{
         assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
         maybe_uninit_uninit_array,
     },
-    AsBytes, Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodePtr,
-    NodeType, OpaqueNodePtr,
+    Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodePtr, NodeType,
+    OpaqueNodePtr,
 };
 use std::{
     cmp::Ordering,
@@ -102,7 +102,7 @@ impl Error for TryFromByteError {}
 
 /// Node that references between 17 and 49 children
 #[repr(C, align(8))]
-pub struct InnerNode48<K: AsBytes, V, const PREFIX_LEN: usize> {
+pub struct InnerNode48<K, V, const PREFIX_LEN: usize> {
     /// The common node fields.
     pub header: Header<PREFIX_LEN>,
     /// An array that maps key bytes (as the index) to the index value in
@@ -117,7 +117,7 @@ pub struct InnerNode48<K: AsBytes, V, const PREFIX_LEN: usize> {
     pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; 48],
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode48<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode48<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode48")
             .field("header", &self.header)
@@ -127,7 +127,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode48<K, V, PR
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Clone for InnerNode48<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Clone for InnerNode48<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -137,7 +137,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Clone for InnerNode48<K, V, PREFIX_
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode48<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> InnerNode48<K, V, PREFIX_LEN> {
     /// Return the initialized portions of the child pointer array.
     pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<K, V, PREFIX_LEN>] {
         unsafe {
@@ -149,16 +149,14 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode48<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node48;
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
-    for InnerNode48<K, V, PREFIX_LEN>
-{
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode256<K, V, PREFIX_LEN>;
     #[cfg(not(feature = "nightly"))]
     type Iter<'a> = Node48Iter<'a, K, V, PREFIX_LEN> where Self: 'a;
@@ -378,8 +376,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     fn range(
         &self,
         bound: impl std::ops::RangeBounds<u8>,
-    ) -> impl Iterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + DoubleEndedIterator
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + FusedIterator {
         let child_pointers = self.initialized_child_pointers();
 
@@ -391,7 +388,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
         };
         let end = bound.end_bound().map(|val| usize::from(*val));
 
-        (&self.child_indices[(start, end)])
+        self.child_indices[(start, end)]
             .iter()
             .enumerate()
             .filter_map(|(key, idx)| {
@@ -565,13 +562,13 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
 
 /// TODO
 #[cfg(not(feature = "nightly"))]
-pub struct Node48Iter<'a, K: AsBytes, V, const PREFIX_LEN: usize> {
+pub struct Node48Iter<'a, K, V, const PREFIX_LEN: usize> {
     pub(crate) it: Enumerate<Iter<'a, RestrictedNodeIndex<48>>>,
     pub(crate) child_pointers: &'a [OpaqueNodePtr<K, V, PREFIX_LEN>],
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> Iterator for Node48Iter<'a, K, V, PREFIX_LEN> {
+impl<'a, K, V, const PREFIX_LEN: usize> Iterator for Node48Iter<'a, K, V, PREFIX_LEN> {
     type Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -590,9 +587,7 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> Iterator for Node48Iter<'a, K, 
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> DoubleEndedIterator
-    for Node48Iter<'a, K, V, PREFIX_LEN>
-{
+impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node48Iter<'a, K, V, PREFIX_LEN> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some((key, idx)) = self.it.next_back() {
             if idx.is_empty() {
@@ -609,10 +604,7 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> DoubleEndedIterator
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
-    for Node48Iter<'a, K, V, PREFIX_LEN>
-{
-}
+impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for Node48Iter<'a, K, V, PREFIX_LEN> {}
 
 #[cfg(test)]
 mod tests {

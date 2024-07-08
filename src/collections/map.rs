@@ -18,14 +18,14 @@ pub use entry_ref::*;
 pub use iterators::*;
 
 /// An ordered map based on an adaptive radix tree.
-pub struct TreeMap<K: AsBytes, V, const PREFIX_LEN: usize = 16> {
+pub struct TreeMap<K, V, const PREFIX_LEN: usize = 16> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
     pub(crate) root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
 }
 
-impl<K: AsBytes, V> TreeMap<K, V> {
+impl<K, V> TreeMap<K, V> {
     /// Create a new, empty [`crate::TreeMap`] with the default number of prefix
     /// bytes (16).
     ///
@@ -45,7 +45,7 @@ impl<K: AsBytes, V> TreeMap<K, V> {
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// Create a new, empty [`crate::TreeMap`].
     ///
     /// This function will not pre-allocate anything.
@@ -559,10 +559,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     fn apply_delete_point(
         &mut self,
         delete_point: DeletePoint<K, V, PREFIX_LEN>,
-    ) -> DeleteResult<K, V, PREFIX_LEN>
-    where
-        K: AsBytes,
-    {
+    ) -> DeleteResult<K, V, PREFIX_LEN> {
         // SAFETY: The root is sure to not be `None`, since the we somehow got a
         // `DeletePoint`. So the caller must have checked this
         let delete_result = delete_point.apply(unsafe { self.root.unwrap_unchecked() });
@@ -1116,7 +1113,10 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// assert_eq!(p, vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
     /// ```
-    pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, PREFIX_LEN> {
+    pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, PREFIX_LEN>
+    where
+        K: AsBytes,
+    {
         Prefix::new(self, prefix)
     }
 
@@ -1139,10 +1139,10 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// assert_eq!(p, vec![(&c"abcde", &mut 0), (&c"abcdexxx", &mut 0), (&c"abcdexxy", &mut 0)]);
     /// ```
-    pub fn prefix_mut<'a, 'b>(
-        &'a mut self,
-        prefix: &'b [u8],
-    ) -> PrefixMut<'a, 'b, K, V, PREFIX_LEN> {
+    pub fn prefix_mut<'a, 'b>(&'a mut self, prefix: &'b [u8]) -> PrefixMut<'a, 'b, K, V, PREFIX_LEN>
+    where
+        K: AsBytes,
+    {
         PrefixMut::new(self, prefix)
     }
 
@@ -1164,7 +1164,10 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// assert_eq!(p, vec![&c"abcde", &c"abcdexxx", &c"abcdexxy"]);
     /// ```
-    pub fn prefix_keys<'a, 'b>(&'a self, prefix: &'b [u8]) -> PrefixKeys<'a, 'b, K, V, PREFIX_LEN> {
+    pub fn prefix_keys<'a, 'b>(&'a self, prefix: &'b [u8]) -> PrefixKeys<'a, 'b, K, V, PREFIX_LEN>
+    where
+        K: AsBytes,
+    {
         PrefixKeys::new(self, prefix)
     }
 
@@ -1189,7 +1192,10 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     pub fn prefix_values<'a, 'b>(
         &'a self,
         prefix: &'b [u8],
-    ) -> PrefixValues<'a, 'b, K, V, PREFIX_LEN> {
+    ) -> PrefixValues<'a, 'b, K, V, PREFIX_LEN>
+    where
+        K: AsBytes,
+    {
         PrefixValues::new(self, prefix)
     }
 
@@ -1215,7 +1221,10 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     pub fn prefix_values_mut<'a, 'b>(
         &'a mut self,
         prefix: &'b [u8],
-    ) -> PrefixValuesMut<'a, 'b, K, V, PREFIX_LEN> {
+    ) -> PrefixValuesMut<'a, 'b, K, V, PREFIX_LEN>
+    where
+        K: AsBytes,
+    {
         PrefixValuesMut::new(self, prefix)
     }
 
@@ -1251,7 +1260,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
     pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, PREFIX_LEN>, InsertPrefixError>
@@ -1352,7 +1361,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Drop for TreeMap<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Drop for TreeMap<K, V, PREFIX_LEN> {
     fn drop(&mut self) {
         self.clear();
     }

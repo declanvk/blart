@@ -104,46 +104,46 @@ struct OpaqueValue;
 /// Could be any one of the NodeTypes, need to perform check on the runtime type
 /// and then cast to a [`NodePtr`].
 #[repr(transparent)]
-pub struct OpaqueNodePtr<K: AsBytes, V, const PREFIX_LEN: usize>(
+pub struct OpaqueNodePtr<K, V, const PREFIX_LEN: usize>(
     TaggedPointer<OpaqueValue, 3>,
     PhantomData<(K, V)>,
 );
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Copy for OpaqueNodePtr<K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize> Copy for OpaqueNodePtr<K, V, PREFIX_LEN> {}
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Clone for OpaqueNodePtr<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Clone for OpaqueNodePtr<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> fmt::Debug for OpaqueNodePtr<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for OpaqueNodePtr<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("OpaqueNodePtr").field(&self.0).finish()
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> fmt::Pointer for OpaqueNodePtr<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> fmt::Pointer for OpaqueNodePtr<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.0, f)
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Eq for OpaqueNodePtr<K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize> Eq for OpaqueNodePtr<K, V, PREFIX_LEN> {}
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> PartialEq for OpaqueNodePtr<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> PartialEq for OpaqueNodePtr<K, V, PREFIX_LEN> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Hash for OpaqueNodePtr<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Hash for OpaqueNodePtr<K, V, PREFIX_LEN> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     /// Construct a new opaque node pointer from an existing non-null node
     /// pointer.
     pub fn new<N>(pointer: NonNull<N>) -> Self
@@ -262,7 +262,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
 }
 
 /// An enum that encapsulates pointers to every type of Node
-pub enum ConcreteNodePtr<K: AsBytes, V, const PREFIX_LEN: usize> {
+pub enum ConcreteNodePtr<K, V, const PREFIX_LEN: usize> {
     /// Node that references between 2 and 4 children
     Node4(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>),
     /// Node that references between 5 and 16 children
@@ -289,7 +289,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteNodePtr<K, V
 
 /// A pointer to a [`Node`].
 #[repr(transparent)]
-pub struct NodePtr<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>>(NonNull<N>);
+pub struct NodePtr<const PREFIX_LEN: usize, N>(NonNull<N>);
 
 impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     /// Create a safe pointer to a [`Node`].
@@ -396,7 +396,7 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
+impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
     /// Returns a shared reference to the key and value of the pointed to
     /// [`LeafNode`].
     ///
@@ -490,12 +490,12 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, 
     }
 }
 
-impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> Clone for NodePtr<PREFIX_LEN, N> {
+impl<const PREFIX_LEN: usize, N> Clone for NodePtr<PREFIX_LEN, N> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> Copy for NodePtr<PREFIX_LEN, N> {}
+impl<const PREFIX_LEN: usize, N> Copy for NodePtr<PREFIX_LEN, N> {}
 
 impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> From<&mut N> for NodePtr<PREFIX_LEN, N> {
     fn from(node_ref: &mut N) -> Self {
@@ -505,38 +505,36 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> From<&mut N> for NodePtr<PREF
     }
 }
 
-impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> PartialEq for NodePtr<PREFIX_LEN, N> {
+impl<const PREFIX_LEN: usize, N> PartialEq for NodePtr<PREFIX_LEN, N> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> Eq for NodePtr<PREFIX_LEN, N> {}
+impl<const PREFIX_LEN: usize, N> Eq for NodePtr<PREFIX_LEN, N> {}
 
-impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> fmt::Debug for NodePtr<PREFIX_LEN, N> {
+impl<const PREFIX_LEN: usize, N> fmt::Debug for NodePtr<PREFIX_LEN, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("NodePtr").field(&self.0).finish()
     }
 }
 
-impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> fmt::Pointer for NodePtr<PREFIX_LEN, N> {
+impl<const PREFIX_LEN: usize, N> fmt::Pointer for NodePtr<PREFIX_LEN, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.0, f)
     }
 }
 
 pub(crate) mod private {
-    use crate::AsBytes;
-
     /// This trait is used to seal other traits, such that they cannot be
     /// implemented outside of the crate.
     pub trait Sealed {}
 
-    impl<K: AsBytes, V, const PREFIX_LEN: usize> Sealed for super::InnerNode4<K, V, PREFIX_LEN> {}
-    impl<K: AsBytes, V, const PREFIX_LEN: usize> Sealed for super::InnerNode16<K, V, PREFIX_LEN> {}
-    impl<K: AsBytes, V, const PREFIX_LEN: usize> Sealed for super::InnerNode48<K, V, PREFIX_LEN> {}
-    impl<K: AsBytes, V, const PREFIX_LEN: usize> Sealed for super::InnerNode256<K, V, PREFIX_LEN> {}
-    impl<K: AsBytes, V, const PREFIX_LEN: usize> Sealed for super::LeafNode<K, V, PREFIX_LEN> {}
+    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode4<K, V, PREFIX_LEN> {}
+    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode16<K, V, PREFIX_LEN> {}
+    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode48<K, V, PREFIX_LEN> {}
+    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode256<K, V, PREFIX_LEN> {}
+    impl<K, V, const PREFIX_LEN: usize> Sealed for super::LeafNode<K, V, PREFIX_LEN> {}
 }
 
 /// All nodes which contain a runtime tag that validates their type.
@@ -545,7 +543,7 @@ pub trait Node<const PREFIX_LEN: usize>: private::Sealed {
     const TYPE: NodeType;
 
     /// The key type carried by the leaf nodes
-    type Key: AsBytes;
+    type Key;
 
     /// The value type carried by the leaf nodes
     type Value;
@@ -553,7 +551,7 @@ pub trait Node<const PREFIX_LEN: usize>: private::Sealed {
 
 /// Result of prefix match
 #[derive(Debug)]
-pub enum MatchPrefixResult<K: AsBytes, V, const PREFIX_LEN: usize> {
+pub enum MatchPrefixResult<K, V, const PREFIX_LEN: usize> {
     /// If prefixes don't match
     Mismatch {
         /// Mismatch object
@@ -568,7 +566,7 @@ pub enum MatchPrefixResult<K: AsBytes, V, const PREFIX_LEN: usize> {
 
 /// Represents a prefix mismatch
 #[derive(Debug)]
-pub struct Mismatch<K: AsBytes, V, const PREFIX_LEN: usize> {
+pub struct Mismatch<K, V, const PREFIX_LEN: usize> {
     /// How many bytes were matched
     pub matched_bytes: usize,
     /// Value of the byte that made it not match
@@ -671,8 +669,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
     fn range(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> impl Iterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + DoubleEndedIterator
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + FusedIterator;
 
     /// Compares the compressed path of a node with the key and returns the
@@ -685,7 +682,10 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
         &self,
         key: &[u8],
         current_depth: usize,
-    ) -> MatchPrefixResult<Self::Key, Self::Value, PREFIX_LEN> {
+    ) -> MatchPrefixResult<Self::Key, Self::Value, PREFIX_LEN>
+    where
+        Self::Key: AsBytes,
+    {
         #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: Since we are iterating the key and prefixes, we
@@ -724,7 +724,10 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
     ) -> (
         &[u8],
         Option<NodePtr<PREFIX_LEN, LeafNode<Self::Key, Self::Value, PREFIX_LEN>>>,
-    ) {
+    )
+    where
+        Self::Key: AsBytes,
+    {
         self.header().inner_read_full_prefix(self, current_depth)
     }
 
@@ -813,7 +816,7 @@ impl<K, V, const PREFIX_LEN: usize> LeafNode<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for LeafNode<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for LeafNode<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
 

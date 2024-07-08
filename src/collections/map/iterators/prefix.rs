@@ -65,7 +65,7 @@ macro_rules! gen_add_children {
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s with a specific prefix
-        pub struct $name<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> {
+        pub struct $name<'a, 'b, K, V, const PREFIX_LEN: usize> {
             nodes: VecDeque<(OpaqueNodePtr<K, V, PREFIX_LEN>, usize)>,
             size: usize,
             _tree: $tree,

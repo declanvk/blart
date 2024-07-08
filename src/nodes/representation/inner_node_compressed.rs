@@ -1,7 +1,6 @@
 use crate::{
     rust_nightly_apis::{assume, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array},
-    AsBytes, Header, InnerNode, InnerNode48, Node, NodePtr, NodeType, OpaqueNodePtr,
-    RestrictedNodeIndex,
+    Header, InnerNode, InnerNode48, Node, NodePtr, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
 use std::{
     fmt,
@@ -39,7 +38,7 @@ trait SearchInnerNodeCompressed {
 /// Node type that has a compact representation for key bytes and children
 /// pointers.
 #[repr(C, align(8))]
-pub struct InnerNodeCompressed<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize> {
+pub struct InnerNodeCompressed<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     /// The common node fields.
     pub header: Header<PREFIX_LEN>,
     /// An array that contains single key bytes in the same index as the
@@ -55,7 +54,7 @@ pub struct InnerNodeCompressed<K: AsBytes, V, const PREFIX_LEN: usize, const SIZ
     pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize> Clone
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Clone
     for InnerNodeCompressed<K, V, PREFIX_LEN, SIZE>
 {
     fn clone(&self) -> Self {
@@ -67,7 +66,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize> Clone
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize> fmt::Debug
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> fmt::Debug
     for InnerNodeCompressed<K, V, PREFIX_LEN, SIZE>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -85,9 +84,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize> fmt::Debug
 pub type InnerNodeCompressedIter<'a, K, V, const PREFIX_LEN: usize> =
     Zip<Copied<Iter<'a, u8>>, Copied<Iter<'a, OpaqueNodePtr<K, V, PREFIX_LEN>>>>;
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize>
-    InnerNodeCompressed<K, V, PREFIX_LEN, SIZE>
-{
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V, PREFIX_LEN, SIZE> {
     /// Return the initialized portions of the keys and child pointer arrays.
     pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<K, V, PREFIX_LEN>]) {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
@@ -382,9 +379,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize>
 /// Node that references between 2 and 4 children
 pub type InnerNode4<K, V, const PREFIX_LEN: usize> = InnerNodeCompressed<K, V, PREFIX_LEN, 4>;
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed
-    for InnerNode4<K, V, PREFIX_LEN>
-{
+impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed for InnerNode4<K, V, PREFIX_LEN> {
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         let (keys, _) = self.initialized_portion();
         for (child_index, key) in keys.iter().enumerate() {
@@ -413,16 +408,14 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node4;
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
-    for InnerNode4<K, V, PREFIX_LEN>
-{
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode16<K, V, PREFIX_LEN>;
     type Iter<'a> = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN> where Self: 'a;
     type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
@@ -466,8 +459,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     fn range(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> impl Iterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + DoubleEndedIterator
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + std::iter::FusedIterator {
         self.inner_range_iter(bound)
     }
@@ -507,9 +499,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
 /// Node that references between 5 and 16 children
 pub type InnerNode16<K, V, const PREFIX_LEN: usize> = InnerNodeCompressed<K, V, PREFIX_LEN, 16>;
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed
-    for InnerNode16<K, V, PREFIX_LEN>
-{
+impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed for InnerNode16<K, V, PREFIX_LEN> {
     #[cfg(feature = "nightly")]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         // SAFETY: Even though the type is marked is uninit data, when
@@ -581,16 +571,14 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node16;
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
-    for InnerNode16<K, V, PREFIX_LEN>
-{
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode48<K, V, PREFIX_LEN>;
     type Iter<'a> = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN> where Self: 'a;
     type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
@@ -634,8 +622,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     fn range(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> impl Iterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + DoubleEndedIterator
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + std::iter::FusedIterator {
         self.inner_range_iter(bound)
     }

@@ -1,4 +1,4 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
@@ -7,7 +7,7 @@ use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePt
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn minimum_unchecked<K: AsBytes, V, const PREFIX_LEN: usize>(
+pub unsafe fn minimum_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 ) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
     let mut current_node = root;
@@ -32,7 +32,7 @@ pub unsafe fn minimum_unchecked<K: AsBytes, V, const PREFIX_LEN: usize>(
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
 #[inline(always)]
-pub unsafe fn maximum_unchecked<K: AsBytes, V, const PREFIX_LEN: usize>(
+pub unsafe fn maximum_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 ) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
     let mut current_node = root;

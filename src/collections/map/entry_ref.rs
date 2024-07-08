@@ -4,10 +4,7 @@ use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr,
 
 /// A view into an occupied entry in a [`TreeMap`]. It is part of the
 /// [`EntryRef`] enum.
-pub struct OccupiedEntryRef<'a, K, V, const PREFIX_LEN: usize>
-where
-    K: AsBytes,
-{
+pub struct OccupiedEntryRef<'a, K, V, const PREFIX_LEN: usize> {
     pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 
     /// Used for the removal
@@ -18,10 +15,7 @@ where
     pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
 }
 
-impl<'a, K, V, const PREFIX_LEN: usize> OccupiedEntryRef<'a, K, V, PREFIX_LEN>
-where
-    K: AsBytes,
-{
+impl<'a, K, V, const PREFIX_LEN: usize> OccupiedEntryRef<'a, K, V, PREFIX_LEN> {
     /// Gets a reference to the value in the entry.
     pub fn get(&self) -> &V {
         // SAFETY: This is safe because `Self` has an mutable reference

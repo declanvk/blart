@@ -5,8 +5,8 @@ mod tree_stats;
 mod well_formed;
 
 use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48,
-    LeafNode, Node, NodePtr, OpaqueNodePtr,
+    ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, Node,
+    NodePtr, OpaqueNodePtr,
 };
 pub use pretty_printer::*;
 pub use tree_stats::*;
@@ -14,7 +14,7 @@ pub use well_formed::*;
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.
-pub trait Visitable<K: AsBytes, T, const PREFIX_LEN: usize> {
+pub trait Visitable<K, T, const PREFIX_LEN: usize> {
     /// This function provides the default traversal behavior for the
     /// implementing type.
     ///
@@ -47,7 +47,7 @@ pub trait Visitable<K: AsBytes, T, const PREFIX_LEN: usize> {
     }
 }
 
-impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
     for OpaqueNodePtr<K, T, PREFIX_LEN>
 {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
@@ -61,7 +61,7 @@ impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
     }
 }
 
-impl<K: AsBytes, T, const PREFIX_LEN: usize, N: Node<PREFIX_LEN> + Visitable<K, T, PREFIX_LEN>>
+impl<K, T, const PREFIX_LEN: usize, N: Node<PREFIX_LEN> + Visitable<K, T, PREFIX_LEN>>
     Visitable<K, T, PREFIX_LEN> for NodePtr<PREFIX_LEN, N>
 {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
@@ -70,9 +70,7 @@ impl<K: AsBytes, T, const PREFIX_LEN: usize, N: Node<PREFIX_LEN> + Visitable<K, 
     }
 }
 
-impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
-    for InnerNode4<K, T, PREFIX_LEN>
-{
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode4<K, T, PREFIX_LEN> {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
@@ -82,9 +80,7 @@ impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
     }
 }
 
-impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
-    for InnerNode16<K, T, PREFIX_LEN>
-{
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode16<K, T, PREFIX_LEN> {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
@@ -94,9 +90,7 @@ impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
     }
 }
 
-impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
-    for InnerNode48<K, T, PREFIX_LEN>
-{
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode48<K, T, PREFIX_LEN> {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
@@ -106,9 +100,7 @@ impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
     }
 }
 
-impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
-    for InnerNode256<K, T, PREFIX_LEN>
-{
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode256<K, T, PREFIX_LEN> {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
@@ -118,9 +110,7 @@ impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
     }
 }
 
-impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
-    for LeafNode<K, T, PREFIX_LEN>
-{
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for LeafNode<K, T, PREFIX_LEN> {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         visitor.default_output()
     }
@@ -132,7 +122,7 @@ impl<K: AsBytes, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
 
 /// The `Visitor` trait allows creating new operations on the radix tree by
 /// overriding specific handling methods for each of the node types.
-pub trait Visitor<K: AsBytes, V, const PREFIX_LEN: usize>: Sized {
+pub trait Visitor<K, V, const PREFIX_LEN: usize>: Sized {
     /// The type of value that the visitor produces.
     type Output;
 
@@ -168,12 +158,7 @@ pub trait Visitor<K: AsBytes, V, const PREFIX_LEN: usize>: Sized {
     }
 }
 
-fn combine_inner_node_child_output<
-    K: AsBytes,
-    T,
-    const PREFIX_LEN: usize,
-    V: Visitor<K, T, PREFIX_LEN>,
->(
+fn combine_inner_node_child_output<K, T, const PREFIX_LEN: usize, V: Visitor<K, T, PREFIX_LEN>>(
     mut iter: impl Iterator<Item = (u8, OpaqueNodePtr<K, T, PREFIX_LEN>)>,
     visitor: &mut V,
 ) -> V::Output {
