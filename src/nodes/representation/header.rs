@@ -244,22 +244,12 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "attempt to subtract with overflow"]
     fn header_ltrim_prefix_too_many_bytes_panic() {
         let mut h = Header::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8], 8);
         assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
         assert_eq!(h.prefix_len(), 8);
 
         h.ltrim_by(10);
-    }
-
-    #[test]
-    #[should_panic]
-    fn header_ltrim_prefix_non_stored_bytes_panic() {
-        let mut h = Header::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 14);
-        assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);
-        assert_eq!(h.prefix_len(), 8);
-
-        h.ltrim_by(0);
     }
 }

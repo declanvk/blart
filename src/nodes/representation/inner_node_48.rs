@@ -692,7 +692,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "Cannot shrink a Node48 when it has more than 16 children. Currently has [17] \
+                      children."]
     fn shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNode48::<_, _, 16>::empty(), 17);
     }
@@ -799,7 +800,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "slice index starts at 81 but ends at 80"]
     fn range_iterate_out_of_bounds_panic_both_excluded() {
         let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = fixture();
 

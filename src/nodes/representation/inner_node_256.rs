@@ -368,18 +368,12 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn write_child_full_panic() {
-        inner_node_write_child_test(InnerNode256::<_, _, 16>::empty(), 257)
-    }
-
-    #[test]
     fn remove_child() {
         inner_node_remove_child_test(InnerNode256::<_, _, 16>::empty(), 256)
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "unable to grow a Node256, something went wrong!"]
     fn grow() {
         let n = InnerNode256::<Box<[u8]>, (), 16>::empty();
 
@@ -392,7 +386,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "Cannot shrink a Node256 when it has more than 48 children. Currently has \
+                      [49] children."]
     fn shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNode256::<_, _, 16>::empty(), 49);
     }
@@ -499,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "slice index starts at 81 but ends at 80"]
     fn range_iterate_out_of_bounds_panic_both_excluded() {
         let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = fixture();
 

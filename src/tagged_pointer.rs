@@ -345,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "cannot set more data beyond the lowest NUM_BITS"]
     fn set_data_beyond_capacity_u8() {
         let mut val = 0u8;
         let raw_ptr = &mut val as *mut _;
@@ -355,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "cannot set more data beyond the lowest NUM_BITS"]
     fn set_data_beyond_capacity_u16() {
         let mut val = 0u16;
         let raw_ptr = &mut val as *mut _;
@@ -365,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "cannot set more data beyond the lowest NUM_BITS"]
     fn set_data_beyond_capacity_u32() {
         let mut val = 0u32;
         let raw_ptr = &mut val as *mut _;
@@ -375,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "cannot set more data beyond the lowest NUM_BITS"]
     fn set_data_beyond_capacity_u64() {
         let mut val = 0u64;
         let raw_ptr = &mut val as *mut _;

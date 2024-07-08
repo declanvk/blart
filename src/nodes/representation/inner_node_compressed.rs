@@ -738,7 +738,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "unable to shrink a Node4, something went wrong!"]
     fn node4_shrink() {
         let n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
 
@@ -790,7 +790,7 @@ mod tests {
     // }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "Node must be full to grow to node 48"]
     fn node16_grow_panic() {
         let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
         let mut l1 = LeafNode::new(vec![].into(), ());
@@ -836,7 +836,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "Cannot change InnerNodeCompressed<16> to size 4 when it has more than 4 \
+                      children. Currently has [5] children."]
     fn node16_shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 5);
     }
@@ -943,7 +944,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "slice index starts at 3 but ends at 2"]
     fn node4_range_iterate_out_of_bounds_panic_both_excluded() {
         let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node4_fixture();
 
@@ -1055,7 +1056,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "slice index starts at 3 but ends at 2"]
     fn node16_range_iterate_out_of_bounds_panic_both_excluded() {
         let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node16_fixture();
 
