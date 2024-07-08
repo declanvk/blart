@@ -1,32 +1,27 @@
 use argh::FromArgs;
 use blart::{
     visitor::{DotPrinter, DotPrinterSettings},
-    TreeMap,
+    AsBytes, NoPrefixesBytes, TreeMap,
 };
 use std::{
     error::Error,
+    ffi::CString,
     fmt::Display,
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     io::{self, BufRead, BufReader, BufWriter, Write},
-    iter,
-    path::PathBuf,
-    str::FromStr,
+    path::{Path, PathBuf},
 };
 
 #[derive(FromArgs)]
 /// TREES
 struct TreeToDotArgs {
-    /// input to read keys from an external file
+    /// optional delimiter to split key from value on each file line
     #[argh(option)]
-    input_file: Option<PathBuf>,
+    delimiter: Option<char>,
 
-    /// what shape of tree to generate
+    /// input to read keys from an external file
     #[argh(positional)]
-    shape: TreeShape,
-
-    /// how large the tree should be
-    #[argh(positional)]
-    size: usize,
+    input_file: PathBuf,
 
     /// where to output the tree diagram
     ///
@@ -35,17 +30,17 @@ struct TreeToDotArgs {
     output_location: String,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     let args: TreeToDotArgs = argh::from_env();
 
     let mut tree = TreeMap::new();
 
-    for (key, value) in args.shape.generate_keys(args.size, args.input_file) {
-        let _ = tree.try_insert(key, value).unwrap();
+    for (key, value) in read_key_values_from_text_file(&args.input_file, args.delimiter) {
+        let _ = tree.insert(key, value);
     }
 
     if tree.is_empty() {
-        return Err(Box::new(EmptyTreeError));
+        panic!("Tree should now be empty after reading keys from file");
     };
 
     if args.output_location == "_" {
@@ -54,26 +49,43 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut buffer = BufWriter::new(handle);
 
-        write_tree(&mut buffer, tree)?;
+        write_tree(&mut buffer, tree)
     } else {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(true)
-            .open(args.output_location)?;
+            .open(args.output_location)
+            .expect("Failed to open file for output");
 
         let mut buffer = BufWriter::new(file);
 
-        write_tree(&mut buffer, tree)?;
+        write_tree(&mut buffer, tree)
     }
-
-    Ok(())
+    .expect("Failed to write tree to output")
 }
+
+pub struct DisplayWrapper(CString);
+
+impl Display for DisplayWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.to_string_lossy())
+    }
+}
+
+impl AsBytes for DisplayWrapper {
+    fn as_bytes(&self) -> &[u8] {
+        <CString as AsBytes>::as_bytes(&self.0)
+    }
+}
+
+// SAFETY: We can impl `NoPrefixesBytes` since `CString` also implements that
+unsafe impl NoPrefixesBytes for DisplayWrapper where CString: NoPrefixesBytes {}
 
 fn write_tree(
     output: &mut dyn Write,
-    tree: TreeMap<Box<[u8]>, String>,
+    tree: TreeMap<DisplayWrapper, String>,
 ) -> Result<(), Box<dyn Error>> {
     DotPrinter::print(
         output,
@@ -87,193 +99,38 @@ fn write_tree(
     Ok(())
 }
 
-#[derive(Debug)]
-enum TreeShape {
-    LeftSkew,
-    FullNode4,
-    FullNode16,
-    FullNode48,
-    FullNode256,
-    FromTextFile,
-}
+fn read_key_values_from_text_file(
+    text_file_path: &Path,
+    delimiter: Option<char>,
+) -> impl Iterator<Item = (DisplayWrapper, String)> {
+    let text_file = OpenOptions::new()
+        .read(true)
+        .open(text_file_path)
+        .expect("unable to open text file");
 
-impl TreeShape {
-    fn generate_keys(
-        self,
-        tree_size: usize,
-        text_file_path: Option<PathBuf>,
-    ) -> Box<dyn Iterator<Item = (Box<[u8]>, String)>> {
-        match self {
-            TreeShape::LeftSkew => Box::new(TreeShape::generate_left_skew_keys(tree_size)),
-            TreeShape::FullNode4 => Box::new(TreeShape::generate_full_keys(tree_size, 4)),
-            TreeShape::FullNode16 => Box::new(TreeShape::generate_full_keys(tree_size, 16)),
-            TreeShape::FullNode48 => Box::new(TreeShape::generate_full_keys(tree_size, 48)),
-            TreeShape::FullNode256 => Box::new(TreeShape::generate_full_keys(tree_size, 256)),
-            TreeShape::FromTextFile => {
-                let text_file = OpenOptions::new()
-                    .read(true)
-                    .open(
-                        text_file_path
-                            .expect("file path not passed to 'from_text_file' tree shape"),
-                    )
-                    .expect("unable to open text file");
-                Box::new(TreeShape::read_key_values_from_text_file(text_file))
-            },
-        }
-    }
+    BufReader::new(text_file).lines().map(move |line| {
+        let line = line.expect("unable to read line");
+        if let Some(delimiter) = delimiter {
+            let entry_components = line.split(delimiter).collect::<Vec<_>>();
 
-    fn read_key_values_from_text_file(
-        text_file: File,
-    ) -> impl Iterator<Item = (Box<[u8]>, String)> {
-        BufReader::new(text_file).lines().map(|line| {
-            let line = line.expect("unable to read line");
-            let entry_components = line.split(',').collect::<Vec<_>>();
-
-            let key = entry_components[..entry_components.len() - 1]
-                .iter()
-                .map(|num| u8::from_str(num.trim()))
-                .collect::<Result<Box<[u8]>, _>>()
-                .expect("unable to parse bytes");
-            let value = String::from(
-                entry_components
-                    .last()
-                    .copied()
-                    .expect("expected at least one component in line"),
+            assert_eq!(
+                entry_components.len(),
+                2,
+                "Each line must only have delimiter once"
             );
 
-            (key, value)
-        })
-    }
+            let key = entry_components[0];
+            let value = entry_components[1];
 
-    fn generate_left_skew_keys(tree_size: usize) -> impl Iterator<Item = (Box<[u8]>, String)> {
-        (0..tree_size)
-            .map(|key_size| {
-                (0..key_size)
-                    .map(|_| 1u8)
-                    .chain(iter::once(u8::MAX))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice()
-            })
-            .enumerate()
-            .map(|(value, key)| (key, value.to_string()))
-    }
-
-    fn generate_full_keys(
-        tree_height: usize,
-        node_width: usize,
-    ) -> impl Iterator<Item = (Box<[u8]>, String)> {
-        // tree size will be interpreted as the number of levels of all
-        // InnerNode{node_width} with a last layer of leaves
-        //
-        // Assuming node_width = 4
-        // 1 level - 4 leaves
-        //  0,255:0|1,255:1|2,255:2|3,255:3
-        // 2 levels - 16 leaves
-        //  0,0,255:0|0,1,255:1|0,2,255:2|0,3,255:3
-        //  1,0,255:0|1,1,255:1|1,2,255:2|1,3,255:3
-        //  2,0,255:0|2,1,255:1|2,2,255:2|2,3,255:3
-        //  3,0,255:0|3,1,255:1|3,2,255:2|3,3,255:3
-        // 3 levels - 64 leaves
-
-        // [0-3],[0-3],...,[0-3],256
-        // \---- n numbers ----/
-        // total key size is n + 1
-
-        struct FullKeysIter {
-            tree_height: usize,
-            node_width: usize,
-            digit_stack: Vec<u8>,
+            (
+                DisplayWrapper(CString::new(String::from(key).into_bytes()).unwrap()),
+                value.into(),
+            )
+        } else {
+            (
+                DisplayWrapper(CString::new(line.into_bytes()).unwrap()),
+                String::new(),
+            )
         }
-
-        impl Iterator for FullKeysIter {
-            type Item = Box<[u8]>;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                if self.digit_stack.is_empty() {
-                    return None;
-                }
-
-                let mut new_key = self.digit_stack.clone();
-                new_key.push(u8::MAX);
-                let new_key = new_key.into_boxed_slice();
-
-                // update the stack for next value
-
-                for digit_idx in (0..self.tree_height).rev() {
-                    if let Some(updated_digit) = self.digit_stack[digit_idx].checked_add(1) {
-                        self.digit_stack[digit_idx] = updated_digit
-                    } else {
-                        // At 256, max width
-                        self.digit_stack.pop();
-                        continue;
-                    }
-
-                    if usize::from(self.digit_stack[digit_idx]) >= self.node_width {
-                        self.digit_stack.pop();
-                    } else {
-                        // under limit
-                        break;
-                    }
-                }
-
-                if !self.digit_stack.is_empty() {
-                    while self.digit_stack.len() < self.tree_height {
-                        self.digit_stack.push(0);
-                    }
-                }
-
-                Some(new_key)
-            }
-        }
-
-        Box::new(
-            FullKeysIter {
-                tree_height,
-                node_width,
-                digit_stack: vec![0; tree_height],
-            }
-            .enumerate()
-            .map(|(value, key)| (key, value.to_string())),
-        )
-    }
+    })
 }
-
-impl FromStr for TreeShape {
-    type Err = ShapeParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "left_skew" => Ok(TreeShape::LeftSkew),
-            "full_node4" => Ok(TreeShape::FullNode4),
-            "full_node16" => Ok(TreeShape::FullNode16),
-            "full_node48" => Ok(TreeShape::FullNode48),
-            "full_node256" => Ok(TreeShape::FullNode256),
-            "from_text_file" => Ok(TreeShape::FromTextFile),
-            _ => Err(ShapeParseError(s.into())),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ShapeParseError(String);
-
-impl Display for ShapeParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Unable to parse tree shape from argument value [{}].",
-            self.0
-        )
-    }
-}
-
-#[derive(Debug)]
-struct EmptyTreeError;
-
-impl Display for EmptyTreeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "There were no keys to insert into the tree!")
-    }
-}
-
-impl Error for EmptyTreeError {}

@@ -3,7 +3,7 @@ use crate::{
     AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
 };
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     io::{self, Write},
 };
 
@@ -32,8 +32,8 @@ impl<O: Write> DotPrinter<O> {
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where
-        K: Debug + AsBytes,
-        V: Debug,
+        K: Display + AsBytes,
+        V: Display,
     {
         tree.root.map(|root| {
             // SAFETY: Since we get a reference to the `TreeMap`, we know the
@@ -53,8 +53,8 @@ impl<O: Write> DotPrinter<O> {
         settings: DotPrinterSettings,
     ) -> io::Result<()>
     where
-        K: Debug + AsBytes,
-        V: Debug,
+        K: Display + AsBytes,
+        V: Display,
     {
         let mut visitor = DotPrinter {
             output,
@@ -87,8 +87,8 @@ impl<O: Write> DotPrinter<O> {
         inner_node: &N,
     ) -> io::Result<usize>
     where
-        K: Debug + AsBytes,
-        T: Debug,
+        K: Display + AsBytes,
+        T: Display,
         N: InnerNode<PREFIX_LEN, Key = K, Value = T>,
     {
         let header = inner_node.header();
@@ -144,8 +144,8 @@ impl<O: Write> DotPrinter<O> {
 
 impl<K, T, O, const PREFIX_LEN: usize> Visitor<K, T, PREFIX_LEN> for DotPrinter<O>
 where
-    K: Debug + AsBytes,
-    T: Debug,
+    K: Display + AsBytes,
+    T: Display,
     O: Write,
 {
     type Output = io::Result<usize>;
@@ -182,7 +182,7 @@ where
         if self.settings.display_node_address {
             writeln!(
                 self.output,
-                "{{<h0> {:p}}} | {{{:?}}} | {{{:?}}} | {{{:?}}}}}\"]",
+                "{{<h0> {:p}}} | {{{:?}}} | {{{}}} | {{{}}}}}\"]",
                 t as *const _,
                 NodeType::Leaf,
                 t.key_ref(),
@@ -191,7 +191,7 @@ where
         } else {
             writeln!(
                 self.output,
-                "{{<h0> {:?}}} | {{{:?}}} | {{{:?}}}}}\"]",
+                "{{<h0> {:?}}} | {{{}}} | {{{}}}}}\"]",
                 NodeType::Leaf,
                 t.key_ref(),
                 t.value_ref()
@@ -210,11 +210,31 @@ mod tests {
 
     #[test]
     fn simple_tree_output_to_dot() {
-        let root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
+        struct DisplayAsDebug<T>(T);
+
+        impl<T> Display for DisplayAsDebug<T>
+        where
+            T: Debug,
+        {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                <T as Debug>::fmt(&self.0, f)
+            }
+        }
+
+        impl<T> AsBytes for DisplayAsDebug<T>
+        where
+            T: AsBytes,
+        {
+            fn as_bytes(&self) -> &[u8] {
+                self.0.as_bytes()
+            }
+        }
+
+        let root: OpaqueNodePtr<DisplayAsDebug<Box<[u8]>>, usize, 16> =
             crate::tests_common::setup_tree_from_entries(
                 crate::tests_common::generate_key_fixed_length([3, 3])
                     .enumerate()
-                    .map(|(a, b)| (b, a)),
+                    .map(|(a, b)| (DisplayAsDebug(b), a)),
             );
         let mut buffer = Vec::new();
 

@@ -332,9 +332,12 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn setup_tree_from_entries<V, const PREFIX_LEN: usize>(
-    mut entries_it: impl Iterator<Item = (Box<[u8]>, V)>,
-) -> OpaqueNodePtr<Box<[u8]>, V, PREFIX_LEN> {
+pub(crate) fn setup_tree_from_entries<K, V, const PREFIX_LEN: usize>(
+    mut entries_it: impl Iterator<Item = (K, V)>,
+) -> OpaqueNodePtr<K, V, PREFIX_LEN>
+where
+    K: AsBytes,
+{
     use crate::{LeafNode, NodePtr};
 
     let (first_key, first_value) = entries_it.next().unwrap();
