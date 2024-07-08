@@ -163,7 +163,13 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     #[cfg(not(feature = "nightly"))]
     type Iter<'a> = Node48Iter<'a, K, V, PREFIX_LEN> where Self: 'a;
     #[cfg(feature = "nightly")]
-    type Iter<'a> = Map<FilterMap<Enumerate<Iter<'a, RestrictedNodeIndex<48>>>, impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>>, impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> where Self: 'a;
+    type Iter<'a> = Map<
+        FilterMap<
+            Enumerate<Iter<'a, RestrictedNodeIndex<48>>>,
+            impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>,
+        >,
+        impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
+    > where Self: 'a;
     type ShrunkNode = InnerNode16<K, V, PREFIX_LEN>;
 
     fn header(&self) -> &Header<PREFIX_LEN> {
@@ -367,6 +373,40 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
                 // be inbounds
                 .map(|(key, idx)| unsafe { (key, *child_pointers.get_unchecked(idx)) })
         }
+    }
+
+    fn range(
+        &self,
+        bound: impl std::ops::RangeBounds<u8>,
+    ) -> impl Iterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
+           + DoubleEndedIterator
+           + FusedIterator {
+        let child_pointers = self.initialized_child_pointers();
+
+        let start = bound.start_bound().map(|val| usize::from(*val));
+        let key_offset = match bound.start_bound() {
+            std::ops::Bound::Included(val) => *val,
+            std::ops::Bound::Excluded(val) => val.saturating_add(1),
+            std::ops::Bound::Unbounded => 0,
+        };
+        let end = bound.end_bound().map(|val| usize::from(*val));
+
+        (&self.child_indices[(start, end)])
+            .iter()
+            .enumerate()
+            .filter_map(|(key, idx)| {
+                // normally `enumerate()` has elements of (idx, val), but we're using the index
+                // as the key since it ranges from [0, 256)
+                (!idx.is_empty()).then_some((key as u8, usize::from(*idx)))
+            })
+            // SAFETY: By the construction of `Self` idx, must always
+            // be inbounds
+            .map(move |(key, idx)| unsafe {
+                (
+                    key.saturating_add(key_offset),
+                    *child_pointers.get_unchecked(idx),
+                )
+            })
     }
 
     #[cfg(feature = "nightly")]
@@ -576,6 +616,8 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Bound;
+
     use crate::{
         nodes::representation::tests::{
             inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
@@ -623,6 +665,7 @@ mod tests {
         inner_node_remove_child_test(InnerNode48::<_, _, 16>::empty(), 48)
     }
 
+    // TODO
     // #[test]
     // #[should_panic]
     // fn write_child_full_panic() {
@@ -685,17 +728,92 @@ mod tests {
     fn iterate() {
         let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = fixture();
 
-        assert!(node
-            .iter()
-            .any(|(key_fragment, ptr)| key_fragment == 3 && ptr == l1_ptr));
-        assert!(node
-            .iter()
-            .any(|(key_fragment, ptr)| key_fragment == 255 && ptr == l2_ptr));
-        assert!(node
-            .iter()
-            .any(|(key_fragment, ptr)| key_fragment == 0u8 && ptr == l3_ptr));
-        assert!(node
-            .iter()
-            .any(|(key_fragment, ptr)| key_fragment == 85 && ptr == l4_ptr));
+        let mut iter = node.iter();
+
+        assert_eq!(iter.next().unwrap(), (0u8, l3_ptr));
+        assert_eq!(iter.next().unwrap(), (3, l1_ptr));
+        assert_eq!(iter.next().unwrap(), (85, l4_ptr));
+        assert_eq!(iter.next().unwrap(), (255, l2_ptr));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn iterate_rev() {
+        let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = fixture();
+
+        let mut iter = node.iter().rev();
+
+        assert_eq!(iter.next().unwrap(), (255, l2_ptr));
+        assert_eq!(iter.next().unwrap(), (85, l4_ptr));
+        assert_eq!(iter.next().unwrap(), (3, l1_ptr));
+        assert_eq!(iter.next().unwrap(), (0u8, l3_ptr));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn range_iterate() {
+        let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = fixture();
+
+        let pairs = node
+            .range((Bound::Included(0), Bound::Included(3)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[(0u8, l3_ptr), (3, l1_ptr)]);
+
+        let pairs = node
+            .range((Bound::Excluded(0), Bound::Excluded(3)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[]);
+
+        let pairs = node
+            .range((Bound::Included(0), Bound::Included(0)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[(0u8, l3_ptr)]);
+
+        let pairs = node
+            .range((Bound::Included(0), Bound::Included(255)))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            pairs,
+            &[(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr),]
+        );
+
+        let pairs = node
+            .range((Bound::Included(255), Bound::Included(255)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[(255, l2_ptr),]);
+
+        let pairs = node
+            .range((Bound::Included(255), Bound::Excluded(255)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[]);
+
+        let pairs = node
+            .range((Bound::Excluded(255), Bound::Included(255)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[]);
+
+        let pairs = node
+            .range((Bound::Excluded(0), Bound::Excluded(255)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[(3, l1_ptr), (85, l4_ptr)]);
+
+        let pairs = node
+            .range((Bound::<u8>::Unbounded, Bound::Unbounded))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            pairs,
+            &[(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr),]
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn range_iterate_out_of_bounds_panic_both_excluded() {
+        let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = fixture();
+
+        let pairs = node
+            .range((Bound::Excluded(80), Bound::Excluded(80)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[]);
     }
 }

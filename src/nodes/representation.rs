@@ -8,7 +8,7 @@ use std::{
     iter::FusedIterator,
     marker::PhantomData,
     mem::{self, ManuallyDrop},
-    ops::Range,
+    ops::{Range, RangeBounds},
     ptr::{self, NonNull},
 };
 
@@ -662,9 +662,18 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
         self.header().num_children() >= Self::TYPE.upper_capacity()
     }
 
-    /// Create an iterator over all (key bytes, child pointers) in this inner
+    /// Create an iterator over all `(key bytes, child pointers)` in this inner
     /// node.
     fn iter(&self) -> Self::Iter<'_>;
+
+    /// Create an iterator over a subset of `(key bytes, child pointers)`, using
+    /// the given `bound` as a restriction on the set of key bytes.
+    fn range(
+        &self,
+        bound: impl RangeBounds<u8>,
+    ) -> impl Iterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
+           + DoubleEndedIterator
+           + FusedIterator;
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
