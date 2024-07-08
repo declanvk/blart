@@ -138,7 +138,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
             // means there can only exist other immutable references aside from this one,
             // and no mutable references. That means that no mutating operations can occur
             // on the root node or any child of the root node.
-            let search_result = unsafe { search_unchecked(root, key)? };
+            let search_result = unsafe { search_unchecked(root, key.as_bytes())? };
 
             // SAFETY: The lifetime chosen the value reference is bounded by the lifetime of
             // the immutable reference to the `TreeMap`. The memory of the value will not be
@@ -196,7 +196,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
             // means there cannot exist any other reference (mutable or immutable) to the
             // same `TreeMap`. Which means that no other mutating operations could be
             // happening during the `search_unchecked` call.
-            let search_result = unsafe { search_unchecked(root, key)? };
+            let search_result = unsafe { search_unchecked(root, key.as_bytes())? };
 
             // SAFETY: The lifetime chosen the value reference is bounded by the lifetime of
             // the mutable reference to the `TreeMap`. The value pointed to by the returned
@@ -639,7 +639,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let insert_point = unsafe { search_for_insert_point(root, &key)? };
+            let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
             let insert_result = self.apply_insert_point(insert_point, key, value);
             Ok(insert_result.existing_leaf.map(|leaf| leaf.into_entry().1))
         } else {
@@ -673,7 +673,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let delete_point = unsafe { search_for_delete_point(root, key)? };
+            let delete_point = unsafe { search_for_delete_point(root, key.as_bytes())? };
             let delete_result = self.apply_delete_point(delete_point);
             Some(delete_result.deleted_leaf.into_entry())
         } else {
@@ -1273,7 +1273,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
                 // that there are no other references (mutable or immutable) to this same
                 // object. Meaning that our access to the root node is unique and there are no
                 // other accesses to any node in the tree.
-                let insert_point = unsafe { search_for_insert_point(root, &key)? };
+                let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
                         map: self,
@@ -1314,7 +1314,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
                 // that there are no other references (mutable or immutable) to this same
                 // object. Meaning that our access to the root node is unique and there are no
                 // other accesses to any node in the tree.
-                let insert_point = unsafe { search_for_insert_point(root, key)? };
+                let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
                         map: self,

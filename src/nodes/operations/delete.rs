@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use crate::{
     nodes::operations::lookup, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr,
     OpaqueNodePtr,
@@ -294,13 +292,12 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-pub unsafe fn search_for_delete_point<Q, K, V, const PREFIX_LEN: usize>(
+pub unsafe fn search_for_delete_point<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    key: &Q,
+    key_bytes: &[u8],
 ) -> Option<DeletePoint<K, V, PREFIX_LEN>>
 where
-    K: Borrow<Q> + AsBytes,
-    Q: AsBytes + ?Sized,
+    K: AsBytes,
 {
     let mut current_grandparent = None;
     let mut current_parent = None;
@@ -312,29 +309,29 @@ where
             ConcreteNodePtr::Node4(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
-                lookup::check_prefix_lookup_child(inner_ptr, key, &mut current_depth)
+                lookup::check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node16(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
-                lookup::check_prefix_lookup_child(inner_ptr, key, &mut current_depth)
+                lookup::check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node48(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
-                lookup::check_prefix_lookup_child(inner_ptr, key, &mut current_depth)
+                lookup::check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node256(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
-                lookup::check_prefix_lookup_child(inner_ptr, key, &mut current_depth)
+                lookup::check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 let leaf_node = leaf_node_ptr.read();
 
                 // Specifically we are matching the leaf node stored key against the full search
                 // key to confirm that it is the right value.
-                if leaf_node.matches_full_key(key) {
+                if leaf_node.matches_full_key(key_bytes) {
                     return Some(DeletePoint {
                         grandparent_ptr_and_parent_key_byte: current_grandparent,
                         parent_ptr_and_child_key_byte: current_parent,
@@ -352,7 +349,7 @@ where
         );
 
         // This should not panic because the current_depth will be greater than zero
-        let last_key_byte = key.as_bytes()[current_depth - 1];
+        let last_key_byte = key_bytes[current_depth - 1];
 
         current_grandparent = current_parent;
         current_parent = Some((current_node, last_key_byte));

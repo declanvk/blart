@@ -1,8 +1,8 @@
 use crate::{
     deallocate_tree, search_unchecked,
     tests_common::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
-    AsBytes, InnerNode, InnerNode4, InnerNodeCompressed, InsertPrefixError, LeafNode, NodePtr,
-    NodeType, OpaqueNodePtr,
+    InnerNode, InnerNode4, InnerNodeCompressed, InsertPrefixError, LeafNode, NodePtr, NodeType,
+    OpaqueNodePtr,
 };
 
 #[test]
@@ -271,7 +271,7 @@ fn insert_existing_key_overwrite() {
 
     let current_root: OpaqueNodePtr<Box<[u8]>, char, 16> = setup_tree_from_entries(entries_it);
 
-    unsafe fn get_value<K: AsBytes, V: Copy, const PREFIX_LEN: usize>(
+    unsafe fn get_value<K, V: Copy, const PREFIX_LEN: usize>(
         n: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
     ) -> V {
         unsafe { *n.as_ref().value_ref() }

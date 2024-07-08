@@ -327,7 +327,7 @@ where
 {
     use crate::search_for_insert_point;
 
-    let insert_point = unsafe { search_for_insert_point(root, &key)? };
+    let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
     Ok(insert_point.apply(key, value))
 }
 

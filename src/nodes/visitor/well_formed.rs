@@ -30,7 +30,8 @@ impl<const LEN: usize> PartialEq<[u8; LEN]> for KeyPrefix {
 
 /// An issue with the well-formed-ness of the tree. See the documentation on
 /// [`WellFormedChecker`] for more context.
-pub enum MalformedTreeError<K: AsBytes, V, const PREFIX_LEN: usize> {
+#[derive(PartialEq, Eq)]
+pub enum MalformedTreeError<K, V, const PREFIX_LEN: usize> {
     /// A loop was observed between nodes
     LoopFound {
         /// The node that was observed more than once while traversing the tree
@@ -155,10 +156,7 @@ where
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Clone for MalformedTreeError<K, V, PREFIX_LEN>
-where
-    K: Clone,
-{
+impl<K: Clone, V, const PREFIX_LEN: usize> Clone for MalformedTreeError<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
         match self {
             Self::LoopFound {
@@ -191,61 +189,6 @@ where
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> PartialEq for MalformedTreeError<K, V, PREFIX_LEN>
-where
-    K: Eq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::LoopFound {
-                    node_ptr: l_node_ptr,
-                    first_observed: l_first_observed,
-                    later_observed: l_later_observed,
-                },
-                Self::LoopFound {
-                    node_ptr: r_node_ptr,
-                    first_observed: r_first_observed,
-                    later_observed: r_later_observed,
-                },
-            ) => {
-                l_node_ptr == r_node_ptr
-                    && l_first_observed == r_first_observed
-                    && l_later_observed == r_later_observed
-            },
-            (
-                Self::WrongChildrenCount {
-                    key_prefix: l_key_prefix,
-                    inner_node_type: l_inner_node_type,
-                    num_children: l_num_children,
-                },
-                Self::WrongChildrenCount {
-                    key_prefix: r_key_prefix,
-                    inner_node_type: r_inner_node_type,
-                    num_children: r_num_children,
-                },
-            ) => {
-                l_key_prefix == r_key_prefix
-                    && l_inner_node_type == r_inner_node_type
-                    && l_num_children == r_num_children
-            },
-            (
-                Self::PrefixMismatch {
-                    expected_prefix: l_expected_prefix,
-                    entire_key: l_entire_key,
-                },
-                Self::PrefixMismatch {
-                    expected_prefix: r_expected_prefix,
-                    entire_key: r_entire_key,
-                },
-            ) => l_expected_prefix == r_expected_prefix && l_entire_key == r_entire_key,
-            _ => false,
-        }
-    }
-}
-
-impl<K: Eq + AsBytes, V, const PREFIX_LEN: usize> Eq for MalformedTreeError<K, V, PREFIX_LEN> {}
-
 impl<K: AsBytes, V, const PREFIX_LEN: usize> Error for MalformedTreeError<K, V, PREFIX_LEN> {}
 
 /// A visitor of the radix tree which checks that the tree is well-formed.
@@ -265,7 +208,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Error for MalformedTreeError<K, V, 
 /// "well-formed" (by the definition given above) if the checker returns
 /// `Ok(())`.
 #[derive(Debug)]
-pub struct WellFormedChecker<K: AsBytes, V, const PREFIX_LEN: usize> {
+pub struct WellFormedChecker<K, V, const PREFIX_LEN: usize> {
     current_key_prefix: Vec<u8>,
     seen_nodes: HashMap<OpaqueNodePtr<K, V, PREFIX_LEN>, KeyPrefix>,
 }

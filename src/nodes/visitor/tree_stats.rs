@@ -32,12 +32,12 @@ impl TreeStatsCollector {
     }
 
     /// Iterate through the given tree and return the number of leaf nodes.
-    pub fn count_leaf_nodes<K: AsBytes, V, const PREFIX_LEN: usize>(
+    pub fn count_leaf_nodes<K, V, const PREFIX_LEN: usize>(
         tree: &TreeMap<K, V, PREFIX_LEN>,
     ) -> usize {
         struct LeafNodeCounter;
 
-        impl<K: AsBytes, V, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN> for LeafNodeCounter {
+        impl<K, V, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN> for LeafNodeCounter {
             type Output = usize;
 
             fn default_output(&self) -> Self::Output {
@@ -91,7 +91,7 @@ pub struct InnerNodeStats {
 }
 
 impl InnerNodeStats {
-    fn aggregate_data<K: AsBytes, V, const PREFIX_LEN: usize, N>(&mut self, t: &N)
+    fn aggregate_data<K, V, const PREFIX_LEN: usize, N>(&mut self, t: &N)
     where
         N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
     {

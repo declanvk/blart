@@ -2,7 +2,6 @@
 
 use crate::{rust_nightly_apis::assume, tagged_pointer::TaggedPointer, AsBytes};
 use std::{
-    borrow::Borrow,
     fmt,
     hash::Hash,
     iter::FusedIterator,
@@ -275,7 +274,7 @@ pub enum ConcreteNodePtr<K, V, const PREFIX_LEN: usize> {
     LeafNode(NodePtr<PREFIX_LEN, LeafNode<K, V>>),
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteNodePtr<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteNodePtr<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
@@ -830,12 +829,11 @@ impl<K, V> LeafNode<K, V> {
     }
 
     /// Check that the provided full key is the same one as the stored key.
-    pub fn matches_full_key<Q>(&self, possible_key: &Q) -> bool
+    pub fn matches_full_key(&self, possible_key: &[u8]) -> bool
     where
-        K: Borrow<Q> + AsBytes,
-        Q: AsBytes + ?Sized,
+        K: AsBytes,
     {
-        self.key.borrow().as_bytes().eq(possible_key.as_bytes())
+        self.key.as_bytes().eq(possible_key)
     }
 }
 

@@ -3,7 +3,7 @@ use crate::{
     AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch,
     NodePtr, OpaqueNodePtr,
 };
-use std::{borrow::Borrow, error::Error, fmt, marker::PhantomData, ops::ControlFlow};
+use std::{error::Error, fmt, marker::PhantomData, ops::ControlFlow};
 
 /// The results of a successful tree insert
 #[derive(Debug)]
@@ -439,13 +439,12 @@ pub enum InsertSearchResultType<K, V, const PREFIX_LEN: usize> {
 /// # Errors
 ///  - If the given `key` is a prefix of an existing key, this function will
 ///    return an error.
-pub unsafe fn search_for_insert_point<K, V, Q, const PREFIX_LEN: usize>(
+pub unsafe fn search_for_insert_point<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    key: &Q,
+    key_bytes: &[u8],
 ) -> Result<InsertPoint<K, V, PREFIX_LEN>, InsertPrefixError>
 where
-    K: AsBytes + Borrow<Q>,
-    Q: AsBytes + ?Sized,
+    K: AsBytes,
 {
     fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
         inner_ptr: NodePtr<PREFIX_LEN, N>,
@@ -500,7 +499,6 @@ where
     let mut current_parent = None;
     let mut current_node = root;
     let mut current_depth = 0;
-    let key_bytes = key.as_bytes();
 
     loop {
         let lookup_result = match current_node.to_node_ptr() {
@@ -519,7 +517,7 @@ where
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
                 let leaf_node = leaf_node_ptr.read();
 
-                if leaf_node.matches_full_key(key) {
+                if leaf_node.matches_full_key(key_bytes) {
                     return Ok(InsertPoint {
                         key_bytes_used: current_depth,
                         grandparent_ptr_and_parent_key_byte: current_grandparent,

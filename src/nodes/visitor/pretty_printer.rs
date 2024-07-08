@@ -1,6 +1,6 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
+    InnerNode, NodeType, OpaqueNodePtr, TreeMap,
 };
 use std::{
     fmt::{Debug, Display},
@@ -32,7 +32,7 @@ impl<O: Write> DotPrinter<O> {
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where
-        K: Display + AsBytes,
+        K: Display,
         V: Display,
     {
         tree.root.map(|root| {
@@ -53,7 +53,7 @@ impl<O: Write> DotPrinter<O> {
         settings: DotPrinterSettings,
     ) -> io::Result<()>
     where
-        K: Display + AsBytes,
+        K: Display,
         V: Display,
     {
         let mut visitor = DotPrinter {
@@ -87,7 +87,7 @@ impl<O: Write> DotPrinter<O> {
         inner_node: &N,
     ) -> io::Result<usize>
     where
-        K: Display + AsBytes,
+        K: Display,
         T: Display,
         N: InnerNode<PREFIX_LEN, Key = K, Value = T>,
     {
@@ -144,7 +144,7 @@ impl<O: Write> DotPrinter<O> {
 
 impl<K, T, O, const PREFIX_LEN: usize> Visitor<K, T, PREFIX_LEN> for DotPrinter<O>
 where
-    K: Display + AsBytes,
+    K: Display,
     T: Display,
     O: Write,
 {
@@ -204,7 +204,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::deallocate_tree;
+    use crate::{deallocate_tree, AsBytes};
 
     use super::*;
 
