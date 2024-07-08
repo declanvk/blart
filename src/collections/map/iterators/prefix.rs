@@ -117,7 +117,7 @@ macro_rules! gen_iter {
             fn handle_leaf(
                 &mut self,
                 current_depth: usize,
-                inner: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+                inner: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
             ) -> bool {
                 self.size -= 1;
                 // SAFETY: Since `Self` holds a mutable/shared reference

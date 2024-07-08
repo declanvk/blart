@@ -13,7 +13,7 @@ use crate::{
 pub unsafe fn search_unchecked<Q, K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key: &Q,
-) -> Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>
+) -> Option<NodePtr<PREFIX_LEN, LeafNode<K, V>>>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,

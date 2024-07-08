@@ -7,7 +7,7 @@ use crate::{
 
 #[test]
 fn insert_to_small_trees() {
-    let first_leaf: NodePtr<16, LeafNode<Box<_>, String, 16>> =
+    let first_leaf: NodePtr<16, LeafNode<Box<_>, String>> =
         NodePtr::allocate_node_ptr(LeafNode::new(Box::from([1, 2, 3, 4]), "1234".to_string()));
 
     let mut tree = first_leaf.to_opaque();
@@ -85,8 +85,8 @@ fn insert_into_left_skewed_tree_deallocate() {
 
 #[test]
 fn insert_prefix_key_errors() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> = NodePtr::allocate_node_ptr(
-        LeafNode::<Box<[u8]>, _, 16>::new(Box::from([1, 2, 3, 4]), "1234".to_string()),
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String>> = NodePtr::allocate_node_ptr(
+        LeafNode::<Box<[u8]>, _>::new(Box::from([1, 2, 3, 4]), "1234".to_string()),
     );
 
     let tree = first_leaf.to_opaque();
@@ -104,8 +104,8 @@ fn insert_prefix_key_errors() {
 
 #[test]
 fn insert_prefix_key_with_existing_prefix_errors() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> = NodePtr::allocate_node_ptr(
-        LeafNode::<Box<[u8]>, _, 16>::new(Box::from([1, 2]), "12".to_string()),
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String>> = NodePtr::allocate_node_ptr(
+        LeafNode::<Box<[u8]>, _>::new(Box::from([1, 2]), "12".to_string()),
     );
 
     let tree = first_leaf.to_opaque();
@@ -123,9 +123,11 @@ fn insert_prefix_key_with_existing_prefix_errors() {
 
 #[test]
 fn insert_key_with_long_prefix_then_split() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, i32, 16>> = NodePtr::allocate_node_ptr(
-        LeafNode::<Box<[u8]>, _, 16>::new(Box::from([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]), 0),
-    );
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, i32>> =
+        NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _>::new(
+            Box::from([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]),
+            0,
+        ));
 
     let mut tree = first_leaf.to_opaque();
     tree = unsafe {
@@ -270,7 +272,7 @@ fn insert_existing_key_overwrite() {
     let current_root: OpaqueNodePtr<Box<[u8]>, char, 16> = setup_tree_from_entries(entries_it);
 
     unsafe fn get_value<K: AsBytes, V: Copy, const PREFIX_LEN: usize>(
-        n: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+        n: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
     ) -> V {
         unsafe { *n.as_ref().value_ref() }
     }

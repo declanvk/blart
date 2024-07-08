@@ -527,7 +527,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         }
     }
 
-    fn init_tree(&mut self, key: K, value: V) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
+    fn init_tree(&mut self, key: K, value: V) -> NodePtr<PREFIX_LEN, LeafNode<K, V>> {
         let leaf = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
         self.root = Some(leaf.to_opaque());
         self.num_entries = 1;

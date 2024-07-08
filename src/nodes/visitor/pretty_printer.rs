@@ -174,7 +174,7 @@ where
         self.write_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T>) -> Self::Output {
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;

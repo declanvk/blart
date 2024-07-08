@@ -111,7 +111,7 @@ unsafe fn remove_child_from_inner_node_and_compress<
 ///  - `leaf_node_ptr` must be a unique pointer to the node and not have any
 ///    other mutable references.
 unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize>(
-    leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+    leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
     (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V, PREFIX_LEN>, u8),
     grandparent_node_ptr: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     original_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
@@ -199,7 +199,7 @@ pub struct DeleteResult<K, V, const PREFIX_LEN: usize> {
     /// If `None`, that means the tree is now empty.
     pub new_root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
     /// The leaf node that was successfully deleted.
-    pub deleted_leaf: LeafNode<K, V, PREFIX_LEN>,
+    pub deleted_leaf: LeafNode<K, V>,
 }
 
 pub struct DeletePoint<K, V, const PREFIX_LEN: usize> {
@@ -216,7 +216,7 @@ pub struct DeletePoint<K, V, const PREFIX_LEN: usize> {
     /// If the grandparent node is present, this value also must be present.
     pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     /// The node to delete.
-    pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+    pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
 }
 
 impl<K, V, const PREFIX_LEN: usize> std::fmt::Debug for DeletePoint<K, V, PREFIX_LEN> {

@@ -137,7 +137,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         &mut self,
         len: usize,
         depth: usize,
-        leaf_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+        leaf_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
     ) {
         self.prefix_len -= len as u32;
 
@@ -173,7 +173,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         current_depth: usize,
     ) -> (
         &'a [u8],
-        Option<NodePtr<PREFIX_LEN, LeafNode<N::Key, N::Value, PREFIX_LEN>>>,
+        Option<NodePtr<PREFIX_LEN, LeafNode<N::Key, N::Value>>>,
     )
     where
         N::Key: AsBytes,

@@ -5,7 +5,7 @@ use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr,
 /// A view into an occupied entry in a [`TreeMap`]. It is part of the
 /// [`EntryRef`] enum.
 pub struct OccupiedEntryRef<'a, K, V, const PREFIX_LEN: usize> {
-    pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+    pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
 
     /// Used for the removal
     pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN>,

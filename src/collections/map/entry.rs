@@ -8,7 +8,7 @@ pub struct OccupiedEntry<'a, K, V, const PREFIX_LEN: usize>
 where
     K: AsBytes,
 {
-    pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+    pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
 
     /// Used for the removal
     pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN>,
