@@ -15,8 +15,8 @@ use std::{
     sync::Arc,
 };
 
-mod ordered;
-pub use ordered::*;
+mod mapped;
+pub use mapped::*;
 
 /// Any type implementing `AsBytes` can be decomposed into bytes.
 ///
@@ -124,32 +124,15 @@ macro_rules! as_bytes_for_integer_arrays {
 as_bytes_for_integer_arrays!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128);
 
 /// SAFETY: The lexicographic ordering of `[u8; N]` converted to bytes is the
-/// same as its normal representation
-unsafe impl<const N: usize, T> OrderedBytes for [T; N]
-where
-    T: OrderedBytes,
-    [T; N]: AsBytes,
-{
-}
+/// same as its normal representation.
+unsafe impl<const N: usize> OrderedBytes for [u8; N] {}
 
-/// SAFETY: The ordering of a slice is the lexicographic ordering of the
-/// elements. If each element compares the same if it is converted to bytes,
-/// then converting the entire slice to bytes should compare the same as the
-/// original slice.
-unsafe impl<T> OrderedBytes for [T]
-where
-    T: OrderedBytes,
-    [T]: AsBytes,
-{
-}
+/// SAFETY: The lexicographic ordering of `[u8; N]` converted to bytes is the
+/// same as its normal representation.
+unsafe impl OrderedBytes for [u8] {}
 
-/// SAFETY: Same reasoning as the `OrderedBytes for [T]`
-unsafe impl<T> OrderedBytes for Vec<T>
-where
-    T: OrderedBytes,
-    Vec<T>: AsBytes,
-{
-}
+/// SAFETY: Same reasoning as the `OrderedBytes for [u8]`
+unsafe impl OrderedBytes for Vec<u8> {}
 
 impl AsBytes for str {
     fn as_bytes(&self) -> &[u8] {
@@ -590,6 +573,10 @@ as_bytes_for_tuples!(
 
 #[cfg(test)]
 mod tests {
+    use std::fmt;
+
+    use mapped::tests::assert_ordered_bytes_mapping_contract;
+
     use super::*;
 
     #[test]
@@ -731,5 +718,113 @@ mod tests {
             <IoSliceMut as AsBytes>::as_bytes(&IoSliceMut::new(&mut buffer)),
             b"hello world"
         )
+    }
+
+    #[test]
+    fn copy_tuple_as_bytes() {
+        let tup1 = ([0u8; 5], [10u8; 5]);
+        assert_eq!(tup1.as_bytes(), &[0, 0, 0, 0, 0, 10, 10, 10, 10, 10]);
+    }
+
+    // TODO: Resolve https://github.com/declanvk/blart/issues/31
+    #[test]
+    fn concat_tuple_ord_matches_tuple_ord() {
+        let t1 = ("aa".to_owned(), "abb".to_owned());
+        let t2 = ("aaa".to_owned(), "bb".to_owned());
+        assert!(t1 < t2);
+
+        let c1: Concat<(String, String)> = Concat::from(("aa", "abb"));
+        let c2: Concat<(String, String)> = Concat::from(("aaa", "bb"));
+        assert_ordered_bytes_contract(c1, c2)
+    }
+
+    #[test]
+    fn copy_mapped_tuple_ordering() {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        enum Weird {
+            Short([u8; 1]),
+            Long([u8; 2]),
+        }
+
+        #[derive(Debug, Clone, Copy)]
+        enum WeirdBytes {
+            Short([u8; 2]),
+            Long([u8; 3]),
+        }
+
+        impl AsRef<[u8]> for WeirdBytes {
+            fn as_ref(&self) -> &[u8] {
+                match self {
+                    WeirdBytes::Short(bytes) => bytes.as_ref(),
+                    WeirdBytes::Long(bytes) => bytes.as_ref(),
+                }
+            }
+        }
+
+        struct WeirdToBytes;
+
+        unsafe impl BytesMapping for WeirdToBytes {
+            type Bytes = WeirdBytes;
+            type Domain = Weird;
+
+            fn to_bytes(value: Self::Domain) -> Self::Bytes {
+                match value {
+                    Weird::Short(inner) => WeirdBytes::Short([0, inner[0]]),
+                    Weird::Long(inner) => WeirdBytes::Long([1, inner[0], inner[1]]),
+                }
+            }
+
+            fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+                match bytes {
+                    WeirdBytes::Short(bytes) => Weird::Short([bytes[1]]),
+                    WeirdBytes::Long(bytes) => Weird::Long([bytes[1], bytes[2]]),
+                }
+            }
+        }
+
+        assert_ordered_bytes_mapping_contract::<WeirdToBytes>(
+            Weird::Short([u8::MIN]),
+            Weird::Short([u8::MAX]),
+        );
+        assert_ordered_bytes_mapping_contract::<WeirdToBytes>(
+            Weird::Short([u8::MAX]),
+            Weird::Long([u8::MIN, u8::MIN]),
+        );
+        assert_ordered_bytes_mapping_contract::<WeirdToBytes>(
+            Weird::Long([u8::MIN, u8::MIN]),
+            Weird::Long([u8::MAX, u8::MAX]),
+        );
+
+        unsafe impl OrderedBytes for Mapped<WeirdToBytes> {}
+
+        let t1 = (
+            Mapped::<WeirdToBytes>::new(Weird::Long([u8::MIN, u8::MIN])),
+            Mapped::<WeirdToBytes>::new(Weird::Short([u8::MAX])),
+        );
+        let t2 = (
+            Mapped::<WeirdToBytes>::new(Weird::Short([u8::MIN])),
+            Mapped::<WeirdToBytes>::new(Weird::Long([u8::MIN, u8::MAX])),
+        );
+
+        assert_ordered_bytes_contract(t1, t2);
+    }
+
+    fn assert_ordered_bytes_contract<T>(a: T, b: T)
+    where
+        T: Ord + fmt::Debug + OrderedBytes,
+    {
+        let a_bytes = a.as_bytes();
+        let b_bytes = b.as_bytes();
+
+        assert_eq!(
+            a.cmp(&b),
+            a_bytes.cmp(b_bytes),
+            "{:?} and {:?} compare differently than their byte representation \
+             (a_bytes={:?},b_bytes={:?})",
+            a,
+            b,
+            a_bytes,
+            b_bytes
+        );
     }
 }

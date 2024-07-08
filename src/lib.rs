@@ -39,7 +39,7 @@
 //!    International Conference on Data Engineering (ICDE) (pp. 38-49). IEEE.
 //!    [Link to PDF][ART paper]
 //!
-//! [ART paper]: https://www-db.in.tum.de/~leis/papers/ART.pdf
+//! [ART paper]: http://web.archive.org/web/20240508000744/https://db.in.tum.de/~leis/papers/ART.pdf
 
 mod bytes;
 mod collections;

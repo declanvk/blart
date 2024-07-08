@@ -358,14 +358,13 @@ unsafe impl NoPrefixesBytes for Mapped<ToOctets<Ipv6Addr>> {}
 unsafe impl OrderedBytes for Mapped<ToOctets<Ipv6Addr>> {}
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use std::fmt::Debug;
 
     fn check_is_ordered_bytes<T: OrderedBytes>() {}
 
-    /// Check that for the given type
-    fn assert_bytes_isomorphism_contract<B>(a: B::Domain, b: B::Domain)
+    pub(in crate::bytes) fn assert_ordered_bytes_mapping_contract<B>(a: B::Domain, b: B::Domain)
     where
         B: BytesMapping,
         B::Domain: Ord + Debug + Copy,
@@ -395,20 +394,20 @@ mod tests {
                 #[test]
                 fn $test_fn() {
                     let mid = (<$unsigned>::MAX + <$unsigned>::MIN) / 2;
-                    assert_bytes_isomorphism_contract::<ToUBE<$unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE<$unsigned>>(
                         <$unsigned>::MAX, <$unsigned>::MIN);
-                    assert_bytes_isomorphism_contract::<ToUBE<$unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE<$unsigned>>(
                         mid, <$unsigned>::MAX);
-                    assert_bytes_isomorphism_contract::<ToUBE<$unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE<$unsigned>>(
                         mid, <$unsigned>::MIN);
 
                     check_is_ordered_bytes::<Mapped<ToUBE<$unsigned>>>();
 
-                    assert_bytes_isomorphism_contract::<ToIBE<$signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE<$signed>>(
                         0, <$signed>::MAX);
-                    assert_bytes_isomorphism_contract::<ToIBE<$signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE<$signed>>(
                         0, <$signed>::MIN);
-                    assert_bytes_isomorphism_contract::<ToIBE<$signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE<$signed>>(
                         <$signed>::MAX, <$signed>::MIN);
 
                     check_is_ordered_bytes::<Mapped<ToIBE<$signed>>>();
@@ -432,23 +431,23 @@ mod tests {
                 #[test]
                 fn $test_fn() {
                     let mid = <$nonzero_unsigned>::new((<$unsigned>::MAX + <$unsigned>::MIN) / 2).unwrap();
-                    assert_bytes_isomorphism_contract::<ToUBE<$nonzero_unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE<$nonzero_unsigned>>(
                         <$nonzero_unsigned>::new(1).unwrap(),
                         <$nonzero_unsigned>::new(<$unsigned>::MAX).unwrap());
-                    assert_bytes_isomorphism_contract::<ToUBE<$nonzero_unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE<$nonzero_unsigned>>(
                         mid, <$nonzero_unsigned>::new(<$unsigned>::MAX).unwrap());
-                    assert_bytes_isomorphism_contract::<ToUBE<$nonzero_unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE<$nonzero_unsigned>>(
                         mid, <$nonzero_unsigned>::new(<$unsigned>::MIN + 1).unwrap());
 
                     check_is_ordered_bytes::<Mapped<ToUBE<$nonzero_unsigned>>>();
 
-                    assert_bytes_isomorphism_contract::<ToIBE<$nonzero_signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE<$nonzero_signed>>(
                         <$nonzero_signed>::new(<$signed>::MIN).unwrap(),
                         <$nonzero_signed>::new(<$signed>::MAX).unwrap());
-                    assert_bytes_isomorphism_contract::<ToIBE<$nonzero_signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE<$nonzero_signed>>(
                         <$nonzero_signed>::new(1).unwrap(),
                         <$nonzero_signed>::new(<$signed>::MAX).unwrap());
-                    assert_bytes_isomorphism_contract::<ToIBE<$nonzero_signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE<$nonzero_signed>>(
                         <$nonzero_signed>::new(<$signed>::MIN).unwrap(),
                         <$nonzero_signed>::new(1).unwrap());
 
@@ -469,15 +468,15 @@ mod tests {
 
     #[test]
     fn test_ordered_ip_types() {
-        assert_bytes_isomorphism_contract::<ToOctets<Ipv4Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv4Addr>>(
             Ipv4Addr::LOCALHOST,
             Ipv4Addr::BROADCAST,
         );
-        assert_bytes_isomorphism_contract::<ToOctets<Ipv4Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv4Addr>>(
             Ipv4Addr::LOCALHOST,
             Ipv4Addr::UNSPECIFIED,
         );
-        assert_bytes_isomorphism_contract::<ToOctets<Ipv4Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv4Addr>>(
             Ipv4Addr::BROADCAST,
             Ipv4Addr::UNSPECIFIED,
         );
@@ -495,12 +494,15 @@ mod tests {
             u16::MAX,
         );
 
-        assert_bytes_isomorphism_contract::<ToOctets<Ipv6Addr>>(Ipv6Addr::LOCALHOST, IPV6_MAX);
-        assert_bytes_isomorphism_contract::<ToOctets<Ipv6Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv6Addr>>(Ipv6Addr::LOCALHOST, IPV6_MAX);
+        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv6Addr>>(
             Ipv6Addr::LOCALHOST,
             Ipv6Addr::UNSPECIFIED,
         );
-        assert_bytes_isomorphism_contract::<ToOctets<Ipv6Addr>>(IPV6_MAX, Ipv6Addr::UNSPECIFIED);
+        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv6Addr>>(
+            IPV6_MAX,
+            Ipv6Addr::UNSPECIFIED,
+        );
 
         check_is_ordered_bytes::<Mapped<ToOctets<Ipv6Addr>>>();
     }
