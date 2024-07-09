@@ -167,38 +167,6 @@ pub fn box_new_uninit_slice<T>(len: usize) -> Box<[std::mem::MaybeUninit<T>]> {
     }
 }
 
-/// Converts to `Box<[T], A>`.
-///
-/// # Safety
-///
-/// As with [`MaybeUninit::assume_init`],
-/// it is up to the caller to guarantee that the values
-/// really are in an initialized state.
-/// Calling this when the content is not yet fully initialized
-/// causes immediate undefined behavior.
-///
-/// [`MaybeUninit::assume_init`]: std::mem::MaybeUninit::assume_init
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#63291][issue-63291]**
-///
-/// [issue-63291]: https://github.com/rust-lang/rust/issues/63291
-#[inline(always)]
-pub unsafe fn box_assume_init<T>(b: Box<[std::mem::MaybeUninit<T>]>) -> Box<[T]> {
-    #[cfg(feature = "nightly")]
-    {
-        // SAFETY: Covered by condition of containing function
-        unsafe { b.assume_init() }
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        let raw = Box::into_raw(b);
-        // SAFETY: Covered by condition of containing function
-        unsafe { Box::from_raw(raw as *mut [T]) }
-    }
-}
-
 /// Informs the optimizer that a condition is always true.
 /// If the condition is false, the behavior is undefined.
 ///

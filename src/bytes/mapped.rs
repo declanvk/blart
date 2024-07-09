@@ -11,14 +11,13 @@ use std::{
 };
 
 /// Trait representing a reversible conversion from a type to some sort of byte
-/// string, while preserving the ordering of the original type.
+/// string.
 ///
-/// The ordering of the original type is determined by the [`Ord`]
-/// implementation, and the ordering of the byte string type is the
-/// lexicographic ordering.
+/// # `Hash` and `Eq`
 ///
-/// The mapping should also maintain equality for the [`PartialEq`] and [`Eq`]
-/// implementations, along with hashing for the [`Hash`] implementation.
+/// The transformation from the original type to the byte string should preserve
+/// equality for the [`PartialEq`] and [`Eq`] implementations, along with
+/// hashing for the [`Hash`] implementation.
 ///
 /// The following property should hold true:
 ///
@@ -29,42 +28,68 @@ use std::{
 /// And this implies that the `hash` implementations should also match, in line
 /// with the [`Hash`] and [`Eq`] documentation.
 ///
-/// [`Hash`] and [`Eq`] [documentation](https://doc.rust-lang.org/1.68.2/std/hash/trait.Hash.html#hash-and-eq)
+/// [`Hash` and `Eq` documentation](https://doc.rust-lang.org/1.68.2/std/hash/trait.Hash.html#hash-and-eq)
 ///
-/// # Safety
-///  - This trait is unsafe because implementing it implies that the
-///    [`Mapped<Self>`] type will implement [`OrderedBytes`], so the safety
-///    requirements must be upheld. Namely, that the ordering of values of the
-///    [`BytesMapping::Domain`] type must be equal to the ordering of those same
-///    values translated to the the [`BytesMapping::Bytes`] type.
-pub unsafe trait BytesMapping {
-    /// The unconverted type that has a specific ordering
-    type Domain;
-    /// The bytestring type that the [`Self::Domain`] is converted to.
-    type Bytes: AsRef<[u8]>;
+/// # Ordering
+///
+/// The mapping may optionally preserve ordering of the original type, as
+/// implemented by [`Ord`] on the original type. In that case, [`PartialOrd`]
+/// and [`Ord`] should be implemented for [`Mapped<B, D>`] where `B` is the type
+/// implementing `BytesMapping<D>` and `D` is the type being converted. Then the
+/// trait [`OrderedBytes`] should be implemented for [`Mapped<B, D>`] as well.
+pub trait BytesMapping<D> {
+    // /// The unconverted type that has a specific ordering
+
+    /// The bytestring type that the `D` is converted to.
+    type Bytes: AsBytes;
 
     /// Convert the domain type into the bytestring type
-    fn to_bytes(value: Self::Domain) -> Self::Bytes;
+    fn to_bytes(value: D) -> Self::Bytes;
     /// Convert the bytestring type back into the domain type
-    fn from_bytes(bytes: Self::Bytes) -> Self::Domain;
+    fn from_bytes(bytes: Self::Bytes) -> D;
+}
+
+/// This type implements a [`BytesMapping`] that preserves the original type
+/// without converting it to bytes.
+///
+/// It only works for types which directly implement [`AsBytes`]. This type is
+/// mostly meant for use with the [`Concat`] mapping, as one of the type
+/// parameters.
+#[derive(Debug)]
+pub struct Identity;
+
+impl<D> BytesMapping<D> for Identity
+where
+    D: AsBytes,
+{
+    type Bytes = D;
+
+    fn to_bytes(value: D) -> Self::Bytes {
+        value
+    }
+
+    fn from_bytes(bytes: Self::Bytes) -> D {
+        bytes
+    }
 }
 
 /// A container for the bytestring that is produced from [`BytesMapping`]
 /// conversion
-pub struct Mapped<B>
+#[repr(transparent)]
+pub struct Mapped<B, D>
 where
-    B: BytesMapping,
+    B: BytesMapping<D>,
 {
-    _mapping: PhantomData<B>,
+    _mapping: PhantomData<fn(B) -> D>,
     repr: B::Bytes,
 }
 
-impl<B> Mapped<B>
+impl<B, D> Mapped<B, D>
 where
-    B: BytesMapping,
+    B: BytesMapping<D>,
 {
     /// Transform a value into its ordered representation
-    pub fn new(value: B::Domain) -> Self {
+    pub fn new(value: D) -> Self {
         Mapped {
             _mapping: PhantomData,
             repr: B::to_bytes(value),
@@ -73,28 +98,28 @@ where
 
     /// Take the ordered representation and convert it back to the original
     /// value
-    pub fn get(self) -> B::Domain {
+    pub fn get(self) -> D {
         B::from_bytes(self.repr)
     }
 }
 
-impl<B> Debug for Mapped<B>
+impl<B, D> Debug for Mapped<B, D>
 where
-    B: BytesMapping,
-    B::Domain: Debug,
+    B: BytesMapping<D>,
+    D: Debug,
     B::Bytes: Clone,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Mapped")
-            .field("repr", &self.repr.as_ref())
+            .field("repr", &self.repr.as_bytes())
             .field("original_value", &B::from_bytes(self.repr.clone()))
             .finish()
     }
 }
 
-impl<B> Clone for Mapped<B>
+impl<B, D> Clone for Mapped<B, D>
 where
-    B: BytesMapping,
+    B: BytesMapping<D>,
     B::Bytes: Clone,
 {
     fn clone(&self) -> Self {
@@ -105,58 +130,56 @@ where
     }
 }
 
-impl<B> Copy for Mapped<B>
+impl<B, D> Copy for Mapped<B, D>
 where
-    B: BytesMapping,
+    B: BytesMapping<D>,
     B::Bytes: Copy,
 {
 }
 
-impl<B> PartialEq for Mapped<B>
+impl<B, D> PartialEq for Mapped<B, D>
 where
-    B: BytesMapping,
+    B: BytesMapping<D>,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.repr.as_ref() == other.repr.as_ref()
+        self.repr.as_bytes() == other.repr.as_bytes()
     }
 }
 
-impl<B> Eq for Mapped<B> where B: BytesMapping {}
+impl<B, D> Eq for Mapped<B, D> where B: BytesMapping<D> {}
 
-impl<B> PartialOrd for Mapped<B>
+impl<B, D> Hash for Mapped<B, D>
 where
-    B: BytesMapping,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.repr.as_ref().cmp(other.repr.as_ref()))
-    }
-}
-
-impl<B> Ord for Mapped<B>
-where
-    B: BytesMapping,
-{
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.repr.as_ref().cmp(other.repr.as_ref())
-    }
-}
-
-impl<B> Hash for Mapped<B>
-where
-    B: BytesMapping,
+    B: BytesMapping<D>,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.repr.as_ref().hash(state);
+        self.repr.as_bytes().hash(state);
     }
 }
 
-impl<B> AsBytes for Mapped<B>
+impl<B, D> AsBytes for Mapped<B, D>
 where
-    B: BytesMapping,
+    B: BytesMapping<D>,
 {
     fn as_bytes(&self) -> &[u8] {
-        self.repr.as_ref()
+        self.repr.as_bytes()
     }
+}
+
+macro_rules! impl_ord_for_mapped {
+    ($mapping:ty, $data:ty) => {
+        impl PartialOrd for Mapped<$mapping, $data> {
+            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                Some(self.repr.cmp(&other.repr))
+            }
+        }
+
+        impl Ord for Mapped<$mapping, $data> {
+            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                self.repr.cmp(&other.repr)
+            }
+        }
+    };
 }
 
 /// This struct represents a conversion of **unsigned integers** to the [big
@@ -164,7 +187,7 @@ where
 /// lexicographic ordering of the bytes.
 ///
 /// [big endian format]: https://en.wikipedia.org/wiki/Endianness
-pub struct ToUBE<N>(PhantomData<N>);
+pub struct ToUBE;
 
 /// This struct represents a conversion of **signed integers** to a format that
 /// allows the natural ordering of the numbers to match the lexicographic
@@ -173,46 +196,41 @@ pub struct ToUBE<N>(PhantomData<N>);
 /// This is done by converting the numbers to their unsigned equivalent using `x
 /// XOR (2 ^ (b - 1))` where `b` is the number of bits, then converting the
 /// unsigned value to a big endian format if needed.
-pub struct ToIBE<N>(PhantomData<N>);
+pub struct ToIBE;
 
 macro_rules! impl_ordered_bytes_ints {
     ($([$unsigned:ty, $signed:ty]),*) => {
         $(
-            // SAFETY: This is safe to implement because the big endian conversion is reversible and
-            // will guarantee that the byte string ordering is the same as the natural number ordering.
-            unsafe impl BytesMapping for ToUBE<$unsigned> {
-                type Domain = $unsigned;
+            impl BytesMapping<$unsigned> for ToUBE {
                 type Bytes = [u8; std::mem::size_of::<$unsigned>()];
 
-                fn to_bytes(value: Self::Domain) -> Self::Bytes {
+                fn to_bytes(value: $unsigned) -> Self::Bytes {
                     value.to_be_bytes()
                 }
 
-                fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+                fn from_bytes(bytes: Self::Bytes) -> $unsigned {
                     <$unsigned>::from_be_bytes(bytes)
                 }
             }
 
             // SAFETY: Unsigned integers will have no byte prefixes when converted to their big endian
             // representation, also the byte number of bytes used is constant for all values of the type
-            unsafe impl NoPrefixesBytes for Mapped<ToUBE<$unsigned>> {}
+            unsafe impl NoPrefixesBytes for Mapped<ToUBE, $unsigned> {}
+
+            impl_ord_for_mapped!(ToUBE, $unsigned);
 
             // SAFETY: The big endian representation of unsigned integers is lexicographically ordered
             // and matches the natural ordering of the integer type
-            unsafe impl OrderedBytes for Mapped<ToUBE<$unsigned>> {}
+            unsafe impl OrderedBytes for Mapped<ToUBE, $unsigned> {}
 
-            // SAFETY: This is safe to implement because the big endian conversion and XOR operation is
-            // reversible and  will guarantee that the byte string ordering is the same as the integer
-            // number ordering.
-            unsafe impl BytesMapping for ToIBE<$signed> {
-                type Domain = $signed;
+            impl BytesMapping<$signed> for ToIBE {
                 type Bytes = [u8; std::mem::size_of::<$unsigned>()];
 
-                fn to_bytes(value: Self::Domain) -> Self::Bytes {
+                fn to_bytes(value: $signed) -> Self::Bytes {
                     (bytemuck::cast::<_, $unsigned>(value) ^ (1 << (<$unsigned>::BITS - 1))).to_be_bytes()
                 }
 
-                fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+                fn from_bytes(bytes: Self::Bytes) -> $signed {
                     bytemuck::cast::<_, $signed>(<$unsigned>::from_be_bytes(bytes) ^ (1 << (<$unsigned>::BITS - 1)))
                 }
             }
@@ -220,13 +238,15 @@ macro_rules! impl_ordered_bytes_ints {
             // SAFETY: ToIBE converts the transforms the signed integers, then converts them to the
             // big endian byte representation, which is the same number of bytes for all values of the
             // type, thus there can be no prefixes
-            unsafe impl NoPrefixesBytes for Mapped<ToIBE<$signed>> {}
+            unsafe impl NoPrefixesBytes for Mapped<ToIBE, $signed> {}
+
+            impl_ord_for_mapped!(ToIBE, $signed);
 
             // SAFETY: The transformation that ToIBE does to the signed values converts them to unsigned
             // equivalents in a way that preserves the overall ordering of the type. The conversion from
             // uint to big endian bytes also preserves order, so that the lexicographic ordering of the bytes
             // matches the original ordering of the signed values.
-            unsafe impl OrderedBytes for Mapped<ToIBE<$signed>> {}
+            unsafe impl OrderedBytes for Mapped<ToIBE, $signed> {}
         )*
     };
 }
@@ -243,17 +263,14 @@ impl_ordered_bytes_ints!(
 macro_rules! impl_ordered_bytes_nonzero_ints {
     ($([$nonzero_unsigned:ty; $unsigned:ty, $nonzero_signed:ty; $signed:ty]),*) => {
         $(
-            // SAFETY: This is safe to implement because the big endian conversion is reversible and
-            // will guarantee that the byte string ordering is the same as the natural number ordering.
-            unsafe impl BytesMapping for ToUBE<$nonzero_unsigned> {
-                type Domain = $nonzero_unsigned;
+            impl BytesMapping<$nonzero_unsigned> for ToUBE {
                 type Bytes = [u8; std::mem::size_of::<$unsigned>()];
 
-                fn to_bytes(value: Self::Domain) -> Self::Bytes {
+                fn to_bytes(value: $nonzero_unsigned) -> Self::Bytes {
                     value.get().to_be_bytes()
                 }
 
-                fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+                fn from_bytes(bytes: Self::Bytes) -> $nonzero_unsigned {
                     <$nonzero_unsigned>::new(<$unsigned>::from_be_bytes(bytes))
                         .expect("input bytes should not produce a zero value")
                 }
@@ -261,24 +278,22 @@ macro_rules! impl_ordered_bytes_nonzero_ints {
 
             // SAFETY: The safety of the NonZero* version of the unsigned integer is the same as it
             // is for non-NonZero* variant
-            unsafe impl NoPrefixesBytes for Mapped<ToUBE<$nonzero_unsigned>> {}
+            unsafe impl NoPrefixesBytes for Mapped<ToUBE, $nonzero_unsigned> {}
+
+            impl_ord_for_mapped!(ToUBE, $nonzero_unsigned);
 
             // SAFETY: The safety of the NonZero* version of the unsigned integer is the same as it
             // is for non-NonZero* variant
-            unsafe impl OrderedBytes for Mapped<ToUBE<$nonzero_unsigned>> {}
+            unsafe impl OrderedBytes for Mapped<ToUBE, $nonzero_unsigned> {}
 
-            // SAFETY: This is safe to implement because the big endian conversion and XOR operation is
-            // reversible and  will guarantee that the byte string ordering is the same as the integer
-            // number ordering.
-            unsafe impl BytesMapping for ToIBE<$nonzero_signed> {
-                type Domain = $nonzero_signed;
+            impl BytesMapping<$nonzero_signed> for ToIBE {
                 type Bytes = [u8; std::mem::size_of::<$unsigned>()];
 
-                fn to_bytes(value: Self::Domain) -> Self::Bytes {
+                fn to_bytes(value: $nonzero_signed) -> Self::Bytes {
                     (bytemuck::cast::<_, $unsigned>(value.get()) ^ (1 << (<$unsigned>::BITS - 1))).to_be_bytes()
                 }
 
-                fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+                fn from_bytes(bytes: Self::Bytes) -> $nonzero_signed {
                     let signed = bytemuck::cast::<_, $signed>(
                         <$unsigned>::from_be_bytes(bytes) ^ (1 << (<$unsigned>::BITS - 1)));
 
@@ -287,10 +302,12 @@ macro_rules! impl_ordered_bytes_nonzero_ints {
             }
 
             // SAFETY: This impl is safe for the same reasons as the non-NonZero* impl is
-            unsafe impl NoPrefixesBytes for Mapped<ToIBE<$nonzero_signed>> {}
+            unsafe impl NoPrefixesBytes for Mapped<ToIBE, $nonzero_signed> {}
+
+            impl_ord_for_mapped!(ToIBE, $nonzero_signed);
 
             // SAFETY: This impl is safe for the same reasons as the non-NonZero* impl is
-            unsafe impl OrderedBytes for Mapped<ToIBE<$nonzero_signed>> {}
+            unsafe impl OrderedBytes for Mapped<ToIBE, $nonzero_signed> {}
         )*
     };
 }
@@ -307,55 +324,174 @@ impl_ordered_bytes_nonzero_ints!(
 /// This struct represents a conversion of **IP addresses** (V4 and V6) into
 /// their component bytes. The ordering of IP addresses is already the
 /// lexicographic ordering of the component bytes, so it will be preserved.
-pub struct ToOctets<IP>(PhantomData<IP>);
+pub struct ToOctets;
 
-// SAFETY: This is safe to implement because the conversion to octets is
-// reversible and the ordering of the `Ipv4Addr` is already based on these
-// bytes.
-unsafe impl BytesMapping for ToOctets<Ipv4Addr> {
+impl BytesMapping<Ipv4Addr> for ToOctets {
     type Bytes = [u8; 4];
-    type Domain = Ipv4Addr;
 
-    fn to_bytes(value: Self::Domain) -> Self::Bytes {
+    fn to_bytes(value: Ipv4Addr) -> Self::Bytes {
         value.octets()
     }
 
-    fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+    fn from_bytes(bytes: Self::Bytes) -> Ipv4Addr {
         bytes.into()
     }
 }
 
 // SAFETY: The ToOctets mapping will always produce byte arrays of length 4 for
 // all Ipv4Addr values. Thus there can be no prefixes
-unsafe impl NoPrefixesBytes for Mapped<ToOctets<Ipv4Addr>> {}
+unsafe impl NoPrefixesBytes for Mapped<ToOctets, Ipv4Addr> {}
+
+impl_ord_for_mapped!(ToOctets, Ipv4Addr);
 
 // SAFETY: The ordering of the Ipv4Addr is already defined using the octet bytes
 // see https://doc.rust-lang.org/1.69.0/src/core/net/ip_addr.rs.html#1066
-unsafe impl OrderedBytes for Mapped<ToOctets<Ipv4Addr>> {}
+unsafe impl OrderedBytes for Mapped<ToOctets, Ipv4Addr> {}
 
-// SAFETY: This is safe to implement because the conversion to octets is
-// reversible and the ordering of the `Ipv6Addr` is already based on these
-// bytes.
-unsafe impl BytesMapping for ToOctets<Ipv6Addr> {
+impl BytesMapping<Ipv6Addr> for ToOctets {
     type Bytes = [u8; 16];
-    type Domain = Ipv6Addr;
 
-    fn to_bytes(value: Self::Domain) -> Self::Bytes {
+    fn to_bytes(value: Ipv6Addr) -> Self::Bytes {
         value.octets()
     }
 
-    fn from_bytes(bytes: Self::Bytes) -> Self::Domain {
+    fn from_bytes(bytes: Self::Bytes) -> Ipv6Addr {
         bytes.into()
     }
 }
 
 // SAFETY: The ToOctets mapping will always produce byte arrays of length 16 for
 // all Ipv6Addr values. THus there can be no prefixes
-unsafe impl NoPrefixesBytes for Mapped<ToOctets<Ipv6Addr>> {}
+unsafe impl NoPrefixesBytes for Mapped<ToOctets, Ipv6Addr> {}
+
+impl_ord_for_mapped!(ToOctets, Ipv6Addr);
 
 // SAFETY: The ordering of the Ipv6Addr is already defined using the octet bytes
 // see https://doc.rust-lang.org/1.69.0/src/core/net/ip_addr.rs.html#1908
-unsafe impl OrderedBytes for Mapped<ToOctets<Ipv6Addr>> {}
+unsafe impl OrderedBytes for Mapped<ToOctets, Ipv6Addr> {}
+
+/// This type implements a [`BytesMapping`] for tuples of types, concatenating
+/// their byte representations together.
+///
+/// The `M` type parameter also takes a tuple, the same size as the input, which
+/// contains types also implementing `BytesMapping`. Each type in this tuple is
+/// used to transform the corresponding value in the input tuple.
+///
+/// # Examples
+///
+/// Here is a basic example using the [`Identity`] transform for both tuple
+/// elements:
+///
+/// ```rust
+/// use blart::{Concat, AsBytes, Mapped, Identity};
+///
+/// let c1 = "aaa".to_owned();
+/// let c2 = "bb".to_owned();
+///
+/// assert_eq!(c1.as_bytes(), b"aaa");
+/// assert_eq!(c2.as_bytes(), b"bb");
+///
+/// let t = Mapped::<Concat<(Identity, Identity)>, _>::new((c1, c2));
+///
+/// assert_eq!(t.as_bytes(), b"aaabb");
+/// ```
+///
+/// Here is a more complex example:
+///
+/// ```rust
+/// use std::net::Ipv4Addr;
+/// use std::num::NonZeroI16;
+/// use blart::{Concat, AsBytes, Mapped, ToOctets, ToIBE};
+///
+/// let c1 = NonZeroI16::new(256).unwrap();
+/// let c2 = Ipv4Addr::LOCALHOST;
+///
+/// assert_eq!(Mapped::<ToIBE, _>::new(c1).as_bytes(), &[129, 0][..]);
+/// assert_eq!(Mapped::<ToOctets, _>::new(c2).as_bytes(), &[127, 0, 0, 1][..]);
+///
+/// let t = Mapped::<Concat<(ToIBE, ToOctets)>, _>::new((c1, c2));
+///
+/// assert_eq!(t.as_bytes(), &[129, 0, 127, 0, 0, 1][..]);
+/// ```
+#[derive(Debug)]
+pub struct Concat<M>(PhantomData<M>);
+
+/// This struct contains the concatenated bytes from the [`Concat`]
+/// transformation.
+///
+/// It also holds a tuple of [`Mapped<B, D>`] types, so the space overhead is
+/// roughly 2x.
+#[derive(Debug, Clone)]
+pub struct ConcatBytes<MD> {
+    individual_mapped: MD,
+    bytes: Box<[u8]>,
+}
+
+impl<M> AsBytes for ConcatBytes<M> {
+    fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+macro_rules! as_bytes_for_tuples {
+    ($(($($ty:ident)+))+) => {
+        $(
+            paste::paste! {
+                #[allow(non_snake_case)]
+                impl<$($ty, [< M $ty >],)+> BytesMapping<($($ty,)+)> for Concat<($([< M $ty >], )+)> where $(
+                    [< M $ty >]: BytesMapping<$ty>,
+                )+ {
+                    type Bytes = ConcatBytes<($(Mapped::<[< M $ty >], $ty>,)+)>;
+
+                    fn to_bytes(value: ($($ty,)+)) -> Self::Bytes {
+                        let mut bytes = Vec::new();
+
+                        let ($($ty,)+) = value;
+                        $(
+                            #[allow(non_snake_case)]
+                            let [<mapped_ $ty>] = Mapped::<[< M $ty >], $ty>::new($ty);
+                            let $ty = [<mapped_ $ty>].as_bytes();
+                            bytes.extend($ty);
+                        )+
+
+                        let individual_mapped = (
+                            $(
+                                [<mapped_ $ty>],
+                            )+
+                        );
+
+                        ConcatBytes {
+                            individual_mapped, bytes: bytes.into_boxed_slice(),
+                        }
+                    }
+
+                    fn from_bytes(ConcatBytes { individual_mapped, .. }: Self::Bytes) -> ($($ty,)+) {
+                        #[allow(non_snake_case)]
+                        let ($([<mapped_ $ty>],)+) = individual_mapped;
+
+                        (
+                            $([<mapped_ $ty>].get(),)+
+                        )
+                    }
+                }
+            }
+        )*
+    };
+}
+
+as_bytes_for_tuples!(
+    (T0 T1)
+    (T0 T1 T2)
+    (T0 T1 T2 T3)
+    (T0 T1 T2 T3 T4)
+    (T0 T1 T2 T3 T4 T5)
+    (T0 T1 T2 T3 T4 T5 T6)
+    (T0 T1 T2 T3 T4 T5 T6 T7)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10)
+    (T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11)
+);
 
 #[cfg(test)]
 pub(super) mod tests {
@@ -364,13 +500,13 @@ pub(super) mod tests {
 
     fn check_is_ordered_bytes<T: OrderedBytes>() {}
 
-    pub(in crate::bytes) fn assert_ordered_bytes_mapping_contract<B>(a: B::Domain, b: B::Domain)
+    pub(in crate::bytes) fn assert_ordered_bytes_mapping_contract<B, D>(a: D, b: D)
     where
-        B: BytesMapping,
-        B::Domain: Ord + Debug + Copy,
+        B: BytesMapping<D>,
+        D: Ord + Debug + Clone,
     {
-        let a_mapped = Mapped::<B>::new(a);
-        let b_mapped = Mapped::<B>::new(b);
+        let a_mapped = Mapped::<B, D>::new(a.clone());
+        let b_mapped = Mapped::<B, D>::new(b.clone());
         let a_bytes = a_mapped.as_bytes();
         let b_bytes = b_mapped.as_bytes();
         assert_eq!(
@@ -384,8 +520,8 @@ pub(super) mod tests {
             b_bytes
         );
 
-        assert_eq!(B::from_bytes(B::to_bytes(a)), a);
-        assert_eq!(B::from_bytes(B::to_bytes(b)), b);
+        assert_eq!(B::from_bytes(B::to_bytes(a.clone())), a);
+        assert_eq!(B::from_bytes(B::to_bytes(b.clone())), b);
     }
 
     macro_rules! impl_ordered_bytes_ints_tests {
@@ -394,23 +530,23 @@ pub(super) mod tests {
                 #[test]
                 fn $test_fn() {
                     let mid = (<$unsigned>::MAX + <$unsigned>::MIN) / 2;
-                    assert_ordered_bytes_mapping_contract::<ToUBE<$unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE, $unsigned>(
                         <$unsigned>::MAX, <$unsigned>::MIN);
-                    assert_ordered_bytes_mapping_contract::<ToUBE<$unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE, $unsigned>(
                         mid, <$unsigned>::MAX);
-                    assert_ordered_bytes_mapping_contract::<ToUBE<$unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE, $unsigned>(
                         mid, <$unsigned>::MIN);
 
-                    check_is_ordered_bytes::<Mapped<ToUBE<$unsigned>>>();
+                    check_is_ordered_bytes::<Mapped<ToUBE, $unsigned>>();
 
-                    assert_ordered_bytes_mapping_contract::<ToIBE<$signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE, $signed>(
                         0, <$signed>::MAX);
-                    assert_ordered_bytes_mapping_contract::<ToIBE<$signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE, $signed>(
                         0, <$signed>::MIN);
-                    assert_ordered_bytes_mapping_contract::<ToIBE<$signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE, $signed>(
                         <$signed>::MAX, <$signed>::MIN);
 
-                    check_is_ordered_bytes::<Mapped<ToIBE<$signed>>>();
+                    check_is_ordered_bytes::<Mapped<ToIBE, $signed>>();
                 }
             )*
         }
@@ -431,27 +567,27 @@ pub(super) mod tests {
                 #[test]
                 fn $test_fn() {
                     let mid = <$nonzero_unsigned>::new((<$unsigned>::MAX + <$unsigned>::MIN) / 2).unwrap();
-                    assert_ordered_bytes_mapping_contract::<ToUBE<$nonzero_unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE, $nonzero_unsigned>(
                         <$nonzero_unsigned>::new(1).unwrap(),
                         <$nonzero_unsigned>::new(<$unsigned>::MAX).unwrap());
-                    assert_ordered_bytes_mapping_contract::<ToUBE<$nonzero_unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE, $nonzero_unsigned>(
                         mid, <$nonzero_unsigned>::new(<$unsigned>::MAX).unwrap());
-                    assert_ordered_bytes_mapping_contract::<ToUBE<$nonzero_unsigned>>(
+                    assert_ordered_bytes_mapping_contract::<ToUBE, $nonzero_unsigned>(
                         mid, <$nonzero_unsigned>::new(<$unsigned>::MIN + 1).unwrap());
 
-                    check_is_ordered_bytes::<Mapped<ToUBE<$nonzero_unsigned>>>();
+                    check_is_ordered_bytes::<Mapped<ToUBE, $nonzero_unsigned>>();
 
-                    assert_ordered_bytes_mapping_contract::<ToIBE<$nonzero_signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE, $nonzero_signed>(
                         <$nonzero_signed>::new(<$signed>::MIN).unwrap(),
                         <$nonzero_signed>::new(<$signed>::MAX).unwrap());
-                    assert_ordered_bytes_mapping_contract::<ToIBE<$nonzero_signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE, $nonzero_signed>(
                         <$nonzero_signed>::new(1).unwrap(),
                         <$nonzero_signed>::new(<$signed>::MAX).unwrap());
-                    assert_ordered_bytes_mapping_contract::<ToIBE<$nonzero_signed>>(
+                    assert_ordered_bytes_mapping_contract::<ToIBE, $nonzero_signed>(
                         <$nonzero_signed>::new(<$signed>::MIN).unwrap(),
                         <$nonzero_signed>::new(1).unwrap());
 
-                    check_is_ordered_bytes::<Mapped<ToIBE<$nonzero_signed>>>();
+                    check_is_ordered_bytes::<Mapped<ToIBE, $nonzero_signed>>();
                 }
             )*
         }
@@ -468,20 +604,20 @@ pub(super) mod tests {
 
     #[test]
     fn test_ordered_ip_types() {
-        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv4Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets, Ipv4Addr>(
             Ipv4Addr::LOCALHOST,
             Ipv4Addr::BROADCAST,
         );
-        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv4Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets, Ipv4Addr>(
             Ipv4Addr::LOCALHOST,
             Ipv4Addr::UNSPECIFIED,
         );
-        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv4Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets, Ipv4Addr>(
             Ipv4Addr::BROADCAST,
             Ipv4Addr::UNSPECIFIED,
         );
 
-        check_is_ordered_bytes::<Mapped<ToOctets<Ipv4Addr>>>();
+        check_is_ordered_bytes::<Mapped<ToOctets, Ipv4Addr>>();
 
         const IPV6_MAX: Ipv6Addr = Ipv6Addr::new(
             u16::MAX,
@@ -494,16 +630,38 @@ pub(super) mod tests {
             u16::MAX,
         );
 
-        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv6Addr>>(Ipv6Addr::LOCALHOST, IPV6_MAX);
-        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv6Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets, Ipv6Addr>(Ipv6Addr::LOCALHOST, IPV6_MAX);
+        assert_ordered_bytes_mapping_contract::<ToOctets, Ipv6Addr>(
             Ipv6Addr::LOCALHOST,
             Ipv6Addr::UNSPECIFIED,
         );
-        assert_ordered_bytes_mapping_contract::<ToOctets<Ipv6Addr>>(
+        assert_ordered_bytes_mapping_contract::<ToOctets, Ipv6Addr>(
             IPV6_MAX,
             Ipv6Addr::UNSPECIFIED,
         );
 
-        check_is_ordered_bytes::<Mapped<ToOctets<Ipv6Addr>>>();
+        check_is_ordered_bytes::<Mapped<ToOctets, Ipv6Addr>>();
+    }
+
+    #[test]
+    fn copy_tuple_as_bytes() {
+        let tup1 =
+            Mapped::<Concat<(Identity, Identity)>, ([u8; 5], [u8; 5])>::new(([0u8; 5], [10u8; 5]));
+        assert_eq!(tup1.as_bytes(), &[0, 0, 0, 0, 0, 10, 10, 10, 10, 10]);
+    }
+
+    #[test]
+    #[should_panic = "compare differently than their byte representation"]
+    fn concat_tuple_ord_matches_tuple_ord() {
+        let t1 = ("aa".to_owned(), "abb".to_owned());
+        let t2 = ("aaa".to_owned(), "bb".to_owned());
+        assert!(t1 < t2);
+
+        let c1 = ("aa".to_owned(), "abb".to_owned());
+        let c2 = ("aaa".to_owned(), "bb".to_owned());
+
+        assert_ordered_bytes_mapping_contract::<Concat<(Identity, Identity)>, (String, String)>(
+            c1, c2,
+        )
     }
 }
