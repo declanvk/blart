@@ -80,7 +80,14 @@ where
     let inner_node = unsafe { inner_ptr.as_ref() };
     let match_prefix = inner_node.match_prefix(key_bytes, *current_depth);
     match match_prefix {
-        MatchPrefixResult::Mismatch { .. } => None,
+        MatchPrefixResult::Mismatch { mismatch } => {
+            // Even though the prefix didn't match, still advance the depth by the number of
+            // matching bytes.
+            // This is useful in cases where we need to know how many bytes to continue from
+            *current_depth += mismatch.matched_bytes;
+
+            None
+        },
         MatchPrefixResult::Match { matched_bytes } => {
             // Since the prefix matched, advance the depth by the size of the prefix
             *current_depth += matched_bytes;

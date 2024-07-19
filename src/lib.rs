@@ -2,6 +2,7 @@
     feature = "nightly",
     feature(
         impl_trait_in_assoc_type,
+        is_sorted,
         maybe_uninit_slice,
         maybe_uninit_uninit_array,
         const_maybe_uninit_uninit_array,

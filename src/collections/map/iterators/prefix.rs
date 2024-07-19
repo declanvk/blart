@@ -300,4 +300,17 @@ mod tests {
         assert_eq!(p0, vec![(&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
         assert_eq!(p1, vec![(&c"abcdexxy", &0), (&c"abcdexxx", &0)]);
     }
+
+    #[test]
+    fn longer_prefix_than_keys() {
+        let mut t = TreeMap::new();
+        t.insert(c"abcde1", 1);
+        t.insert(c"abcde2", 2);
+        t.insert(c"abcde3", 3);
+        t.insert(c"abcde4", 4);
+
+        let p0: Vec<_> = t.prefix(c"abcdefghijklmnop".to_bytes()).collect();
+
+        assert_eq!(p0, []);
+    }
 }

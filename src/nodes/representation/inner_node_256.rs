@@ -288,7 +288,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
     }
 }
 
-/// TODO
+/// An iterator over key bytes and child nodes pointers of an [`InnerNode256`].
 #[cfg(not(feature = "nightly"))]
 pub struct Node256Iter<'a, K, V, const PREFIX_LEN: usize> {
     pub(crate) it: Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>>,
