@@ -80,7 +80,7 @@ pub struct Mapped<B, D>
 where
     B: BytesMapping<D>,
 {
-    _mapping: PhantomData<fn(B) -> D>,
+    _mapping: PhantomData<(B, D)>,
     repr: B::Bytes,
 }
 
@@ -88,7 +88,7 @@ impl<B, D> Mapped<B, D>
 where
     B: BytesMapping<D>,
 {
-    /// Transform a value into its ordered representation
+    /// Transform a value into its bytes representation
     pub fn new(value: D) -> Self {
         Mapped {
             _mapping: PhantomData,
@@ -96,7 +96,16 @@ where
         }
     }
 
-    /// Take the ordered representation and convert it back to the original
+    /// Created a new instance of [`Mapped`] starting from the byte
+    /// representation
+    fn with_repr(repr: B::Bytes) -> Self {
+        Mapped {
+            _mapping: PhantomData,
+            repr,
+        }
+    }
+
+    /// Take the byte representation and convert it back to the original
     /// value
     pub fn get(self) -> D {
         B::from_bytes(self.repr)
@@ -385,13 +394,10 @@ unsafe impl OrderedBytes for Mapped<ToOctets, Ipv6Addr> {}
 /// ```rust
 /// use blart::{Concat, AsBytes, Mapped, Identity};
 ///
-/// let c1 = "aaa".to_owned();
-/// let c2 = "bb".to_owned();
+/// let c1 = b"aaa";
+/// let c2 = b"bb";
 ///
-/// assert_eq!(c1.as_bytes(), b"aaa");
-/// assert_eq!(c2.as_bytes(), b"bb");
-///
-/// let t = Mapped::<Concat<(Identity, Identity)>, _>::new((c1, c2));
+/// let t = Mapped::<Concat<(Identity, Identity)>, _>::new((*c1, *c2));
 ///
 /// assert_eq!(t.as_bytes(), b"aaabb");
 /// ```
@@ -416,64 +422,107 @@ unsafe impl OrderedBytes for Mapped<ToOctets, Ipv6Addr> {}
 #[derive(Debug)]
 pub struct Concat<M>(PhantomData<M>);
 
-/// This struct contains the concatenated bytes from the [`Concat`]
-/// transformation.
-///
-/// It also holds a tuple of [`Mapped<B, D>`] types, so the space overhead is
-/// roughly 2x.
-#[derive(Debug, Clone)]
-pub struct ConcatBytes<MD> {
-    individual_mapped: MD,
-    bytes: Box<[u8]>,
-}
-
-impl<M> AsBytes for ConcatBytes<M> {
-    fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
+macro_rules! sum {
+    ($h:expr, ) => ($h);
+    ($h:expr, $($t:expr,)*) =>
+        ($h + sum!($($t,)*));
 }
 
 macro_rules! as_bytes_for_tuples {
     ($(($($ty:ident)+))+) => {
         $(
             paste::paste! {
-                #[allow(non_snake_case)]
-                impl<$($ty, [< M $ty >],)+> BytesMapping<($($ty,)+)> for Concat<($([< M $ty >], )+)> where $(
-                    [< M $ty >]: BytesMapping<$ty>,
+                impl<
+                    $($ty, [< M $ty >],)+
+                    $( const [< LEN_ $ty >]: usize, )+
+                > BytesMapping<($($ty,)+)> for Concat<($([< M $ty >], )+)> where $(
+                    [< M $ty >]: BytesMapping<$ty, Bytes = [u8; [< LEN_ $ty >]]>,
                 )+ {
-                    type Bytes = ConcatBytes<($(Mapped::<[< M $ty >], $ty>,)+)>;
+                    type Bytes = Box<[u8]>;
 
+                    #[allow(non_snake_case)]
                     fn to_bytes(value: ($($ty,)+)) -> Self::Bytes {
-                        let mut bytes = Vec::new();
+                        let mut bytes = Vec::with_capacity(sum!(
+                            $([< LEN_ $ty >],)+
+                        ));
 
                         let ($($ty,)+) = value;
                         $(
-                            #[allow(non_snake_case)]
                             let [<mapped_ $ty>] = Mapped::<[< M $ty >], $ty>::new($ty);
-                            let $ty = [<mapped_ $ty>].as_bytes();
-                            bytes.extend($ty);
+                            bytes.extend([<mapped_ $ty>].repr);
                         )+
 
-                        let individual_mapped = (
-                            $(
-                                [<mapped_ $ty>],
-                            )+
-                        );
-
-                        ConcatBytes {
-                            individual_mapped, bytes: bytes.into_boxed_slice(),
-                        }
+                        bytes.into_boxed_slice()
                     }
 
-                    fn from_bytes(ConcatBytes { individual_mapped, .. }: Self::Bytes) -> ($($ty,)+) {
-                        #[allow(non_snake_case)]
-                        let ($([<mapped_ $ty>],)+) = individual_mapped;
+                    fn from_bytes(bytes: Self::Bytes) -> ($($ty,)+) {
+                        let remaining = &*bytes;
+
+                        $(
+                            #[allow(non_snake_case)]
+                            let ([<bytes_ $ty>], remaining) = remaining.split_first_chunk::<[< LEN_ $ty >]>().unwrap();
+                        )+
+
+                        assert_eq!(remaining.len(), 0, "should have used all the bytes");
 
                         (
-                            $([<mapped_ $ty>].get(),)+
+                            $(
+                                Mapped::<[< M $ty >], $ty>::with_repr([<bytes_ $ty>].clone()).get(),
+                            )+
                         )
                     }
                 }
+
+                // SAFETY: This is safe because all the component bytes are fixed length,
+                // meaning all the full bytes mapping have the same length
+                unsafe impl<
+                    $($ty, [< M $ty >],)+
+                > NoPrefixesBytes for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
+                where
+                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>  {}
+
+                impl<
+                    $($ty, [< M $ty >],)+
+                > PartialOrd for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
+                where
+                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    $(
+                        $ty: Ord,
+                    )+
+                {
+                    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                        Some(self.repr.cmp(&other.repr))
+                    }
+                }
+
+                impl<
+                    $($ty, [< M $ty >],)+
+                > Ord for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
+                where
+                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    $(
+                        $ty: Ord,
+                    )+
+                {
+                    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                        self.repr.cmp(&other.repr)
+                    }
+                }
+
+                // SAFETY: When all components bytes are the same length, comparing the entire
+                // bytestrings is the same as comparing the elements in order
+                unsafe impl<
+                    $($ty, [< M $ty >],)+
+                > OrderedBytes for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
+                where
+                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    $(
+                        $ty: Ord,
+                    )+
+                {}
             }
         )*
     };
@@ -651,17 +700,24 @@ pub(super) mod tests {
     }
 
     #[test]
-    #[should_panic = "compare differently than their byte representation"]
     fn concat_tuple_ord_matches_tuple_ord() {
-        let t1 = ("aa".to_owned(), "abb".to_owned());
-        let t2 = ("aaa".to_owned(), "bb".to_owned());
-        assert!(t1 < t2);
+        let t1 = (Ipv4Addr::UNSPECIFIED, -212, Ipv6Addr::UNSPECIFIED);
+        let t2 = (Ipv4Addr::UNSPECIFIED, -212, Ipv6Addr::LOCALHOST);
+        let t3 = (Ipv4Addr::UNSPECIFIED, 212, Ipv6Addr::LOCALHOST);
+        let t4 = (Ipv4Addr::LOCALHOST, 212, Ipv6Addr::LOCALHOST);
+        assert!(t1 < t2 && t2 < t3 && t3 < t4);
 
-        let c1 = ("aa".to_owned(), "abb".to_owned());
-        let c2 = ("aaa".to_owned(), "bb".to_owned());
-
-        assert_ordered_bytes_mapping_contract::<Concat<(Identity, Identity)>, (String, String)>(
-            c1, c2,
-        )
+        assert_ordered_bytes_mapping_contract::<
+            Concat<(ToOctets, ToIBE, ToOctets)>,
+            (Ipv4Addr, i32, Ipv6Addr),
+        >(t1, t2);
+        assert_ordered_bytes_mapping_contract::<
+            Concat<(ToOctets, ToIBE, ToOctets)>,
+            (Ipv4Addr, i32, Ipv6Addr),
+        >(t2, t3);
+        assert_ordered_bytes_mapping_contract::<
+            Concat<(ToOctets, ToIBE, ToOctets)>,
+            (Ipv4Addr, i32, Ipv6Addr),
+        >(t3, t4);
     }
 }
