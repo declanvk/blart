@@ -433,11 +433,26 @@ macro_rules! as_bytes_for_tuples {
         $(
             paste::paste! {
                 impl<
-                    $($ty, [< M $ty >],)+
-                    $( const [< LEN_ $ty >]: usize, )+
-                > BytesMapping<($($ty,)+)> for Concat<($([< M $ty >], )+)> where $(
+                    $(
+                        // The input type
+                        $ty,
+                        // The mapping type which transforms the input type
+                        [< M $ty >],
+                    )+
+                    $(
+                        // The const generic type containing the fixed length of the mapped bytes for the given input
+                        // type
+                        const [< LEN_ $ty >]: usize,
+                    )+
+                > BytesMapping<($($ty,)+)> for Concat<($([< M $ty >], )+)>
+                where
+                $(
+                    // Each mapping type must implement a mapping from the input type to a byte array of fixed length
                     [< M $ty >]: BytesMapping<$ty, Bytes = [u8; [< LEN_ $ty >]]>,
-                )+ {
+                )+
+                {
+                    // TODO: Convert this to use an array of `[u8; sum!($([< LEN_ $ty >],)+)]` once const generics
+                    // supports that
                     type Bytes = Box<[u8]>;
 
                     #[allow(non_snake_case)]
@@ -446,9 +461,9 @@ macro_rules! as_bytes_for_tuples {
                             $([< LEN_ $ty >],)+
                         ));
 
-                        let ($($ty,)+) = value;
+                        let ($([<elem_ $ty>],)+) = value;
                         $(
-                            let [<mapped_ $ty>] = Mapped::<[< M $ty >], $ty>::new($ty);
+                            let [<mapped_ $ty>] = Mapped::<[< M $ty >], $ty>::new([<elem_ $ty>]);
                             bytes.extend([<mapped_ $ty>].repr);
                         )+
 
@@ -476,20 +491,42 @@ macro_rules! as_bytes_for_tuples {
                 // SAFETY: This is safe because all the component bytes are fixed length,
                 // meaning all the full bytes mapping have the same length
                 unsafe impl<
-                    $($ty, [< M $ty >],)+
+                    $(
+                        // The input type
+                        $ty,
+                        // The mapping type which transforms the input type
+                        [< M $ty >],
+                    )+
                 > NoPrefixesBytes for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
                 where
-                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>  {}
+                    // Concat mapping type containing each element mapping type must implement a mapping for the tuple
+                    // containing all input types
+                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>
+                {}
 
                 impl<
-                    $($ty, [< M $ty >],)+
+                    $(
+                        // The input type
+                        $ty,
+                        // The mapping type which transforms the input type
+                        [< M $ty >],
+                    )+
                 > PartialOrd for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
                 where
-                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
-                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    // For each tuple input element type:
                     $(
+                        // The input type must be ordered
                         $ty: Ord,
+                        // The mapping type must implementing a mapping for the input type
+                        [< M $ty >]: BytesMapping<$ty>,
+                        // The mapped struct (using the mapping type and the input type) must also be ordered by bytes
+                        Mapped<[< M $ty >], $ty>: OrderedBytes,
                     )+
+                    // Concat mapping type containing each element mapping type must implement a mapping for the tuple
+                    // containing all input types
+                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    // The mapped bytes type of the Concat mapping type must have an order
+                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {
                     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
                         Some(self.repr.cmp(&other.repr))
@@ -497,14 +534,28 @@ macro_rules! as_bytes_for_tuples {
                 }
 
                 impl<
-                    $($ty, [< M $ty >],)+
+                    $(
+                        // The input type
+                        $ty,
+                        // The mapping type which transforms the input type
+                        [< M $ty >],
+                    )+
                 > Ord for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
                 where
-                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
-                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    // For each tuple input element type:
                     $(
+                        // The input type must be ordered
                         $ty: Ord,
+                        // The mapping type must implementing a mapping for the input type
+                        [< M $ty >]: BytesMapping<$ty>,
+                        // The mapped struct (using the mapping type and the input type) must also be ordered by bytes
+                        Mapped<[< M $ty >], $ty>: OrderedBytes,
                     )+
+                    // Concat mapping type containing each element mapping type must implement a mapping for the tuple
+                    // containing all input types
+                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    // The mapped bytes type of the Concat mapping type must have an order
+                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {
                     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
                         self.repr.cmp(&other.repr)
@@ -514,14 +565,28 @@ macro_rules! as_bytes_for_tuples {
                 // SAFETY: When all components bytes are the same length, comparing the entire
                 // bytestrings is the same as comparing the elements in order
                 unsafe impl<
-                    $($ty, [< M $ty >],)+
+                    $(
+                        // The input type
+                        $ty,
+                        // The mapping type which transforms the input type
+                        [< M $ty >],
+                    )+
                 > OrderedBytes for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
                 where
-                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
-                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    // For each tuple input element type:
                     $(
+                        // The input type must be ordered
                         $ty: Ord,
+                        // The mapping type must implementing a mapping for the input type
+                        [< M $ty >]: BytesMapping<$ty>,
+                        // The mapped struct (using the mapping type and the input type) must also be ordered by bytes
+                        Mapped<[< M $ty >], $ty>: OrderedBytes,
                     )+
+                    // Concat mapping type containing each element mapping type must implement a mapping for the tuple
+                    // containing all input types
+                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    // The mapped bytes type of the Concat mapping type must have an order
+                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {}
             }
         )*
