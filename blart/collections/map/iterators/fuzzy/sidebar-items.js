@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["edit_dist","swap"],"macro":["gen_iter"],"struct":["Fuzzy","FuzzyKeys","FuzzyMut","FuzzyValues","FuzzyValuesMut","StackArena"],"trait":["FuzzySearch"]};
