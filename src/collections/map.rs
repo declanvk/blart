@@ -4,9 +4,9 @@
 use crate::{
     deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
     minimum_unchecked, rust_nightly_apis::hasher_write_length_prefix, search_for_delete_point,
-    search_for_insert_point, search_unchecked, AsBytes, DeletePoint, DeleteResult, InsertPoint,
-    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
-    NodePtr, OpaqueNodePtr,
+    search_for_insert_point, search_unchecked, visitor::Visitable, AsBytes, DeletePoint,
+    DeleteResult, InsertPoint, InsertPrefixError, InsertResult, InsertSearchResultType::Exact,
+    LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr,
 };
 use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Index};
 
@@ -1558,6 +1558,15 @@ where
     K: Sync + AsBytes,
     V: Sync,
 {
+}
+
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for TreeMap<K, T, PREFIX_LEN> {
+    fn super_visit_with<V: crate::visitor::Visitor<K, T, PREFIX_LEN>>(
+        &self,
+        visitor: &mut V,
+    ) -> V::Output {
+        self.root.visit_with(visitor)
+    }
 }
 
 #[cfg(test)]

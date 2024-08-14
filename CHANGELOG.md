@@ -11,15 +11,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
-TODO
+TODO: More
 
 ### Changed
 
-TODO
+ - Increase MSRV to 1.78
+
+TODO: More
 
 ### Removed
 
-TODO
+TODO: More
 
 ## [0.1.2] - 2023-02-13
 

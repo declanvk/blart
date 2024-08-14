@@ -120,6 +120,18 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for LeafNode<K, 
     }
 }
 
+impl<K, T, const PREFIX_LEN: usize, B> Visitable<K, T, PREFIX_LEN> for Option<B>
+where
+    B: Visitable<K, T, PREFIX_LEN>,
+{
+    fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
+        match self {
+            Some(inner) => inner.visit_with(visitor),
+            None => visitor.default_output(),
+        }
+    }
+}
+
 /// The `Visitor` trait allows creating new operations on the radix tree by
 /// overriding specific handling methods for each of the node types.
 pub trait Visitor<K, V, const PREFIX_LEN: usize>: Sized {

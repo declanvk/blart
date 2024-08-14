@@ -38,13 +38,12 @@ use std::{
 /// implementing `BytesMapping<D>` and `D` is the type being converted. Then the
 /// trait [`OrderedBytes`] should be implemented for [`Mapped<B, D>`] as well.
 pub trait BytesMapping<D> {
-    // /// The unconverted type that has a specific ordering
-
     /// The bytestring type that the `D` is converted to.
     type Bytes: AsBytes;
 
     /// Convert the domain type into the bytestring type
     fn to_bytes(value: D) -> Self::Bytes;
+
     /// Convert the bytestring type back into the domain type
     fn from_bytes(bytes: Self::Bytes) -> D;
 }
@@ -53,7 +52,7 @@ pub trait BytesMapping<D> {
 /// without converting it to bytes.
 ///
 /// It only works for types which directly implement [`AsBytes`]. This type is
-/// mostly meant for use with the [`Concat`] mapping, as one of the type
+/// mostly meant for use with the [`ConcatTuple`] mapping, as one of the type
 /// parameters.
 #[derive(Debug)]
 pub struct Identity;
@@ -176,14 +175,14 @@ where
 }
 
 macro_rules! impl_ord_for_mapped {
-    ($mapping:ty, $data:ty) => {
-        impl PartialOrd for Mapped<$mapping, $data> {
+    ($(const $const_ident:ident: $const_ty:ty => )? $mapping:ty, $data:ty) => {
+        impl<$(const $const_ident: $const_ty)?> PartialOrd for Mapped<$mapping, $data> {
             fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
                 Some(self.repr.cmp(&other.repr))
             }
         }
 
-        impl Ord for Mapped<$mapping, $data> {
+        impl<$(const $const_ident: $const_ty)?> Ord for Mapped<$mapping, $data> {
             fn cmp(&self, other: &Self) -> std::cmp::Ordering {
                 self.repr.cmp(&other.repr)
             }
@@ -269,6 +268,114 @@ impl_ordered_bytes_ints!(
     [usize, isize]
 );
 
+/// # Safety
+///
+/// 1. This macro must only be used with types `$elem` where `size_of::<$elem>
+///    == <$elem as AsBytes>::as_bytes(&instance).len()`. The types must also be
+///    fixed size, so all instance of `$elem` must have the same size.
+/// 2. This macro must only be used with types that implement
+/// ```ignore
+/// impl BytesMapping<$elem> for $mapping {
+///     // ...
+/// }
+/// ```
+///
+/// 3. `$elem` must also implement
+///
+/// ```ignore
+/// unsafe impl OrderedBytes for Mapped<$mapping, $elem> {}
+/// ```
+macro_rules! impl_ordered_bytes_ints_arrays {
+    ($([$mapping:ty => $($elem:ty),+]),*) => {
+        $(
+            $(
+                impl_ordered_bytes_ints_arrays!($mapping; $elem; array);
+                impl_ordered_bytes_ints_arrays!($mapping; $elem; vec_like; Vec<$elem>);
+                impl_ordered_bytes_ints_arrays!($mapping; $elem; vec_like; Box<[$elem]>);
+            )+
+        )*
+    };
+    ($mapping:ty;$elem:ty;array) => {
+        impl<const N: usize> BytesMapping<[$elem; N]> for $mapping {
+            // TODO: When we can multiply in const generics, we could make this
+            // type Bytes = [u8; const { N * std::mem::size_of::<$elem>() }];
+            type Bytes = Box<[u8]>;
+
+            fn to_bytes(values: [$elem; N]) -> Self::Bytes {
+                let mut bytes = Vec::with_capacity(N * std::mem::size_of::<$elem>());
+
+                for value in values {
+                    bytes.extend(<Self as BytesMapping<$elem>>::to_bytes(value));
+                }
+
+                bytes.into_boxed_slice()
+            }
+
+            fn from_bytes(bytes: Self::Bytes) -> [$elem; N] {
+                std::array::from_fn(|index| {
+                    let value_bytes_slice = &bytes[(index * std::mem::size_of::<$elem>())
+                        ..((index + 1) * std::mem::size_of::<$elem>())];
+                    let value_bytes_array: [u8; std::mem::size_of::<$elem>()] = value_bytes_slice.try_into().unwrap();
+
+                    <Self as BytesMapping<$elem>>::from_bytes(
+                        value_bytes_array
+                    )
+                })
+            }
+        }
+
+        // SAFETY: Covered by safety condition on macro, the array is a concatenation of
+        // fixed size inputs
+        unsafe impl<const N: usize> NoPrefixesBytes for Mapped<$mapping, [$elem; N]> {}
+
+        // SAFETY: Covered by safety conditions on macro, the array is ordered because the
+        // concatenation of ordered bytes is ordered
+        unsafe impl<const N: usize> OrderedBytes for Mapped<$mapping, [$elem; N]> {}
+
+        impl_ord_for_mapped!(const N: usize => $mapping, [$elem; N]);
+    };
+    ($mapping:ty;$elem:ty;vec_like;$domain:ty) => {
+        impl BytesMapping<$domain> for $mapping {
+            type Bytes = Box<[u8]>;
+
+            fn to_bytes(values: $domain) -> Self::Bytes {
+                let mut bytes = Vec::with_capacity(values.len() * std::mem::size_of::<$elem>());
+
+                for value in values {
+                    bytes.extend(<Self as BytesMapping<$elem>>::to_bytes(value));
+                }
+
+                bytes.into_boxed_slice()
+            }
+
+            fn from_bytes(bytes: Self::Bytes) -> $domain {
+                let num_elements = bytes.len() / std::mem::size_of::<$elem>();
+                (0..num_elements).map(|index| {
+                    let value_bytes_slice = &bytes[(index * std::mem::size_of::<$elem>())
+                        ..((index + 1) * std::mem::size_of::<$elem>())];
+                    let value_bytes_array: [u8; std::mem::size_of::<$elem>()] = value_bytes_slice.try_into().unwrap();
+
+                    <Self as BytesMapping<$elem>>::from_bytes(
+                        value_bytes_array
+                    )
+                }).collect()
+            }
+        }
+
+        // SAFETY: Covered by safety conditions on macro, the array is ordered because the
+        // concatenation of ordered bytes is ordered
+        unsafe impl OrderedBytes for Mapped<$mapping, $domain> {}
+
+        impl_ord_for_mapped!($mapping, $domain);
+    };
+}
+
+// SAFETY: All integer type fulfill requirements
+impl_ordered_bytes_ints_arrays!(
+    [ToUBE => u8, u16, u32, u64, u128, usize],
+    [ToIBE => i8, i16, i32, i64, i128, isize]
+);
+
 macro_rules! impl_ordered_bytes_nonzero_ints {
     ($([$nonzero_unsigned:ty; $unsigned:ty, $nonzero_signed:ty; $signed:ty]),*) => {
         $(
@@ -328,6 +435,12 @@ impl_ordered_bytes_nonzero_ints!(
     [NonZeroU64; u64, NonZeroI64; i64],
     [NonZeroU128; u128, NonZeroI128; i128],
     [NonZeroUsize; usize, NonZeroIsize; isize]
+);
+
+// SAFETY: All non-zero integer type fulfill requirements
+impl_ordered_bytes_ints_arrays!(
+    [ToUBE => NonZeroU8, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize],
+    [ToIBE => NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize]
 );
 
 /// This struct represents a conversion of **IP addresses** (V4 and V6) into
@@ -392,12 +505,12 @@ unsafe impl OrderedBytes for Mapped<ToOctets, Ipv6Addr> {}
 /// elements:
 ///
 /// ```rust
-/// use blart::{Concat, AsBytes, Mapped, Identity};
+/// use blart::{ConcatTuple, AsBytes, Mapped, Identity};
 ///
 /// let c1 = b"aaa";
 /// let c2 = b"bb";
 ///
-/// let t = Mapped::<Concat<(Identity, Identity)>, _>::new((*c1, *c2));
+/// let t = Mapped::<ConcatTuple<(Identity, Identity)>, _>::new((*c1, *c2));
 ///
 /// assert_eq!(t.as_bytes(), b"aaabb");
 /// ```
@@ -407,7 +520,7 @@ unsafe impl OrderedBytes for Mapped<ToOctets, Ipv6Addr> {}
 /// ```rust
 /// use std::net::Ipv4Addr;
 /// use std::num::NonZeroI16;
-/// use blart::{Concat, AsBytes, Mapped, ToOctets, ToIBE};
+/// use blart::{ConcatTuple, AsBytes, Mapped, ToOctets, ToIBE};
 ///
 /// let c1 = NonZeroI16::new(256).unwrap();
 /// let c2 = Ipv4Addr::LOCALHOST;
@@ -415,12 +528,12 @@ unsafe impl OrderedBytes for Mapped<ToOctets, Ipv6Addr> {}
 /// assert_eq!(Mapped::<ToIBE, _>::new(c1).as_bytes(), &[129, 0][..]);
 /// assert_eq!(Mapped::<ToOctets, _>::new(c2).as_bytes(), &[127, 0, 0, 1][..]);
 ///
-/// let t = Mapped::<Concat<(ToIBE, ToOctets)>, _>::new((c1, c2));
+/// let t = Mapped::<ConcatTuple<(ToIBE, ToOctets)>, _>::new((c1, c2));
 ///
 /// assert_eq!(t.as_bytes(), &[129, 0, 127, 0, 0, 1][..]);
 /// ```
 #[derive(Debug)]
-pub struct Concat<M>(PhantomData<M>);
+pub struct ConcatTuple<M>(PhantomData<M>);
 
 macro_rules! sum {
     ($h:expr, ) => ($h);
@@ -444,7 +557,7 @@ macro_rules! as_bytes_for_tuples {
                         // type
                         const [< LEN_ $ty >]: usize,
                     )+
-                > BytesMapping<($($ty,)+)> for Concat<($([< M $ty >], )+)>
+                > BytesMapping<($($ty,)+)> for ConcatTuple<($([< M $ty >], )+)>
                 where
                 $(
                     // Each mapping type must implement a mapping from the input type to a byte array of fixed length
@@ -497,11 +610,11 @@ macro_rules! as_bytes_for_tuples {
                         // The mapping type which transforms the input type
                         [< M $ty >],
                     )+
-                > NoPrefixesBytes for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
+                > NoPrefixesBytes for Mapped<ConcatTuple<($([< M $ty >], )+)>, ($($ty,)+)>
                 where
                     // Concat mapping type containing each element mapping type must implement a mapping for the tuple
                     // containing all input types
-                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>
+                    ConcatTuple<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>
                 {}
 
                 impl<
@@ -511,7 +624,7 @@ macro_rules! as_bytes_for_tuples {
                         // The mapping type which transforms the input type
                         [< M $ty >],
                     )+
-                > PartialOrd for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
+                > PartialOrd for Mapped<ConcatTuple<($([< M $ty >], )+)>, ($($ty,)+)>
                 where
                     // For each tuple input element type:
                     $(
@@ -524,9 +637,9 @@ macro_rules! as_bytes_for_tuples {
                     )+
                     // Concat mapping type containing each element mapping type must implement a mapping for the tuple
                     // containing all input types
-                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    ConcatTuple<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
                     // The mapped bytes type of the Concat mapping type must have an order
-                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    <ConcatTuple<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {
                     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
                         Some(self.repr.cmp(&other.repr))
@@ -540,7 +653,7 @@ macro_rules! as_bytes_for_tuples {
                         // The mapping type which transforms the input type
                         [< M $ty >],
                     )+
-                > Ord for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
+                > Ord for Mapped<ConcatTuple<($([< M $ty >], )+)>, ($($ty,)+)>
                 where
                     // For each tuple input element type:
                     $(
@@ -553,9 +666,9 @@ macro_rules! as_bytes_for_tuples {
                     )+
                     // Concat mapping type containing each element mapping type must implement a mapping for the tuple
                     // containing all input types
-                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    ConcatTuple<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
                     // The mapped bytes type of the Concat mapping type must have an order
-                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    <ConcatTuple<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {
                     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
                         self.repr.cmp(&other.repr)
@@ -571,7 +684,7 @@ macro_rules! as_bytes_for_tuples {
                         // The mapping type which transforms the input type
                         [< M $ty >],
                     )+
-                > OrderedBytes for Mapped<Concat<($([< M $ty >], )+)>, ($($ty,)+)>
+                > OrderedBytes for Mapped<ConcatTuple<($([< M $ty >], )+)>, ($($ty,)+)>
                 where
                     // For each tuple input element type:
                     $(
@@ -584,9 +697,9 @@ macro_rules! as_bytes_for_tuples {
                     )+
                     // Concat mapping type containing each element mapping type must implement a mapping for the tuple
                     // containing all input types
-                    Concat<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
+                    ConcatTuple<($([< M $ty >], )+)>: BytesMapping<($($ty,)+)>,
                     // The mapped bytes type of the Concat mapping type must have an order
-                    <Concat<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
+                    <ConcatTuple<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {}
             }
         )*
@@ -610,7 +723,7 @@ as_bytes_for_tuples!(
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
-    use std::fmt::Debug;
+    use std::{cmp::Ordering, fmt::Debug};
 
     fn check_is_ordered_bytes<T: OrderedBytes>() {}
 
@@ -675,6 +788,69 @@ pub(super) mod tests {
         [usize, isize; test_ordered_uisize]
     );
 
+    macro_rules! impl_ordered_bytes_int_arrays_tests {
+        ($([$unsigned:ty, $signed:ty; $test_fn:ident]),*) => {
+            $(
+                #[test]
+                fn $test_fn() {
+                    let mid = (<$unsigned>::MAX + <$unsigned>::MIN) / 2;
+                    let array_min = [<$unsigned>::MIN, <$unsigned>::MIN, <$unsigned>::MIN];
+                    let array_mid = [<$unsigned>::MIN, mid, <$unsigned>::MIN];
+                    let array_max = [<$unsigned>::MIN, mid, <$unsigned>::MAX];
+
+                    assert_ordered_bytes_mapping_contract::<ToUBE, [$unsigned; 3]>(
+                        array_min, array_max);
+                    assert_ordered_bytes_mapping_contract::<ToUBE, [$unsigned; 3]>(
+                        array_mid, array_max);
+                    assert_ordered_bytes_mapping_contract::<ToUBE, [$unsigned; 3]>(
+                        array_mid, array_min);
+
+                    check_is_ordered_bytes::<Mapped<ToUBE, [$unsigned; 3]>>();
+
+                    assert_ordered_bytes_mapping_contract::<ToUBE, Vec<$unsigned>>(
+                        array_min.into(), array_max.into());
+                    assert_ordered_bytes_mapping_contract::<ToUBE, Vec<$unsigned>>(
+                        array_mid.into(), array_max.into());
+                    assert_ordered_bytes_mapping_contract::<ToUBE, Vec<$unsigned>>(
+                        array_mid.into(), array_min.into());
+
+                    check_is_ordered_bytes::<Mapped<ToUBE, Vec<$unsigned>>>();
+
+                    let array_min = [<$signed>::MIN, <$signed>::MIN, <$signed>::MIN];
+                    let array_mid = [<$signed>::MIN, 0, <$signed>::MIN];
+                    let array_max = [<$signed>::MIN, 0, <$signed>::MAX];
+
+                    assert_ordered_bytes_mapping_contract::<ToIBE, [$signed; 3]>(
+                        array_min, array_max);
+                    assert_ordered_bytes_mapping_contract::<ToIBE, [$signed; 3]>(
+                        array_mid, array_max);
+                    assert_ordered_bytes_mapping_contract::<ToIBE, [$signed; 3]>(
+                        array_mid, array_min);
+
+                    check_is_ordered_bytes::<Mapped<ToIBE, [$signed; 3]>>();
+
+                    assert_ordered_bytes_mapping_contract::<ToIBE, Vec<$signed>>(
+                        array_min.into(), array_max.into());
+                    assert_ordered_bytes_mapping_contract::<ToIBE, Vec<$signed>>(
+                        array_mid.into(), array_max.into());
+                    assert_ordered_bytes_mapping_contract::<ToIBE, Vec<$signed>>(
+                        array_mid.into(), array_min.into());
+
+                    check_is_ordered_bytes::<Mapped<ToIBE, Vec<$signed>>>();
+                }
+            )*
+        }
+    }
+
+    impl_ordered_bytes_int_arrays_tests!(
+        [u8, i8; test_ordered_ui8_array],
+        [u16, i16; test_ordered_ui16_array],
+        [u32, i32; test_ordered_ui32_array],
+        [u64, i64; test_ordered_ui64_array],
+        [u128, i128; test_ordered_ui128_array],
+        [usize, isize; test_ordered_uisize_array]
+    );
+
     macro_rules! impl_ordered_bytes_nonzero_ints_tests {
         ($([$nonzero_unsigned:ty, $unsigned:ty, $nonzero_signed:ty, $signed:ty; $test_fn:ident]),*) => {
             $(
@@ -691,6 +867,19 @@ pub(super) mod tests {
 
                     check_is_ordered_bytes::<Mapped<ToUBE, $nonzero_unsigned>>();
 
+                    let array_min = [<$nonzero_unsigned>::new(1).unwrap(), <$nonzero_unsigned>::new(1).unwrap(), <$nonzero_unsigned>::new(1).unwrap()];
+                    let array_mid = [<$nonzero_unsigned>::new(1).unwrap(), mid, <$nonzero_unsigned>::new(1).unwrap()];
+                    let array_max = [<$nonzero_unsigned>::new(1).unwrap(), mid, <$nonzero_unsigned>::new(<$unsigned>::MAX).unwrap()];
+
+                    assert_ordered_bytes_mapping_contract::<ToUBE, [$nonzero_unsigned; 3]>(
+                        array_min, array_max);
+                    assert_ordered_bytes_mapping_contract::<ToUBE, [$nonzero_unsigned; 3]>(
+                        array_mid, array_max);
+                    assert_ordered_bytes_mapping_contract::<ToUBE, [$nonzero_unsigned; 3]>(
+                        array_mid, array_min);
+
+                    check_is_ordered_bytes::<Mapped<ToUBE, [$unsigned; 3]>>();
+
                     assert_ordered_bytes_mapping_contract::<ToIBE, $nonzero_signed>(
                         <$nonzero_signed>::new(<$signed>::MIN).unwrap(),
                         <$nonzero_signed>::new(<$signed>::MAX).unwrap());
@@ -702,6 +891,19 @@ pub(super) mod tests {
                         <$nonzero_signed>::new(1).unwrap());
 
                     check_is_ordered_bytes::<Mapped<ToIBE, $nonzero_signed>>();
+
+                    let array_min = [<$nonzero_signed>::new(<$signed>::MIN).unwrap(), <$nonzero_signed>::new(<$signed>::MIN).unwrap(), <$nonzero_signed>::new(<$signed>::MIN).unwrap()];
+                    let array_mid = [<$nonzero_signed>::new(<$signed>::MIN).unwrap(), <$nonzero_signed>::new(1).unwrap(), <$nonzero_signed>::new(<$signed>::MIN).unwrap()];
+                    let array_max = [<$nonzero_signed>::new(<$signed>::MIN).unwrap(), <$nonzero_signed>::new(1).unwrap(), <$nonzero_signed>::new(<$signed>::MAX).unwrap()];
+
+                    assert_ordered_bytes_mapping_contract::<ToIBE, [$nonzero_signed; 3]>(
+                        array_min, array_max);
+                    assert_ordered_bytes_mapping_contract::<ToIBE, [$nonzero_signed; 3]>(
+                        array_mid, array_max);
+                    assert_ordered_bytes_mapping_contract::<ToIBE, [$nonzero_signed; 3]>(
+                        array_mid, array_min);
+
+                    check_is_ordered_bytes::<Mapped<ToIBE, [$nonzero_signed; 3]>>();
                 }
             )*
         }
@@ -759,8 +961,9 @@ pub(super) mod tests {
 
     #[test]
     fn copy_tuple_as_bytes() {
-        let tup1 =
-            Mapped::<Concat<(Identity, Identity)>, ([u8; 5], [u8; 5])>::new(([0u8; 5], [10u8; 5]));
+        let tup1 = Mapped::<ConcatTuple<(Identity, Identity)>, ([u8; 5], [u8; 5])>::new((
+            [0u8; 5], [10u8; 5],
+        ));
         assert_eq!(tup1.as_bytes(), &[0, 0, 0, 0, 0, 10, 10, 10, 10, 10]);
     }
 
@@ -773,16 +976,36 @@ pub(super) mod tests {
         assert!(t1 < t2 && t2 < t3 && t3 < t4);
 
         assert_ordered_bytes_mapping_contract::<
-            Concat<(ToOctets, ToIBE, ToOctets)>,
+            ConcatTuple<(ToOctets, ToIBE, ToOctets)>,
             (Ipv4Addr, i32, Ipv6Addr),
         >(t1, t2);
         assert_ordered_bytes_mapping_contract::<
-            Concat<(ToOctets, ToIBE, ToOctets)>,
+            ConcatTuple<(ToOctets, ToIBE, ToOctets)>,
             (Ipv4Addr, i32, Ipv6Addr),
         >(t2, t3);
         assert_ordered_bytes_mapping_contract::<
-            Concat<(ToOctets, ToIBE, ToOctets)>,
+            ConcatTuple<(ToOctets, ToIBE, ToOctets)>,
             (Ipv4Addr, i32, Ipv6Addr),
         >(t3, t4);
+    }
+
+    #[test]
+    fn concat_array_of_signed_integers_ord() {
+        let arr1 = [i32::MIN, i32::MAX, 0];
+        let arr2 = [i32::MIN, i32::MAX, -1];
+
+        assert_eq!(arr1.cmp(&arr2), Ordering::Greater);
+
+        let mut bytes1 = [0; 12];
+        bytes1[0..4].clone_from_slice(&Mapped::<ToIBE, _>::new(-121i32).repr);
+        bytes1[4..8].clone_from_slice(&Mapped::<ToIBE, _>::new(100i32).repr);
+        bytes1[8..12].clone_from_slice(&Mapped::<ToIBE, _>::new(0i32).repr);
+
+        let mut bytes2 = [0; 12];
+        bytes2[0..4].clone_from_slice(&Mapped::<ToIBE, _>::new(-121i32).repr);
+        bytes2[4..8].clone_from_slice(&Mapped::<ToIBE, _>::new(100i32).repr);
+        bytes2[8..12].clone_from_slice(&Mapped::<ToIBE, _>::new(-1i32).repr);
+
+        assert_eq!(bytes1.cmp(&bytes2), Ordering::Greater);
     }
 }
