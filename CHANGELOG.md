@@ -11,8 +11,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.0] - 2024-08-18
 
-## [0.2.0] - 2024-08-18
-
 The 0.2.0 has been entirely (99%) contributed by @Gab-Menezes, thank you for all the new features!
 
 Some of the most exciting work they did was to re-implement much of the inner node lookups using SIMD-accelerated searches! The `nightly` feature turns on these optimizations using the new `std::simd` modules. The optimization here also include tactical use of the `likely`, `unlikely`, and `assume` hints to provide the compiler with better optimization material.
