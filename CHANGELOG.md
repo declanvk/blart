@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - ReleaseDate
 
+## [0.2.0] - 2024-08-18
+
 The 0.2.0 has been entirely (99%) contributed by @Gab-Menezes, thank you for all the new features!
 
 Some of the most exciting work they did was to re-implement much of the inner node lookups using SIMD-accelerated searches! The `nightly` feature turns on these optimizations using the new `std::simd` modules. The optimization here also include tactical use of the `likely`, `unlikely`, and `assume` hints to provide the compiler with better optimization material.
@@ -70,7 +72,8 @@ The crate is tested several ways:
    tree, and unit tests for the sizes of the different node types.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/declanvk/blart/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/declanvk/wall-a/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/declanvk/blart/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/declanvk/blart/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/declanvk/blart/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/declanvk/blart/compare/54af3b8...v0.1.0
