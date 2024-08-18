@@ -341,7 +341,7 @@ macro_rules! impl_ordered_bytes_ints_arrays {
             fn to_bytes(values: $domain) -> Self::Bytes {
                 let mut bytes = Vec::with_capacity(values.len() * std::mem::size_of::<$elem>());
 
-                for value in values {
+                for value in Vec::from(values) {
                     bytes.extend(<Self as BytesMapping<$elem>>::to_bytes(value));
                 }
 
