@@ -48,7 +48,7 @@ impl TreeStatsCollector {
                 o1 + o2
             }
 
-            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V>) -> Self::Output {
+            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
                 1
             }
         }
@@ -261,7 +261,7 @@ where
         self.current.tree.aggregate_data(t);
     }
 
-    fn visit_leaf(&mut self, t: &LeafNode<K, V>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
         self.current.leaf.count += 1;
         self.current.leaf.sum_key_bytes += t.key_ref().as_bytes().len();
         self.current.leaf.mem_usage += std::mem::size_of_val(t);
@@ -330,7 +330,7 @@ mod tests {
             leaf: LeafStats {
                 count: 16,
                 sum_key_bytes: 64,
-                mem_usage: 256,
+                mem_usage: 512,
             },
             ..Default::default()
         };
@@ -376,7 +376,7 @@ mod tests {
             leaf: LeafStats {
                 count: 64,
                 sum_key_bytes: 128,
-                mem_usage: 1024,
+                mem_usage: 2048,
             },
             ..Default::default()
         };

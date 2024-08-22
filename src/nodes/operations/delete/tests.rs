@@ -3,7 +3,7 @@ use crate::{deallocate_tree, search_unchecked, tests_common::setup_tree_from_ent
 
 #[test]
 fn delete_singleton_tree_leaf() {
-    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _>::new(
+    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16>::new(
         Box::from([1, 2, 3, 4]),
         "1234".to_string(),
     ));
@@ -201,8 +201,8 @@ fn delete_one_entry_n256_shrinks() {
 
 #[test]
 fn delete_minimum_singleton_tree() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String>> = NodePtr::allocate_node_ptr(
-        LeafNode::<Box<[u8]>, _>::new(Box::from([1, 2, 3, 4]), "1234".to_string()),
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> = NodePtr::allocate_node_ptr(
+        LeafNode::<Box<[u8]>, _, 16>::new(Box::from([1, 2, 3, 4]), "1234".to_string()),
     );
 
     let root = first_leaf.to_opaque();
@@ -272,8 +272,8 @@ fn delete_minimum_entire_small_tree() {
 
 #[test]
 fn delete_maximum_singleton_tree() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String>> = NodePtr::allocate_node_ptr(
-        LeafNode::<Box<[u8]>, _>::new(Box::from([1, 2, 3, 4]), "1234".to_string()),
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> = NodePtr::allocate_node_ptr(
+        LeafNode::<Box<[u8]>, _, 16>::new(Box::from([1, 2, 3, 4]), "1234".to_string()),
     );
 
     let root = first_leaf.to_opaque();

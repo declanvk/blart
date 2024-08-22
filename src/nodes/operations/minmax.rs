@@ -9,7 +9,7 @@ use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 #[inline(always)]
 pub unsafe fn minimum_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
-) -> NodePtr<PREFIX_LEN, LeafNode<K, V>> {
+) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
     let mut current_node = root;
 
     loop {
@@ -34,7 +34,7 @@ pub unsafe fn minimum_unchecked<K, V, const PREFIX_LEN: usize>(
 #[inline(always)]
 pub unsafe fn maximum_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
-) -> NodePtr<PREFIX_LEN, LeafNode<K, V>> {
+) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
     let mut current_node = root;
 
     loop {

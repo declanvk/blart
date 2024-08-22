@@ -9,9 +9,9 @@ use std::{error::Error, fmt, marker::PhantomData, ops::ControlFlow};
 #[derive(Debug)]
 pub struct InsertResult<'a, K, V, const PREFIX_LEN: usize> {
     /// Pointer to the leaf
-    pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
+    pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     /// The existing leaf referenced by the insert key, if present
-    pub existing_leaf: Option<LeafNode<K, V>>,
+    pub existing_leaf: Option<LeafNode<K, V, PREFIX_LEN>>,
     /// The new tree root after the successful insert
     pub new_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 
@@ -79,11 +79,11 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
     {
         fn write_new_child_in_existing_node<'a, K, V, const PREFIX_LEN: usize>(
             inner_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
-            new_leaf_node: LeafNode<K, V>,
+            new_leaf_node: LeafNode<K, V, PREFIX_LEN>,
             key_bytes_used: usize,
         ) -> (
             OpaqueNodePtr<K, V, PREFIX_LEN>,
-            NodePtr<PREFIX_LEN, LeafNode<K, V>>,
+            NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
         )
         where
             K: AsBytes + 'a,
@@ -91,11 +91,11 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
         {
             fn write_new_child_in_existing_inner_node<'a, K, V, N, const PREFIX_LEN: usize>(
                 inner_node_ptr: NodePtr<PREFIX_LEN, N>,
-                new_leaf_node: LeafNode<K, V>,
+                new_leaf_node: LeafNode<K, V, PREFIX_LEN>,
                 key_bytes_used: usize,
             ) -> (
                 OpaqueNodePtr<K, V, PREFIX_LEN>,
-                NodePtr<PREFIX_LEN, LeafNode<K, V>>,
+                NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
             )
             where
                 N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
@@ -404,7 +404,7 @@ pub enum InsertSearchResultType<K, V, const PREFIX_LEN: usize> {
     /// existing leaf and the new leaf as children to that node.
     SplitLeaf {
         /// A pointer to the leaf node that will be split
-        leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
+        leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
         new_key_bytes_used: usize,
     },
     /// Exact match of the leaf was found
@@ -412,7 +412,7 @@ pub enum InsertSearchResultType<K, V, const PREFIX_LEN: usize> {
     /// This insert type will replace the older leaf with a new one
     Exact {
         /// A pointer to the leaf node that will be split
-        leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V>>,
+        leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     },
     /// An insert where the search terminated at an existing inner node that
     /// did not have a child with the key byte.

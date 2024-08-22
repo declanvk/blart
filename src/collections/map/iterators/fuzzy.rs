@@ -275,7 +275,9 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN> for LeafNode<K, V> {
+impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
+    for LeafNode<K, V, PREFIX_LEN>
+{
     fn fuzzy_search(
         &self,
         _arena: &mut StackArena,

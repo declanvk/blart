@@ -188,9 +188,9 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
             NodeType::Node256 => ConcreteNodePtr::Node256(NodePtr(
                 self.0.cast::<InnerNode256<K, V, PREFIX_LEN>>().into(),
             )),
-            NodeType::Leaf => {
-                ConcreteNodePtr::LeafNode(NodePtr(self.0.cast::<LeafNode<K, V>>().into()))
-            },
+            NodeType::Leaf => ConcreteNodePtr::LeafNode(NodePtr(
+                self.0.cast::<LeafNode<K, V, PREFIX_LEN>>().into(),
+            )),
         }
     }
 
@@ -271,7 +271,7 @@ pub enum ConcreteNodePtr<K, V, const PREFIX_LEN: usize> {
     /// Node that references between 49 and 256 children
     Node256(NodePtr<PREFIX_LEN, InnerNode256<K, V, PREFIX_LEN>>),
     /// Node that contains a single value
-    LeafNode(NodePtr<PREFIX_LEN, LeafNode<K, V>>),
+    LeafNode(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>),
 }
 
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteNodePtr<K, V, PREFIX_LEN> {
@@ -395,7 +395,7 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V>> {
+impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
     /// Returns a shared reference to the key and value of the pointed to
     /// [`LeafNode`].
     ///
@@ -533,7 +533,7 @@ pub(crate) mod private {
     impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode16<K, V, PREFIX_LEN> {}
     impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode48<K, V, PREFIX_LEN> {}
     impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode256<K, V, PREFIX_LEN> {}
-    impl<K, V> Sealed for super::LeafNode<K, V> {}
+    impl<K, V, const PREFIX_LEN: usize> Sealed for super::LeafNode<K, V, PREFIX_LEN> {}
 }
 
 /// All nodes which contain a runtime tag that validates their type.
@@ -584,7 +584,7 @@ pub struct Mismatch<K, V, const PREFIX_LEN: usize> {
     /// Value of the byte that made it not match
     pub prefix_byte: u8,
     /// Pointer to the leaf if the prefix was reconstructed
-    pub leaf_ptr: Option<NodePtr<PREFIX_LEN, LeafNode<K, V>>>,
+    pub leaf_ptr: Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>,
 }
 
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for Mismatch<K, V, PREFIX_LEN> {
@@ -745,7 +745,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
         current_depth: usize,
     ) -> (
         &[u8],
-        Option<NodePtr<PREFIX_LEN, LeafNode<Self::Key, Self::Value>>>,
+        Option<NodePtr<PREFIX_LEN, LeafNode<Self::Key, Self::Value, PREFIX_LEN>>>,
     )
     where
         Self::Key: AsBytes,
@@ -783,17 +783,30 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
 /// Node that contains a single leaf value.
 #[derive(Debug, Clone)]
 #[repr(align(8))]
-pub struct LeafNode<K, V> {
+pub struct LeafNode<K, V, const PREFIX_LEN: usize> {
     /// The leaf value.
     value: V,
     /// The full key that the `value` was stored with.
     key: K,
+
+    /// Pointer to the previous leaf node in the trie. If the value is `None`,
+    /// then this is the first leaf.
+    previous: Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>,
+
+    /// Pointer to the next leaf node in the trie. If the value is `None`,
+    /// then this is the last leaf.
+    next: Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>,
 }
 
-impl<K, V> LeafNode<K, V> {
+impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
     /// Create a new leaf node with the given value.
     pub fn new(key: K, value: V) -> Self {
-        LeafNode { value, key }
+        LeafNode {
+            value,
+            key,
+            previous: None,
+            next: None,
+        }
     }
 
     /// Returns a shared reference to the key contained by this leaf node
@@ -837,7 +850,7 @@ impl<K, V> LeafNode<K, V> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for LeafNode<K, V> {
+impl<const PREFIX_LEN: usize, K, V> Node<PREFIX_LEN> for LeafNode<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
 
@@ -856,7 +869,7 @@ mod tests {
     // pointer to a type with large and small alignment and back without issues.
     #[test]
     fn leaf_node_alignment() {
-        let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _>, 3>::new(Box::into_raw(Box::new(
+        let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _, 16>, 3>::new(Box::into_raw(Box::new(
             LeafNode::new([], 3u8),
         )))
         .unwrap()
@@ -866,16 +879,16 @@ mod tests {
         #[repr(align(64))]
         struct LargeAlignment;
 
-        let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _>, 3>::new(Box::into_raw(Box::new(
-            LeafNode::new(LargeAlignment, 2u16),
-        )))
+        let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _, 16>, 3>::new(Box::into_raw(
+            Box::new(LeafNode::new(LargeAlignment, 2u16)),
+        ))
         .unwrap()
         .cast::<OpaqueValue>();
         p1.set_data(0b011);
 
-        let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment>, 3>::new(Box::into_raw(Box::new(
-            LeafNode::new(1u64, LargeAlignment),
-        )))
+        let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment, 16>, 3>::new(Box::into_raw(
+            Box::new(LeafNode::new(1u64, LargeAlignment)),
+        ))
         .unwrap()
         .cast::<OpaqueValue>();
         p2.set_data(0b111);
@@ -885,12 +898,14 @@ mod tests {
             // them back to the original type when we deallocate. The `.cast` calls
             // are required, even though the tests pass under normal execution otherwise (I
             // guess normal test execution doesn't care about leaked memory?)
-            drop(Box::from_raw(p0.cast::<LeafNode<[u8; 0], u8>>().to_ptr()));
             drop(Box::from_raw(
-                p1.cast::<LeafNode<LargeAlignment, u16>>().to_ptr(),
+                p0.cast::<LeafNode<[u8; 0], u8, 16>>().to_ptr(),
             ));
             drop(Box::from_raw(
-                p2.cast::<LeafNode<u64, LargeAlignment>>().to_ptr(),
+                p1.cast::<LeafNode<LargeAlignment, u16, 16>>().to_ptr(),
+            ));
+            drop(Box::from_raw(
+                p2.cast::<LeafNode<u64, LargeAlignment, 16>>().to_ptr(),
             ));
         }
     }
@@ -967,7 +982,7 @@ mod tests {
         assert_eq!(mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(), 8);
-        assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8>>(), 8);
+        assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<Header<16>>(), 8);
 
         assert_eq!(
@@ -987,7 +1002,7 @@ mod tests {
             mem::align_of::<OpaqueValue>()
         );
         assert_eq!(
-            mem::align_of::<LeafNode<Box<[u8]>, u8>>(),
+            mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(),
             mem::align_of::<OpaqueValue>()
         );
 
@@ -1103,7 +1118,7 @@ mod tests {
 
     pub(crate) type FixtureReturn<Node, const N: usize> = (
         Node,
-        [LeafNode<Box<[u8]>, ()>; N],
+        [LeafNode<Box<[u8]>, (), 16>; N],
         [OpaqueNodePtr<Box<[u8]>, (), 16>; N],
     );
 }
