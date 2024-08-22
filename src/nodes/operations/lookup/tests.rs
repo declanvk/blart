@@ -5,7 +5,7 @@ use crate::{
 
 #[test]
 fn lookup_on_non_copy_leaf() {
-    let mut l1: LeafNode<Box<[u8]>, String> =
+    let mut l1: LeafNode<Box<[u8]>, String, 16> =
         LeafNode::new(Box::from([1, 2, 3]), "Hello world my name is".into());
     let mut l2 = LeafNode::new(Box::from([1, 2, 4]), "geregog".into());
 

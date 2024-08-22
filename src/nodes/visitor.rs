@@ -110,7 +110,7 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode256
     }
 }
 
-impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for LeafNode<K, T> {
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for LeafNode<K, T, PREFIX_LEN> {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         visitor.default_output()
     }
@@ -153,7 +153,7 @@ pub trait Visitor<K, V, const PREFIX_LEN: usize>: Sized {
     }
 
     /// Visit a [`LeafNode`].
-    fn visit_leaf(&mut self, t: &LeafNode<K, V>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
         t.super_visit_with(self)
     }
 }

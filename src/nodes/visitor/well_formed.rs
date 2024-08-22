@@ -366,7 +366,7 @@ where
         self.visit_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
         if !t.key_ref().as_bytes().starts_with(&self.current_key_prefix) {
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::PrefixMismatch {
@@ -429,7 +429,7 @@ mod tests {
         let l2 = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
         let l3 = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
 
-        let l1_ptr: NodePtr<16, LeafNode<Box<[u8; 6]>, i32>> = NodePtr::allocate_node_ptr(l1);
+        let l1_ptr: NodePtr<16, LeafNode<Box<[u8; 6]>, i32, 16>> = NodePtr::allocate_node_ptr(l1);
         let l2_ptr = NodePtr::allocate_node_ptr(l2);
         let l3_ptr = NodePtr::allocate_node_ptr(l3);
 
