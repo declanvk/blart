@@ -466,7 +466,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, P
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let (keys, children) = self.initialized_portion();
-        // SAFETY: Covered by the containing function
+        // SAFETY: Any Node4 must have at least 2 children, so the `keys` and `children`
+        // arrays must be non-empty
         unsafe {
             (
                 keys.first().copied().unwrap_unchecked(),
@@ -477,7 +478,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, P
 
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let (keys, children) = self.initialized_portion();
-        // SAFETY: Covered by the containing function
+        // SAFETY: Any Node4 must have at least 2 children, so the `keys` and `children`
+        // arrays must be non-empty
         unsafe {
             (
                 keys.last().copied().unwrap_unchecked(),
@@ -674,9 +676,9 @@ mod tests {
     #[test]
     fn node4_lookup() {
         let mut n = InnerNode4::<Box<[u8]>, (), 16>::empty();
-        let mut l1 = LeafNode::new(vec![].into(), ());
-        let mut l2 = LeafNode::new(vec![].into(), ());
-        let mut l3 = LeafNode::new(vec![].into(), ());
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -711,9 +713,9 @@ mod tests {
     #[test]
     fn node4_grow() {
         let mut n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
-        let mut l1 = LeafNode::new(vec![].into(), ());
-        let mut l2 = LeafNode::new(vec![].into(), ());
-        let mut l3 = LeafNode::new(vec![].into(), ());
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -741,9 +743,9 @@ mod tests {
     #[test]
     fn node16_lookup() {
         let mut n = InnerNode16::<Box<[u8]>, (), 16>::empty();
-        let mut l1 = LeafNode::new(Box::from([]), ());
-        let mut l2 = LeafNode::new(Box::from([]), ());
-        let mut l3 = LeafNode::new(Box::from([]), ());
+        let mut l1 = LeafNode::with_no_siblings(Box::from([]), ());
+        let mut l2 = LeafNode::with_no_siblings(Box::from([]), ());
+        let mut l3 = LeafNode::with_no_siblings(Box::from([]), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -779,9 +781,9 @@ mod tests {
     #[should_panic = "Node must be full to grow to node 48"]
     fn node16_grow_panic() {
         let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
-        let mut l1 = LeafNode::new(vec![].into(), ());
-        let mut l2 = LeafNode::new(vec![].into(), ());
-        let mut l3 = LeafNode::new(vec![].into(), ());
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -798,7 +800,7 @@ mod tests {
         let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
         let mut v = Vec::new();
         for i in 0..16 {
-            let mut l = LeafNode::new(vec![].into(), ());
+            let mut l = LeafNode::with_no_siblings(vec![].into(), ());
             let l_ptr = NodePtr::from(&mut l).to_opaque();
             v.push(l_ptr);
             n16.write_child(i * 2, l_ptr);
@@ -825,10 +827,10 @@ mod tests {
 
     fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {
         let mut n4 = InnerNode4::empty();
-        let mut l1 = LeafNode::new(vec![].into(), ());
-        let mut l2 = LeafNode::new(vec![].into(), ());
-        let mut l3 = LeafNode::new(vec![].into(), ());
-        let mut l4 = LeafNode::new(vec![].into(), ());
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l4 = LeafNode::with_no_siblings(vec![].into(), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -937,10 +939,10 @@ mod tests {
 
     fn node16_fixture() -> FixtureReturn<InnerNode16<Box<[u8]>, (), 16>, 4> {
         let mut n16 = InnerNode16::empty();
-        let mut l1 = LeafNode::new(vec![].into(), ());
-        let mut l2 = LeafNode::new(vec![].into(), ());
-        let mut l3 = LeafNode::new(vec![].into(), ());
-        let mut l4 = LeafNode::new(vec![].into(), ());
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l4 = LeafNode::with_no_siblings(vec![].into(), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();

@@ -131,7 +131,7 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize>(
             // SAFETY: Covered by containing function safety doc
             remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte)
         },
-        ConcreteNodePtr::LeafNode(_) => panic!("Cannot have delete from leaf node"),
+        ConcreteNodePtr::LeafNode(_) => unreachable!("Cannot have delete from leaf node"),
     };
 
     // If the parent node was changed to something else, we have to write the new
@@ -168,7 +168,7 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize>(
                     inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::LeafNode(_) => {
-                    panic!("Cannot modify children of a leaf node")
+                    unreachable!("Cannot modify children of a leaf node")
                 },
             }
         }
@@ -196,6 +196,7 @@ pub struct DeleteResult<K, V, const PREFIX_LEN: usize> {
     ///
     /// If `None`, that means the tree is now empty.
     pub new_root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
+
     /// The leaf node that was successfully deleted.
     pub deleted_leaf: LeafNode<K, V, PREFIX_LEN>,
 }
@@ -213,6 +214,7 @@ pub struct DeletePoint<K, V, const PREFIX_LEN: usize> {
     /// If the leaf node to delete is also the root, then this value is `None`.
     /// If the grandparent node is present, this value also must be present.
     pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
+
     /// The node to delete.
     pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 }
@@ -240,7 +242,10 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
     ///  - This function cannot be called concurrently to any reads or writes of
     ///    the `root` node or any child node of `root`. This function will
     ///    arbitrarily read or write to any child in the given tree.
-    pub fn apply(self, root: OpaqueNodePtr<K, V, PREFIX_LEN>) -> DeleteResult<K, V, PREFIX_LEN> {
+    pub unsafe fn apply(
+        self,
+        root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> DeleteResult<K, V, PREFIX_LEN> {
         let DeletePoint {
             grandparent_ptr_and_parent_key_byte: grandparent_node_ptr,
             parent_ptr_and_child_key_byte: parent_node_ptr,
@@ -262,7 +267,7 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
             },
             (None, Some(grandparent_node_ptr)) => {
                 // search_for_node_to_delete should maintain this invariant
-                panic!(
+                unreachable!(
                     "This should be impossible, to have missing parent node and present \
                      grandparent node [{grandparent_node_ptr:?}]",
                 );

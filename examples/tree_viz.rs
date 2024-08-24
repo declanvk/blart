@@ -87,14 +87,7 @@ fn write_tree(
     output: &mut dyn Write,
     tree: TreeMap<DisplayWrapper, String>,
 ) -> Result<(), Box<dyn Error>> {
-    DotPrinter::print(
-        output,
-        &tree,
-        DotPrinterSettings {
-            display_node_address: false,
-        },
-    )
-    .unwrap()?;
+    DotPrinter::print(output, &tree, DotPrinterSettings::default()).unwrap()?;
 
     Ok(())
 }
