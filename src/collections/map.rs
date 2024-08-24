@@ -3,12 +3,15 @@
 
 use crate::{
     deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
-    minimum_unchecked, rust_nightly_apis::hasher_write_length_prefix, search_for_delete_point,
-    search_for_insert_point, search_unchecked, AsBytes, DeletePoint, DeleteResult, InsertPoint,
-    InsertPrefixError, InsertResult, InsertSearchResultType::Exact, LeafNode, NoPrefixesBytes,
-    NodePtr, OpaqueNodePtr,
+    minimum_unchecked,
+    rust_nightly_apis::hasher_write_length_prefix,
+    search_for_delete_point, search_for_insert_point, search_unchecked,
+    visitor::{MalformedTreeError, WellFormedChecker},
+    AsBytes, DeletePoint, DeleteResult, InsertPoint, InsertPrefixError, InsertResult,
+    InsertSearchResultType::Exact,
+    LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr,
 };
-use std::{borrow::Borrow, fmt::Debug, hash::Hash, ops::Index};
+use std::{borrow::Borrow, fmt::Debug, hash::Hash, mem::ManuallyDrop, ops::Index};
 
 mod entry;
 mod entry_ref;
@@ -93,6 +96,84 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
 
             self.num_entries = 0;
             self.root = None;
+        }
+    }
+
+    /// Consume the tree, returning a raw pointer to the root node.
+    ///
+    /// If the results is `None`, this means the tree is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    ///
+    /// let root = TreeMap::into_raw(map);
+    /// assert!(root.is_some());
+    /// ```
+    pub fn into_raw(tree: Self) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
+        // We need this `ManuallyDrop` so that the `TreeMap::drop` is not called.
+        // Since the `root` field is `Copy`, it can be moved out of the tree without
+        // inhibiting `Drop`
+        let tree = ManuallyDrop::new(tree);
+        tree.root
+    }
+
+    /// Constructs a [`TreeMap`] from a raw node pointer.
+    ///
+    /// # Safety
+    ///
+    /// The raw pointer must have been previously returned by a call to
+    /// [`TreeMap::into_raw`].
+    ///
+    /// This function also requires that this the given `root` pointer is
+    /// unique, and that there are no other pointers into the tree.
+    ///
+    /// # Errors
+    ///
+    /// This function runs a series of checks to ensure that the returned tree
+    /// is well-formed. See [`WellFormedChecker`] for details on the
+    /// requirements.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    ///
+    /// let root = TreeMap::into_raw(map);
+    /// assert!(root.is_some());
+    ///
+    /// // SAFETY: The root pointer came directly from the `into_raw` result.
+    /// let _map = unsafe { TreeMap::from_raw(root) }.unwrap();
+    /// ```
+    pub unsafe fn from_raw(
+        root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
+    ) -> Result<Self, MalformedTreeError<K, V, PREFIX_LEN>>
+    where
+        K: AsBytes,
+    {
+        match root {
+            Some(root) => {
+                // SAFETY: The safety doc of this function guarantees the uniqueness of the
+                // `root` pointer, which means we won't have any other mutations
+                let stats = unsafe { WellFormedChecker::check_tree(root)? };
+
+                Ok(Self {
+                    root: Some(root),
+                    num_entries: stats.num_leaf,
+                })
+            },
+            None => Ok(Self::with_prefix_len()),
         }
     }
 
@@ -1984,5 +2065,49 @@ mod tests {
         }
         let new_tree = tree.clone();
         assert!(tree == new_tree);
+    }
+
+    #[test]
+    fn regression_29a4f553e0689f886010df5a425384b757d612ed() {
+        // [
+        //     Extend(
+        //         [
+        //             [
+        //                 0,
+        //             ],
+        //             [
+        //                 171,
+        //                 171,
+        //             ],
+        //             [
+        //                 65,
+        //                 229,
+        //             ],
+        //         ],
+        //     ),
+        //     PopMinimum,
+        //     Clone,
+        //     PopMinimum,
+        //     Clear,
+        // ]
+
+        let mut tree = TreeMap::<Box<[u8]>, u32>::new();
+        let _ = tree.try_insert(Box::new([0]), 0);
+        let _ = tree.try_insert(Box::new([171, 171]), 1);
+        let _ = tree.try_insert(Box::new([65, 229]), 2);
+
+        assert_eq!(tree.len(), 3);
+
+        let minimum = tree.pop_first().unwrap();
+        assert_eq!(minimum.0.as_ref(), &[0]);
+
+        tree = tree.clone();
+
+        let minimum = tree.pop_first().unwrap();
+        assert_eq!(minimum.0.as_ref(), &[65, 229]);
+
+        tree.clear();
+        assert_eq!(tree.len(), 0);
+        assert_eq!(tree.pop_first(), None);
     }
 }

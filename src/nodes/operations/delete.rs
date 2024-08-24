@@ -174,6 +174,10 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize>(
         }
     }
 
+    // SAFETY: Function safety doc covers the no concurrent read or modification of
+    // this leaf node.
+    unsafe { LeafNode::remove_self(leaf_node_ptr) }
+
     // SAFETY: `leaf_node_ptr` is a unique pointer to the leaf node, no other code
     // will deallocate this
     let leaf_node = unsafe { NodePtr::deallocate_node_ptr(leaf_node_ptr) };
@@ -253,7 +257,9 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
         } = self;
         match (parent_node_ptr, grandparent_node_ptr) {
             (None, None) => {
-                // The leaf node was also the root node
+                // The leaf node was also the root node. We don't need to remove the leaf from
+                // the linked list here because the `previous` and `next` pointers should both
+                // be `None`, since it is the only leaf.
 
                 // SAFETY: The original `root` node pointer is a unique pointer to the tree
                 // (required by safety doc), which means that leaf_node_ptr is also unique and

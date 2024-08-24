@@ -6,6 +6,7 @@ use std::{
     collections::{hash_map::Entry, HashMap},
     error::Error,
     fmt,
+    ops::{Add, AddAssign},
 };
 
 /// A portion of an entire key that should uniquely identify each node in
@@ -58,7 +59,7 @@ pub enum MalformedTreeError<K, V, const PREFIX_LEN: usize> {
         /// The expected key prefix
         expected_prefix: KeyPrefix,
         /// The entire key
-        entire_key: K,
+        entire_key: Vec<u8>,
     },
     /// The length of the tree is not 0, even though the root is
     /// [`Option::None`]
@@ -215,16 +216,16 @@ pub struct WellFormedChecker<K, V, const PREFIX_LEN: usize> {
 
 impl<K, V, const PREFIX_LEN: usize> WellFormedChecker<K, V, PREFIX_LEN>
 where
-    K: AsBytes + Clone,
+    K: AsBytes,
 {
     /// Traverse the given tree and check that it is well-formed. Returns the
-    /// number of nodes in the tree.
+    /// number of leaf nodes in the tree.
     ///
     /// # Errors
     ///  - Returns an error if the given tree is not well-formed.
     pub fn check(
         tree: &TreeMap<K, V, PREFIX_LEN>,
-    ) -> Result<usize, MalformedTreeError<K, V, PREFIX_LEN>> {
+    ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
         tree.root
             .map(|root| {
                 // SAFETY: Since we get a reference to the TreeMap, we know no
@@ -233,7 +234,7 @@ where
             })
             .unwrap_or_else(|| {
                 if tree.is_empty() {
-                    Ok(0)
+                    Ok(WellFormedTreeStats::default())
                 } else {
                     Err(MalformedTreeError::EmptyTreeWithLen)
                 }
@@ -241,17 +242,17 @@ where
     }
 
     /// Traverse the given tree and check that it is well-formed. Returns the
-    /// number of nodes in the tree.
+    /// number of leaf nodes in the tree.
     ///
     /// # Safety
     ///  - For the duration of this function, the given node and all its
-    ///    children nodes must not get mutated.
+    ///    children nodes must not be mutated.
     ///
     /// # Errors
     ///  - Returns an error if the given tree is not well-formed.
-    unsafe fn check_tree(
+    pub(crate) unsafe fn check_tree(
         tree: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) -> Result<usize, MalformedTreeError<K, V, PREFIX_LEN>> {
+    ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
         let mut visitor = WellFormedChecker {
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
@@ -266,7 +267,7 @@ where
     fn visit_inner_node<N>(
         &mut self,
         inner_node: &N,
-    ) -> Result<usize, MalformedTreeError<K, V, PREFIX_LEN>>
+    ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>>
     where
         N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
     {
@@ -283,7 +284,7 @@ where
         // `check_tree` caller requirements.
         let child_it = inner_node.iter();
 
-        let mut running_node_count = 0;
+        let mut running_node_count = WellFormedTreeStats::default();
         let mut num_children: usize = 0;
         for (key_byte, child_pointer) in child_it {
             // update running key prefix with child pointer key fragment
@@ -329,21 +330,58 @@ where
             });
         }
 
-        Ok(running_node_count + 1)
+        running_node_count.num_inner += 1;
+
+        Ok(running_node_count)
+    }
+}
+
+/// This struct contains some simple stats collected from the trie when visiting
+/// it with [`WellFormedChecker`].
+#[derive(Debug, Default)]
+pub struct WellFormedTreeStats {
+    /// The number of leaf nodes in the trie.
+    pub num_leaf: usize,
+    /// The number of inner node in the trie.
+    pub num_inner: usize,
+}
+
+impl WellFormedTreeStats {
+    /// The total number of leaf nodes and inner nodes in the trie.
+    pub fn total_nodes(self) -> usize {
+        self.num_inner + self.num_leaf
+    }
+}
+
+impl Add for WellFormedTreeStats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            num_leaf: self.num_leaf + rhs.num_leaf,
+            num_inner: self.num_inner + rhs.num_inner,
+        }
+    }
+}
+
+impl AddAssign for WellFormedTreeStats {
+    fn add_assign(&mut self, rhs: Self) {
+        self.num_inner += rhs.num_inner;
+        self.num_leaf += rhs.num_leaf;
     }
 }
 
 impl<K, V, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN>
     for WellFormedChecker<K, V, PREFIX_LEN>
 where
-    K: Clone + AsBytes,
+    K: AsBytes,
 {
-    type Output = Result<usize, MalformedTreeError<K, V, PREFIX_LEN>>;
+    type Output = Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>>;
 
     fn default_output(&self) -> Self::Output {
         // Chose zero so that any places that call `default_output` don't influence the
         // overall count
-        Ok(0)
+        Ok(Default::default())
     }
 
     fn combine_output(&self, o1: Self::Output, o2: Self::Output) -> Self::Output {
@@ -371,11 +409,14 @@ where
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::PrefixMismatch {
                 expected_prefix: current_key_prefix,
-                entire_key: t.key_ref().clone(),
+                entire_key: t.key_ref().as_bytes().to_vec(),
             });
         }
 
-        Ok(1)
+        Ok(WellFormedTreeStats {
+            num_inner: 0,
+            num_leaf: 1,
+        })
     }
 }
 
@@ -404,7 +445,12 @@ mod tests {
         // 4  * 3 * 2
         assert_eq!(num_leaves, 24);
 
-        assert_eq!(unsafe { WellFormedChecker::check_tree(root) }, Ok(41));
+        assert_eq!(
+            unsafe { WellFormedChecker::check_tree(root) }
+                .unwrap()
+                .total_nodes(),
+            41
+        );
 
         unsafe { deallocate_tree(root) };
     }
@@ -417,7 +463,7 @@ mod tests {
         tree.insert(CString::new("2XX1XXXXXXXXXXXXXXXXXXXXXX2").unwrap(), 3);
         tree.insert(CString::new("2XX2").unwrap(), 4);
 
-        assert_eq!(WellFormedChecker::check(&tree), Ok(7));
+        assert_eq!(WellFormedChecker::check(&tree).unwrap().total_nodes(), 7);
     }
 
     #[test]
@@ -592,7 +638,7 @@ mod tests {
                 entire_key,
             } => {
                 assert_eq!(expected_prefix, [1, 2, 4, 7, 8, 4]);
-                assert_eq!(entire_key.as_ref(), &[255u8, 255, 255, 255, 255, 255][..]);
+                assert_eq!(entire_key, &[255u8, 255, 255, 255, 255, 255][..]);
             },
             _ => {
                 panic!("expected a PrefixMismatch error")

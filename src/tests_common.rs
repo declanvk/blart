@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, iter};
 
-use crate::{AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr};
+use crate::{AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr, TreeMap};
 
 /// Generate an iterator of bytestring keys, with increasing length up to a
 /// maximum value.
@@ -325,23 +325,18 @@ where
 
 #[allow(dead_code)]
 pub(crate) fn setup_tree_from_entries<K, V, const PREFIX_LEN: usize>(
-    mut entries_it: impl Iterator<Item = (K, V)>,
+    entries_it: impl Iterator<Item = (K, V)>,
 ) -> OpaqueNodePtr<K, V, PREFIX_LEN>
 where
     K: AsBytes,
 {
-    use crate::{LeafNode, NodePtr};
-
-    let (first_key, first_value) = entries_it.next().unwrap();
-
-    let mut current_root =
-        NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(first_key, first_value)).to_opaque();
+    let mut tree = TreeMap::with_prefix_len();
 
     for (key, value) in entries_it {
-        current_root = unsafe { insert_unchecked(current_root, key, value).unwrap().new_root };
+        let _ = tree.try_insert(key, value).unwrap();
     }
 
-    current_root
+    TreeMap::into_raw(tree).unwrap()
 }
 
 #[cfg(test)]
