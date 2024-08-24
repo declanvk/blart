@@ -1,9 +1,15 @@
 use crate::{
+    maximum_unchecked, minimum_unchecked,
     rust_nightly_apis::{assume, likely, unlikely},
     AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch,
     NodePtr, OpaqueNodePtr,
 };
-use std::{error::Error, fmt, marker::PhantomData, ops::ControlFlow};
+use std::{
+    error::Error,
+    fmt,
+    marker::PhantomData,
+    ops::{Bound, ControlFlow},
+};
 
 /// The results of a successful tree insert
 #[derive(Debug)]
@@ -127,6 +133,59 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 K: AsBytes + 'a,
                 V: 'a,
             {
+                /// This function will:
+                ///   1. Find the nearest (previous or next) sibling leaf for
+                ///      the new leaf pointer
+                ///   2. Use that sibling leaf node to add the new leaf pointer
+                ///      into the linked list of leaves
+                fn insert_new_leaf_in_linked_list<'a, K, V, N, const PREFIX_LEN: usize>(
+                    new_leaf_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+                    inner_node: &mut N,
+                    new_leaf_key_byte: u8,
+                ) where
+                    N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
+                    K: AsBytes + 'a,
+                    V: 'a,
+                {
+                    if let Some((_, next_node)) = inner_node
+                        .range((Bound::Excluded(new_leaf_key_byte), Bound::Unbounded))
+                        .next()
+                    {
+                        // in this branch we're looking for the next larger leaf node, which we'll
+                        // get by iterating over the inner node starting from the excluded new leaf
+                        // key byte. Then we find the minimum leaf of that next node to be the
+                        // `next` sibling
+
+                        // SAFETY: There are no concurrent modifications, the `apply` safety doc
+                        // covers this
+                        let next_leaf = unsafe { minimum_unchecked(next_node) };
+
+                        // SAFETY: There is no concurrent modification of the new leaf node, the
+                        // existing leaf node, or its siblings because of the safety requirements of
+                        // the `apply` function.
+                        unsafe { LeafNode::insert_before(new_leaf_ptr, next_leaf) };
+                    } else if let Some((_, previous_node)) = inner_node
+                        .range((Bound::Unbounded, Bound::Excluded(new_leaf_key_byte)))
+                        .next_back()
+                    {
+                        // in this branch we're looking for the next smaller leaf node, which we'll
+                        // get by iterating over the inner node ending with the excluded new leaf
+                        // key byte. Then we find the maximum leaf of that next node to be the
+                        // `previous` sibling
+
+                        // SAFETY: There are no concurrent modifications, the `apply` safety doc
+                        // covers this
+                        let previous_leaf = unsafe { maximum_unchecked(previous_node) };
+
+                        // SAFETY: There is no concurrent modification of the new leaf node, the
+                        // existing leaf node, or its siblings because of the safety requirements of
+                        // the `apply` function.
+                        unsafe { LeafNode::insert_after(new_leaf_ptr, previous_leaf) };
+                    } else {
+                        unreachable!("the inner node should have at least one other child");
+                    }
+                }
+
                 // SAFETY: The `inner_node` reference lasts only for the duration of this
                 // function, and the node will not be read or written via any other source.
                 let inner_node = unsafe { inner_node_ptr.as_mut() };
@@ -141,6 +200,8 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     let mut new_node = inner_node.grow();
                     new_node.write_child(new_leaf_key_byte, new_leaf_ptr_opaque);
 
+                    insert_new_leaf_in_linked_list(new_leaf_ptr, &mut new_node, new_leaf_key_byte);
+
                     let new_inner_node = NodePtr::allocate_node_ptr(new_node).to_opaque();
 
                     // SAFETY: The `deallocate_node_ptr` function is only called a
@@ -152,6 +213,8 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     (new_inner_node, new_leaf_ptr)
                 } else {
                     inner_node.write_child(new_leaf_key_byte, new_leaf_ptr_opaque);
+
+                    insert_new_leaf_in_linked_list(new_leaf_ptr, inner_node, new_leaf_key_byte);
 
                     (inner_node_ptr.to_opaque(), new_leaf_ptr)
                 }
@@ -244,20 +307,25 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     // and the whole process should be already finished
                     assume!(key_bytes_used + mismatch.matched_bytes < key_bytes.len());
                 }
-                // SAFETY: We hold a mutable reference, so creating
-                // a mutable reference is safe
-                let header = unsafe { mismatched_inner_node_ptr.header_mut_unchecked() };
+
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
 
                 let new_leaf_pointer =
                     NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value));
                 let new_leaf_pointer_opaque = new_leaf_pointer.to_opaque();
 
-                // prefix mismatch, need to split prefix into two separate nodes and take the
-                // common prefix into a new parent node
-                let prefix = &header.read_prefix();
-                let prefix = &prefix[..prefix.len().min(mismatch.matched_bytes)];
-                let mut new_n4 = InnerNode4::from_prefix(prefix, mismatch.matched_bytes);
+                let mut new_n4 = {
+                    // SAFETY: The lifetime of the header reference is bounded to this block and no
+                    // current mutation happens. Also, we know this is an inner node pointer because
+                    // of the specific insert case
+                    let header = unsafe { mismatched_inner_node_ptr.header_ref_unchecked() };
+
+                    // prefix mismatch, need to split prefix into two separate nodes and take the
+                    // common prefix into a new parent node
+                    let prefix = header.read_prefix();
+                    let prefix = &prefix[..prefix.len().min(mismatch.matched_bytes)];
+                    InnerNode4::from_prefix(prefix, mismatch.matched_bytes)
+                };
 
                 unsafe {
                     // SAFETY: This is a new node 4 so it's empty and we have
@@ -267,23 +335,52 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                         new_n4
                             .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
                         new_n4.write_child_unchecked(key_byte, new_leaf_pointer_opaque);
+
+                        // SAFETY: There are no concurrent modifications, the `apply` safety doc
+                        // covers this
+                        let previous_leaf_ptr = maximum_unchecked(mismatched_inner_node_ptr);
+
+                        // SAFETY: There is no concurrent modification of the new leaf node, the
+                        // existing leaf node, or its siblings because of the safety requirements of
+                        // the `apply` function.
+                        LeafNode::insert_after(new_leaf_pointer, previous_leaf_ptr);
                     } else {
                         new_n4.write_child_unchecked(key_byte, new_leaf_pointer_opaque);
                         new_n4
                             .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
+
+                        // SAFETY: There are no concurrent modifications, the `apply` safety doc
+                        // covers this
+                        let next_leaf_ptr = minimum_unchecked(mismatched_inner_node_ptr);
+
+                        // SAFETY: There is no concurrent modification of the new leaf node, the
+                        // existing leaf node, or its siblings because of the safety requirements of
+                        // the `apply` function.
+                        LeafNode::insert_before(new_leaf_pointer, next_leaf_ptr);
                     }
                 }
-                // In this case we trim the current prefix, by skipping the matched bytes + 1
-                // This + 1 is due to that one extra byte is used as key in the new node, so
-                // we also need to remove it from the prefix
-                let shrink_len = mismatch.matched_bytes + 1;
-                match mismatch.leaf_ptr {
-                    Some(leaf_ptr) => {
-                        header.ltrim_by_with_leaf(shrink_len, key_bytes_used, leaf_ptr)
-                    },
-                    None => {
-                        header.ltrim_by(shrink_len);
-                    },
+
+                {
+                    // Scope header mutation so that the mutable reference is held for the minimum
+                    // time required
+
+                    // SAFETY: We hold a mutable reference, so creating a mutable reference is safe.
+                    // We also know for certain that this is an inner node pointer, because of the
+                    // insert case we're in
+                    let header = unsafe { mismatched_inner_node_ptr.header_mut_unchecked() };
+
+                    // In this case we trim the current prefix, by skipping the matched bytes + 1
+                    // This + 1 is due to that one extra byte is used as key in the new node, so
+                    // we also need to remove it from the prefix
+                    let shrink_len = mismatch.matched_bytes + 1;
+                    match mismatch.leaf_ptr {
+                        Some(leaf_ptr) => {
+                            header.ltrim_by_with_leaf(shrink_len, key_bytes_used, leaf_ptr)
+                        },
+                        None => {
+                            header.ltrim_by(shrink_len);
+                        },
+                    }
                 }
 
                 (
@@ -293,9 +390,16 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
             },
             InsertSearchResultType::Exact { leaf_node_ptr } => {
                 let new_leaf_node = LeafNode::with_no_siblings(key, value);
+
                 // SAFETY: The leaf node will not be accessed concurrently because of the safety
                 // doc on the containing function
-                let old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, new_leaf_node) };
+                let mut old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, new_leaf_node) };
+
+                // SAFETY: There is no concurrent modification of the new leaf node, old leaf
+                // node, or its siblings because of the safety requirements of the `apply`
+                // function
+                unsafe { LeafNode::replace(leaf_node_ptr, &mut old_leaf_node) };
+
                 return InsertResult {
                     leaf_node_ptr,
                     existing_leaf: Some(old_leaf_node),
@@ -352,12 +456,22 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                             new_leaf_node_key_byte,
                             new_leaf_node_pointer.to_opaque(),
                         );
+
+                        // SAFETY: There is no concurrent modification of the new leaf node, the
+                        // existing leaf node, or its siblings because of the safety requirements of
+                        // the `apply` function.
+                        LeafNode::insert_after(new_leaf_node_pointer, leaf_node_ptr);
                     } else {
                         new_n4.write_child_unchecked(
                             new_leaf_node_key_byte,
                             new_leaf_node_pointer.to_opaque(),
                         );
                         new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
+
+                        // SAFETY: There is no concurrent modification of the new leaf node, the
+                        // existing leaf node, or its siblings because of the safety requirements of
+                        // the `apply` function.
+                        LeafNode::insert_before(new_leaf_node_pointer, leaf_node_ptr);
                     }
                 }
 
