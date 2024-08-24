@@ -65,6 +65,14 @@ impl<K, T, const PREFIX_LEN: usize, N: Node<PREFIX_LEN> + Visitable<K, T, PREFIX
     Visitable<K, T, PREFIX_LEN> for NodePtr<PREFIX_LEN, N>
 {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
+        // FIXME: This is broken in a couple ways:
+        //  1. The `read` function likely needs to be marked unsafe, since it does not
+        //     have any guarantees around concurrent reads or modification
+        //  2. The `Visitor`/`Visitable` trait methods likely all need to be marked
+        //     unsafe, since they are operating on the raw nodes of the tree. The
+        //     visitor implementations so far include "Safety" doc-comments requiring
+        //     read-only access, but it probably should be recorded in the function
+        //     signature
         let inner = self.read();
         inner.visit_with(visitor)
     }

@@ -1,8 +1,9 @@
 use crate::{
     nodes::visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
+    AsBytes, InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr, OptionalLeafPtr, TreeMap,
 };
 use std::{
+    cmp::Ordering,
     collections::{hash_map::Entry, HashMap},
     error::Error,
     fmt,
@@ -64,6 +65,34 @@ pub enum MalformedTreeError<K, V, const PREFIX_LEN: usize> {
     /// The length of the tree is not 0, even though the root is
     /// [`Option::None`]
     EmptyTreeWithLen,
+    /// There is a leaf node with a sibling pointer where the sibling has the
+    /// wrong key ordering with respect to the original leaf node.
+    LeafSiblingWrongOrder {
+        /// The key bytes of the sibling leaf node
+        sibling_key: Vec<u8>,
+        /// The key bytes of the leaf node that was out of order
+        leaf_key: Vec<u8>,
+        /// The expected ordering (either [`Ordering::Greater`] or
+        /// [`Ordering::Less`]) of the sibling and leaf keys.
+        expected_order: Ordering,
+        /// The actual ordering (either [`Ordering::Greater`] or
+        /// [`Ordering::Less`]) of the sibling and leaf keys.
+        actual_order: Ordering,
+    },
+    /// There is a leaf node which has incorrect values for either the
+    /// `previous` or `next` sibling pointers.
+    WrongSiblingLinks {
+        /// The key bytes of the broken leaf node
+        leaf_key: Vec<u8>,
+        /// The expected `previous` pointer value
+        expected_previous: OptionalLeafPtr<K, V, PREFIX_LEN>,
+        /// The expected `next` pointer value
+        expected_next: OptionalLeafPtr<K, V, PREFIX_LEN>,
+        /// The actual `previous` pointer value
+        actual_previous: OptionalLeafPtr<K, V, PREFIX_LEN>,
+        /// The actual `next` pointer value
+        actual_next: OptionalLeafPtr<K, V, PREFIX_LEN>,
+    },
 }
 
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for MalformedTreeError<K, V, PREFIX_LEN>
@@ -101,6 +130,32 @@ where
                 .field("entire_key", &entire_key.as_bytes() as &dyn fmt::Debug)
                 .finish(),
             Self::EmptyTreeWithLen => f.debug_struct("EmptyTreeWithLen").finish(),
+            Self::LeafSiblingWrongOrder {
+                sibling_key,
+                leaf_key,
+                expected_order,
+                actual_order,
+            } => f
+                .debug_struct("LeafSiblingWrongOrder")
+                .field("sibling_key", sibling_key)
+                .field("leaf_key", leaf_key)
+                .field("expected_order", expected_order)
+                .field("actual_order", actual_order)
+                .finish(),
+            Self::WrongSiblingLinks {
+                leaf_key,
+                expected_previous,
+                expected_next,
+                actual_previous,
+                actual_next,
+            } => f
+                .debug_struct("WrongSiblingLinks")
+                .field("leaf_key", leaf_key)
+                .field("expected_previous", expected_previous)
+                .field("expected_next", expected_next)
+                .field("actual_previous", actual_previous)
+                .field("actual_next", actual_next)
+                .finish(),
         }
     }
 }
@@ -153,6 +208,47 @@ where
                     "The length of the tree is not 0, even though the root is None",
                 )
             },
+            MalformedTreeError::LeafSiblingWrongOrder {
+                sibling_key,
+                leaf_key,
+                expected_order,
+                actual_order,
+            } => {
+                write!(
+                    f,
+                    "Found a leaf with key [{leaf_key:?}] and sibling with key [{sibling_key:?}] \
+                     that was expected to have [{expected_order:?}] but had [{actual_order:?}]"
+                )
+            },
+            MalformedTreeError::WrongSiblingLinks {
+                leaf_key,
+                expected_previous,
+                expected_next,
+                actual_previous,
+                actual_next,
+            } => {
+                if expected_previous != actual_previous && expected_next != actual_next {
+                    write!(
+                        f,
+                        "Found a leaf with key [{leaf_key:?}] where the previous pointer expected \
+                         to be [{expected_previous:?}] but was actually [{actual_previous:?}] and \
+                         the next pointer expected to be [{expected_next:?}] but was actually \
+                         [{actual_next:?}]."
+                    )
+                } else if expected_previous != actual_previous {
+                    write!(
+                        f,
+                        "Found a leaf with key [{leaf_key:?}] where the previous pointer expected \
+                         to be [{expected_previous:?}] but was actually [{actual_previous:?}]."
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Found a leaf with key [{leaf_key:?}] where the next pointer expected to \
+                         be [{expected_next:?}] but was actually [{actual_next:?}]."
+                    )
+                }
+            },
         }
     }
 }
@@ -186,6 +282,30 @@ impl<K: Clone, V, const PREFIX_LEN: usize> Clone for MalformedTreeError<K, V, PR
                 entire_key: entire_key.clone(),
             },
             Self::EmptyTreeWithLen => Self::EmptyTreeWithLen,
+            Self::LeafSiblingWrongOrder {
+                sibling_key,
+                leaf_key,
+                expected_order,
+                actual_order,
+            } => Self::LeafSiblingWrongOrder {
+                sibling_key: sibling_key.clone(),
+                leaf_key: leaf_key.clone(),
+                expected_order: *expected_order,
+                actual_order: *actual_order,
+            },
+            Self::WrongSiblingLinks {
+                leaf_key,
+                expected_previous,
+                expected_next,
+                actual_previous,
+                actual_next,
+            } => Self::WrongSiblingLinks {
+                leaf_key: leaf_key.clone(),
+                expected_previous: *expected_previous,
+                expected_next: *expected_next,
+                actual_previous: *actual_previous,
+                actual_next: *actual_next,
+            },
         }
     }
 }
@@ -200,6 +320,11 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Error for MalformedTreeError<K, V, 
 ///     node type. For example, InnerNode16 has between 5 and 16 children.
 ///  3. the elements of the key (as part of inner node prefixes and child
 ///     pointers) combine to match the leaf node key prefix
+///  4. the `previous` and `next` pointers that form a doubly-linked list of
+///     leaf nodes has no loops, and the ordering of the leaves in the list is
+///     equal to the ordering of the leaves when sorted by key. The linked list
+///     should also be properly terminated with `previous = None` at the start
+///     and `next = None` at the end.
 ///
 /// #1 and #3 are unlikely, but #2 is a possibility if specific tree operations
 /// are not implemented correctly. This visitor can be used to sanity check the
@@ -212,6 +337,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Error for MalformedTreeError<K, V, 
 pub struct WellFormedChecker<K, V, const PREFIX_LEN: usize> {
     current_key_prefix: Vec<u8>,
     seen_nodes: HashMap<OpaqueNodePtr<K, V, PREFIX_LEN>, KeyPrefix>,
+    seen_leaf_nodes: Vec<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>,
 }
 
 impl<K, V, const PREFIX_LEN: usize> WellFormedChecker<K, V, PREFIX_LEN>
@@ -256,12 +382,52 @@ where
         let mut visitor = WellFormedChecker {
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
+            seen_leaf_nodes: vec![],
         };
 
         // We see the root node at the empty prefix
         visitor.seen_nodes.insert(tree, KeyPrefix::default());
+        if let Some(leaf_ptr) = tree.cast::<LeafNode<K, V, PREFIX_LEN>>() {
+            visitor.seen_leaf_nodes.push(leaf_ptr);
+        }
 
-        tree.visit_with(&mut visitor)
+        let stats = tree.visit_with(&mut visitor)?;
+
+        debug_assert_eq!(stats.num_leaf, visitor.seen_leaf_nodes.len());
+
+        visitor.verify_leaves_linked_list()?;
+
+        Ok(stats)
+    }
+
+    fn verify_leaves_linked_list(&self) -> Result<(), MalformedTreeError<K, V, PREFIX_LEN>> {
+        for (idx, leaf_ptr) in self.seen_leaf_nodes.iter().enumerate() {
+            let leaf = leaf_ptr.read();
+
+            let expected_previous = if idx == 0 {
+                None
+            } else {
+                Some(self.seen_leaf_nodes[idx - 1])
+            };
+
+            let expected_next = if idx == self.seen_leaf_nodes.len() - 1 {
+                None
+            } else {
+                Some(self.seen_leaf_nodes[idx + 1])
+            };
+
+            if leaf.previous != expected_previous || leaf.next != expected_next {
+                return Err(MalformedTreeError::WrongSiblingLinks {
+                    leaf_key: leaf.key_ref().as_bytes().to_vec(),
+                    expected_previous,
+                    expected_next,
+                    actual_previous: leaf.previous,
+                    actual_next: leaf.next,
+                });
+            }
+        }
+
+        Ok(())
     }
 
     fn visit_inner_node<N>(
@@ -303,6 +469,10 @@ where
                 Entry::Vacant(entry) => {
                     entry.insert(current_key_prefix);
                 },
+            }
+
+            if let Some(leaf_node_ptr) = child_pointer.cast::<LeafNode<K, V, PREFIX_LEN>>() {
+                self.seen_leaf_nodes.push(leaf_node_ptr);
             }
 
             running_node_count += child_pointer.visit_with(self)?;
@@ -411,6 +581,32 @@ where
                 expected_prefix: current_key_prefix,
                 entire_key: t.key_ref().as_bytes().to_vec(),
             });
+        }
+
+        if let Some(sibling_ptr) = t.previous {
+            let sibling = sibling_ptr.read();
+            let sibling_order = sibling.key_ref().as_bytes().cmp(t.key_ref().as_bytes());
+            if sibling_order != Ordering::Less {
+                return Err(MalformedTreeError::LeafSiblingWrongOrder {
+                    sibling_key: sibling.key_ref().as_bytes().to_vec(),
+                    leaf_key: t.key_ref().as_bytes().to_vec(),
+                    expected_order: Ordering::Less,
+                    actual_order: sibling_order,
+                });
+            }
+        }
+
+        if let Some(sibling_ptr) = t.next {
+            let sibling = sibling_ptr.read();
+            let sibling_order = sibling.key_ref().as_bytes().cmp(t.key_ref().as_bytes());
+            if sibling_order != Ordering::Greater {
+                return Err(MalformedTreeError::LeafSiblingWrongOrder {
+                    sibling_key: sibling.key_ref().as_bytes().to_vec(),
+                    leaf_key: t.key_ref().as_bytes().to_vec(),
+                    expected_order: Ordering::Greater,
+                    actual_order: sibling_order,
+                });
+            }
         }
 
         Ok(WellFormedTreeStats {
