@@ -6,9 +6,10 @@ use crate::{
 
 #[test]
 fn leaf_tree_min_max_same() {
-    let root: OpaqueNodePtr<Box<[i32; 4]>, String, 16> =
-        NodePtr::allocate_node_ptr(LeafNode::new(Box::new([1, 2, 3, 4]), "1234".to_string()))
-            .to_opaque();
+    let root: OpaqueNodePtr<Box<[i32; 4]>, String, 16> = NodePtr::allocate_node_ptr(
+        LeafNode::with_no_siblings(Box::new([1, 2, 3, 4]), "1234".to_string()),
+    )
+    .to_opaque();
 
     let min_leaf = unsafe { minimum_unchecked(root) };
     let max_leaf = unsafe { maximum_unchecked(root) };
@@ -27,7 +28,7 @@ fn large_tree_same_length_keys_min_max() {
 
     let mut keys = generate_key_fixed_length([VALUE_STOPS; 3]);
     let mut root: OpaqueNodePtr<_, usize, 16> =
-        NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
+        NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };
@@ -55,7 +56,7 @@ fn skewed_tree_min_max() {
     let mut keys = generate_keys_skewed(12);
 
     let mut root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
-        NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
+        NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
         root = unsafe { insert_unchecked(root, key, idx + 1).unwrap().new_root };

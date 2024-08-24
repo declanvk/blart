@@ -1,14 +1,17 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    InnerNode, NodeType, OpaqueNodePtr, TreeMap,
+    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
 };
 use std::{
-    fmt::{Debug, Display},
+    borrow::Borrow,
+    fmt::{self, Debug, Display},
     io::{self, Write},
+    ops::Deref,
 };
 
 /// Settings which customize the output of the [`DotPrinter`] visitor.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DotPrinterSettings {
     /// Add node address to output in graphs
     pub display_node_address: bool,
@@ -47,7 +50,7 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    unsafe fn print_tree<K, V, const PREFIX_LEN: usize>(
+    pub(crate) unsafe fn print_tree<K, V, const PREFIX_LEN: usize>(
         output: O,
         tree: &OpaqueNodePtr<K, V, PREFIX_LEN>,
         settings: DotPrinterSettings,
@@ -182,11 +185,14 @@ where
         if self.settings.display_node_address {
             writeln!(
                 self.output,
-                "{{<h0> {:p}}} | {{{:?}}} | {{{}}} | {{{}}}}}\"]",
+                "{{<h0> {:p}}} | {{{:?}}} | {{{}}} | {{{}}} | {{{:p} {:p}}} }}\"]",
                 t as *const _,
                 NodeType::Leaf,
                 t.key_ref(),
-                t.value_ref()
+                t.value_ref(),
+                t.previous
+                    .map_or(std::ptr::null_mut(), |prev| prev.to_ptr()),
+                t.next.map_or(std::ptr::null_mut(), |next| next.to_ptr()),
             )?;
         } else {
             writeln!(
@@ -199,6 +205,57 @@ where
         }
 
         Ok(node_id)
+    }
+}
+
+/// This struct is intended to wrap a type which implements [`Debug`] and expose
+/// it as an implementation of [`Display`].
+///
+/// This is helpful when working with [`TreeMap`] key types which don't directly
+/// implement [`Display`], but you still want to print the tree using
+/// [`DotPrinter`].
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DebugAsDisplay<T>(T);
+
+impl<T> Deref for DebugAsDisplay<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: AsBytes> AsBytes for DebugAsDisplay<T> {
+    fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl<T> Borrow<T> for DebugAsDisplay<T> {
+    fn borrow(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> DebugAsDisplay<T> {
+    /// Consume this struct and return the inner value.
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T> From<T> for DebugAsDisplay<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T> fmt::Display for DebugAsDisplay<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        <T as fmt::Debug>::fmt(&self.0, f)
     }
 }
 

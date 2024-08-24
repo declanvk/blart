@@ -288,7 +288,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
     }
 }
 
-/// TODO
+/// This struct is an iterator over the children of a [`InnerNode256`].
 #[cfg(not(feature = "nightly"))]
 pub struct Node256Iter<'a, K, V, const PREFIX_LEN: usize> {
     pub(crate) it: Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>>,
@@ -342,9 +342,9 @@ mod tests {
     #[test]
     fn lookup() {
         let mut n = InnerNode256::<Box<[u8]>, (), 16>::empty();
-        let mut l1 = LeafNode::new(Box::from([]), ());
-        let mut l2 = LeafNode::new(Box::from([]), ());
-        let mut l3 = LeafNode::new(Box::from([]), ());
+        let mut l1 = LeafNode::with_no_siblings(Box::from([]), ());
+        let mut l2 = LeafNode::with_no_siblings(Box::from([]), ());
+        let mut l3 = LeafNode::with_no_siblings(Box::from([]), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
@@ -394,10 +394,10 @@ mod tests {
 
     fn fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, (), 16>, 4> {
         let mut n256 = InnerNode256::empty();
-        let mut l1 = LeafNode::new(vec![].into(), ());
-        let mut l2 = LeafNode::new(vec![].into(), ());
-        let mut l3 = LeafNode::new(vec![].into(), ());
-        let mut l4 = LeafNode::new(vec![].into(), ());
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l4 = LeafNode::with_no_siblings(vec![].into(), ());
         let l1_ptr = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();

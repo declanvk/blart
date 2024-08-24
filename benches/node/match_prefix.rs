@@ -2,7 +2,7 @@ use blart::{InnerNode, InnerNode256, InnerNode48, LeafNode, NodePtr};
 use criterion::{criterion_group, Criterion};
 
 fn bench(c: &mut Criterion) {
-    let leaf = LeafNode::new(
+    let leaf = LeafNode::with_no_siblings(
         vec![
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0,

@@ -425,9 +425,9 @@ mod tests {
         // have to allocate in this one because miri didn't like us using `&mut _` to
         // make loops
 
-        let l1 = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let l2 = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let l3 = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let l1 = LeafNode::with_no_siblings(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let l2 = LeafNode::with_no_siblings(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let l3 = LeafNode::with_no_siblings(Box::new([1, 2, 4, 7, 8, 3]), 124783);
 
         let l1_ptr: NodePtr<16, LeafNode<Box<[u8; 6]>, i32, 16>> = NodePtr::allocate_node_ptr(l1);
         let l2_ptr = NodePtr::allocate_node_ptr(l2);
@@ -506,10 +506,10 @@ mod tests {
 
     #[test]
     fn check_tree_with_wrong_child_count() {
-        let mut l1 = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let mut l2 = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let mut l3 = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
-        let mut l4 = LeafNode::new(Box::new([1, 2, 4, 7, 8, 4]), 124784);
+        let mut l1 = LeafNode::with_no_siblings(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let mut l2 = LeafNode::with_no_siblings(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let mut l3 = LeafNode::with_no_siblings(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let mut l4 = LeafNode::with_no_siblings(Box::new([1, 2, 4, 7, 8, 4]), 124784);
 
         let l1_ptr: OpaqueNodePtr<Box<[u8; 6]>, i32, 16> = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
@@ -555,10 +555,10 @@ mod tests {
 
     #[test]
     fn check_tree_with_mismatched_key_prefix() {
-        let mut l1 = LeafNode::new(Box::new([1, 2, 3, 5, 6, 1]), 123561);
-        let mut l2 = LeafNode::new(Box::new([1, 2, 3, 5, 6, 2]), 123562);
-        let mut l3 = LeafNode::new(Box::new([1, 2, 4, 7, 8, 3]), 124783);
-        let mut l4 = LeafNode::new(Box::new([255, 255, 255, 255, 255, 255]), 124784);
+        let mut l1 = LeafNode::with_no_siblings(Box::new([1, 2, 3, 5, 6, 1]), 123561);
+        let mut l2 = LeafNode::with_no_siblings(Box::new([1, 2, 3, 5, 6, 2]), 123562);
+        let mut l3 = LeafNode::with_no_siblings(Box::new([1, 2, 4, 7, 8, 3]), 124783);
+        let mut l4 = LeafNode::with_no_siblings(Box::new([255, 255, 255, 255, 255, 255]), 124784);
 
         let l1_ptr: OpaqueNodePtr<Box<[u8; 6]>, i32, 16> = NodePtr::from(&mut l1).to_opaque();
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();

@@ -1,5 +1,5 @@
 use crate::{
-    AsBytes, ConcreteNodePtr, InnerNode, LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr,
+    AsBytes, ConcreteNodePtr, InnerNode, MatchPrefixResult, NodePtr, OpaqueNodePtr, OptionalLeafPtr,
 };
 
 /// Search in the given tree for the value stored with the given key.
@@ -11,7 +11,7 @@ use crate::{
 pub unsafe fn search_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
-) -> Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>
+) -> OptionalLeafPtr<K, V, PREFIX_LEN>
 where
     K: AsBytes,
 {

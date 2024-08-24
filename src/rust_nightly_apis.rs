@@ -181,6 +181,7 @@ pub fn box_new_uninit_slice<T>(len: usize) -> Box<[std::mem::MaybeUninit<T>]> {
 /// **This is a unstable API copied from the Rust standard library**
 macro_rules! assume {
     ($b:expr) => {
+        debug_assert!($b);
         #[cfg(feature = "nightly")]
         std::intrinsics::assume($b)
     };

@@ -528,7 +528,8 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     }
 
     fn init_tree(&mut self, key: K, value: V) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
-        let leaf = NodePtr::allocate_node_ptr(LeafNode::new(key, value));
+        // Since this is a singleton tree, the single leaf node has no siblings
+        let leaf = NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value));
         self.root = Some(leaf.to_opaque());
         self.num_entries = 1;
         leaf
@@ -543,7 +544,9 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     where
         K: AsBytes,
     {
-        let insert_result = insert_point.apply(key, value);
+        // SAFETY: This call is safe because we have a mutable reference on the tree, so
+        // no other operation can be concurrent with this one.
+        let insert_result = unsafe { insert_point.apply(key, value) };
 
         self.root = Some(insert_result.new_root);
 
@@ -561,8 +564,10 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         delete_point: DeletePoint<K, V, PREFIX_LEN>,
     ) -> DeleteResult<K, V, PREFIX_LEN> {
         // SAFETY: The root is sure to not be `None`, since the we somehow got a
-        // `DeletePoint`. So the caller must have checked this
-        let delete_result = delete_point.apply(unsafe { self.root.unwrap_unchecked() });
+        // `DeletePoint`. So the caller must have checked this. Also, since we have a
+        // mutable reference to the tree, no other read or write operation can be
+        // happening concurrently.
+        let delete_result = unsafe { delete_point.apply(self.root.unwrap_unchecked()) };
 
         self.root = delete_result.new_root;
 
@@ -639,8 +644,10 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
-            let insert_result = self.apply_insert_point(insert_point, key, value);
+            let insert_result = unsafe {
+                let insert_point = search_for_insert_point(root, key.as_bytes())?;
+                self.apply_insert_point(insert_point, key, value)
+            };
             Ok(insert_result.existing_leaf.map(|leaf| leaf.into_entry().1))
         } else {
             self.init_tree(key, value);

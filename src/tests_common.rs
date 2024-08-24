@@ -320,7 +320,7 @@ where
     use crate::search_for_insert_point;
 
     let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
-    Ok(insert_point.apply(key, value))
+    Ok(unsafe { insert_point.apply(key, value) })
 }
 
 #[allow(dead_code)]
@@ -335,7 +335,7 @@ where
     let (first_key, first_value) = entries_it.next().unwrap();
 
     let mut current_root =
-        NodePtr::allocate_node_ptr(LeafNode::new(first_key, first_value)).to_opaque();
+        NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(first_key, first_value)).to_opaque();
 
     for (key, value) in entries_it {
         current_root = unsafe { insert_unchecked(current_root, key, value).unwrap().new_root };
