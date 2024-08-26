@@ -15,7 +15,12 @@ macro_rules! gen_iter {
             /// given node.
             pub(crate) fn new(tree: $tree) -> Self {
                 Self {
-                    nodes: tree.root.into_iter().collect(),
+                    nodes: tree
+                        .state
+                        .as_ref()
+                        .map(|state| state.root)
+                        .into_iter()
+                        .collect(),
                     size: tree.num_entries,
                     _tree: tree,
                 }

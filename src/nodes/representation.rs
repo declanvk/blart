@@ -809,11 +809,11 @@ pub struct LeafNode<K, V, const PREFIX_LEN: usize> {
 
     /// Pointer to the previous leaf node in the trie. If the value is `None`,
     /// then this is the first leaf.
-    pub(super) previous: OptionalLeafPtr<K, V, PREFIX_LEN>,
+    pub(crate) previous: OptionalLeafPtr<K, V, PREFIX_LEN>,
 
     /// Pointer to the next leaf node in the trie. If the value is `None`,
     /// then this is the last leaf.
-    pub(super) next: OptionalLeafPtr<K, V, PREFIX_LEN>,
+    pub(crate) next: OptionalLeafPtr<K, V, PREFIX_LEN>,
 }
 
 impl<K: Clone, V: Clone, const PREFIX_LEN: usize> Clone for LeafNode<K, V, PREFIX_LEN> {
@@ -1040,8 +1040,9 @@ impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
             sibling.previous = this.previous;
         }
 
-        this.next = None;
-        this.previous = None;
+        // Normally this is where I would reset the `previous`/`next` pointers
+        // to `None`, but it is useful in the delete case to keep this
+        // information around.
     }
 }
 

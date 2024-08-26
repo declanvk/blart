@@ -18,46 +18,17 @@ impl TreeStatsCollector {
     pub fn collect<K: AsBytes, V, const PREFIX_LEN: usize>(
         tree: &TreeMap<K, V, PREFIX_LEN>,
     ) -> Option<TreeStats> {
-        if let Some(root) = tree.root {
+        if let Some(state) = &tree.state {
             let mut collector = TreeStatsCollector {
                 current: TreeStats::default(),
             };
 
-            root.visit_with(&mut collector);
+            state.root.visit_with(&mut collector);
 
             Some(collector.current)
         } else {
             None
         }
-    }
-
-    /// Iterate through the given tree and return the number of leaf nodes.
-    pub fn count_leaf_nodes<K, V, const PREFIX_LEN: usize>(
-        tree: &TreeMap<K, V, PREFIX_LEN>,
-    ) -> usize {
-        struct LeafNodeCounter;
-
-        impl<K, V, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN> for LeafNodeCounter {
-            type Output = usize;
-
-            fn default_output(&self) -> Self::Output {
-                0
-            }
-
-            fn combine_output(&self, o1: Self::Output, o2: Self::Output) -> Self::Output {
-                o1 + o2
-            }
-
-            fn visit_leaf(&mut self, _t: &crate::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
-                1
-            }
-        }
-
-        let mut counter = LeafNodeCounter;
-
-        tree.root
-            .map(|root| root.visit_with(&mut counter))
-            .unwrap_or(0)
     }
 }
 
