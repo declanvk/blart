@@ -38,10 +38,10 @@ impl<O: Write> DotPrinter<O> {
         K: Display,
         V: Display,
     {
-        tree.root.map(|root| {
+        tree.state.as_ref().map(|state| {
             // SAFETY: Since we get a reference to the `TreeMap`, we know the
             // node and all descendants will not be mutated
-            unsafe { Self::print_tree(output, &root, settings) }
+            unsafe { Self::print_tree(output, &state.root, settings) }
         })
     }
 

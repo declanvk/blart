@@ -352,11 +352,12 @@ where
     pub fn check(
         tree: &TreeMap<K, V, PREFIX_LEN>,
     ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
-        tree.root
-            .map(|root| {
+        tree.state
+            .as_ref()
+            .map(|state| {
                 // SAFETY: Since we get a reference to the TreeMap, we know no
                 // mutation can happen to any of the nodes
-                unsafe { Self::check_tree(root) }
+                unsafe { Self::check_tree(state.root) }
             })
             .unwrap_or_else(|| {
                 if tree.is_empty() {

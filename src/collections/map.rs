@@ -25,7 +25,13 @@ pub struct TreeMap<K, V, const PREFIX_LEN: usize = 16> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
-    pub(crate) root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
+    pub(crate) state: Option<NonEmptyTree<K, V, PREFIX_LEN>>,
+}
+
+pub(crate) struct NonEmptyTree<K, V, const PREFIX_LEN: usize> {
+    pub(crate) root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    min_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+    max_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 }
 
 impl<K, V> TreeMap<K, V> {
@@ -65,7 +71,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     pub fn with_prefix_len() -> Self {
         TreeMap {
             num_entries: 0,
-            root: None,
+            state: None,
         }
     }
 
@@ -86,16 +92,16 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert!(map.get([1, 2, 3].as_ref()).is_none());
     /// ```
     pub fn clear(&mut self) {
-        if let Some(root) = self.root {
+        if let Some(state) = &mut self.state {
             // SAFETY: Since we have a mutable reference to the map, we know that there are
             // no other mutable references to any node in the tree, meaning we can
             // deallocate all of them.
             unsafe {
-                deallocate_tree(root);
+                deallocate_tree(state.root);
             }
 
             self.num_entries = 0;
-            self.root = None;
+            self.state = None;
         }
     }
 
@@ -121,7 +127,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         // Since the `root` field is `Copy`, it can be moved out of the tree without
         // inhibiting `Drop`
         let tree = ManuallyDrop::new(tree);
-        tree.root
+        tree.state.as_ref().map(|state| state.root)
     }
 
     /// Constructs a [`TreeMap`] from a raw node pointer.
@@ -168,8 +174,16 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
                 // `root` pointer, which means we won't have any other mutations
                 let stats = unsafe { WellFormedChecker::check_tree(root)? };
 
+                let (min_leaf, max_leaf) =
+                    // SAFETY: TODO
+                    unsafe { (minimum_unchecked(root), maximum_unchecked(root)) };
+
                 Ok(Self {
-                    root: Some(root),
+                    state: Some(NonEmptyTree {
+                        root,
+                        min_leaf,
+                        max_leaf,
+                    }),
                     num_entries: stats.num_leaf,
                 })
             },
@@ -214,12 +228,12 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
     {
-        if let Some(root) = self.root {
+        if let Some(state) = &self.state {
             // SAFETY: Since we have an immutable reference to the `TreeMap` object, that
             // means there can only exist other immutable references aside from this one,
             // and no mutable references. That means that no mutating operations can occur
             // on the root node or any child of the root node.
-            let search_result = unsafe { search_unchecked(root, key.as_bytes())? };
+            let search_result = unsafe { search_unchecked(state.root, key.as_bytes())? };
 
             // SAFETY: The lifetime chosen the value reference is bounded by the lifetime of
             // the immutable reference to the `TreeMap`. The memory of the value will not be
@@ -272,12 +286,12 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
     {
-        if let Some(root) = self.root {
+        if let Some(state) = &self.state {
             // SAFETY: Since we have a mutable reference to the `TreeMap` object, that
             // means there cannot exist any other reference (mutable or immutable) to the
             // same `TreeMap`. Which means that no other mutating operations could be
             // happening during the `search_unchecked` call.
-            let search_result = unsafe { search_unchecked(root, key.as_bytes())? };
+            let search_result = unsafe { search_unchecked(state.root, key.as_bytes())? };
 
             // SAFETY: The lifetime chosen the value reference is bounded by the lifetime of
             // the mutable reference to the `TreeMap`. The value pointed to by the returned
@@ -491,18 +505,12 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(map.first_key_value().unwrap(), (&[1, 2, 3].into(), &'a'));
     /// ```
     pub fn first_key_value(&self) -> Option<(&K, &V)> {
-        if let Some(root) = self.root {
-            // SAFETY: Since we have an immutable reference to the `TreeMap` object, that
-            // means there can only exist other immutable references aside from this one,
-            // and no mutable references. That means that no mutating operations can occur
-            // on the root node or any child of the root node.
-            let minimum = unsafe { minimum_unchecked(root) };
-
+        if let Some(state) = &self.state {
             // SAFETY: The lifetime chosen the value reference is bounded by the lifetime of
             // the immutable reference to the `TreeMap`. The memory of the value will not be
             // mutated since it is only owned by the `TreeMap` and there can only be other
             // immutable references at this time (no mutable references to the `TreeMap`).
-            let leaf_node_ref = unsafe { minimum.as_ref() };
+            let leaf_node_ref = unsafe { state.min_leaf.as_ref() };
 
             Some(leaf_node_ref.entry_ref())
         } else {
@@ -527,12 +535,12 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(map.pop_first().unwrap(), (Box::from([1, 2, 3]), 'a'));
     /// ```
     pub fn pop_first(&mut self) -> Option<(K, V)> {
-        if let Some(root) = self.root {
+        if let Some(state) = &self.state {
             // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let delete_point = unsafe { find_minimum_to_delete(root) };
+            let delete_point = unsafe { find_minimum_to_delete(state.root) };
             let delete_result = self.apply_delete_point(delete_point);
             Some(delete_result.deleted_leaf.into_entry())
         } else {
@@ -558,18 +566,12 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(map.last_key_value().unwrap(), (&Box::from([2, 3, 4]), &'b'));
     /// ```
     pub fn last_key_value(&self) -> Option<(&K, &V)> {
-        if let Some(root) = self.root {
-            // SAFETY: Since we have an immutable reference to the `TreeMap` object, that
-            // means there can only exist other immutable references aside from this one,
-            // and no mutable references. That means that no mutating operations can occur
-            // on the root node or any child of the root node.
-            let maximum = unsafe { maximum_unchecked(root) };
-
+        if let Some(state) = &self.state {
             // SAFETY: The lifetime chosen the value reference is bounded by the lifetime of
             // the immutable reference to the `TreeMap`. The memory of the value will not be
             // mutated since it is only owned by the `TreeMap` and there can only be other
             // immutable references at this time (no mutable references to the `TreeMap`).
-            let leaf_node_ref = unsafe { maximum.as_ref() };
+            let leaf_node_ref = unsafe { state.max_leaf.as_ref() };
 
             Some(leaf_node_ref.entry_ref())
         } else {
@@ -595,12 +597,12 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(map.pop_last().unwrap(), (Box::from([2, 3, 4]), 'b'));
     /// ```
     pub fn pop_last(&mut self) -> Option<(K, V)> {
-        if let Some(root) = self.root {
+        if let Some(state) = &self.state {
             // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let delete_point = unsafe { find_maximum_to_delete(root) };
+            let delete_point = unsafe { find_maximum_to_delete(state.root) };
             let delete_result = self.apply_delete_point(delete_point);
             Some(delete_result.deleted_leaf.into_entry())
         } else {
@@ -611,7 +613,12 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     fn init_tree(&mut self, key: K, value: V) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
         // Since this is a singleton tree, the single leaf node has no siblings
         let leaf = NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value));
-        self.root = Some(leaf.to_opaque());
+        let state = NonEmptyTree {
+            root: leaf.to_opaque(),
+            min_leaf: leaf,
+            max_leaf: leaf,
+        };
+        self.state = Some(state);
         self.num_entries = 1;
         leaf
     }
@@ -629,7 +636,30 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         // no other operation can be concurrent with this one.
         let insert_result = unsafe { insert_point.apply(key, value) };
 
-        self.root = Some(insert_result.new_root);
+        match &mut self.state {
+            Some(state) => {
+                state.root = insert_result.new_root;
+
+                {
+                    // SAFETY: TODO
+                    let new_leaf = unsafe { insert_result.leaf_node_ptr.as_ref() };
+                    if new_leaf.previous.is_none() {
+                        state.min_leaf = insert_result.leaf_node_ptr;
+                    }
+
+                    if new_leaf.next.is_none() {
+                        state.max_leaf = insert_result.leaf_node_ptr;
+                    }
+                }
+            },
+            None => {
+                self.state = Some(NonEmptyTree {
+                    root: insert_result.new_root,
+                    min_leaf: insert_result.leaf_node_ptr,
+                    max_leaf: insert_result.leaf_node_ptr,
+                })
+            },
+        }
 
         if insert_result.existing_leaf.is_none() {
             // this was a strict add, not a replace. If there was an existing leaf we are
@@ -648,9 +678,31 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         // `DeletePoint`. So the caller must have checked this. Also, since we have a
         // mutable reference to the tree, no other read or write operation can be
         // happening concurrently.
-        let delete_result = unsafe { delete_point.apply(self.root.unwrap_unchecked()) };
+        let delete_result =
+            unsafe { delete_point.apply(self.state.as_ref().unwrap_unchecked().root) };
 
-        self.root = delete_result.new_root;
+        match &mut self.state {
+            Some(state) => {
+                if let Some(new_root) = delete_result.new_root {
+                    state.root = new_root;
+
+                    if delete_result.deleted_leaf.previous.is_none() {
+                        state.min_leaf = delete_result.deleted_leaf.next.expect(
+                            "this should be Some since this is the non-singleton delete case",
+                        );
+                    }
+
+                    if delete_result.deleted_leaf.next.is_none() {
+                        state.max_leaf = delete_result.deleted_leaf.previous.expect(
+                            "this should be Some since this is the non-singleton delete case",
+                        );
+                    }
+                } else {
+                    self.state = None;
+                }
+            },
+            None => unreachable!("a successful deletion requires a non-empty tree"),
+        }
 
         self.num_entries -= 1;
 
@@ -720,13 +772,13 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     where
         K: AsBytes,
     {
-        if let Some(root) = self.root {
+        if let Some(state) = &self.state {
             // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
             let insert_result = unsafe {
-                let insert_point = search_for_insert_point(root, key.as_bytes())?;
+                let insert_point = search_for_insert_point(state.root, key.as_bytes())?;
                 self.apply_insert_point(insert_point, key, value)
             };
             Ok(insert_result.existing_leaf.map(|leaf| leaf.into_entry().1))
@@ -756,12 +808,12 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
     {
-        if let Some(root) = self.root {
+        if let Some(state) = &self.state {
             // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let delete_point = unsafe { search_for_delete_point(root, key.as_bytes())? };
+            let delete_point = unsafe { search_for_delete_point(state.root, key.as_bytes())? };
             let delete_result = self.apply_delete_point(delete_point);
             Some(delete_result.deleted_leaf.into_entry())
         } else {
@@ -1355,13 +1407,13 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     where
         K: AsBytes,
     {
-        let entry = match self.root {
-            Some(root) => {
+        let entry = match &self.state {
+            Some(state) => {
                 // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
                 // that there are no other references (mutable or immutable) to this same
                 // object. Meaning that our access to the root node is unique and there are no
                 // other accesses to any node in the tree.
-                let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
+                let insert_point = unsafe { search_for_insert_point(state.root, key.as_bytes())? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
                         map: self,
@@ -1396,13 +1448,13 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         K: AsBytes + Borrow<Q> + From<&'b Q>,
         Q: AsBytes + ?Sized,
     {
-        let entry = match self.root {
-            Some(root) => {
+        let entry = match &self.state {
+            Some(state) => {
                 // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
                 // that there are no other references (mutable or immutable) to this same
                 // object. Meaning that our access to the root node is unique and there are no
                 // other accesses to any node in the tree.
-                let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
+                let insert_point = unsafe { search_for_insert_point(state.root, key.as_bytes())? };
                 match insert_point.insert_type {
                     Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
                         map: self,
@@ -1461,14 +1513,12 @@ where
     V: Clone,
 {
     fn clone(&self) -> Self {
-        if let Some(root) = self.root {
-            Self {
-                root: Some(root.deep_clone()),
-                num_entries: self.num_entries,
-            }
-        } else {
-            Self::with_prefix_len()
+        let mut tree = TreeMap::with_prefix_len();
+        for (key, value) in self.iter() {
+            tree.try_insert(key.clone(), value.clone())
+                .expect("key is already present in a TreeMap, this should not fail");
         }
+        tree
     }
 }
 

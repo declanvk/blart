@@ -81,7 +81,13 @@ macro_rules! gen_iter {
             /// given node.
             pub(crate) fn new(tree: $tree, prefix: &'b [u8]) -> Self {
                 Self {
-                    nodes: tree.root.into_iter().map(|r| (r, 0)).collect(),
+                    nodes: tree
+                        .state
+                        .as_ref()
+                        .map(|state| state.root)
+                        .into_iter()
+                        .map(|r| (r, 0))
+                        .collect(),
                     size: tree.num_entries,
                     prefix,
                     _tree: tree,

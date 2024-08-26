@@ -331,7 +331,12 @@ macro_rules! gen_iter {
                 }
 
                 Self {
-                    nodes_to_search: tree.root.into_iter().collect(),
+                    nodes_to_search: tree
+                        .state
+                        .as_ref()
+                        .map(|state| state.root)
+                        .into_iter()
+                        .collect(),
                     old_row: box_new_uninit_slice(arena.size()),
                     new_row: box_new_uninit_slice(arena.size()),
                     arena,

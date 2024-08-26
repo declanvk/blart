@@ -21,7 +21,7 @@ pub struct InsertResult<'a, K, V, const PREFIX_LEN: usize> {
     /// The new tree root after the successful insert
     pub new_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 
-    pub marker: PhantomData<(&'a mut K, &'a V)>,
+    marker: PhantomData<(&'a mut K, &'a V)>,
 }
 
 /// Attempted to insert a key which was a prefix of an existing key in
