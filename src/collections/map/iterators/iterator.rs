@@ -1,11 +1,12 @@
-use crate::{ConcreteNodePtr, InnerNode, NodePtr, OpaqueNodePtr, TreeMap};
-use std::{collections::VecDeque, iter::FusedIterator};
+use std::iter::FusedIterator;
+
+use crate::{RawIterator, TreeMap};
 
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s
         pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
-            nodes: VecDeque<OpaqueNodePtr<K, V, PREFIX_LEN>>,
+            inner: RawIterator<K, V, PREFIX_LEN>,
             size: usize,
             _tree: $tree,
         }
@@ -14,45 +15,18 @@ macro_rules! gen_iter {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
             pub(crate) fn new(tree: $tree) -> Self {
+                let inner = match &tree.state {
+                    // SAFETY: `min_leaf` is before or equal to `max_leaf` by construction and
+                    // maintained on insert and delete from the tree
+                    Some(state) => unsafe { RawIterator::new(state.min_leaf, state.max_leaf) },
+                    None => RawIterator::empty(),
+                };
+
                 Self {
-                    nodes: tree
-                        .state
-                        .as_ref()
-                        .map(|state| state.root)
-                        .into_iter()
-                        .collect(),
+                    inner,
                     size: tree.num_entries,
                     _tree: tree,
                 }
-            }
-
-            fn push_back_rev_iter<N>(&mut self, inner: NodePtr<PREFIX_LEN, N>)
-            where
-                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-            {
-                // SAFETY: Since `Self` holds a mutable/shared reference
-                // is safe to create a shared reference from it
-                unsafe {
-                    inner
-                        .as_ref()
-                        .iter()
-                        .rev()
-                        .for_each(|(_, n)| self.nodes.push_back(n))
-                };
-            }
-
-            fn push_front<N>(&mut self, inner: NodePtr<PREFIX_LEN, N>)
-            where
-                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-            {
-                // SAFETY: Since `Self` holds a mutable/shared reference
-                // is safe to create a shared reference from it
-                unsafe {
-                    inner
-                        .as_ref()
-                        .iter()
-                        .for_each(|(_, n)| self.nodes.push_front(n))
-                };
             }
         }
 
@@ -60,20 +34,14 @@ macro_rules! gen_iter {
             type Item = $ret;
 
             fn next(&mut self) -> Option<Self::Item> {
-                while let Some(node) = self.nodes.pop_back() {
-                    match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner) => self.push_back_rev_iter(inner),
-                        ConcreteNodePtr::Node16(inner) => self.push_back_rev_iter(inner),
-                        ConcreteNodePtr::Node48(inner) => self.push_back_rev_iter(inner),
-                        ConcreteNodePtr::Node256(inner) => self.push_back_rev_iter(inner),
-                        ConcreteNodePtr::LeafNode(inner) => {
-                            self.size -= 1;
-                            return unsafe { Some(inner.$op()) };
-                        },
-                    }
+                // SAFETY: This iterator has either a mutable or shared reference to the
+                if let Some(next) = unsafe { self.inner.next() } {
+                    self.size -= 1;
+                    // `TreeMap`, so we know there will be no concurrent modification.
+                    unsafe { Some(next.$op()) }
+                } else {
+                    None
                 }
-
-                None
             }
 
             fn size_hint(&self) -> (usize, Option<usize>) {
@@ -92,20 +60,16 @@ macro_rules! gen_iter {
             for $name<'a, K, V, PREFIX_LEN>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
-                while let Some(node) = self.nodes.pop_front() {
-                    match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner) => self.push_front(inner),
-                        ConcreteNodePtr::Node16(inner) => self.push_front(inner),
-                        ConcreteNodePtr::Node48(inner) => self.push_front(inner),
-                        ConcreteNodePtr::Node256(inner) => self.push_front(inner),
-                        ConcreteNodePtr::LeafNode(inner) => {
-                            self.size -= 1;
-                            return unsafe { Some(inner.$op()) };
-                        },
-                    }
+                // SAFETY: This iterator has either a mutable or shared reference to the
+                // `TreeMap`, so we know there will be no concurrent modification.
+                if let Some(next) = unsafe { self.inner.next_back() } {
+                    self.size -= 1;
+                    // SAFETY: This iterator has either a mutable or shared reference to the
+                    // `TreeMap`, so we know there will be no concurrent modification.
+                    unsafe { Some(next.$op()) }
+                } else {
+                    None
                 }
-
-                None
             }
         }
 

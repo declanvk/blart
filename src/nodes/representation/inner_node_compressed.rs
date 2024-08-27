@@ -711,6 +711,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn node4_write_child_full_panic() {
+        inner_node_write_child_test(InnerNode4::<_, _, 16>::empty(), 5);
+    }
+
+    #[test]
     fn node4_grow() {
         let mut n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -775,6 +781,12 @@ mod tests {
     #[test]
     fn node16_remove_child() {
         inner_node_remove_child_test(InnerNode16::<_, _, 16>::empty(), 16)
+    }
+
+    #[test]
+    #[should_panic]
+    fn node16_write_child_full_panic() {
+        inner_node_write_child_test(InnerNode16::<_, _, 16>::empty(), 17);
     }
 
     #[test]

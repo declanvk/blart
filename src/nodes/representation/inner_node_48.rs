@@ -657,12 +657,11 @@ mod tests {
         inner_node_remove_child_test(InnerNode48::<_, _, 16>::empty(), 48)
     }
 
-    // TODO
-    // #[test]
-    // #[should_panic]
-    // fn write_child_full_panic() {
-    //     inner_node_write_child_test(InnerNode48::<_, _, 16>::empty(), 49);
-    // }
+    #[test]
+    #[should_panic]
+    fn write_child_full_panic() {
+        inner_node_write_child_test(InnerNode48::<_, _, 16>::empty(), 49);
+    }
 
     #[test]
     fn grow() {
