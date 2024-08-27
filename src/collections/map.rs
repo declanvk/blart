@@ -121,6 +121,9 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// let root = TreeMap::into_raw(map);
     /// assert!(root.is_some());
+    ///
+    /// // SAFETY: The root pointer came directly from the `into_raw` result.
+    /// let _map = unsafe { TreeMap::from_raw(root) }.unwrap();
     /// ```
     pub fn into_raw(tree: Self) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
         // We need this `ManuallyDrop` so that the `TreeMap::drop` is not called.

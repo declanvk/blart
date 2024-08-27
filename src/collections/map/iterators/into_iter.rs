@@ -1,4 +1,6 @@
-use crate::TreeMap;
+use std::mem::ManuallyDrop;
+
+use crate::{deallocate_leaves, deallocate_tree_non_leaves, NodePtr, RawIterator, TreeMap};
 
 /// An owning iterator over the entries of a `TreeMap`.
 ///
@@ -7,11 +9,48 @@ use crate::TreeMap;
 ///
 /// [`into_iter`]: IntoIterator::into_iter
 /// [`IntoIterator`]: core::iter::IntoIterator
-pub struct IntoIter<K, V, const PREFIX_LEN: usize>(TreeMap<K, V, PREFIX_LEN>);
+#[derive(Debug)]
+pub struct IntoIter<K, V, const PREFIX_LEN: usize> {
+    inner: RawIterator<K, V, PREFIX_LEN>,
+    size: usize,
+}
+
+impl<K, V, const PREFIX_LEN: usize> Drop for IntoIter<K, V, PREFIX_LEN> {
+    fn drop(&mut self) {
+        if let Some(next) = unsafe { self.inner.next() } {
+            // SAFETY: TODO
+            unsafe { deallocate_leaves(next) }
+        }
+
+        // Just to be safe, clear the iterator
+        self.inner = RawIterator::empty();
+        self.size = 0;
+    }
+}
 
 impl<K, V, const PREFIX_LEN: usize> IntoIter<K, V, PREFIX_LEN> {
     pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN>) -> Self {
-        IntoIter(tree)
+        // We need to inhibit `TreeMap::drop` since it would cause a double-free
+        // otherwise.
+        let tree = ManuallyDrop::new(tree);
+
+        if let Some(state) = &tree.state {
+            let inner = unsafe { RawIterator::new(state.min_leaf, state.max_leaf) };
+
+            // SAFETY: Since this function takes an owned `TreeMap`, we can assume there is
+            // no concurrent read or modification, that this is a unique handle to the trie.
+            unsafe { deallocate_tree_non_leaves(state.root) }
+
+            Self {
+                inner,
+                size: tree.num_entries,
+            }
+        } else {
+            Self {
+                inner: RawIterator::empty(),
+                size: 0,
+            }
+        }
     }
 }
 
@@ -19,19 +58,29 @@ impl<K, V, const PREFIX_LEN: usize> Iterator for IntoIter<K, V, PREFIX_LEN> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        // TODO(#19): Optimize `IntoIter` by not maintaining a valid tree throughout
-        // iteration
-        self.0.pop_first()
+        // SAFETY: TODO
+        let leaf_ptr = unsafe { self.inner.next() };
+
+        leaf_ptr.map(|leaf_ptr| {
+            // SAFETY: TODO
+            unsafe { NodePtr::deallocate_node_ptr(leaf_ptr) }.into_entry()
+        })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.0.len(), Some(self.0.len()))
+        (self.size, Some(self.size))
     }
 }
 
 impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for IntoIter<K, V, PREFIX_LEN> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.0.pop_last()
+        // SAFETY: TODO
+        let leaf_ptr = unsafe { self.inner.next_back() };
+
+        leaf_ptr.map(|leaf_ptr| {
+            // SAFETY: TODO
+            unsafe { NodePtr::deallocate_node_ptr(leaf_ptr) }.into_entry()
+        })
     }
 }
 
