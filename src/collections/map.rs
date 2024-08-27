@@ -175,7 +175,8 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
                 let stats = unsafe { WellFormedChecker::check_tree(root)? };
 
                 let (min_leaf, max_leaf) =
-                    // SAFETY: TODO
+                    // SAFETY: The safety doc of this function guarantees the uniqueness of the
+                // `root` pointer, which means we won't have any other mutations
                     unsafe { (minimum_unchecked(root), maximum_unchecked(root)) };
 
                 Ok(Self {
@@ -641,7 +642,8 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
                 state.root = insert_result.new_root;
 
                 {
-                    // SAFETY: TODO
+                    // SAFETY: This call is safe because we have a mutable reference on the tree and
+                    // the returned reference is bounded to this block, not returned
                     let new_leaf = unsafe { insert_result.leaf_node_ptr.as_ref() };
                     if new_leaf.previous.is_none() {
                         state.min_leaf = insert_result.leaf_node_ptr;
