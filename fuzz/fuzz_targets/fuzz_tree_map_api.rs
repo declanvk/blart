@@ -129,8 +129,8 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 let hash_builder = RandomState::new();
                 let tree_copy = tree.clone();
 
-                let original_hash = hash_one(&hash_builder, &tree);
-                let copy_hash = hash_one(&hash_builder, &tree_copy);
+                let original_hash = hash_builder.hash_one(&tree);
+                let copy_hash = hash_builder.hash_one(&tree_copy);
 
                 assert_eq!(original_hash, copy_hash, "{:?} != {:?}", tree, tree_copy);
             },
@@ -187,9 +187,3 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
         }
     }
 });
-
-fn hash_one(hasher_builder: &impl BuildHasher, value: impl Hash) -> u64 {
-    let mut hasher = hasher_builder.build_hasher();
-    value.hash(&mut hasher);
-    hasher.finish()
-}

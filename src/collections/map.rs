@@ -1847,10 +1847,6 @@ mod tests {
         assert_eq!(map_d.cmp(&map_d), Ordering::Equal);
     }
 
-    fn hash_one(hasher_builder: &impl BuildHasher, value: impl Hash) -> u64 {
-        hasher_builder.hash_one(&value)
-    }
-
     #[test]
     fn tree_hash_equals() {
         let mut tree_a = TreeMap::<[u8; 0], i32>::new();
@@ -1862,8 +1858,8 @@ mod tests {
 
         let hasher_builder = RandomState::new();
 
-        let hash_a = hash_one(&hasher_builder, &tree_a);
-        let hash_b = hash_one(&hasher_builder, &tree_b);
+        let hash_a = hasher_builder.hash_one(&tree_a);
+        let hash_b = hasher_builder.hash_one(&tree_b);
 
         assert_eq!(hash_a, hash_b);
     }
