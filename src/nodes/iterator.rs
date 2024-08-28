@@ -9,6 +9,17 @@ struct RawIteratorInner<K, V, const PREFIX_LEN: usize> {
     end: LeafPtr<K, V, PREFIX_LEN>,
 }
 
+impl<K, V, const PREFIX_LEN: usize> Copy for RawIteratorInner<K, V, PREFIX_LEN> {}
+
+impl<K, V, const PREFIX_LEN: usize> Clone for RawIteratorInner<K, V, PREFIX_LEN> {
+    fn clone(&self) -> Self {
+        Self {
+            start: self.start.clone(),
+            end: self.end.clone(),
+        }
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for RawIteratorInner<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RawIteratorInner")
@@ -25,6 +36,16 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for RawIteratorInner<K, V, PREFIX
 /// [`next_back`][Self::next_back] functions.
 pub struct RawIterator<K, V, const PREFIX_LEN: usize> {
     state: Option<RawIteratorInner<K, V, PREFIX_LEN>>,
+}
+
+impl<K, V, const PREFIX_LEN: usize> Copy for RawIterator<K, V, PREFIX_LEN> {}
+
+impl<K, V, const PREFIX_LEN: usize> Clone for RawIterator<K, V, PREFIX_LEN> {
+    fn clone(&self) -> Self {
+        Self {
+            state: self.state.clone(),
+        }
+    }
 }
 
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for RawIterator<K, V, PREFIX_LEN> {

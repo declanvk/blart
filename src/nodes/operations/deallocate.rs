@@ -1,6 +1,7 @@
-use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawIterator};
 
-/// Deallocate all the leaf nodes in the linked list starting from `start`.
+/// Deallocate all the leaf nodes in the linked list starting that are within
+/// the given iterator.
 ///
 /// # Safety
 ///  - This function must only be called once for this `start` node and all
@@ -9,19 +10,12 @@ use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 ///  - This function should not be called concurrently with any read of the
 ///    tree, otherwise it could result in a use-after-free.
 pub unsafe fn deallocate_leaves<K, V, const PREFIX_LEN: usize>(
-    start: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+    mut leaf_range: RawIterator<K, V, PREFIX_LEN>,
 ) {
-    let mut current = start;
-
-    loop {
+    // SAFETY: Covered by function safety doc
+    while let Some(leaf_ptr) = unsafe { leaf_range.next() } {
         // SAFETY: Covered by function safety doc
-        let leaf = unsafe { NodePtr::deallocate_node_ptr(current) };
-
-        if let Some(next) = leaf.next {
-            current = next;
-        } else {
-            break;
-        }
+        let _ = unsafe { NodePtr::deallocate_node_ptr(leaf_ptr) };
     }
 }
 

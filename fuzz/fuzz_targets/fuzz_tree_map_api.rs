@@ -44,7 +44,7 @@ enum Action {
     EntryRef(EntryAction, Box<[u8]>),
     Fuzzy(Box<[u8]>),
     Prefix(Box<[u8]>),
-    IntoIter(usize),
+    IntoIter { take_front: usize, take_back: usize },
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -221,10 +221,23 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 let v: Vec<_> = tree.prefix(&key).collect();
                 std::hint::black_box(v);
             },
-            Action::IntoIter(take) => {
+            Action::IntoIter {
+                take_front,
+                take_back,
+            } => {
                 let tree = mem::replace(&mut tree, TreeMap::<_, u32>::new());
-                let num_entries = tree.into_iter().take(take).count();
-                assert!(num_entries <= take);
+
+                let original_size = tree.len();
+                let mut it = tree.into_iter();
+                let front_count = it.by_ref().take(take_front).count();
+                let back_count = it.rev().take(take_back).count();
+
+                assert_eq!(
+                    front_count + back_count,
+                    original_size.min(take_front.saturating_add(take_back))
+                );
+                assert!(front_count <= take_front);
+                assert!(back_count <= take_back);
             },
         }
     }
