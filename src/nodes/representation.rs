@@ -612,7 +612,7 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for Mismatch<K, V, PREFIX_LEN> {
 }
 
 /// Common methods implemented by all inner node.
-pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
+pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::Debug {
     /// The type of the next larger node type.
     type GrownNode: InnerNode<PREFIX_LEN, Key = Self::Key, Value = Self::Value>;
 
@@ -722,6 +722,15 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized {
     where
         Self::Key: AsBytes,
     {
+        // TODO: We could optimize the usage of this function by splitting it into two
+        // cases:
+        //  1. Where we read the full prefix, in cases of an insert when we need to
+        //     determine where to split the prefix
+        //  2. Where we read only the inline part of the prefix, in cases of a lookup
+        //     where we can still check the final leaf key for equality at the end of
+        //     the search
+        // This would speed up the `lookup` case, since we wouldn't need to load the
+        // full prefix for some of those cases.
         #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: Since we are iterating the key and prefixes, we

@@ -1,10 +1,6 @@
-#![feature(is_sorted)]
 #![no_main]
 
-use blart::{
-    map::{Entry, EntryRef},
-    TreeMap,
-};
+use blart::TreeMap;
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 use std::{
     collections::hash_map::RandomState,

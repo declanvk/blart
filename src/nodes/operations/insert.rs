@@ -593,11 +593,9 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertSearchResultType<K, V, 
 /// starting at the given root node.
 ///
 /// # Safety
-///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying
-///    tree
-///  - This function cannot be called concurrently to any reads or writes of the
-///    `root` node or any child node of `root`. This function will arbitrarily
-///    read or write to any child in the given tree.
+///  - This function cannot be called concurrently to any writes of the `root`
+///    node or any child node of `root`. This function will arbitrarily read to
+///    any child in the given tree.
 ///
 /// # Errors
 ///  - If the given `key` is a prefix of an existing key, this function will

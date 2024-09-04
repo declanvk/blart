@@ -1,6 +1,6 @@
 use crate::{
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NodeType, OpaqueNodePtr, TreeMap,
+    AsBytes, InnerNode, NoPrefixesBytes, NodeType, OpaqueNodePtr, OrderedBytes, TreeMap,
 };
 use std::{
     borrow::Borrow,
@@ -230,6 +230,14 @@ impl<T: AsBytes> AsBytes for DebugAsDisplay<T> {
         self.0.as_bytes()
     }
 }
+
+// SAFETY: The underlying type already implements the `NoPrefixesBytes`, so this
+// is safe
+unsafe impl<T: NoPrefixesBytes> NoPrefixesBytes for DebugAsDisplay<T> {}
+
+// SAFETY: The underlying type already implements the `OrderedBytes`, so this is
+// safe
+unsafe impl<T: OrderedBytes> OrderedBytes for DebugAsDisplay<T> {}
 
 impl<T> Borrow<T> for DebugAsDisplay<T> {
     fn borrow(&self) -> &T {

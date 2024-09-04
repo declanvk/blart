@@ -16,6 +16,7 @@
 )]
 #![cfg_attr(feature = "nightly", allow(incomplete_features, internal_features))]
 #![allow(clippy::type_complexity, unstable_name_collisions)]
+#![warn(clippy::dbg_macro)]
 #![deny(
     missing_docs,
     clippy::missing_safety_doc,
