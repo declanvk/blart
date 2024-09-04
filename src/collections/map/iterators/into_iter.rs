@@ -1,4 +1,7 @@
-use std::mem::{self, ManuallyDrop};
+use std::{
+    iter::FusedIterator,
+    mem::{self, ManuallyDrop},
+};
 
 use crate::{deallocate_leaves, deallocate_tree_non_leaves, NodePtr, RawIterator, TreeMap};
 
@@ -88,7 +91,13 @@ impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for IntoIter<K, V, PREFI
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> ExactSizeIterator for IntoIter<K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize> ExactSizeIterator for IntoIter<K, V, PREFIX_LEN> {
+    fn len(&self) -> usize {
+        self.size
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> FusedIterator for IntoIter<K, V, PREFIX_LEN> {}
 
 /// An owning iterator over the keys of a [`TreeMap`].
 ///

@@ -205,6 +205,7 @@ pub struct DeleteResult<K, V, const PREFIX_LEN: usize> {
     pub deleted_leaf: LeafNode<K, V, PREFIX_LEN>,
 }
 
+/// This struct represents a location in the trie that can be deleted.
 pub struct DeletePoint<K, V, const PREFIX_LEN: usize> {
     /// The grandparent node of the leaf that will be deleted and the key byte
     /// that was used to continue search.

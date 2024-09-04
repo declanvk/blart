@@ -41,10 +41,15 @@ where
                 check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                let leaf_node = leaf_node_ptr.read();
+                // SAFETY: The shared reference is bounded to this block and there are no
+                // concurrent modifications, by the safety conditions of this function.
+                let leaf_node = unsafe { leaf_node_ptr.as_ref() };
 
                 // Specifically we are matching the leaf node stored key against the full search
                 // key to confirm that it is the right value.
+                // TODO: We could optimize this by only checking the full leaf key in cases
+                // where a prefix match read some "implicit" bytes. See the TODO node in the
+                // `match_prefix` function.
                 if leaf_node.matches_full_key(key_bytes) {
                     return Some(leaf_node_ptr);
                 } else {

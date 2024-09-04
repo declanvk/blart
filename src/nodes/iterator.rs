@@ -13,10 +13,7 @@ impl<K, V, const PREFIX_LEN: usize> Copy for RawIteratorInner<K, V, PREFIX_LEN> 
 
 impl<K, V, const PREFIX_LEN: usize> Clone for RawIteratorInner<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
-        Self {
-            start: self.start.clone(),
-            end: self.end.clone(),
-        }
+        *self
     }
 }
 
@@ -42,9 +39,7 @@ impl<K, V, const PREFIX_LEN: usize> Copy for RawIterator<K, V, PREFIX_LEN> {}
 
 impl<K, V, const PREFIX_LEN: usize> Clone for RawIterator<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
-        Self {
-            state: self.state.clone(),
-        }
+        *self
     }
 }
 
@@ -61,7 +56,7 @@ impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN> {
     /// pointers.
     ///
     /// # Safety
-    ///  - `start` must be before or equal to `end` in the linked list order
+    /// `start` must be before or equal to `end` in the linked list order.
     pub unsafe fn new(start: LeafPtr<K, V, PREFIX_LEN>, end: LeafPtr<K, V, PREFIX_LEN>) -> Self {
         Self {
             state: Some(RawIteratorInner { start, end }),

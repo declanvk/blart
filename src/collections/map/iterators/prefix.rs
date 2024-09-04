@@ -51,7 +51,7 @@ macro_rules! gen_add_children {
             // the searched prefix, so we find a children with this
             // key and only consider this one
             //
-            // This slice operation is safe sice we just checked if
+            // This slice operation is safe since we just checked if
             // new depth >= searched prefix len, and this also
             // ensures that we have at least one byte in the slice
             let key = *self.prefix[new_depth..].first().unwrap();
