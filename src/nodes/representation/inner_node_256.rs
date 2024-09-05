@@ -5,6 +5,7 @@ use crate::{
 use std::{
     fmt,
     iter::{Enumerate, FusedIterator},
+    ops::Bound,
     slice::Iter,
 };
 
@@ -144,6 +145,21 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
         bound: impl std::ops::RangeBounds<u8>,
     ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + FusedIterator {
+        {
+            match (bound.start_bound(), bound.end_bound()) {
+                (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
+                    panic!("range start and end are equal and excluded: ({s:?})")
+                },
+                (
+                    Bound::Included(s) | Bound::Excluded(s),
+                    Bound::Included(e) | Bound::Excluded(e),
+                ) if s > e => {
+                    panic!("range start ({s:?}) is greater than range end ({e:?})")
+                },
+                _ => {},
+            }
+        }
+
         let start = bound.start_bound().map(|val| usize::from(*val));
         let key_offset = match bound.start_bound() {
             std::ops::Bound::Included(val) => *val,
@@ -494,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "slice index starts at 81 but ends at 80"]
+    #[should_panic = "range start and end are equal and excluded: (80)"]
     fn range_iterate_out_of_bounds_panic_both_excluded() {
         let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = fixture();
 
@@ -502,5 +518,15 @@ mod tests {
             .range((Bound::Excluded(80), Bound::Excluded(80)))
             .collect::<Vec<_>>();
         assert_eq!(pairs, &[]);
+    }
+
+    #[test]
+    #[should_panic = "range start (80) is greater than range end (0)"]
+    fn range_iterate_start_greater_than_end() {
+        let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = fixture();
+
+        let _pairs = node
+            .range((Bound::Excluded(80), Bound::Included(0)))
+            .collect::<Vec<_>>();
     }
 }

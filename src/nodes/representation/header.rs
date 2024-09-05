@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// The common header for all inner nodes
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[repr(align(8))]
 pub struct Header<const PREFIX_LEN: usize> {
     /// Number of children of this inner node. This field has no meaning for
@@ -218,6 +218,16 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
             let leaf = &leaf[current_depth..(current_depth + len)];
             (leaf, Some(leaf_ptr))
         }
+    }
+}
+
+impl<const PREFIX_LEN: usize> Debug for Header<PREFIX_LEN> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Header")
+            .field("num_children", &self.num_children)
+            .field("prefix_len", &self.prefix_len)
+            .field("prefix", &&self.prefix[..(self.prefix_len as usize)])
+            .finish()
     }
 }
 
