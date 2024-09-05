@@ -17,6 +17,7 @@ use std::simd::{
 };
 
 /// Where a write should happen inside the node
+#[derive(Debug)]
 enum WritePoint {
     /// In an already existing key fragment
     Existing(usize),
@@ -332,21 +333,54 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     where
         Self: SearchInnerNodeCompressed,
     {
-        fn fixup_bound_lookup(bound: Bound<WritePoint>) -> Bound<usize> {
+        {
+            match (bound.start_bound(), bound.end_bound()) {
+                (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
+                    panic!("range start and end are equal and excluded: ({s:?})")
+                },
+                (
+                    Bound::Included(s) | Bound::Excluded(s),
+                    Bound::Included(e) | Bound::Excluded(e),
+                ) if s > e => {
+                    panic!("range start ({s:?}) is greater than range end ({e:?})")
+                },
+                _ => {},
+            }
+        }
+
+        fn fixup_bound_lookup(bound: Bound<WritePoint>, is_start: bool) -> Bound<usize> {
+            // [0, 3, 85, 254]
             match bound {
-                Bound::Included(WritePoint::Existing(idx))
-                | Bound::Included(WritePoint::Last(idx))
-                | Bound::Included(WritePoint::Shift(idx)) => Bound::Included(idx),
-                Bound::Excluded(WritePoint::Existing(idx))
-                | Bound::Excluded(WritePoint::Last(idx))
-                | Bound::Excluded(WritePoint::Shift(idx)) => Bound::Excluded(idx),
+                // key = Included(0), bound = Included(Existing(0)), output = Included(0)
+                Bound::Included(WritePoint::Existing(idx)) => Bound::Included(idx),
+                // key = Included(255), bound = Included(Last(4)), output = Included(4)
+                Bound::Included(WritePoint::Last(idx)) => Bound::Included(idx),
+                // key = Included(2), bound = Included(Shift(1)), output = Included(1)
+                Bound::Included(WritePoint::Shift(idx)) => Bound::Included(idx),
+                // key = Excluded(0), bound = Excluded(Existing(0)), output = Excluded(0)
+                Bound::Excluded(WritePoint::Existing(idx)) => Bound::Excluded(idx),
+                // key = Excluded(255), bound = Excluded(Last(4)), output = Excluded(4)
+                Bound::Excluded(WritePoint::Last(idx)) => Bound::Excluded(idx),
+                // key = Excluded(2), bound = Excluded(Shift(1)), output = Excluded(0)
+                Bound::Excluded(WritePoint::Shift(idx)) => {
+                    if is_start {
+                        idx.checked_sub(1).map_or(Bound::Unbounded, Bound::Excluded)
+                    } else {
+                        Bound::Excluded(idx)
+                    }
+                },
                 Bound::Unbounded => Bound::Unbounded,
             }
         }
 
-        let start_idx =
-            fixup_bound_lookup(bound.start_bound().map(|val| self.find_write_point(*val)));
-        let end_idx = fixup_bound_lookup(bound.end_bound().map(|val| self.find_write_point(*val)));
+        let start_idx = fixup_bound_lookup(
+            bound.start_bound().map(|val| self.find_write_point(*val)),
+            true,
+        );
+        let end_idx = fixup_bound_lookup(
+            bound.end_bound().map(|val| self.find_write_point(*val)),
+            false,
+        );
 
         let slice_range = (start_idx, end_idx);
 
@@ -939,14 +973,23 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "slice index starts at 3 but ends at 2"]
+    #[should_panic = "range start and end are equal and excluded: (80)"]
     fn node4_range_iterate_out_of_bounds_panic_both_excluded() {
         let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node4_fixture();
 
-        let pairs = node
+        let _pairs = node
             .range((Bound::Excluded(80), Bound::Excluded(80)))
             .collect::<Vec<_>>();
-        assert_eq!(pairs, &[]);
+    }
+
+    #[test]
+    #[should_panic = "range start (80) is greater than range end (0)"]
+    fn node4_range_iterate_start_greater_than_end() {
+        let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node4_fixture();
+
+        let _pairs = node
+            .range((Bound::Excluded(80), Bound::Included(0)))
+            .collect::<Vec<_>>();
     }
 
     fn node16_fixture() -> FixtureReturn<InnerNode16<Box<[u8]>, (), 16>, 4> {
@@ -1051,7 +1094,22 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "slice index starts at 3 but ends at 2"]
+    fn node16_range_edge_cases() {
+        let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node16_fixture();
+
+        let pairs = node
+            .range((Bound::<u8>::Excluded(84), Bound::Unbounded))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[(85, l4_ptr), (255, l2_ptr),]);
+
+        let pairs = node
+            .range((Bound::<u8>::Unbounded, Bound::Excluded(4)))
+            .collect::<Vec<_>>();
+        assert_eq!(pairs, &[(0u8, l3_ptr), (3, l1_ptr)]);
+    }
+
+    #[test]
+    #[should_panic = "range start and end are equal and excluded: (80)"]
     fn node16_range_iterate_out_of_bounds_panic_both_excluded() {
         let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node16_fixture();
 
@@ -1059,5 +1117,15 @@ mod tests {
             .range((Bound::Excluded(80), Bound::Excluded(80)))
             .collect::<Vec<_>>();
         assert_eq!(pairs, &[]);
+    }
+
+    #[test]
+    #[should_panic = "range start (80) is greater than range end (0)"]
+    fn node16_range_iterate_start_greater_than_end() {
+        let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node16_fixture();
+
+        let _pairs = node
+            .range((Bound::Excluded(80), Bound::Included(0)))
+            .collect::<Vec<_>>();
     }
 }
