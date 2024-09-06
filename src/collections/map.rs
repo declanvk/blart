@@ -943,54 +943,57 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         )
     }
 
-    /*
     /// Constructs a mutable double-ended iterator over a sub-range of elements
     /// in the map.
     ///
     /// The simplest way is to use the range syntax `min..max`, thus
-    /// `range+_mut(min..max)` will yield elements from min (inclusive) to max
+    /// `range_mut(min..max)` will yield elements from min (inclusive) to max
     /// (exclusive). The range may also be entered as `(Bound<T>, Bound<T>)`, so
     /// for example `range_mut((Excluded(4), Included(10)))` will yield a
     /// left-exclusive, right-inclusive range from 4 to 10.
-    //
-    // # Examples
-    //
-    // ```rust,should_panic
-    // use blart::TreeMap;
-    //
-    // let mut map: TreeMap<_, i32> = TreeMap::new();
-    //
-    // for (key, value) in [("Alice", 0), ("Bob", 0), ("Carol", 0), ("Cheryl", 0)] {
-    //     let _ = map.try_insert(key, value).unwrap();
-    // }
-    //
-    // for (name, balance) in map.range_mut("B".."Cheryl") {
-    //     *balance += 100;
-    //
-    //     if name.starts_with('C') {
-    //         *balance *= 2;
-    //     }
-    // }
-    //
-    // for (name, balance) in &map {
-    //     println!("{name} => {balance}");
-    // }
-    //
-    // assert_eq!(map["Alice"], 0);
-    // assert_eq!(map["Bob"], 100);
-    // assert_eq!(map["Carol"], 200);
-    // assert_eq!(map["Cheryl"], 200);
-    // ```
-    #[allow(dead_code)]
-    pub(crate) fn range_mut<Q, R>(&mut self, _range: R) -> iterators::RangeMut<K, V>
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<_, i32> = TreeMap::new();
+    ///
+    /// for (key, value) in [("Alice", 0), ("Bob", 0), ("Carol", 0), ("Cheryl", 0)] {
+    ///     let _ = map.try_insert(key, value).unwrap();
+    /// }
+    ///
+    /// for (name, balance) in map.range_mut("B"..="Cheryl") {
+    ///     *balance += 100;
+    ///
+    ///     if name.starts_with('C') {
+    ///         *balance *= 2;
+    ///     }
+    /// }
+    ///
+    /// for (name, balance) in &map {
+    ///     println!("{name} => {balance}");
+    /// }
+    ///
+    /// assert_eq!(map["Alice"], 0);
+    /// assert_eq!(map["Bob"], 100);
+    /// assert_eq!(map["Carol"], 200);
+    /// assert_eq!(map["Cheryl"], 200);
+    /// ```
+    pub fn range_mut<Q, R>(&mut self, range: R) -> iterators::RangeMut<K, V, PREFIX_LEN>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
         R: RangeBounds<Q>,
     {
-        todo!()
+        iterators::RangeMut::new(
+            self,
+            range.start_bound().map(AsBytes::as_bytes),
+            range.end_bound().map(AsBytes::as_bytes),
+        )
     }
 
+    /*
     /// Splits the collection into two at the given key. Returns everything
     /// after the given key, including the key.
     //
