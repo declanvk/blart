@@ -316,6 +316,25 @@ unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN: usize>(
                         }
                     },
                     InnerNodeSearchResultReason::MissingChild => {
+                        fn access_closest_child<
+                            const PREFIX_LEN: usize,
+                            N: InnerNode<PREFIX_LEN>,
+                        >(
+                            inner_ptr: NodePtr<PREFIX_LEN, N>,
+                            child_bounds: (Bound<u8>, Bound<u8>),
+                            is_start: bool,
+                        ) -> Option<(u8, OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>)>
+                        {
+                            // SAFETY: Covered by function safety doc
+                            let inner = unsafe { inner_ptr.as_ref() };
+                            let mut child_it = inner.range(child_bounds);
+                            if is_start {
+                                child_it.next()
+                            } else {
+                                child_it.next_back()
+                            }
+                        }
+
                         let child_bounds = if is_start {
                             (bound.map(|_| key_bytes[current_depth]), Bound::Unbounded)
                         } else {
@@ -323,44 +342,16 @@ unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN: usize>(
                         };
                         let possible_next_child = match node_ptr.to_node_ptr() {
                             ConcreteNodePtr::Node4(inner_ptr) => {
-                                // SAFETY: Covered by function safety doc
-                                let inner = unsafe { inner_ptr.as_ref() };
-                                let mut child_it = inner.range(child_bounds);
-                                if is_start {
-                                    child_it.next()
-                                } else {
-                                    child_it.next_back()
-                                }
+                                access_closest_child(inner_ptr, child_bounds, is_start)
                             },
                             ConcreteNodePtr::Node16(inner_ptr) => {
-                                // SAFETY: Covered by function safety doc
-                                let inner = unsafe { inner_ptr.as_ref() };
-                                let mut child_it = inner.range(child_bounds);
-                                if is_start {
-                                    child_it.next()
-                                } else {
-                                    child_it.next_back()
-                                }
+                                access_closest_child(inner_ptr, child_bounds, is_start)
                             },
                             ConcreteNodePtr::Node48(inner_ptr) => {
-                                // SAFETY: Covered by function safety doc
-                                let inner = unsafe { inner_ptr.as_ref() };
-                                let mut child_it = inner.range(child_bounds);
-                                if is_start {
-                                    child_it.next()
-                                } else {
-                                    child_it.next_back()
-                                }
+                                access_closest_child(inner_ptr, child_bounds, is_start)
                             },
                             ConcreteNodePtr::Node256(inner_ptr) => {
-                                // SAFETY: Covered by function safety doc
-                                let inner = unsafe { inner_ptr.as_ref() };
-                                let mut child_it = inner.range(child_bounds);
-                                if is_start {
-                                    child_it.next()
-                                } else {
-                                    child_it.next_back()
-                                }
+                                access_closest_child(inner_ptr, child_bounds, is_start)
                             },
                             ConcreteNodePtr::LeafNode(_) => unreachable!(
                                 "This branch is unreachable because the \
@@ -765,5 +756,22 @@ mod tests {
         );
 
         assert_eq!(it.count(), 0);
+    }
+
+    #[test]
+    fn included_included_range_on_middle() {
+        let tree = fixture_tree();
+
+        let mut it = Range::new(
+            &tree,
+            Bound::Included([126, 0, 0].as_slice()),
+            Bound::Included([128, 0, 0].as_slice()),
+        )
+        .map(|(k, _)| k);
+
+        assert_eq!(it.next().unwrap(), &[127, 127, 0]);
+        assert_eq!(it.next().unwrap(), &[127, 127, 127]);
+        assert_eq!(it.next().unwrap(), &[127, 127, u8::MAX]);
+        assert_eq!(it.next(), None);
     }
 }

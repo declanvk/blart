@@ -624,7 +624,7 @@ impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for Node48Iter<'a, K, V, P
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Bound;
+    use std::ops::{Bound, RangeBounds};
 
     use crate::{
         nodes::representation::tests::{
@@ -762,56 +762,133 @@ mod tests {
     fn range_iterate() {
         let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = fixture();
 
-        let pairs = node
-            .range((Bound::Included(0), Bound::Included(3)))
-            .collect::<Vec<_>>();
-        assert_eq!(pairs, &[(0u8, l3_ptr), (3, l1_ptr)]);
+        #[track_caller]
+        fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
+            node: &InnerNode48<K, V, PREFIX_LEN>,
+            bound: impl RangeBounds<u8>,
+            expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
+        ) {
+            let pairs = node.range(bound).collect::<Vec<_>>();
+            assert_eq!(pairs, expected_pairs);
+        }
 
-        let pairs = node
-            .range((Bound::Excluded(0), Bound::Excluded(3)))
-            .collect::<Vec<_>>();
-        assert_eq!(pairs, &[]);
-
-        let pairs = node
-            .range((Bound::Included(0), Bound::Included(0)))
-            .collect::<Vec<_>>();
-        assert_eq!(pairs, &[(0u8, l3_ptr)]);
-
-        let pairs = node
-            .range((Bound::Included(0), Bound::Included(255)))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            pairs,
-            &[(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr),]
+        check(
+            &node,
+            (Bound::Included(0), Bound::Included(3)),
+            [(0u8, l3_ptr), (3, l1_ptr)],
         );
-
-        let pairs = node
-            .range((Bound::Included(255), Bound::Included(255)))
-            .collect::<Vec<_>>();
-        assert_eq!(pairs, &[(255, l2_ptr),]);
-
-        let pairs = node
-            .range((Bound::Included(255), Bound::Excluded(255)))
-            .collect::<Vec<_>>();
-        assert_eq!(pairs, &[]);
-
-        let pairs = node
-            .range((Bound::Excluded(255), Bound::Included(255)))
-            .collect::<Vec<_>>();
-        assert_eq!(pairs, &[]);
-
-        let pairs = node
-            .range((Bound::Excluded(0), Bound::Excluded(255)))
-            .collect::<Vec<_>>();
-        assert_eq!(pairs, &[(3, l1_ptr), (85, l4_ptr)]);
-
-        let pairs = node
-            .range((Bound::<u8>::Unbounded, Bound::Unbounded))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            pairs,
-            &[(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr),]
+        check(&node, (Bound::Excluded(0), Bound::Excluded(3)), []);
+        check(
+            &node,
+            (Bound::Included(0), Bound::Included(0)),
+            [(0u8, l3_ptr)],
         );
+        check(
+            &node,
+            (Bound::Included(0), Bound::Included(255)),
+            [(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr)],
+        );
+        check(
+            &node,
+            (Bound::Included(255), Bound::Included(255)),
+            [(255, l2_ptr)],
+        );
+        check(&node, (Bound::Included(255), Bound::Excluded(255)), []);
+        check(&node, (Bound::Excluded(255), Bound::Included(255)), []);
+        check(
+            &node,
+            (Bound::Excluded(0), Bound::Excluded(255)),
+            [(3, l1_ptr), (85, l4_ptr)],
+        );
+        check(
+            &node,
+            (Bound::<u8>::Unbounded, Bound::Unbounded),
+            [(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (255, l2_ptr)],
+        );
+        check(
+            &node,
+            (Bound::<u8>::Unbounded, Bound::Included(86)),
+            [(0u8, l3_ptr), (3, l1_ptr), (85, l4_ptr)],
+        );
+    }
+
+    fn fixture_empty_edges() -> FixtureReturn<InnerNode48<Box<[u8]>, (), 16>, 4> {
+        let mut n4 = InnerNode48::empty();
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l4 = LeafNode::with_no_siblings(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+        let l4_ptr = NodePtr::from(&mut l4).to_opaque();
+
+        n4.write_child(3, l1_ptr);
+        n4.write_child(254, l2_ptr);
+        n4.write_child(2u8, l3_ptr);
+        n4.write_child(85, l4_ptr);
+
+        (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
+    }
+
+    #[test]
+    fn range_iterate_boundary_conditions() {
+        let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = fixture_empty_edges();
+
+        #[track_caller]
+        fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
+            node: &InnerNode48<K, V, PREFIX_LEN>,
+            bound: impl RangeBounds<u8>,
+            expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
+        ) {
+            let pairs = node.range(bound).collect::<Vec<_>>();
+            assert_eq!(pairs, expected_pairs);
+        }
+
+        check(
+            &node,
+            (Bound::<u8>::Unbounded, Bound::Included(86)),
+            [(2u8, l3_ptr), (3, l1_ptr), (85, l4_ptr)],
+        );
+        check(
+            &node,
+            (Bound::<u8>::Unbounded, Bound::Included(4)),
+            [(2u8, l3_ptr), (3, l1_ptr)],
+        );
+        check(
+            &node,
+            (Bound::<u8>::Unbounded, Bound::Excluded(3)),
+            [(2u8, l3_ptr)],
+        );
+        check(
+            &node,
+            (Bound::<u8>::Unbounded, Bound::Included(2)),
+            [(2u8, l3_ptr)],
+        );
+        check(&node, (Bound::<u8>::Unbounded, Bound::Included(1)), []);
+        check(&node, (Bound::<u8>::Unbounded, Bound::Included(0)), []);
+
+        check(
+            &node,
+            (Bound::Included(1), Bound::<u8>::Unbounded),
+            [(2u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (254, l2_ptr)],
+        );
+        check(
+            &node,
+            (Bound::Included(3), Bound::<u8>::Unbounded),
+            [(3, l1_ptr), (85, l4_ptr), (254, l2_ptr)],
+        );
+        check(
+            &node,
+            (Bound::Excluded(84), Bound::<u8>::Unbounded),
+            [(85, l4_ptr), (254, l2_ptr)],
+        );
+        check(
+            &node,
+            (Bound::Included(253), Bound::<u8>::Unbounded),
+            [(254, l2_ptr)],
+        );
+        check(&node, (Bound::Included(255), Bound::<u8>::Unbounded), []);
     }
 
     #[test]

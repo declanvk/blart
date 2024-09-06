@@ -226,7 +226,10 @@ impl<const PREFIX_LEN: usize> Debug for Header<PREFIX_LEN> {
         f.debug_struct("Header")
             .field("num_children", &self.num_children)
             .field("prefix_len", &self.prefix_len)
-            .field("prefix", &&self.prefix[..(self.prefix_len as usize)])
+            .field(
+                "prefix",
+                &&self.prefix[..(self.prefix_len as usize).min(self.prefix.len())],
+            )
             .finish()
     }
 }
