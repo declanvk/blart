@@ -11,7 +11,13 @@ use crate::{
     InsertSearchResultType::Exact,
     LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr,
 };
-use std::{borrow::Borrow, fmt::Debug, hash::Hash, mem::ManuallyDrop, ops::Index};
+use std::{
+    borrow::Borrow,
+    fmt::Debug,
+    hash::Hash,
+    mem::ManuallyDrop,
+    ops::{Index, RangeBounds},
+};
 
 mod entry;
 mod entry_ref;
@@ -897,6 +903,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     {
         self.extend(other.drain_filter(|_, _| true))
     }
+    */
 
     /// Constructs a double-ended iterator over a sub-range of elements in the
     /// map.
@@ -906,33 +913,37 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// (exclusive). The range may also be entered as `(Bound<T>, Bound<T>)`, so
     /// for example `range((Excluded(4), Included(10)))` will yield a
     /// left-exclusive, right-inclusive range from 4 to 10.
-    //
-    // # Examples
-    //
-    // ```rust,should_panic
-    // use blart::TreeMap;
-    // use std::ops::Bound::Included;
-    //
-    // let mut map = TreeMap::<u8, _>::new();
-    // map.try_insert(3, "a").unwrap();
-    // map.try_insert(5, "b").unwrap();
-    // map.try_insert(8, "c").unwrap();
-    //
-    // for (key, &value) in map.range((Included(&4), Included(&8))) {
-    //     println!("{key:?}: {value}");
-    // }
-    // assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
-    // ```
-    #[allow(dead_code)]
-    pub(crate) fn range<Q, R>(&self, _range: R) -> iterators::Range<K, V>
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    /// use std::ops::Bound::Included;
+    ///
+    /// let mut map = TreeMap::<u8, _>::new();
+    /// map.try_insert(3, "a").unwrap();
+    /// map.try_insert(5, "b").unwrap();
+    /// map.try_insert(8, "c").unwrap();
+    ///
+    /// for (key, &value) in map.range((Included(&4), Included(&8))) {
+    ///     println!("{key:?}: {value}");
+    /// }
+    /// assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
+    /// ```
+    pub fn range<Q, R>(&self, range: R) -> iterators::Range<K, V, PREFIX_LEN>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
         R: RangeBounds<Q>,
     {
-        todo!()
+        iterators::Range::new(
+            self,
+            range.start_bound().map(AsBytes::as_bytes),
+            range.end_bound().map(AsBytes::as_bytes),
+        )
     }
 
+    /*
     /// Constructs a mutable double-ended iterator over a sub-range of elements
     /// in the map.
     ///
