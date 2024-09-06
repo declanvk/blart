@@ -381,125 +381,161 @@ unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN: usize>(
     })
 }
 
-/// An iterator over a sub-range of entries in a [`TreeMap`].
-///
-/// This struct is created by the [`range`][TreeMap::range] method on `TreeMap`.
-/// See its documentation for more details.
-pub struct Range<'a, K, V, const PREFIX_LEN: usize> {
-    inner: RawIterator<K, V, PREFIX_LEN>,
-    _tree: &'a TreeMap<K, V, PREFIX_LEN>,
-}
-
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> Range<'a, K, V, PREFIX_LEN> {
-    /// Create a new range iterator over the given tree, starting and ending
-    /// according to the given bounds.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if `start_bound` is greater than `end_bound`.
-    pub(crate) fn new(
-        tree: &'a TreeMap<K, V, PREFIX_LEN>,
-        start_bound: Bound<&[u8]>,
-        end_bound: Bound<&[u8]>,
-    ) -> Self {
-        let Some(tree_state) = &tree.state else {
-            return Self {
-                _tree: tree,
-                inner: RawIterator::empty(),
-            };
-        };
-
-        {
-            match (start_bound, end_bound) {
-                (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
-                    panic!("range start and end are equal and excluded: ({s:?})")
-                },
-                (
-                    Bound::Included(s) | Bound::Excluded(s),
-                    Bound::Included(e) | Bound::Excluded(e),
-                ) if s > e => {
-                    panic!("range start ({s:?}) is greater than range end ({e:?})")
-                },
-                _ => {},
-            }
+macro_rules! implement_range_iter {
+    (
+        $(#[$outer:meta])*
+        struct $name:ident {
+            tree: $tree_ty:ty,
+            item: $item_ty:ty,
+            $leaf_accessor_func:ident
+        }
+    ) => {
+        $(#[$outer])*
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
+            inner: RawIterator<K, V, PREFIX_LEN>,
+            _tree: $tree_ty,
         }
 
-        // SAFETY: Since we have a shared reference to the original TreeMap, we know
-        // there will be no concurrent mutation
-        let possible_start = unsafe { find_leaf_pointer_for_bound(tree_state, start_bound, true) };
-        let Some(start) = possible_start else {
-            return Self {
-                _tree: tree,
-                inner: RawIterator::empty(),
-            };
-        };
-
-        // SAFETY: Since we have a shared reference to the original TreeMap, we know
-        // there will be no concurrent mutation
-        let possible_end = unsafe { find_leaf_pointer_for_bound(tree_state, end_bound, false) };
-        let Some(end) = possible_end else {
-            return Self {
-                _tree: tree,
-                inner: RawIterator::empty(),
-            };
-        };
-
-        // SAFETY: Since we have a shared reference to the original TreeMap, we know
-        // there will be no concurrent mutation. Also, the reference lifetimes created
-        // are bounded to this `unsafe` block, and don't overlap with any mutation.
-        unsafe {
-            let start_leaf_bytes = start.as_key_ref().as_bytes();
-            let end_leaf_bytes = end.as_key_ref().as_bytes();
-
-            if start_leaf_bytes > end_leaf_bytes {
-                // Resolved start leaf is not less than or equal to resolved end leaf for
-                // iteration order
-                return Self {
-                    _tree: tree,
-                    inner: RawIterator::empty(),
+        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN> {
+            /// Create a new range iterator over the given tree, starting and ending
+            /// according to the given bounds.
+            ///
+            /// # Panics
+            ///
+            /// This function will panic if `start_bound` is greater than `end_bound`.
+            pub(crate) fn new(
+                tree: $tree_ty,
+                start_bound: Bound<&[u8]>,
+                end_bound: Bound<&[u8]>,
+            ) -> Self {
+                let Some(tree_state) = &tree.state else {
+                    return Self {
+                        _tree: tree,
+                        inner: RawIterator::empty(),
+                    };
                 };
+
+                {
+                    match (start_bound, end_bound) {
+                        (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
+                            panic!("range start and end are equal and excluded: ({s:?})")
+                        },
+                        (
+                            Bound::Included(s) | Bound::Excluded(s),
+                            Bound::Included(e) | Bound::Excluded(e),
+                        ) if s > e => {
+                            panic!("range start ({s:?}) is greater than range end ({e:?})")
+                        },
+                        _ => {},
+                    }
+                }
+
+                // SAFETY: Since we have a (shared or mutable) reference to the original TreeMap, we know
+                // there will be no concurrent mutation
+                let possible_start =
+                    unsafe { find_leaf_pointer_for_bound(tree_state, start_bound, true) };
+                let Some(start) = possible_start else {
+                    return Self {
+                        _tree: tree,
+                        inner: RawIterator::empty(),
+                    };
+                };
+
+                // SAFETY: Since we have a (shared or mutable) reference to the original TreeMap, we know
+                // there will be no concurrent mutation
+                let possible_end =
+                    unsafe { find_leaf_pointer_for_bound(tree_state, end_bound, false) };
+                let Some(end) = possible_end else {
+                    return Self {
+                        _tree: tree,
+                        inner: RawIterator::empty(),
+                    };
+                };
+
+                // SAFETY: Since we have a (shared or mutable) reference to the original TreeMap, we know
+                // there will be no concurrent mutation. Also, the reference lifetimes created
+                // are bounded to this `unsafe` block, and don't overlap with any mutation.
+                unsafe {
+                    let start_leaf_bytes = start.as_key_ref().as_bytes();
+                    let end_leaf_bytes = end.as_key_ref().as_bytes();
+
+                    if start_leaf_bytes > end_leaf_bytes {
+                        // Resolved start leaf is not less than or equal to resolved end leaf for
+                        // iteration order
+                        return Self {
+                            _tree: tree,
+                            inner: RawIterator::empty(),
+                        };
+                    }
+                }
+
+                Self {
+                    _tree: tree,
+                    // SAFETY: `start` is guaranteed to be less than or equal to `end` in the iteration
+                    // order because of the check we do on the bytes of the resolved leaf pointers, just
+                    // above this line
+                    inner: unsafe { RawIterator::new(start, end) },
+                }
             }
         }
 
-        Self {
-            _tree: tree,
-            // SAFETY: `start` is guaranteed to be less than or equal to `end` in the iteration
-            // order because of the check we do on the bytes of the resolved leaf pointers, just
-            // above this line
-            inner: unsafe { RawIterator::new(start, end) },
+        impl<'a, K, V, const PREFIX_LEN: usize> Iterator for $name<'a, K, V, PREFIX_LEN> {
+            type Item = $item_ty;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                // SAFETY: This iterator has a reference (either shared or mutable) to the
+                // original `TreeMap` it is iterating over, preventing any other modification.
+                let leaf_ptr = unsafe { self.inner.next()? };
+
+                // SAFETY: THe lifetimes returned from this function are returned as bounded by
+                // lifetime 'a, meaning that they cannot outlive this iterator's reference
+                // (shared or mutable) to the original TreeMap.
+                Some(unsafe { leaf_ptr.$leaf_accessor_func() })
+            }
         }
-    }
+
+        impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator
+            for $name<'a, K, V, PREFIX_LEN>
+        {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                // SAFETY: This iterator has a reference (either shared or mutable) to the
+                // original `TreeMap` it is iterating over, preventing any other modification.
+                let leaf_ptr = unsafe { self.inner.next_back()? };
+
+                // SAFETY: THe lifetimes returned from this function are returned as bounded by
+                // lifetime 'a, meaning that they cannot outlive this iterator's reference
+                // (shared or mutable) to the original TreeMap.
+                Some(unsafe { leaf_ptr.$leaf_accessor_func() })
+            }
+        }
+
+        impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for $name<'a, K, V, PREFIX_LEN> {}
+    };
 }
 
-impl<'a, K, V, const PREFIX_LEN: usize> Iterator for Range<'a, K, V, PREFIX_LEN> {
-    type Item = (&'a K, &'a V);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // SAFETY: This iterator has a reference (either shared or mutable) to the
-        // original `TreeMap` it is iterating over, preventing any other modification.
-        let leaf_ptr = unsafe { self.inner.next()? };
-
-        // SAFETY: THe lifetimes returned from this function are returned as bounded by
-        // lifetime 'a, meaning that they cannot outlive this iterator's reference
-        // (shared or mutable) to the original TreeMap.
-        Some(unsafe { leaf_ptr.as_key_value_ref() })
+implement_range_iter!(
+    /// An iterator over a sub-range of entries in a [`TreeMap`].
+    ///
+    /// This struct is created by the [`range`][TreeMap::range] method on `TreeMap`.
+    /// See its documentation for more details.
+    struct Range {
+        tree: &'a TreeMap<K, V, PREFIX_LEN>,
+        item: (&'a K, &'a V),
+        as_key_value_ref
     }
-}
+);
 
-impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Range<'a, K, V, PREFIX_LEN> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        // SAFETY: This iterator has a reference (either shared or mutable) to the
-        // original `TreeMap` it is iterating over, preventing any other modification.
-        let leaf_ptr = unsafe { self.inner.next_back()? };
-
-        // SAFETY: THe lifetimes returned from this function are returned as bounded by
-        // lifetime 'a, meaning that they cannot outlive this iterator's reference
-        // (shared or mutable) to the original TreeMap.
-        Some(unsafe { leaf_ptr.as_key_value_ref() })
+implement_range_iter!(
+    /// A mutable iterator over a sub-range of entries in a [`TreeMap`].
+    ///
+    /// This struct is created by the [`range_mut`][TreeMap::range_mut] method on `TreeMap`.
+    /// See its documentation for more details.
+    struct RangeMut {
+        tree: &'a mut TreeMap<K, V, PREFIX_LEN>,
+        item: (&'a K, &'a mut V),
+        as_key_ref_value_mut
     }
-}
-
-impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for Range<'a, K, V, PREFIX_LEN> {}
+);
 
 #[cfg(test)]
 mod tests {
@@ -773,5 +809,32 @@ mod tests {
         assert_eq!(it.next().unwrap(), &[127, 127, 127]);
         assert_eq!(it.next().unwrap(), &[127, 127, u8::MAX]);
         assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn range_mut_mutate_some_keys() {
+        let mut tree = fixture_tree();
+
+        tree.values_mut().for_each(|value| *value = 0);
+
+        tree.range_mut([126, 0, 0]..=[128u8, 0, 0])
+            .for_each(|(_, value)| *value = 1024);
+
+        assert_eq!(
+            tree.into_iter().collect::<Vec<_>>(),
+            [
+                ([0, 0, 0], 0),
+                ([0, 0, 255], 0),
+                ([0, 255, 0], 0),
+                ([0, 255, 255], 0),
+                ([127, 127, 0], 1024),
+                ([127, 127, 127], 1024),
+                ([127, 127, 255], 1024),
+                ([255, 0, 0], 0),
+                ([255, 0, 255], 0),
+                ([255, 255, 0], 0),
+                ([255, 255, 255], 0)
+            ]
+        );
     }
 }
