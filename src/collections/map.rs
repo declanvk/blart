@@ -1946,7 +1946,7 @@ mod tests {
     #[cfg(not(miri))]
     #[test]
     fn clone_tree_fixed_length() {
-        let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
+        let mut tree: TreeMap<_, usize> = TreeMap::new();
         for (v, k) in generate_key_fixed_length([2; 8]).enumerate() {
             tree.try_insert(k, v).unwrap();
         }

@@ -114,10 +114,10 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 ///  - Panics if `value_stops` is 0.
 pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
     level_widths: [u8; KEY_LENGTH],
-) -> impl Iterator<Item = Box<[u8]>> {
+) -> impl Iterator<Item = [u8; KEY_LENGTH]> {
     struct FixedLengthKeys<const KEY_LENGTH: usize> {
         increments: [u8; KEY_LENGTH],
-        next_value: Option<Box<[u8]>>,
+        next_value: Option<[u8; KEY_LENGTH]>,
     }
 
     impl<const KEY_LENGTH: usize> FixedLengthKeys<KEY_LENGTH> {
@@ -145,13 +145,13 @@ pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
 
             FixedLengthKeys {
                 increments,
-                next_value: Some(vec![u8::MIN; KEY_LENGTH].into_boxed_slice()),
+                next_value: Some([u8::MIN; KEY_LENGTH]),
             }
         }
     }
 
     impl<const KEY_LENGTH: usize> Iterator for FixedLengthKeys<KEY_LENGTH> {
-        type Item = Box<[u8]>;
+        type Item = [u8; KEY_LENGTH];
 
         fn next(&mut self) -> Option<Self::Item> {
             let next_value = self.next_value.take()?;

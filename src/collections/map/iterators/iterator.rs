@@ -238,15 +238,15 @@ mod tests {
         assert_eq!(first_remaining_half.len(), TEST_PARAMS.half_len);
         assert_eq!(last_remaining_half.len(), TEST_PARAMS.half_len);
 
-        assert_eq!(first_remaining_half[0], &[0, 0, 0].into());
+        assert_eq!(first_remaining_half[0], &[0, 0, 0]);
         assert_eq!(
             first_remaining_half[first_remaining_half.len() - 1],
-            &TEST_PARAMS.first_half_last.into()
+            &TEST_PARAMS.first_half_last
         );
-        assert_eq!(last_remaining_half[0], &[255, 255, 255].into());
+        assert_eq!(last_remaining_half[0], &[255, 255, 255]);
         assert_eq!(
             last_remaining_half[last_remaining_half.len() - 1],
-            &TEST_PARAMS.last_half_last.into()
+            &TEST_PARAMS.last_half_last
         );
     }
 }

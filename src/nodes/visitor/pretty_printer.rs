@@ -230,7 +230,7 @@ mod tests {
             }
         }
 
-        let root: OpaqueNodePtr<DisplayAsDebug<Box<[u8]>>, usize, 16> =
+        let root: OpaqueNodePtr<DisplayAsDebug<_>, usize, 16> =
             crate::tests_common::setup_tree_from_entries(
                 crate::tests_common::generate_key_fixed_length([3, 3])
                     .enumerate()
