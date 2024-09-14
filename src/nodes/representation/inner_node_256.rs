@@ -228,7 +228,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
                 None => continue,
             }
         }
-        unreachable!()
+        unreachable!("inner node must have non-zero number of children");
     }
 
     #[cfg(feature = "nightly")]
@@ -285,7 +285,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
                 None => continue,
             }
         }
-        unreachable!()
+        unreachable!("inner node must have non-zero number of children");
     }
 
     #[inline(always)]

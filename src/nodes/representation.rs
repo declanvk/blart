@@ -268,13 +268,13 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
             ConcreteNodePtr::Node48(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
             ConcreteNodePtr::Node256(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
             ConcreteNodePtr::LeafNode(inner) => unsafe {
-                NodePtr::allocate_node_ptr(inner.as_ref().clone()).to_opaque()
+                NodePtr::allocate_node_ptr(inner.as_ref().clone_without_siblings()).to_opaque()
             },
         }
     }
 }
 
-/// An enum that encapsulates pointers to every type of Node
+/// An enum that encapsulates pointers to every type of [`Node`]
 pub enum ConcreteNodePtr<K, V, const PREFIX_LEN: usize> {
     /// Node that references between 2 and 4 children
     Node4(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>),
@@ -288,6 +288,34 @@ pub enum ConcreteNodePtr<K, V, const PREFIX_LEN: usize> {
     LeafNode(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>),
 }
 
+impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteNodePtr<K, V, PREFIX_LEN> {}
+
+impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteNodePtr<K, V, PREFIX_LEN> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Node4(arg0) => Self::Node4(arg0.clone()),
+            Self::Node16(arg0) => Self::Node16(arg0.clone()),
+            Self::Node48(arg0) => Self::Node48(arg0.clone()),
+            Self::Node256(arg0) => Self::Node256(arg0.clone()),
+            Self::LeafNode(arg0) => Self::LeafNode(arg0.clone()),
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> ConcreteNodePtr<K, V, PREFIX_LEN> {
+    /// Convert this node pointer with node type information into an
+    /// [`OpaqueNodePtr`] with the type information stored in the pointer.
+    pub fn to_opaque(self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
+        match self {
+            ConcreteNodePtr::Node4(node_ptr) => node_ptr.to_opaque(),
+            ConcreteNodePtr::Node16(node_ptr) => node_ptr.to_opaque(),
+            ConcreteNodePtr::Node48(node_ptr) => node_ptr.to_opaque(),
+            ConcreteNodePtr::Node256(node_ptr) => node_ptr.to_opaque(),
+            ConcreteNodePtr::LeafNode(node_ptr) => node_ptr.to_opaque(),
+        }
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteNodePtr<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -296,6 +324,88 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteNodePtr<K, V, PREFIX_
             Self::Node48(arg0) => f.debug_tuple("Node48").field(arg0).finish(),
             Self::Node256(arg0) => f.debug_tuple("Node256").field(arg0).finish(),
             Self::LeafNode(arg0) => f.debug_tuple("LeafNode").field(arg0).finish(),
+        }
+    }
+}
+
+macro_rules! concrete_node_ptr_from {
+    ($input:ty, $variant:ident) => {
+        impl<K, V, const PREFIX_LEN: usize> From<$input> for ConcreteNodePtr<K, V, PREFIX_LEN> {
+            fn from(value: $input) -> Self {
+                ConcreteNodePtr::$variant(value)
+            }
+        }
+    };
+}
+
+concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>, Node4);
+concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>, Node16);
+concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>, Node48);
+concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode256<K, V, PREFIX_LEN>>, Node256);
+concrete_node_ptr_from!(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>, LeafNode);
+
+/// An enum that encapsulates pointers to every type of [`InnerNode`]
+pub enum ConcreteInnerNodePtr<K, V, const PREFIX_LEN: usize> {
+    /// Node that references between 2 and 4 children
+    Node4(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>),
+    /// Node that references between 5 and 16 children
+    Node16(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>),
+    /// Node that references between 17 and 49 children
+    Node48(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>),
+    /// Node that references between 49 and 256 children
+    Node256(NodePtr<PREFIX_LEN, InnerNode256<K, V, PREFIX_LEN>>),
+}
+
+impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {}
+
+impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Node4(arg0) => Self::Node4(arg0.clone()),
+            Self::Node16(arg0) => Self::Node16(arg0.clone()),
+            Self::Node48(arg0) => Self::Node48(arg0.clone()),
+            Self::Node256(arg0) => Self::Node256(arg0.clone()),
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
+            Self::Node16(arg0) => f.debug_tuple("Node16").field(arg0).finish(),
+            Self::Node48(arg0) => f.debug_tuple("Node48").field(arg0).finish(),
+            Self::Node256(arg0) => f.debug_tuple("Node256").field(arg0).finish(),
+        }
+    }
+}
+
+macro_rules! concrete_inner_node_ptr_from {
+    ($input:ty, $variant:ident) => {
+        impl<K, V, const PREFIX_LEN: usize> From<$input>
+            for ConcreteInnerNodePtr<K, V, PREFIX_LEN>
+        {
+            fn from(value: $input) -> Self {
+                Self::$variant(value)
+            }
+        }
+    };
+}
+
+concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>, Node4);
+concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>, Node16);
+concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>, Node48);
+concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode256<K, V, PREFIX_LEN>>, Node256);
+
+impl<K, V, const PREFIX_LEN: usize> From<ConcreteInnerNodePtr<K, V, PREFIX_LEN>>
+    for ConcreteNodePtr<K, V, PREFIX_LEN>
+{
+    fn from(value: ConcreteInnerNodePtr<K, V, PREFIX_LEN>) -> Self {
+        match value {
+            ConcreteInnerNodePtr::Node4(inner_ptr) => ConcreteNodePtr::Node4(inner_ptr),
+            ConcreteInnerNodePtr::Node16(inner_ptr) => ConcreteNodePtr::Node16(inner_ptr),
+            ConcreteInnerNodePtr::Node48(inner_ptr) => ConcreteNodePtr::Node48(inner_ptr),
+            ConcreteInnerNodePtr::Node256(inner_ptr) => ConcreteNodePtr::Node256(inner_ptr),
         }
     }
 }
@@ -552,6 +662,8 @@ pub(crate) mod private {
 
 /// All nodes which contain a runtime tag that validates their type.
 pub trait Node<const PREFIX_LEN: usize>: private::Sealed {
+    // TODO: See if possible to remove PREFIX_LEN generic from this trait
+
     /// The runtime type of the node.
     const TYPE: NodeType;
 
@@ -825,19 +937,6 @@ pub struct LeafNode<K, V, const PREFIX_LEN: usize> {
     pub(crate) next: OptionalLeafPtr<K, V, PREFIX_LEN>,
 }
 
-impl<K: Clone, V: Clone, const PREFIX_LEN: usize> Clone for LeafNode<K, V, PREFIX_LEN> {
-    fn clone(&self) -> Self {
-        Self {
-            value: self.value.clone(),
-            key: self.key.clone(),
-            // We override the default clone behavior to wipe these values out, since its unlikely
-            // that the cloned leaf should point to the old linked list of leaves
-            previous: None,
-            next: None,
-        }
-    }
-}
-
 impl<K, V, const PREFIX_LEN: usize> LeafNode<K, V, PREFIX_LEN>
 where
     K: AsBytes,
@@ -1053,6 +1152,22 @@ impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
         // to `None`, but it is useful in the delete case to keep this
         // information around.
     }
+
+    /// Create a copy of this leaf node with the sibling references removed.
+    pub fn clone_without_siblings(&self) -> Self
+    where
+        K: Clone,
+        V: Clone,
+    {
+        Self {
+            value: self.value.clone(),
+            key: self.key.clone(),
+            // We override the default clone behavior to wipe these values out, since its unlikely
+            // that the cloned leaf should point to the old linked list of leaves
+            previous: None,
+            next: None,
+        }
+    }
 }
 
 impl<const PREFIX_LEN: usize, K, V> Node<PREFIX_LEN> for LeafNode<K, V, PREFIX_LEN> {
@@ -1233,7 +1348,10 @@ mod tests {
         mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
         num_children: usize,
     ) {
-        let mut leaves = vec![LeafNode::with_no_siblings(vec![].into(), ()); num_children];
+        let mut leaves = Vec::with_capacity(num_children);
+        for _ in 0..num_children {
+            leaves.push(LeafNode::with_no_siblings(vec![].into(), ()));
+        }
 
         assert!(!node.is_full());
         {
@@ -1261,7 +1379,10 @@ mod tests {
         mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
         num_children: usize,
     ) {
-        let mut leaves = vec![LeafNode::with_no_siblings(vec![].into(), ()); num_children];
+        let mut leaves = Vec::with_capacity(num_children);
+        for _ in 0..num_children {
+            leaves.push(LeafNode::with_no_siblings(vec![].into(), ()));
+        }
 
         assert!(!node.is_full());
         {
@@ -1297,7 +1418,10 @@ mod tests {
         mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
         num_children: usize,
     ) {
-        let mut leaves = vec![LeafNode::with_no_siblings(vec![].into(), ()); num_children];
+        let mut leaves = Vec::with_capacity(num_children);
+        for _ in 0..num_children {
+            leaves.push(LeafNode::with_no_siblings(vec![].into(), ()));
+        }
 
         let leaf_pointers = leaves
             .iter_mut()

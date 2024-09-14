@@ -403,11 +403,11 @@ mod tests {
                 assert_eq!(k, a);
                 assert_eq!(v, "aa");
             },
-            Entry::Vacant(_) => unreachable!(),
+            Entry::Vacant(_) => panic!(),
         }
 
         match tree.entry(a.clone()) {
-            Entry::Occupied(_) => unreachable!(),
+            Entry::Occupied(_) => panic!(),
             Entry::Vacant(e) => {
                 let e = e.insert_entry(String::from("aaa"));
                 let v = e.get();

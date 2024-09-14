@@ -406,11 +406,11 @@ mod tests {
                 assert_eq!(k, a);
                 assert_eq!(v, "aa");
             },
-            EntryRef::Vacant(_) => unreachable!(),
+            EntryRef::Vacant(_) => panic!(),
         }
 
         match tree.entry_ref(&a) {
-            EntryRef::Occupied(_) => unreachable!(),
+            EntryRef::Occupied(_) => panic!(),
             EntryRef::Vacant(e) => {
                 let e = e.insert_entry(String::from("aaa"));
                 let v = e.get();
