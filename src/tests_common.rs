@@ -4,6 +4,11 @@ use std::{collections::HashSet, iter};
 
 use crate::{AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr, TreeMap};
 
+/// This function swaps the elements of a 2-tuple.
+pub fn swap<A, B>((a, b): (A, B)) -> (B, A) {
+    (b, a)
+}
+
 /// Generate an iterator of bytestring keys, with increasing length up to a
 /// maximum value.
 ///

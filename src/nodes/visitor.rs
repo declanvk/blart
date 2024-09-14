@@ -76,8 +76,9 @@ impl<K, T, const PREFIX_LEN: usize, N: Node<PREFIX_LEN> + Visitable<K, T, PREFIX
         //     For example, the DotPrinter will attempt to print node addresses by
         //     converting the given reference into a pointer, but this only really works
         //     if the reference points to the actual node location.
-        let inner = self.read();
-        inner.visit_with(visitor)
+        // let inner = self.read();
+        // inner.visit_with(visitor)
+        unsafe { self.as_ref().visit_with(visitor) }
     }
 }
 

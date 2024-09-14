@@ -1,6 +1,6 @@
 use crate::{
-    rust_nightly_apis::maybe_uninit_uninit_array, Header, InnerNode, InnerNode48, Node, NodePtr,
-    NodeType, OpaqueNodePtr, RestrictedNodeIndex,
+    rust_nightly_apis::maybe_uninit_uninit_array, Header, InnerNode, InnerNode48, Node, NodeType,
+    OpaqueNodePtr, RestrictedNodeIndex,
 };
 use std::{
     fmt,
@@ -287,21 +287,6 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
         }
         unreachable!("inner node must have non-zero number of children");
     }
-
-    #[inline(always)]
-    fn deep_clone(&self) -> NodePtr<PREFIX_LEN, Self>
-    where
-        K: Clone,
-        V: Clone,
-    {
-        let mut node = NodePtr::allocate_node_ptr(Self::from_header(self.header.clone()));
-        let node_ref = node.as_mut_safe();
-        for (key_fragment, child_pointer) in self.iter() {
-            node_ref.child_pointers[usize::from(key_fragment)] = Some(child_pointer.deep_clone());
-        }
-
-        node
-    }
 }
 
 /// This struct is an iterator over the children of a [`InnerNode256`].
@@ -350,7 +335,7 @@ mod tests {
             inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
             FixtureReturn,
         },
-        LeafNode,
+        LeafNode, NodePtr,
     };
 
     use super::*;

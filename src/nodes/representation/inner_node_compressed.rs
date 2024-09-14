@@ -1,6 +1,6 @@
 use crate::{
     rust_nightly_apis::{assume, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array},
-    Header, InnerNode, InnerNode48, Node, NodePtr, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
+    Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
 use std::{
     fmt,
@@ -398,23 +398,6 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
 
         keys.iter().copied().zip(nodes.iter().copied())
     }
-
-    /// Deep clones the inner node by allocating memory to a new one
-    fn inner_deep_clone(&self) -> NodePtr<PREFIX_LEN, Self>
-    where
-        K: Clone,
-        V: Clone,
-        Self: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-    {
-        let mut node = NodePtr::allocate_node_ptr(Self::from_header(self.header.clone()));
-        let node_ref = node.as_mut_safe();
-        for (idx, (key_fragment, child_pointer)) in self.iter().enumerate() {
-            let child_pointer = child_pointer.deep_clone();
-            unsafe { node_ref.write_child_at(idx, key_fragment, child_pointer) };
-        }
-
-        node
-    }
 }
 
 /// Node that references between 2 and 4 children
@@ -527,15 +510,6 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, P
                 children.last().copied().unwrap_unchecked(),
             )
         }
-    }
-
-    #[inline(always)]
-    fn deep_clone(&self) -> NodePtr<PREFIX_LEN, Self>
-    where
-        K: Clone,
-        V: Clone,
-    {
-        self.inner_deep_clone()
     }
 }
 
@@ -691,15 +665,6 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, 
             )
         }
     }
-
-    #[inline(always)]
-    fn deep_clone(&self) -> NodePtr<PREFIX_LEN, Self>
-    where
-        K: Clone,
-        V: Clone,
-    {
-        self.inner_deep_clone()
-    }
 }
 
 #[cfg(test)]
@@ -709,7 +674,7 @@ mod tests {
             inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
             FixtureReturn,
         },
-        LeafNode,
+        LeafNode, NodePtr,
     };
 
     use super::*;

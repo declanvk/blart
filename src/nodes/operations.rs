@@ -14,3 +14,6 @@ pub(crate) use delete::*;
 
 mod deallocate;
 pub(crate) use deallocate::*;
+
+mod clone;
+pub(crate) use clone::*;

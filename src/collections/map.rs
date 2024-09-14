@@ -2,12 +2,12 @@
 //! iterators/etc.
 
 use crate::{
-    deallocate_tree, find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked,
-    minimum_unchecked,
+    clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
+    maximum_unchecked, minimum_unchecked,
     rust_nightly_apis::hasher_write_length_prefix,
     search_for_delete_point, search_for_insert_point, search_unchecked,
     visitor::{MalformedTreeError, WellFormedChecker},
-    AsBytes, DeletePoint, DeleteResult, InsertPoint, InsertPrefixError, InsertResult,
+    AsBytes, CloneResult, DeletePoint, DeleteResult, InsertPoint, InsertPrefixError, InsertResult,
     InsertSearchResultType::Exact,
     LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr,
 };
@@ -1532,12 +1532,28 @@ where
     V: Clone,
 {
     fn clone(&self) -> Self {
-        let mut tree = TreeMap::with_prefix_len();
-        for (key, value) in self.iter() {
-            tree.try_insert(key.clone(), value.clone())
-                .expect("key is already present in a TreeMap, this should not fail");
+        match &self.state {
+            Some(state) => {
+                let CloneResult {
+                    root,
+                    min_leaf,
+                    max_leaf,
+                } = unsafe { clone_unchecked(state.root) };
+
+                TreeMap {
+                    num_entries: self.num_entries,
+                    state: Some(NonEmptyTree {
+                        root,
+                        min_leaf,
+                        max_leaf,
+                    }),
+                }
+            },
+            None => TreeMap {
+                num_entries: 0,
+                state: None,
+            },
         }
-        tree
     }
 }
 

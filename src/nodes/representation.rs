@@ -253,25 +253,6 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     pub(crate) unsafe fn header_ref_unchecked<'h>(self) -> &'h Header<PREFIX_LEN> {
         unsafe { &*self.0.cast::<Header<PREFIX_LEN>>().to_ptr() }
     }
-
-    /// Do a deep clone recursively, by allocating new nodes
-    pub fn deep_clone(&self) -> Self
-    where
-        K: Clone,
-        V: Clone,
-    {
-        // SAFETY: We hold a shared reference, so it's safe to make
-        // a shared reference from it
-        match self.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
-            ConcreteNodePtr::Node16(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
-            ConcreteNodePtr::Node48(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
-            ConcreteNodePtr::Node256(inner) => unsafe { inner.as_ref().deep_clone().to_opaque() },
-            ConcreteNodePtr::LeafNode(inner) => unsafe {
-                NodePtr::allocate_node_ptr(inner.as_ref().clone_without_siblings()).to_opaque()
-            },
-        }
-    }
 }
 
 /// An enum that encapsulates pointers to every type of [`Node`]
@@ -509,13 +490,6 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     /// Acquires the underlying *mut pointer.
     pub fn to_ptr(self) -> *mut N {
         self.0.as_ptr()
-    }
-
-    fn as_mut_safe(&mut self) -> &mut N {
-        // SAFETY: The pointer is properly aligned and points to a initialized instance
-        // of N that is dereferenceable. The lifetime safety requirements are passed up
-        // to the invoked of this function.
-        unsafe { self.0.as_mut() }
     }
 }
 
@@ -907,12 +881,6 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
     ///    This is safe because if we had, no children this current node should
     ///    have been deleted.
     fn max(&self) -> (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>);
-
-    /// Deep clones the inner node by allocating memory to a new one
-    fn deep_clone(&self) -> NodePtr<PREFIX_LEN, Self>
-    where
-        Self::Key: Clone,
-        Self::Value: Clone;
 }
 
 /// This type alias represents an optional pointer to a leaf node.

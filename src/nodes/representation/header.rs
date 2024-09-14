@@ -137,6 +137,12 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         self.num_children -= 1;
     }
 
+    /// Reset the number of children to 0.
+    #[inline(always)]
+    pub fn reset_num_children(&mut self) {
+        self.num_children = 0;
+    }
+
     #[inline(always)]
     pub fn ltrim_by_with_leaf<K: AsBytes, V>(
         &mut self,
