@@ -1693,7 +1693,7 @@ where
     V: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.iter().eq(other.iter()) && self.num_entries == other.num_entries
+        self.num_entries == other.num_entries && self.iter().eq(other.iter())
     }
 }
 

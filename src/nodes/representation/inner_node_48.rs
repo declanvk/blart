@@ -482,7 +482,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
             let child_pointers = self.initialized_child_pointers();
             return (key as u8, child_pointers[usize::from(*idx)]);
         }
-        unreachable!();
+        unreachable!("inner node must have non-zero number of children");
     }
 
     #[cfg(feature = "nightly")]
@@ -545,7 +545,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
             let child_pointers = self.initialized_child_pointers();
             return (key as u8, child_pointers[usize::from(*idx)]);
         }
-        unreachable!();
+        unreachable!("inner node must have non-zero number of children");
     }
 
     #[inline(always)]
