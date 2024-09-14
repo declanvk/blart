@@ -3,7 +3,7 @@ use crate::{
         assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
         maybe_uninit_uninit_array,
     },
-    Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodePtr, NodeType,
+    Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodeType,
     OpaqueNodePtr,
 };
 use std::{
@@ -547,33 +547,6 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
         }
         unreachable!("inner node must have non-zero number of children");
     }
-
-    #[inline(always)]
-    fn deep_clone(&self) -> NodePtr<PREFIX_LEN, Self>
-    where
-        K: Clone,
-        V: Clone,
-    {
-        let mut node = NodePtr::allocate_node_ptr(Self::from_header(self.header.clone()));
-        let node_ref = node.as_mut_safe();
-        for (idx, (key_fragment, child_pointer)) in self.iter().enumerate() {
-            let child_pointer = child_pointer.deep_clone();
-            // SAFETY: This iterator is bound to have a maximum of
-            // 256 iterations, so its safe to unwrap the result
-            node_ref.child_indices[usize::from(key_fragment)] =
-                unsafe { RestrictedNodeIndex::try_from(idx).unwrap_unchecked() };
-
-            #[allow(unused_unsafe)]
-            unsafe {
-                // SAFETY: This idx is in bounds, since the number
-                // of iterations is always <= 48 (i.e 0-47)
-                assume!(idx < node_ref.child_pointers.len());
-            }
-            node_ref.child_pointers[idx].write(child_pointer);
-        }
-
-        node
-    }
 }
 
 /// This struct is an iterator over the children of a [`InnerNode48`].
@@ -631,7 +604,7 @@ mod tests {
             inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
             FixtureReturn,
         },
-        LeafNode,
+        LeafNode, NodePtr,
     };
 
     use super::*;
