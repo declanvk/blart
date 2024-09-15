@@ -241,7 +241,7 @@ mod tests {
             [u8::MAX, u8::MAX, u8::MAX],
         ]
         .into_iter()
-        .map(|arr| DropCounter::new(&drop_counter, arr))
+        .map(|arr| DropCounter::new(drop_counter, arr))
         .enumerate()
         .map(swap)
         .collect()
@@ -249,7 +249,7 @@ mod tests {
 
     fn check_will_deallocate_unconsumed_iter_values(
         drop_counter: &Arc<AtomicUsize>,
-        mut iter: impl Iterator + DoubleEndedIterator + ExactSizeIterator,
+        mut iter: impl DoubleEndedIterator + ExactSizeIterator,
     ) {
         assert_eq!(drop_counter.load(Ordering::Relaxed), 8);
 

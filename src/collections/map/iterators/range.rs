@@ -1,5 +1,5 @@
 //! This module contains types and functions relating to iterating over a
-//! range of the [`TreeMap`][crate::TreeMap].
+//! range of the [`TreeMap`].
 
 use std::{
     cmp::Ordering,
