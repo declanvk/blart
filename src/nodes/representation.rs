@@ -273,13 +273,7 @@ impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteNodePtr<K, V, PREFIX_LEN> {
 
 impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteNodePtr<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
-        match self {
-            Self::Node4(arg0) => Self::Node4(arg0.clone()),
-            Self::Node16(arg0) => Self::Node16(arg0.clone()),
-            Self::Node48(arg0) => Self::Node48(arg0.clone()),
-            Self::Node256(arg0) => Self::Node256(arg0.clone()),
-            Self::LeafNode(arg0) => Self::LeafNode(arg0.clone()),
-        }
+        *self
     }
 }
 
@@ -341,12 +335,7 @@ impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteInnerNodePtr<K, V, PREFIX_L
 
 impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
-        match self {
-            Self::Node4(arg0) => Self::Node4(arg0.clone()),
-            Self::Node16(arg0) => Self::Node16(arg0.clone()),
-            Self::Node48(arg0) => Self::Node48(arg0.clone()),
-            Self::Node256(arg0) => Self::Node256(arg0.clone()),
-        }
+        *self
     }
 }
 

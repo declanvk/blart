@@ -303,8 +303,12 @@ mod tests {
     #[test]
     fn clone_small_trees() {
         check([[0u8, 0], [171, 171], [65, 229]]);
-        check(generate_key_fixed_length([17; 2]));
-        check(generate_keys_skewed(127));
+        check(generate_key_fixed_length(if cfg!(miri) {
+            [3; 2]
+        } else {
+            [17; 2]
+        }));
+        check(generate_keys_skewed(if cfg!(miri) { 16 } else { 127 }));
     }
 
     #[test]
