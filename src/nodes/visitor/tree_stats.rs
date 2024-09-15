@@ -330,7 +330,7 @@ mod tests {
             leaf: LeafStats {
                 count: 16,
                 sum_key_bytes: 64,
-                mem_usage: 384,
+                mem_usage: 256,
             },
             ..Default::default()
         };
@@ -376,7 +376,7 @@ mod tests {
             leaf: LeafStats {
                 count: 64,
                 sum_key_bytes: 128,
-                mem_usage: 1536,
+                mem_usage: 1024,
             },
             ..Default::default()
         };

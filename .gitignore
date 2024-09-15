@@ -11,7 +11,7 @@ default.profraw
 .vscode/
 
 # profiling workload data
-data/
+/data/
 profile.json
 
 # coverage info

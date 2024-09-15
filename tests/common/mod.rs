@@ -1,6 +1,6 @@
 use std::{
     fs,
-    hash::{Hash, Hasher},
+    hash::{DefaultHasher, Hash, Hasher},
     path::PathBuf,
 };
 
@@ -26,9 +26,9 @@ pub fn generate_dhat_output_filename(test_filename: &str) -> PathBuf {
     let mut output_path = setup_dhat_output_dir();
 
     let test_filename_hash = {
-        let mut hasher = rustc_hash::FxHasher::default();
-        test_filename.hash(&mut hasher);
-        hasher.finish()
+        let mut s = DefaultHasher::new();
+        test_filename.hash(&mut s);
+        s.finish()
     };
 
     output_path.push(format!("heap-{test_filename_hash:x}.json"));

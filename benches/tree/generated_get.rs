@@ -6,10 +6,7 @@ use blart::{
     },
     TreeMap,
 };
-use criterion::{measurement::Measurement, BenchmarkGroup, Criterion};
-
-#[macro_use]
-mod common;
+use criterion::{criterion_group, measurement::Measurement, BenchmarkGroup, Criterion};
 
 #[inline(always)]
 fn run_benchmarks<M: Measurement>(
@@ -42,8 +39,8 @@ fn run_benchmarks<M: Measurement>(
 }
 
 #[inline(always)]
-fn setup_tree_run_benches_cleanup<M: Measurement>(
-    c: &mut Criterion<M>,
+fn setup_tree_run_benches_cleanup(
+    c: &mut Criterion,
     keys: impl Iterator<Item = Box<[u8]>>,
     group_name: &str,
 ) {
@@ -64,18 +61,18 @@ fn setup_tree_run_benches_cleanup<M: Measurement>(
 }
 
 #[inline(always)]
-fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
+fn bench(c: &mut Criterion) {
     // number of keys = 256
     setup_tree_run_benches_cleanup(
         c,
         generate_keys_skewed(u8::MAX as usize),
-        &format!("{prefix}/skewed"),
+        "generated_get/skewed",
     );
     // number of keys = 256
     setup_tree_run_benches_cleanup(
         c,
-        generate_key_fixed_length([2; 8]),
-        &format!("{prefix}/fixed_length"),
+        generate_key_fixed_length([2; 8]).map(Box::from),
+        "generated_get/fixed_length",
     );
     // number of keys = 256
     setup_tree_run_benches_cleanup(
@@ -93,15 +90,8 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
                 },
             ],
         ),
-        &format!("{prefix}/large_prefixes"),
+        "generated_get/large_prefixes",
     );
 }
 
-gen_benches!(
-    bench,
-    (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
-    (
-        instructions,
-        perfcnt::linux::HardwareEventType::Instructions
-    )
-);
+criterion_group!(bench_generated_get_group, bench);

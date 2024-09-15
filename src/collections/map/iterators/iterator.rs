@@ -206,15 +206,15 @@ mod tests {
         const TEST_PARAMS: TestValues = TestValues {
             value_stops: 5,
             half_len: 108,
-            first_half_last: [102, 255, 255],
-            last_half_last: [153, 0, 0],
+            first_half_last: [2, 5, 5],
+            last_half_last: [3, 0, 0],
         };
         #[cfg(miri)]
         const TEST_PARAMS: TestValues = TestValues {
             value_stops: 3,
             half_len: 32,
-            first_half_last: [85, 255, 255],
-            last_half_last: [170, 0, 0],
+            first_half_last: [1, 3, 3],
+            last_half_last: [2, 0, 0],
         };
 
         let keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
@@ -238,15 +238,18 @@ mod tests {
         assert_eq!(first_remaining_half.len(), TEST_PARAMS.half_len);
         assert_eq!(last_remaining_half.len(), TEST_PARAMS.half_len);
 
-        assert_eq!(first_remaining_half[0], &[0, 0, 0].into());
+        assert_eq!(first_remaining_half[0], &[0, 0, 0]);
         assert_eq!(
             first_remaining_half[first_remaining_half.len() - 1],
-            &TEST_PARAMS.first_half_last.into()
+            &TEST_PARAMS.first_half_last
         );
-        assert_eq!(last_remaining_half[0], &[255, 255, 255].into());
+        assert_eq!(
+            last_remaining_half[0],
+            if cfg!(miri) { &[3, 3, 3] } else { &[5, 5, 5] }
+        );
         assert_eq!(
             last_remaining_half[last_remaining_half.len() - 1],
-            &TEST_PARAMS.last_half_last.into()
+            &TEST_PARAMS.last_half_last
         );
     }
 }

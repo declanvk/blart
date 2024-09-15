@@ -1,15 +1,12 @@
-use std::{ffi::CString, time::Duration};
+use std::ffi::CString;
 
 use blart::TreeMap;
-use criterion::{measurement::Measurement, Criterion};
+use criterion::{criterion_group, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
-#[macro_use]
-mod common;
-
-fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
+fn bench(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(69420);
-    let words = include_str!("dict.txt");
+    let words = include_str!("../data/medium-dict.txt");
 
     let mut words: Vec<_> = words.lines().map(|s| CString::new(s).unwrap()).collect();
     words.dedup();
@@ -35,9 +32,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         .collect();
 
     {
-        let mut group = c.benchmark_group(format!("{prefix}/entry"));
-        group.warm_up_time(Duration::from_secs(3));
-        group.measurement_time(Duration::from_secs(5));
+        let mut group = c.benchmark_group("entry");
 
         for (ty, vals) in [("vacant", vacant.clone()), ("occupied", occupied.clone())] {
             group.bench_function(format!("{ty}/or_default"), |b| {
@@ -108,9 +103,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     }
 
     {
-        let mut group = c.benchmark_group(format!("{prefix}/default"));
-        group.warm_up_time(Duration::from_secs(3));
-        group.measurement_time(Duration::from_secs(5));
+        let mut group = c.benchmark_group("entry/default");
 
         for (ty, vals) in [("vacant", vacant), ("occupied", occupied)] {
             group.bench_function(format!("{ty}/or_default"), |b| {
@@ -205,11 +198,4 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     }
 }
 
-gen_benches!(
-    bench,
-    (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
-    (
-        instructions,
-        perfcnt::linux::HardwareEventType::Instructions
-    )
-);
+criterion_group!(bench_entry_group, bench);

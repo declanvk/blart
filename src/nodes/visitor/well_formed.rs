@@ -400,7 +400,7 @@ mod tests {
             .enumerate()
             .map(|(idx, key)| (key, idx));
 
-        let root: OpaqueNodePtr<Box<[u8]>, usize, 16> = setup_tree_from_entries(keys);
+        let root: OpaqueNodePtr<_, usize, 16> = setup_tree_from_entries(keys);
         // 4  * 3 * 2
         assert_eq!(num_leaves, 24);
 

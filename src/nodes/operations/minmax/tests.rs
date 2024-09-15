@@ -26,7 +26,7 @@ fn large_tree_same_length_keys_min_max() {
     const VALUE_STOPS: u8 = 2;
 
     let mut keys = generate_key_fixed_length([VALUE_STOPS; 3]);
-    let mut root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
+    let mut root: OpaqueNodePtr<_, usize, 16> =
         NodePtr::allocate_node_ptr(LeafNode::new(keys.next().unwrap(), 0)).to_opaque();
 
     for (idx, key) in keys.enumerate() {
@@ -40,8 +40,12 @@ fn large_tree_same_length_keys_min_max() {
     let min_leaf = min_leaf.read();
     let max_leaf = max_leaf.read();
     assert!(min_leaf.key_ref() < max_leaf.key_ref());
-    assert_eq!(min_leaf.key_ref().as_ref(), &[u8::MIN, u8::MIN, u8::MIN]);
-    assert_eq!(max_leaf.key_ref().as_ref(), &[u8::MAX, u8::MAX, u8::MAX]);
+    assert_eq!(min_leaf.key_ref().as_ref(), &[0, 0, 0]);
+    if cfg!(miri) {
+        assert_eq!(max_leaf.key_ref().as_ref(), &[2, 2, 2]);
+    } else {
+        assert_eq!(max_leaf.key_ref().as_ref(), &[5, 5, 5]);
+    }
 
     unsafe { deallocate_tree(root) }
 }

@@ -1,11 +1,8 @@
-use std::{ffi::CString, time::Duration};
+use std::ffi::CString;
 
 use blart::TreeMap;
-use criterion::{measurement::Measurement, Criterion};
+use criterion::{criterion_group, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
-
-#[macro_use]
-mod common;
 
 fn insert(words: Vec<CString>) -> TreeMap<CString, usize> {
     let mut art = TreeMap::new();
@@ -15,9 +12,9 @@ fn insert(words: Vec<CString>) -> TreeMap<CString, usize> {
     art
 }
 
-fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
+fn bench(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(69420);
-    let words = include_str!("dict.txt");
+    let words = include_str!("../data/medium-dict.txt");
     let mut bytes = 0;
     let mut words: Vec<_> = words
         .lines()
@@ -48,10 +45,8 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let part_bytes: usize = part_words.iter().map(|w| w.as_bytes_with_nul().len()).sum();
 
     {
-        let mut group = c.benchmark_group(format!("{prefix}/words/full"));
+        let mut group = c.benchmark_group("dict/words/full");
         group.throughput(criterion::Throughput::Bytes(bytes as u64));
-        group.warm_up_time(Duration::from_secs(10));
-        group.measurement_time(Duration::from_secs(30));
         group.bench_function("insert/asc", |b| {
             b.iter_batched(|| words.clone(), insert, criterion::BatchSize::SmallInput)
         });
@@ -71,10 +66,8 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         });
     }
     {
-        let mut group = c.benchmark_group(format!("{prefix}/words/part"));
+        let mut group = c.benchmark_group("dict/words/part");
         group.throughput(criterion::Throughput::Bytes(part_bytes as u64));
-        group.warm_up_time(Duration::from_secs(10));
-        group.measurement_time(Duration::from_secs(30));
         group.bench_function("insert/asc", |b| {
             b.iter_batched(
                 || part_words.clone(),
@@ -99,11 +92,4 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     }
 }
 
-gen_benches!(
-    bench,
-    (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
-    (
-        instructions,
-        perfcnt::linux::HardwareEventType::Instructions
-    )
-);
+criterion_group!(bench_dict_insert_group, bench);

@@ -25,7 +25,11 @@ cargo "${TOOLCHAIN_ARG}" fmt -- --check
 cargo "${TOOLCHAIN_ARG}" build  $TOOLCHAIN_EXTRA_ARGS --all-targets
 
 # --all-targets does not include the doctests
-cargo "${TOOLCHAIN_ARG}" test   $TOOLCHAIN_EXTRA_ARGS --all-targets
+cargo "${TOOLCHAIN_ARG}" test   $TOOLCHAIN_EXTRA_ARGS --lib --bins --examples --tests
+# check in release just in case
+cargo "${TOOLCHAIN_ARG}" test   $TOOLCHAIN_EXTRA_ARGS --lib --bins --examples --tests --release
+# We test benchmarks in release, otherwise they are too slow
+cargo "${TOOLCHAIN_ARG}" test   $TOOLCHAIN_EXTRA_ARGS --benches --release
 cargo "${TOOLCHAIN_ARG}" test   $TOOLCHAIN_EXTRA_ARGS --doc
 
 cargo "${TOOLCHAIN_ARG}" clippy $TOOLCHAIN_EXTRA_ARGS --all-targets 

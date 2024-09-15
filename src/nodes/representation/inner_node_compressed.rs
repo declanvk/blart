@@ -231,7 +231,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     fn change_block_size<const NEW_SIZE: usize>(
         &self,
     ) -> InnerNodeCompressed<K, V, PREFIX_LEN, NEW_SIZE> {
-        debug_assert!(
+        assert!(
             self.header.num_children() <= NEW_SIZE,
             "Cannot change InnerNodeCompressed<{}> to size {} when it has more than {} children. \
              Currently has [{}] children.",
@@ -282,7 +282,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
 
         let (keys, _) = self.initialized_portion();
 
-        debug_assert_eq!(
+        assert_eq!(
             keys.len(),
             self.keys.len(),
             "Node must be full to grow to node 48"
@@ -708,13 +708,6 @@ mod tests {
         inner_node_remove_child_test(InnerNode4::<_, _, 16>::empty(), 4)
     }
 
-    // TODO
-    // #[test]
-    // #[should_panic]
-    // fn node4_write_child_full_panic() {
-    //     inner_node_write_child_test(InnerNode4::<_, _, 16>::empty(), 5);
-    // }
-
     #[test]
     fn node4_grow() {
         let mut n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
@@ -782,13 +775,6 @@ mod tests {
         inner_node_remove_child_test(InnerNode16::<_, _, 16>::empty(), 16)
     }
 
-    // TODO
-    // #[test]
-    // #[should_panic]
-    // fn node16_write_child_full_panic() {
-    //     inner_node_write_child_test(InnerNode16::<_, _, 16>::empty(), 17);
-    // }
-
     #[test]
     #[should_panic = "Node must be full to grow to node 48"]
     fn node16_grow_panic() {
@@ -804,12 +790,7 @@ mod tests {
         n16.write_child(123, l2_ptr);
         n16.write_child(1, l3_ptr);
 
-        let n48 = n16.grow();
-
-        assert_eq!(n48.lookup_child(3), Some(l1_ptr));
-        assert_eq!(n48.lookup_child(123), Some(l2_ptr));
-        assert_eq!(n48.lookup_child(1), Some(l3_ptr));
-        assert_eq!(n48.lookup_child(4), None);
+        let _n48 = n16.grow();
     }
 
     #[test]

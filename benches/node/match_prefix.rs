@@ -1,12 +1,7 @@
-use std::time::Duration;
-
 use blart::{InnerNode, InnerNode256, InnerNode48, LeafNode, NodePtr};
-use criterion::{measurement::Measurement, Criterion};
+use criterion::{criterion_group, Criterion};
 
-#[macro_use]
-mod common;
-
-fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
+fn bench(c: &mut Criterion) {
     let leaf = LeafNode::new(
         vec![
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -45,9 +40,7 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     node256_large.write_child(99, leaf_opaque);
 
     {
-        let mut old_group = c.benchmark_group(format!("{prefix}/old"));
-        old_group.warm_up_time(Duration::from_secs(5));
-        old_group.measurement_time(Duration::from_secs(10));
+        let mut old_group = c.benchmark_group("match_prefix");
         old_group.bench_function("node48/small/match", |b| {
             b.iter(|| std::hint::black_box(node48_small.match_prefix(key_small_match, 0)));
         });
@@ -78,11 +71,4 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     drop(unsafe { Box::from_raw(leaf_ptr) });
 }
 
-gen_benches!(
-    bench,
-    (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
-    (
-        instructions,
-        perfcnt::linux::HardwareEventType::Instructions
-    )
-);
+criterion_group!(bench_match_prefix_group, bench);

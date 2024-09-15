@@ -305,7 +305,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
     }
 
     fn shrink(&self) -> Self::ShrunkNode {
-        debug_assert!(
+        assert!(
             self.header.num_children() <= 16,
             "Cannot shrink a Node48 when it has more than 16 children. Currently has [{}] \
              children.",

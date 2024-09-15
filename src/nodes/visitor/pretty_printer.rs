@@ -230,7 +230,7 @@ mod tests {
             }
         }
 
-        let root: OpaqueNodePtr<DisplayAsDebug<Box<[u8]>>, usize, 16> =
+        let root: OpaqueNodePtr<DisplayAsDebug<_>, usize, 16> =
             crate::tests_common::setup_tree_from_entries(
                 crate::tests_common::generate_key_fixed_length([3, 3])
                     .enumerate()
@@ -255,45 +255,45 @@ mod tests {
             output,
             "strict digraph G {
 node [shape=record]
-n0 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 85| <c2> 170| <c3> 255}}\"]
-n1 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 85| <c2> 170| <c3> 255}}\"]
+n0 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
+n1 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
 n2 [label=\"{{<h0> Leaf} | {[0, 0]} | {0}}\"]
 n1:c0 -> n2:h0
-n3 [label=\"{{<h0> Leaf} | {[0, 85]} | {1}}\"]
+n3 [label=\"{{<h0> Leaf} | {[0, 1]} | {1}}\"]
 n1:c1 -> n3:h0
-n4 [label=\"{{<h0> Leaf} | {[0, 170]} | {2}}\"]
+n4 [label=\"{{<h0> Leaf} | {[0, 2]} | {2}}\"]
 n1:c2 -> n4:h0
-n5 [label=\"{{<h0> Leaf} | {[0, 255]} | {3}}\"]
+n5 [label=\"{{<h0> Leaf} | {[0, 3]} | {3}}\"]
 n1:c3 -> n5:h0
 n0:c0 -> n1:h0
-n6 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 85| <c2> 170| <c3> 255}}\"]
-n7 [label=\"{{<h0> Leaf} | {[85, 0]} | {4}}\"]
+n6 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
+n7 [label=\"{{<h0> Leaf} | {[1, 0]} | {4}}\"]
 n6:c0 -> n7:h0
-n8 [label=\"{{<h0> Leaf} | {[85, 85]} | {5}}\"]
+n8 [label=\"{{<h0> Leaf} | {[1, 1]} | {5}}\"]
 n6:c1 -> n8:h0
-n9 [label=\"{{<h0> Leaf} | {[85, 170]} | {6}}\"]
+n9 [label=\"{{<h0> Leaf} | {[1, 2]} | {6}}\"]
 n6:c2 -> n9:h0
-n10 [label=\"{{<h0> Leaf} | {[85, 255]} | {7}}\"]
+n10 [label=\"{{<h0> Leaf} | {[1, 3]} | {7}}\"]
 n6:c3 -> n10:h0
 n0:c1 -> n6:h0
-n11 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 85| <c2> 170| <c3> 255}}\"]
-n12 [label=\"{{<h0> Leaf} | {[170, 0]} | {8}}\"]
+n11 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
+n12 [label=\"{{<h0> Leaf} | {[2, 0]} | {8}}\"]
 n11:c0 -> n12:h0
-n13 [label=\"{{<h0> Leaf} | {[170, 85]} | {9}}\"]
+n13 [label=\"{{<h0> Leaf} | {[2, 1]} | {9}}\"]
 n11:c1 -> n13:h0
-n14 [label=\"{{<h0> Leaf} | {[170, 170]} | {10}}\"]
+n14 [label=\"{{<h0> Leaf} | {[2, 2]} | {10}}\"]
 n11:c2 -> n14:h0
-n15 [label=\"{{<h0> Leaf} | {[170, 255]} | {11}}\"]
+n15 [label=\"{{<h0> Leaf} | {[2, 3]} | {11}}\"]
 n11:c3 -> n15:h0
 n0:c2 -> n11:h0
-n16 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 85| <c2> 170| <c3> 255}}\"]
-n17 [label=\"{{<h0> Leaf} | {[255, 0]} | {12}}\"]
+n16 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
+n17 [label=\"{{<h0> Leaf} | {[3, 0]} | {12}}\"]
 n16:c0 -> n17:h0
-n18 [label=\"{{<h0> Leaf} | {[255, 85]} | {13}}\"]
+n18 [label=\"{{<h0> Leaf} | {[3, 1]} | {13}}\"]
 n16:c1 -> n18:h0
-n19 [label=\"{{<h0> Leaf} | {[255, 170]} | {14}}\"]
+n19 [label=\"{{<h0> Leaf} | {[3, 2]} | {14}}\"]
 n16:c2 -> n19:h0
-n20 [label=\"{{<h0> Leaf} | {[255, 255]} | {15}}\"]
+n20 [label=\"{{<h0> Leaf} | {[3, 3]} | {15}}\"]
 n16:c3 -> n20:h0
 n0:c3 -> n16:h0
 }

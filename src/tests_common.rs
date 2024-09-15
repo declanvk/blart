@@ -73,8 +73,8 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 /// let keys = generate_key_fixed_length([3, 2, 1]).collect::<Vec<_>>();
 /// assert_eq!(keys.len(), 24);
 /// assert_eq!(keys[0].as_ref(), &[0, 0, 0]);
-/// assert_eq!(keys[keys.len() / 2].as_ref(), &[170, 0, 0]);
-/// assert_eq!(keys[keys.len() - 1].as_ref(), &[255, 255, 255]);
+/// assert_eq!(keys[keys.len() / 2].as_ref(), &[2, 0, 0]);
+/// assert_eq!(keys[keys.len() - 1].as_ref(), &[3, 2, 1]);
 ///
 /// for k in keys {
 ///     println!("{:?}", k);
@@ -84,29 +84,29 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 /// The above example will print
 /// ```text
 /// [0, 0, 0]
-/// [0, 0, 255]
-/// [0, 128, 0]
-/// [0, 128, 255]
-/// [0, 255, 0]
-/// [0, 255, 255]
-/// [85, 0, 0]
-/// [85, 0, 255]
-/// [85, 128, 0]
-/// [85, 128, 255]
-/// [85, 255, 0]
-/// [85, 255, 255]
-/// [170, 0, 0]
-/// [170, 0, 255]
-/// [170, 128, 0]
-/// [170, 128, 255]
-/// [170, 255, 0]
-/// [170, 255, 255]
-/// [255, 0, 0]
-/// [255, 0, 255]
-/// [255, 128, 0]
-/// [255, 128, 255]
-/// [255, 255, 0]
-/// [255, 255, 255]
+/// [0, 0, 1]
+/// [0, 1, 0]
+/// [0, 1, 1]
+/// [0, 2, 0]
+/// [0, 2, 1]
+/// [1, 0, 0]
+/// [1, 0, 1]
+/// [1, 1, 0]
+/// [1, 1, 1]
+/// [1, 2, 0]
+/// [1, 2, 1]
+/// [2, 0, 0]
+/// [2, 0, 1]
+/// [2, 1, 0]
+/// [2, 1, 1]
+/// [2, 2, 0]
+/// [2, 2, 1]
+/// [3, 0, 0]
+/// [3, 0, 1]
+/// [3, 1, 0]
+/// [3, 1, 1]
+/// [3, 2, 0]
+/// [3, 2, 1]
 /// ```
 ///
 /// # Panics
@@ -114,24 +114,14 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 ///  - Panics if `value_stops` is 0.
 pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
     level_widths: [u8; KEY_LENGTH],
-) -> impl Iterator<Item = Box<[u8]>> {
+) -> impl Iterator<Item = [u8; KEY_LENGTH]> {
     struct FixedLengthKeys<const KEY_LENGTH: usize> {
-        increments: [u8; KEY_LENGTH],
-        next_value: Option<Box<[u8]>>,
+        level_widths: [u8; KEY_LENGTH],
+        next_value: Option<[u8; KEY_LENGTH]>,
     }
 
     impl<const KEY_LENGTH: usize> FixedLengthKeys<KEY_LENGTH> {
         pub fn new(level_widths: [u8; KEY_LENGTH]) -> Self {
-            fn div_ceil(lhs: u8, rhs: u8) -> u8 {
-                let d = lhs / rhs;
-                let r = lhs % rhs;
-                if r > 0 && rhs > 0 {
-                    d + 1
-                } else {
-                    d
-                }
-            }
-
             assert!(
                 KEY_LENGTH > 0,
                 "the fixed key length must be greater than 0"
@@ -141,32 +131,34 @@ pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
                 "the number of distinct values for each key digit must be greater than 0"
             );
 
-            let increments = level_widths.map(|value_stops| div_ceil(u8::MAX, value_stops));
-
             FixedLengthKeys {
-                increments,
-                next_value: Some(vec![u8::MIN; KEY_LENGTH].into_boxed_slice()),
+                level_widths,
+                next_value: Some([u8::MIN; KEY_LENGTH]),
             }
         }
     }
 
     impl<const KEY_LENGTH: usize> Iterator for FixedLengthKeys<KEY_LENGTH> {
-        type Item = Box<[u8]>;
+        type Item = [u8; KEY_LENGTH];
 
         fn next(&mut self) -> Option<Self::Item> {
             let next_value = self.next_value.take()?;
 
-            if next_value.iter().all(|digit| *digit == u8::MAX) {
+            if next_value
+                .iter()
+                .zip(self.level_widths)
+                .all(|(digit, max_digit)| *digit == max_digit)
+            {
                 // the .take function already updated the next_value to None
                 return Some(next_value);
             }
 
-            let mut new_next_value = next_value.clone();
+            let mut new_next_value = next_value;
             for idx in (0..new_next_value.len()).rev() {
-                if new_next_value[idx] == u8::MAX {
+                if new_next_value[idx] == self.level_widths[idx] {
                     new_next_value[idx] = u8::MIN;
                 } else {
-                    new_next_value[idx] = new_next_value[idx].saturating_add(self.increments[idx]);
+                    new_next_value[idx] = new_next_value[idx].saturating_add(1);
                     break;
                 }
             }
@@ -202,8 +194,8 @@ pub struct PrefixExpansion {
 /// let keys = generate_key_with_prefix([2; 3], [PrefixExpansion { base_index: 0, expanded_length: 3 }]).collect::<Vec<_>>();
 /// assert_eq!(keys.len(), 27);
 /// assert_eq!(keys[0].as_ref(), &[0, 0, 0, 0, 0]);
-/// assert_eq!(keys[(keys.len() / 2) - 2].as_ref(), &[128, 128, 128, 0, 255]);
-/// assert_eq!(keys[keys.len() - 1].as_ref(), &[255, 255, 255, 255, 255]);
+/// assert_eq!(keys[(keys.len() / 2) - 2].as_ref(), &[1, 1, 1, 0, 2]);
+/// assert_eq!(keys[keys.len() - 1].as_ref(), &[2, 2, 2, 2, 2]);
 ///
 /// for k in keys {
 ///     println!("{:?}", k);
@@ -213,32 +205,32 @@ pub struct PrefixExpansion {
 /// The above example will print out:
 /// ```text
 /// [0, 0, 0, 0, 0]
-/// [0, 0, 0, 0, 128]
-/// [0, 0, 0, 0, 255]
-/// [0, 0, 0, 128, 0]
-/// [0, 0, 0, 128, 128]
-/// [0, 0, 0, 128, 255]
-/// [0, 0, 0, 255, 0]
-/// [0, 0, 0, 255, 128]
-/// [0, 0, 0, 255, 255]
-/// [128, 128, 128, 0, 0]
-/// [128, 128, 128, 0, 128]
-/// [128, 128, 128, 0, 255]
-/// [128, 128, 128, 128, 0]
-/// [128, 128, 128, 128, 128]
-/// [128, 128, 128, 128, 255]
-/// [128, 128, 128, 255, 0]
-/// [128, 128, 128, 255, 128]
-/// [128, 128, 128, 255, 255]
-/// [255, 255, 255, 0, 0]
-/// [255, 255, 255, 0, 128]
-/// [255, 255, 255, 0, 255]
-/// [255, 255, 255, 128, 0]
-/// [255, 255, 255, 128, 128]
-/// [255, 255, 255, 128, 255]
-/// [255, 255, 255, 255, 0]
-/// [255, 255, 255, 255, 128]
-/// [255, 255, 255, 255, 255]
+/// [0, 0, 0, 0, 1]
+/// [0, 0, 0, 0, 2]
+/// [0, 0, 0, 1, 0]
+/// [0, 0, 0, 1, 1]
+/// [0, 0, 0, 1, 2]
+/// [0, 0, 0, 2, 0]
+/// [0, 0, 0, 2, 1]
+/// [0, 0, 0, 2, 2]
+/// [1, 1, 1, 0, 0]
+/// [1, 1, 1, 0, 1]
+/// [1, 1, 1, 0, 2]
+/// [1, 1, 1, 1, 0]
+/// [1, 1, 1, 1, 1]
+/// [1, 1, 1, 1, 2]
+/// [1, 1, 1, 2, 0]
+/// [1, 1, 1, 2, 1]
+/// [1, 1, 1, 2, 2]
+/// [2, 2, 2, 0, 0]
+/// [2, 2, 2, 0, 1]
+/// [2, 2, 2, 0, 2]
+/// [2, 2, 2, 1, 0]
+/// [2, 2, 2, 1, 1]
+/// [2, 2, 2, 1, 2]
+/// [2, 2, 2, 2, 0]
+/// [2, 2, 2, 2, 1]
+/// [2, 2, 2, 2, 2]
 /// ```
 ///
 /// # Panics
@@ -350,4 +342,89 @@ where
     }
 
     current_root
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::TreeMap;
+
+    use super::*;
+
+    #[test]
+    fn key_generator_returns_expected_number_of_entries() {
+        #[track_caller]
+        fn check<K: AsBytes>(it: impl IntoIterator<Item = K>, expected_num_entries: usize) {
+            let mut num_entries = 0;
+            let it = it.into_iter().inspect(|_| num_entries += 1);
+            let mut tree = TreeMap::new();
+            for (key, value) in it.enumerate().map(|(a, b)| (b, a)) {
+                tree.try_insert(key, value).unwrap();
+            }
+
+            assert_eq!(num_entries, tree.len());
+            assert_eq!(expected_num_entries, num_entries);
+        }
+
+        check(generate_key_fixed_length([3, 2, 1]), 4 * 3 * 2);
+        check(generate_key_fixed_length([15, 2]), 16 * 3);
+        check(generate_key_fixed_length([255]), 256);
+        check(generate_key_fixed_length([127]), 128);
+        if cfg!(not(miri)) {
+            check(generate_key_fixed_length([7; 5]), 8 * 8 * 8 * 8 * 8);
+        }
+
+        let no_op_expansion = [PrefixExpansion {
+            base_index: 0,
+            expanded_length: 1,
+        }];
+        check(
+            generate_key_with_prefix([3, 2, 1], no_op_expansion),
+            4 * 3 * 2,
+        );
+        check(generate_key_with_prefix([15, 2], no_op_expansion), 16 * 3);
+        check(generate_key_with_prefix([255], no_op_expansion), 256);
+        check(generate_key_with_prefix([127], no_op_expansion), 128);
+
+        check(
+            generate_key_with_prefix(
+                [3, 2, 1],
+                [
+                    PrefixExpansion {
+                        base_index: 0,
+                        expanded_length: 1,
+                    },
+                    PrefixExpansion {
+                        base_index: 1,
+                        expanded_length: 1,
+                    },
+                    PrefixExpansion {
+                        base_index: 2,
+                        expanded_length: 1,
+                    },
+                ],
+            ),
+            4 * 3 * 2,
+        );
+
+        check(
+            generate_key_with_prefix(
+                [3, 2, 1],
+                [
+                    PrefixExpansion {
+                        base_index: 0,
+                        expanded_length: 3,
+                    },
+                    PrefixExpansion {
+                        base_index: 1,
+                        expanded_length: 256,
+                    },
+                    PrefixExpansion {
+                        base_index: 2,
+                        expanded_length: 127,
+                    },
+                ],
+            ),
+            4 * 3 * 2,
+        );
+    }
 }

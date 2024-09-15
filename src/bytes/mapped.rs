@@ -444,8 +444,10 @@ impl_ordered_bytes_ints_arrays!(
 );
 
 /// This struct represents a conversion of **IP addresses** (V4 and V6) into
-/// their component bytes. The ordering of IP addresses is already the
-/// lexicographic ordering of the component bytes, so it will be preserved.
+/// their component bytes.
+///
+/// The ordering of IP addresses is already the lexicographic ordering of the
+/// component bytes, so it will be preserved.
 pub struct ToOctets;
 
 impl BytesMapping<Ipv4Addr> for ToOctets {
