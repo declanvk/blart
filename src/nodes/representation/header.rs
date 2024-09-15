@@ -80,6 +80,11 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
     ///  - If `len` > length of the prefix
     #[inline(always)]
     pub fn ltrim_by(&mut self, len: usize) {
+        assert!(
+            (len as u32) <= self.prefix_len,
+            "given length [{len}] must be less than or equal to the prefix length [{}]",
+            self.prefix_len
+        );
         self.prefix_len -= len as u32;
 
         let begin = len;
@@ -244,7 +249,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "attempt to subtract with overflow"]
+    #[should_panic = "given length [10] must be less than or equal to the prefix length [8]"]
     fn header_ltrim_prefix_too_many_bytes_panic() {
         let mut h = Header::<16>::new(&[1, 2, 3, 4, 5, 6, 7, 8], 8);
         assert_eq!(h.read_prefix(), &[1, 2, 3, 4, 5, 6, 7, 8]);

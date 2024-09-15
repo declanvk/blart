@@ -351,7 +351,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fixed_length_keys_have_expected_number_of_entries() {
+    fn key_generator_returns_expected_number_of_entries() {
         #[track_caller]
         fn check<K: AsBytes>(it: impl IntoIterator<Item = K>, expected_num_entries: usize) {
             let mut num_entries = 0;
@@ -369,5 +369,62 @@ mod tests {
         check(generate_key_fixed_length([15, 2]), 16 * 3);
         check(generate_key_fixed_length([255]), 256);
         check(generate_key_fixed_length([127]), 128);
+        if cfg!(not(miri)) {
+            check(generate_key_fixed_length([7; 5]), 8 * 8 * 8 * 8 * 8);
+        }
+
+        let no_op_expansion = [PrefixExpansion {
+            base_index: 0,
+            expanded_length: 1,
+        }];
+        check(
+            generate_key_with_prefix([3, 2, 1], no_op_expansion),
+            4 * 3 * 2,
+        );
+        check(generate_key_with_prefix([15, 2], no_op_expansion), 16 * 3);
+        check(generate_key_with_prefix([255], no_op_expansion), 256);
+        check(generate_key_with_prefix([127], no_op_expansion), 128);
+
+        check(
+            generate_key_with_prefix(
+                [3, 2, 1],
+                [
+                    PrefixExpansion {
+                        base_index: 0,
+                        expanded_length: 1,
+                    },
+                    PrefixExpansion {
+                        base_index: 1,
+                        expanded_length: 1,
+                    },
+                    PrefixExpansion {
+                        base_index: 2,
+                        expanded_length: 1,
+                    },
+                ],
+            ),
+            4 * 3 * 2,
+        );
+
+        check(
+            generate_key_with_prefix(
+                [3, 2, 1],
+                [
+                    PrefixExpansion {
+                        base_index: 0,
+                        expanded_length: 3,
+                    },
+                    PrefixExpansion {
+                        base_index: 1,
+                        expanded_length: 256,
+                    },
+                    PrefixExpansion {
+                        base_index: 2,
+                        expanded_length: 127,
+                    },
+                ],
+            ),
+            4 * 3 * 2,
+        );
     }
 }

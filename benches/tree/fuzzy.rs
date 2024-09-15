@@ -1,13 +1,10 @@
-use std::{ffi::CString, time::Duration};
+use std::ffi::CString;
 
 use blart::TreeMap;
-use criterion::{measurement::Measurement, Criterion};
+use criterion::{criterion_group, measurement::Measurement, Criterion};
 
-#[macro_use]
-mod common;
-
-fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
-    let words = include_str!("dict.txt");
+fn bench<M: Measurement>(c: &mut Criterion<M>) {
+    let words = include_str!("../data/medium-dict.txt");
     let mut bytes = 0;
     let tree: TreeMap<_, _> = words
         .lines()
@@ -30,10 +27,8 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     let costs = [0, 3, 5, 10];
 
     for cost in costs {
-        let mut group = c.benchmark_group(format!("{prefix}/{cost}"));
+        let mut group = c.benchmark_group(format!("fuzzy/{cost}"));
         group.throughput(criterion::Throughput::Bytes(bytes as u64));
-        group.warm_up_time(Duration::from_secs(5));
-        group.measurement_time(Duration::from_secs(10));
         for search in &searches {
             group.bench_function(search.to_str().unwrap(), |b| {
                 b.iter(|| std::hint::black_box(tree.fuzzy(search, cost).collect::<Vec<_>>()));
@@ -42,11 +37,4 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     }
 }
 
-gen_benches!(
-    bench,
-    (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
-    (
-        instructions,
-        perfcnt::linux::HardwareEventType::Instructions
-    )
-);
+criterion_group!(bench_fuzzy_group, bench);

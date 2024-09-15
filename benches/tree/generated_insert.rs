@@ -4,12 +4,9 @@ use blart::{
     },
     TreeMap,
 };
-use criterion::{measurement::Measurement, Criterion, Throughput};
+use criterion::{criterion_group, Criterion, Throughput};
 
-#[macro_use]
-mod common;
-
-fn gen_group<M: Measurement>(c: &mut Criterion<M>, group: String, keys: Vec<Box<[u8]>>) {
+fn gen_group(c: &mut Criterion, group: String, keys: Vec<Box<[u8]>>) {
     let mut group = c.benchmark_group(group);
     group.warm_up_time(std::time::Duration::from_secs(5));
     group.measurement_time(std::time::Duration::from_secs(15));
@@ -30,9 +27,9 @@ fn gen_group<M: Measurement>(c: &mut Criterion<M>, group: String, keys: Vec<Box<
 }
 
 #[inline(always)]
-fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
+fn bench(c: &mut Criterion) {
     let skewed: Vec<_> = generate_keys_skewed(u8::MAX as usize).collect();
-    let fixed_length: Vec<_> = generate_key_fixed_length([2; 8]).collect();
+    let fixed_length: Vec<_> = generate_key_fixed_length([2; 8]).map(Box::from).collect();
     let large_prefixes: Vec<_> = generate_key_with_prefix(
         [2; 8],
         [
@@ -48,16 +45,13 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
     )
     .collect();
 
-    gen_group(c, format!("{prefix}/skewed"), skewed);
-    gen_group(c, format!("{prefix}/fixed_length"), fixed_length);
-    gen_group(c, format!("{prefix}/large_prefixes"), large_prefixes);
+    gen_group(c, format!("generated_insert/skewed"), skewed);
+    gen_group(c, format!("generated_insert/fixed_length"), fixed_length);
+    gen_group(
+        c,
+        format!("generated_insert/large_prefixes"),
+        large_prefixes,
+    );
 }
 
-gen_benches!(
-    bench,
-    (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
-    (
-        instructions,
-        perfcnt::linux::HardwareEventType::Instructions
-    )
-);
+criterion_group!(bench_generated_insert_group, bench);

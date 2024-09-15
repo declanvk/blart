@@ -1,16 +1,13 @@
-use std::{ffi::CString, ptr::NonNull, time::Duration};
+use std::{ffi::CString, ptr::NonNull};
 
 use blart::{InnerNode, InnerNode256, InnerNode48, NodePtr};
-use criterion::{measurement::Measurement, Criterion};
+use criterion::{criterion_group, Criterion};
 
-#[macro_use]
-mod common;
-
-fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
+fn bench(c: &mut Criterion) {
     let dangling_ptr =
         unsafe { NodePtr::new(NonNull::<InnerNode48<CString, usize, 16>>::dangling().as_ptr()) };
     let dangling_opaque = dangling_ptr.to_opaque();
-    let count = 8u8;
+    let count = 3u8;
     let skip = (256u32 / count as u32) as u8;
     let nodes48: Vec<_> = (0..count)
         .map(|i| {
@@ -30,47 +27,32 @@ fn bench<M: Measurement>(c: &mut Criterion<M>, prefix: &str) {
         .collect();
 
     for (idx, node) in nodes48.clone() {
-        let mut group = c.benchmark_group(format!("{prefix}/min/n48"));
-        group.warm_up_time(Duration::from_secs(3));
-        group.measurement_time(Duration::from_secs(5));
+        let mut group = c.benchmark_group(format!("min/n48"));
         group.bench_function(format!("{idx}").as_str(), |b| {
             b.iter(|| std::hint::black_box(node.min()));
         });
     }
 
     for (idx, node) in nodes48.clone() {
-        let mut group = c.benchmark_group(format!("{prefix}/max/n48"));
-        group.warm_up_time(Duration::from_secs(3));
-        group.measurement_time(Duration::from_secs(5));
+        let mut group = c.benchmark_group(format!("max/n48"));
         group.bench_function(format!("{idx}").as_str(), |b| {
             b.iter(|| std::hint::black_box(node.max()));
         });
     }
 
     for (idx, node) in nodes256.clone() {
-        let mut group = c.benchmark_group(format!("{prefix}/min/n256"));
-        group.warm_up_time(Duration::from_secs(3));
-        group.measurement_time(Duration::from_secs(5));
+        let mut group = c.benchmark_group(format!("min/n256"));
         group.bench_function(format!("{idx}").as_str(), |b| {
             b.iter(|| std::hint::black_box(node.min()));
         });
     }
 
     for (idx, node) in nodes256.clone() {
-        let mut group = c.benchmark_group(format!("{prefix}/max/n256"));
-        group.warm_up_time(Duration::from_secs(3));
-        group.measurement_time(Duration::from_secs(5));
+        let mut group = c.benchmark_group(format!("max/n256"));
         group.bench_function(format!("{idx}").as_str(), |b| {
             b.iter(|| std::hint::black_box(node.max()));
         });
     }
 }
 
-gen_benches!(
-    bench,
-    (cycles, perfcnt::linux::HardwareEventType::CPUCycles),
-    (
-        instructions,
-        perfcnt::linux::HardwareEventType::Instructions
-    )
-);
+criterion_group!(bench_min_max_group, bench);

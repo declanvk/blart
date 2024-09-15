@@ -20,6 +20,9 @@ exclude = [
     ".github/",
 ]
 
+# All benchmarks must be registered manually
+autobenches = false
+
 [dependencies]
 bytemuck = { version = "1.16.1", features = ["min_const_generics"] }
 paste = "1.0.15"
@@ -33,47 +36,11 @@ bench-perf-events = []
 argh = "0.1.12"
 criterion = "0.5.1"
 dhat = "0.3.3"
-paste = "1.0.15"
-# criterion-perf-events = "0.4.0"
-# perfcnt = "0.8.0"
 rand = "0.8.5"
 
 [[bench]]
-name = "generated_get"
+name = "criterion"
 harness = false
 
-[[bench]]
-name = "generated_insert"
-harness = false
-
-[[bench]]
-name = "dict_insert"
-harness = false
-
-[[bench]]
-name = "fuzzy"
-harness = false
-
-[[bench]]
-name = "dict_get"
-harness = false
-
-[[bench]]
-name = "min_max"
-harness = false
-
-[[bench]]
-name = "match_prefix"
-harness = false
-
-[[bench]]
-name = "entry"
-harness = false
-
-[[bench]]
-name = "iter"
-harness = false
-
-[[bench]]
-name = "clone"
-harness = false
+[profile.bench]
+debug = true
