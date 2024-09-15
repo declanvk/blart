@@ -1,4 +1,4 @@
-use std::{ffi::CString, sync::LazyLock};
+use std::{ffi::CString, sync::OnceLock};
 
 use blart::{
     tests_common::{
@@ -96,18 +96,16 @@ pub fn remove_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
 
 #[allow(dead_code)]
 pub fn skewed_tree() -> &'static TreeMap<Box<[u8]>, usize> {
-    static TREE: LazyLock<TreeMap<Box<[u8]>, usize>> =
-        LazyLock::new(|| tree_from_keys(generate_keys_skewed(256 * 128)));
+    static TREE: OnceLock<TreeMap<Box<[u8]>, usize>> = OnceLock::new();
 
-    &TREE
+    TREE.get_or_init(|| tree_from_keys(generate_keys_skewed(256 * 128)))
 }
 
 #[allow(dead_code)]
 pub fn dense_fixed_length_key_tree() -> &'static TreeMap<[u8; 2], usize> {
-    static TREE: LazyLock<TreeMap<[u8; 2], usize>> =
-        LazyLock::new(|| tree_from_keys(generate_key_fixed_length([u8::MAX, 127])));
+    static TREE: OnceLock<TreeMap<[u8; 2], usize>> = OnceLock::new();
 
-    &TREE
+    TREE.get_or_init(|| tree_from_keys(generate_key_fixed_length([u8::MAX, 127])))
 }
 
 // pub fn medium_sparse_fixed_length_key_tree() -> TreeMap<[u8; 3], usize> {
@@ -119,7 +117,9 @@ pub fn dense_fixed_length_key_tree() -> &'static TreeMap<[u8; 2], usize> {
 // }
 
 pub fn with_prefixes_tree() -> &'static TreeMap<Box<[u8]>, usize> {
-    static TREE: LazyLock<TreeMap<Box<[u8]>, usize>> = LazyLock::new(|| {
+    static TREE: OnceLock<TreeMap<Box<[u8]>, usize>> = OnceLock::new();
+
+    &TREE.get_or_init(|| {
         tree_from_keys(generate_key_with_prefix(
             [7; 5],
             [
@@ -133,9 +133,7 @@ pub fn with_prefixes_tree() -> &'static TreeMap<Box<[u8]>, usize> {
                 },
             ],
         ))
-    });
-
-    &TREE
+    })
 }
 
 pub fn dictionary_tree() -> &'static TreeMap<CString, usize> {
@@ -143,7 +141,9 @@ pub fn dictionary_tree() -> &'static TreeMap<CString, usize> {
         (b, a)
     }
 
-    static TREE: LazyLock<TreeMap<CString, usize>> = LazyLock::new(|| {
+    static TREE: OnceLock<TreeMap<CString, usize>> = OnceLock::new();
+
+    TREE.get_or_init(|| {
         DICTIONARY
             .split('\n')
             .filter(|s| !s.is_empty())
@@ -151,7 +151,5 @@ pub fn dictionary_tree() -> &'static TreeMap<CString, usize> {
             .enumerate()
             .map(swap)
             .collect()
-    });
-
-    &TREE
+    })
 }
