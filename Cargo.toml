@@ -37,9 +37,15 @@ argh = "0.1.12"
 criterion = "0.5.1"
 dhat = "0.3.3"
 rand = "0.8.5"
+iai-callgrind = "0.13.4"
+zipf = "7.0.1"
 
 [[bench]]
 name = "criterion"
+harness = false
+
+[[bench]]
+name = "iai_callgrind"
 harness = false
 
 [profile.bench]
