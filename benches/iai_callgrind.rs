@@ -32,7 +32,7 @@ fn bench_lookup_single<'a, K: AsBytes, V, const PREFIX_LEN: usize>(
     tree: &'a TreeMap<K, V, PREFIX_LEN>,
     key: &K,
 ) -> &'a V {
-    tree.get(&key).unwrap()
+    tree.get(key).unwrap()
 }
 
 #[library_benchmark]
@@ -81,7 +81,7 @@ fn insert_single_setup<K: AsBytes + Clone, V: Clone, const PREFIX_LEN: usize>(
     key: &K,
 ) -> (TreeMap<K, V, PREFIX_LEN>, K) {
     let mut tree = tree.clone();
-    let _ = tree.remove(&key);
+    let _ = tree.remove(key);
     (tree, key.clone())
 }
 
@@ -102,7 +102,7 @@ fn insert_multiple_setup<K: AsBytes + Clone, V: Clone, const PREFIX_LEN: usize>(
     let mut tree = tree.clone();
     let mut output = Vec::with_capacity(keys.len());
     for key in keys {
-        let _ = tree.remove(&key);
+        let _ = tree.remove(key);
         output.push(key.clone());
     }
     (tree, output)

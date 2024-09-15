@@ -45,7 +45,7 @@ fn bench(c: &mut Criterion) {
         .map(|s| (CString::new(s).unwrap(), 0usize))
         .collect();
 
-    let mut group = c.benchmark_group(format!("iter/tree"));
+    let mut group = c.benchmark_group("iter/tree");
 
     group.bench_function("dict/forward", |b| {
         b.iter(|| {

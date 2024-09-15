@@ -153,7 +153,7 @@ pub fn generate_key_fixed_length<const KEY_LENGTH: usize>(
                 return Some(next_value);
             }
 
-            let mut new_next_value = next_value.clone();
+            let mut new_next_value = next_value;
             for idx in (0..new_next_value.len()).rev() {
                 if new_next_value[idx] == self.level_widths[idx] {
                     new_next_value[idx] = u8::MIN;

@@ -27,29 +27,29 @@ fn bench(c: &mut Criterion) {
         .collect();
 
     for (idx, node) in nodes48.clone() {
-        let mut group = c.benchmark_group(format!("min/n48"));
-        group.bench_function(format!("{idx}").as_str(), |b| {
+        let mut group = c.benchmark_group("min/n48");
+        group.bench_function(idx.to_string(), |b| {
             b.iter(|| std::hint::black_box(node.min()));
         });
     }
 
     for (idx, node) in nodes48.clone() {
-        let mut group = c.benchmark_group(format!("max/n48"));
-        group.bench_function(format!("{idx}").as_str(), |b| {
+        let mut group = c.benchmark_group("max/n48");
+        group.bench_function(idx.to_string(), |b| {
             b.iter(|| std::hint::black_box(node.max()));
         });
     }
 
     for (idx, node) in nodes256.clone() {
-        let mut group = c.benchmark_group(format!("min/n256"));
-        group.bench_function(format!("{idx}").as_str(), |b| {
+        let mut group = c.benchmark_group("min/n256");
+        group.bench_function(idx.to_string(), |b| {
             b.iter(|| std::hint::black_box(node.min()));
         });
     }
 
     for (idx, node) in nodes256.clone() {
-        let mut group = c.benchmark_group(format!("max/n256"));
-        group.bench_function(format!("{idx}").as_str(), |b| {
+        let mut group = c.benchmark_group("max/n256");
+        group.bench_function(idx.to_string(), |b| {
             b.iter(|| std::hint::black_box(node.max()));
         });
     }

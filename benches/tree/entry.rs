@@ -32,7 +32,7 @@ fn bench(c: &mut Criterion) {
         .collect();
 
     {
-        let mut group = c.benchmark_group(format!("entry"));
+        let mut group = c.benchmark_group("entry");
 
         for (ty, vals) in [("vacant", vacant.clone()), ("occupied", occupied.clone())] {
             group.bench_function(format!("{ty}/or_default"), |b| {
@@ -103,7 +103,7 @@ fn bench(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group(format!("entry/default"));
+        let mut group = c.benchmark_group("entry/default");
 
         for (ty, vals) in [("vacant", vacant), ("occupied", occupied)] {
             group.bench_function(format!("{ty}/or_default"), |b| {

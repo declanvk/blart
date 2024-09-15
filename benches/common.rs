@@ -119,7 +119,7 @@ pub fn dense_fixed_length_key_tree() -> &'static TreeMap<[u8; 2], usize> {
 pub fn with_prefixes_tree() -> &'static TreeMap<Box<[u8]>, usize> {
     static TREE: OnceLock<TreeMap<Box<[u8]>, usize>> = OnceLock::new();
 
-    &TREE.get_or_init(|| {
+    TREE.get_or_init(|| {
         tree_from_keys(generate_key_with_prefix(
             [7; 5],
             [

@@ -40,7 +40,7 @@ fn bench(c: &mut Criterion) {
     node256_large.write_child(99, leaf_opaque);
 
     {
-        let mut old_group = c.benchmark_group(format!("match_prefix"));
+        let mut old_group = c.benchmark_group("match_prefix");
         old_group.bench_function("node48/small/match", |b| {
             b.iter(|| std::hint::black_box(node48_small.match_prefix(key_small_match, 0)));
         });

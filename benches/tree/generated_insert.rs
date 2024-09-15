@@ -6,7 +6,7 @@ use blart::{
 };
 use criterion::{criterion_group, Criterion, Throughput};
 
-fn gen_group(c: &mut Criterion, group: String, keys: Vec<Box<[u8]>>) {
+fn gen_group(c: &mut Criterion, group: &str, keys: Vec<Box<[u8]>>) {
     let mut group = c.benchmark_group(group);
     group.warm_up_time(std::time::Duration::from_secs(5));
     group.measurement_time(std::time::Duration::from_secs(15));
@@ -45,13 +45,9 @@ fn bench(c: &mut Criterion) {
     )
     .collect();
 
-    gen_group(c, format!("generated_insert/skewed"), skewed);
-    gen_group(c, format!("generated_insert/fixed_length"), fixed_length);
-    gen_group(
-        c,
-        format!("generated_insert/large_prefixes"),
-        large_prefixes,
-    );
+    gen_group(c, "generated_insert/skewed", skewed);
+    gen_group(c, "generated_insert/fixed_length", fixed_length);
+    gen_group(c, "generated_insert/large_prefixes", large_prefixes);
 }
 
 criterion_group!(bench_generated_insert_group, bench);
