@@ -1,8 +1,10 @@
 use std::{ffi::CString, ptr::NonNull};
 
-use blart::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr, TreeMap};
+use blart::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr};
 use criterion::{criterion_group, measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+
+use crate::common::{dictionary_tree, get_middle_key};
 
 fn iter_node<const PREFIX_LEN: usize, M: Measurement, N: InnerNode<PREFIX_LEN>>(
     c: &mut Criterion<M>,
@@ -39,11 +41,7 @@ fn bench(c: &mut Criterion) {
     iter_node::<16, _, InnerNode48<CString, usize, 16>>(c, "n48", &[17, 32, 48]);
     iter_node::<16, _, InnerNode256<CString, usize, 16>>(c, "n256", &[49, 100, 152, 204, 256]);
 
-    let words = include_str!("../data/medium-dict.txt");
-    let tree: TreeMap<_, _> = words
-        .lines()
-        .map(|s| (CString::new(s).unwrap(), 0usize))
-        .collect();
+    let tree = dictionary_tree();
 
     let mut group = c.benchmark_group("iter/tree");
 
@@ -58,6 +56,15 @@ fn bench(c: &mut Criterion) {
     group.bench_function("dict/rev", |b| {
         b.iter(|| {
             tree.iter().rev().for_each(|(k, v)| {
+                std::hint::black_box((k, v));
+            });
+        });
+    });
+
+    group.bench_function("dict/range", |b| {
+        let range = get_middle_key(&tree, 1, 2)..get_middle_key(&tree, 2, 1);
+        b.iter(|| {
+            tree.range::<CString, _>(range.clone()).for_each(|(k, v)| {
                 std::hint::black_box((k, v));
             });
         });

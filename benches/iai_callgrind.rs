@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, ops::RangeBounds};
 
 use crate::common::{
     dictionary_tree, get_first_key, get_last_key, get_middle_key, select_zipfian_keys,
@@ -159,7 +159,18 @@ fn bench_fuzzy_iterator<K: AsBytes + Borrow<Q>, V, Q: AsBytes + ?Sized, const PR
     tree.fuzzy(key, edit_distance).count() <= tree.len()
 }
 
-library_benchmark_group!(name = bench_iterator_group; benchmarks = bench_full_iterator, bench_prefix_iterator, bench_fuzzy_iterator);
+#[library_benchmark]
+#[bench::full(dictionary_tree(), ..)]
+#[bench::specific_key(dictionary_tree(), get_middle_key(dictionary_tree(), 1, 1)..=get_middle_key(dictionary_tree(), 1, 1))]
+#[bench::middle_third(dictionary_tree(), get_middle_key(dictionary_tree(), 1, 2)..get_middle_key(dictionary_tree(), 2, 1))]
+fn bench_range_iterator<K: AsBytes, V, R: RangeBounds<K>, const PREFIX_LEN: usize>(
+    tree: &TreeMap<K, V, PREFIX_LEN>,
+    range: R,
+) -> bool {
+    tree.range(range).count() <= tree.len()
+}
+
+library_benchmark_group!(name = bench_iterator_group; benchmarks = bench_full_iterator, bench_prefix_iterator, bench_fuzzy_iterator, bench_range_iterator);
 
 // END
 

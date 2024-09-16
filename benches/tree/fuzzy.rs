@@ -1,19 +1,12 @@
 use std::ffi::CString;
 
-use blart::TreeMap;
 use criterion::{criterion_group, measurement::Measurement, Criterion};
 
+use crate::common::dictionary_tree;
+
 fn bench<M: Measurement>(c: &mut Criterion<M>) {
-    let words = include_str!("../data/medium-dict.txt");
-    let mut bytes = 0;
-    let tree: TreeMap<_, _> = words
-        .lines()
-        .map(|s| {
-            let s = CString::new(s).unwrap();
-            bytes += s.as_bytes_with_nul().len();
-            (s, 0usize)
-        })
-        .collect();
+    let tree = dictionary_tree();
+    let bytes: usize = tree.keys().map(|k| k.as_bytes_with_nul().len()).sum();
 
     let searches = [
         CString::new("house").unwrap(),
