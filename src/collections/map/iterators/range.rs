@@ -15,20 +15,20 @@ use crate::{
 
 /// This struct contains details of where and why the search stopped in an inner
 /// node.
-struct InnerNodeSearchResult<K, V, const PREFIX_LEN: usize> {
+pub(crate) struct InnerNodeSearchResult<K, V, const PREFIX_LEN: usize> {
     /// This is a pointer to the inner node where search stopped.
-    node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    pub node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
 
     /// The number of bytes of the key that were consumed, not including the
     /// byte that was used to look for a child node.
-    current_depth: usize,
+    pub current_depth: usize,
 
     /// This is a comparison from the full prefix of the inner node to the
     /// corresponding segment of the search key.
-    node_prefix_comparison_to_search_key_segment: Ordering,
+    pub node_prefix_comparison_to_search_key_segment: Ordering,
 
     /// This field indicates why the search stopped in the inner node.
-    reason: InnerNodeSearchResultReason,
+    pub reason: InnerNodeSearchResultReason,
 }
 
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNodeSearchResult<K, V, PREFIX_LEN> {
@@ -47,7 +47,7 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNodeSearchResult<K, V, P
 
 /// These are search termination reasons specific to inner nodes.
 #[derive(Debug)]
-enum InnerNodeSearchResultReason {
+pub(crate) enum InnerNodeSearchResultReason {
     /// This variant means the search terminated in a mismatched prefix of an
     /// inner node OR the prefix matched, but there were insufficient key bytes
     /// to lookup a child of the inner node.
@@ -59,7 +59,7 @@ enum InnerNodeSearchResultReason {
 
 /// This enum provides the different cases of search result when looking for a
 /// starting/ending point for iteration.
-enum TerminatingNodeSearchResult<K, V, const PREFIX_LEN: usize> {
+pub(crate) enum TerminatingNodeSearchResult<K, V, const PREFIX_LEN: usize> {
     /// This variant means the search terminated at a leaf node.
     Leaf {
         /// The leaf node pointer where search terminated.
@@ -97,7 +97,7 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for TerminatingNodeSearchResult<K
 /// This function cannot be called concurrently with any mutating operation
 /// on `root` or any child node of `root`. This function will arbitrarily
 /// read to any child in the given tree.
-unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usize>(
+pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
 ) -> TerminatingNodeSearchResult<K, V, PREFIX_LEN> {

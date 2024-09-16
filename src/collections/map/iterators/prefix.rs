@@ -1,270 +1,147 @@
-use crate::{AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
-use std::{collections::VecDeque, iter::FusedIterator};
+use crate::{maximum_unchecked, minimum_unchecked, AsBytes, RawIterator, TreeMap};
+use std::iter::FusedIterator;
 
-macro_rules! gen_add_children {
-    ($name:ident, $f1:ident, $f2:ident) => {
-        fn $name<N>(&mut self, inner: NodePtr<PREFIX_LEN, N>, current_depth: usize)
-        where
-            N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-        {
-            // SAFETY: Since `Self` holds a mutable/shared reference
-            // is safe to create a shared reference from it
-            let inner = unsafe { inner.as_ref() };
-            // Given that the invariant of the algorithm is that
-            // all nodes prior to the current one make part of
-            // the prefix (i.e we are always in the correct path)
-            //
-            // With that is safe to assume that if the number of
-            // bytes used is >= to the prefix len this means that
-            // the current node and all of it's children are part
-            // of this prefix search
-            if current_depth >= self.prefix.len() {
-                let prefix_len = inner.header().prefix_len();
-                self.$f1(inner, current_depth + prefix_len + 1);
-                return;
-            }
+use super::{
+    find_terminating_node, InnerNodeSearchResult, InnerNodeSearchResultReason,
+    TerminatingNodeSearchResult,
+};
 
-            // Read the prefix of the current node
-            let (prefix, _) = inner.read_full_prefix(current_depth);
-            // If the searched prefix is not a prefix of the current node
-            // prefix we prune this node and it's children
-            //
-            // This slice operation is safe since we just checked if the
-            // current depth >= prefix len
-            let Some(matched_bytes) = Self::is_prefix_of(prefix, &self.prefix[current_depth..])
-            else {
-                return;
-            };
-
-            // In case the searched prefix is a prefix, if the
-            // number of matched bytes + depth >= searched prefix
-            // len we know that this node and all of it's children
-            // are part of this prefix search
-            let new_depth = current_depth + matched_bytes;
-            if new_depth >= self.prefix.len() {
-                self.$f1(inner, new_depth + 1);
-                return;
-            }
-
-            // If there is some remaining bytes we need to consider
-            // the node key that matches the first character of
-            // the searched prefix, so we find a children with this
-            // key and only consider this one
-            //
-            // This slice operation is safe since we just checked if
-            // new depth >= searched prefix len, and this also
-            // ensures that we have at least one byte in the slice
-            let key = *self.prefix[new_depth..].first().unwrap();
-            if let Some((_, n)) = inner.iter().find(|(k, _)| *k == key) {
-                self.nodes.$f2((n, new_depth + 1));
-            }
+macro_rules! implement_prefix_iter {
+    (
+        $(#[$outer:meta])*
+        struct $name:ident {
+            tree: $tree_ty:ty,
+            item: $item_ty:ty,
+            $leaf_accessor_func:ident
         }
-    };
-}
-
-macro_rules! gen_iter {
-    ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
-        /// An iterator over all the `LeafNode`s with a specific prefix
-        pub struct $name<'a, 'b, K, V, const PREFIX_LEN: usize> {
-            nodes: VecDeque<(OpaqueNodePtr<K, V, PREFIX_LEN>, usize)>,
-            size: usize,
-            _tree: $tree,
-            prefix: &'b [u8],
+    ) => {
+        $(#[$outer])*
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
+            inner: RawIterator<K, V, PREFIX_LEN>,
+            _tree: $tree_ty,
         }
 
-        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, 'b, K, V, PREFIX_LEN> {
-            gen_add_children!(add_children, push_back_rev_iter, push_back);
+        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN> {
+            /// Create a new prefix iterator over the given tree, the iterator returning all
+            /// key-value pairs where the key starts with the given prefix.
+            pub(crate) fn new(
+                tree: $tree_ty,
+                prefix: &[u8],
+            ) -> Self {
+                let Some(tree_state) = &tree.state else {
+                    return Self {
+                        _tree: tree,
+                        inner: RawIterator::empty(),
+                    };
+                };
 
-            gen_add_children!(add_children_rev, push_front, push_front);
+                // SAFETY: Since we have a (shared or mutable) reference to the original
+                // TreeMap, we know there will be no concurrent mutation
+                let search_result = unsafe { find_terminating_node(tree_state.root, prefix) };
+                let (start, end) = match search_result {
+                    TerminatingNodeSearchResult::Leaf { leaf_ptr, .. } => {
+                        // SAFETY: Its safe to create a shared reference to the leaf since we hold
+                        // either a shared or mutable reference to the owning TreeMap, which prevents
+                        // other concurrent mutable references.
+                        let leaf = unsafe { leaf_ptr.as_ref() };
 
-            /// Create a new iterator that will visit all leaf nodes descended from the
-            /// given node.
-            pub(crate) fn new(tree: $tree, prefix: &'b [u8]) -> Self {
+                        // Only include the item in the iterator if the prefix actually matches
+                        if leaf.key_ref().as_bytes().starts_with(prefix) {
+                            (leaf_ptr, leaf_ptr)
+                        } else {
+                            return Self {
+                                _tree: tree,
+                                inner: RawIterator::empty(),
+                            };
+                        }
+                    },
+                    TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult { node_ptr, reason, .. }) => {
+                        if matches!(reason, InnerNodeSearchResultReason::MissingChild) {
+                            // if the child is missing, then there is nothing to be the prefix of
+                            return Self {
+                                _tree: tree,
+                                inner: RawIterator::empty(),
+                            };
+                        }
+
+                        // SAFETY: Its safe to create a shared reference to the leaf since we hold
+                        // either a shared or mutable reference to the owning TreeMap, which prevents
+                        // other concurrent mutable references.
+                        unsafe { (minimum_unchecked(node_ptr), maximum_unchecked(node_ptr)) }
+                    },
+                };
+
                 Self {
-                    nodes: tree
-                        .state
-                        .as_ref()
-                        .map(|state| state.root)
-                        .into_iter()
-                        .map(|r| (r, 0))
-                        .collect(),
-                    size: tree.num_entries,
-                    prefix,
                     _tree: tree,
+                    // SAFETY: `start` is guaranteed to be less than or equal to `end` in the iteration
+                    // order because of the check we do on the bytes of the resolved leaf pointers, just
+                    // above this line
+                    inner: unsafe { RawIterator::new(start, end) },
                 }
-            }
-
-            fn push_back_rev_iter<N>(&mut self, inner: &N, depth: usize)
-            where
-                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-            {
-                inner
-                    .iter()
-                    .rev()
-                    .for_each(|(_, n)| self.nodes.push_back((n, depth)))
-            }
-
-            fn push_front<N>(&mut self, inner: &N, depth: usize)
-            where
-                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-            {
-                inner
-                    .iter()
-                    .for_each(|(_, n)| self.nodes.push_front((n, depth)))
-            }
-
-            fn is_prefix_of(a: &[u8], b: &[u8]) -> Option<usize> {
-                let min = a.len().min(b.len());
-                let matched_bytes = a.iter().zip(b).take_while(|(a, b)| **a == **b).count();
-
-                (min == matched_bytes).then_some(matched_bytes)
-            }
-
-            fn handle_leaf(
-                &mut self,
-                current_depth: usize,
-                inner: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
-            ) -> bool {
-                self.size -= 1;
-                // SAFETY: Since `Self` holds a mutable/shared reference
-                // is safe to create a shared reference from it
-                let key = unsafe { inner.as_key_ref().as_bytes() };
-
-                // In this case we consumed more bytes than the
-                // searched prefix, so in this case we are sure
-                // that the searched prefix is prefix of this leaf
-                if current_depth >= self.prefix.len() {
-                    return true;
-                }
-
-                // If the searched prefix > key length it's
-                // impossible for the search prefix to be
-                // prefix of this leaf
-                if self.prefix.len() > key.len() {
-                    return false;
-                }
-
-                // We just checked, so it's impossible
-                // for this this to panic
-                let key = &key[current_depth..];
-                let prefix = &self.prefix[current_depth..];
-                Self::is_prefix_of(key, prefix).is_some()
             }
         }
 
-        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> Iterator
-            for $name<'a, 'b, K, V, PREFIX_LEN>
-        {
-            type Item = $ret;
+        impl<'a, K, V, const PREFIX_LEN: usize> Iterator for $name<'a, K, V, PREFIX_LEN> {
+            type Item = $item_ty;
 
             fn next(&mut self) -> Option<Self::Item> {
-                while let Some((node, current_depth)) = self.nodes.pop_back() {
-                    match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner) => self.add_children(inner, current_depth),
-                        ConcreteNodePtr::Node16(inner) => self.add_children(inner, current_depth),
-                        ConcreteNodePtr::Node48(inner) => self.add_children(inner, current_depth),
-                        ConcreteNodePtr::Node256(inner) => self.add_children(inner, current_depth),
-                        ConcreteNodePtr::LeafNode(inner) => {
-                            if self.handle_leaf(current_depth, inner) {
-                                return unsafe { Some(inner.$op()) };
-                            }
-                        },
-                    }
-                }
-                None
-            }
+                // SAFETY: This iterator has a reference (either shared or mutable) to the
+                // original `TreeMap` it is iterating over, preventing any other modification.
+                let leaf_ptr = unsafe { self.inner.next()? };
 
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                (0, Some(self.size))
-            }
-
-            fn last(mut self) -> Option<Self::Item>
-            where
-                Self: Sized,
-            {
-                self.next_back()
+                // SAFETY: The lifetimes returned from this function are returned as bounded by
+                // lifetime 'a, meaning that they cannot outlive this iterator's reference
+                // (shared or mutable) to the original TreeMap.
+                Some(unsafe { leaf_ptr.$leaf_accessor_func() })
             }
         }
 
-        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> DoubleEndedIterator
-            for $name<'a, 'b, K, V, PREFIX_LEN>
+        impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator
+            for $name<'a, K, V, PREFIX_LEN>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
-                while let Some((node, current_depth)) = self.nodes.pop_front() {
-                    match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner) => {
-                            self.add_children_rev(inner, current_depth)
-                        },
-                        ConcreteNodePtr::Node16(inner) => {
-                            self.add_children_rev(inner, current_depth)
-                        },
-                        ConcreteNodePtr::Node48(inner) => {
-                            self.add_children_rev(inner, current_depth)
-                        },
-                        ConcreteNodePtr::Node256(inner) => {
-                            self.add_children_rev(inner, current_depth)
-                        },
-                        ConcreteNodePtr::LeafNode(inner) => {
-                            if self.handle_leaf(current_depth, inner) {
-                                return unsafe { Some(inner.$op()) };
-                            }
-                        },
-                    }
-                }
-                None
+                // SAFETY: This iterator has a reference (either shared or mutable) to the
+                // original `TreeMap` it is iterating over, preventing any other modification.
+                let leaf_ptr = unsafe { self.inner.next_back()? };
+
+                // SAFETY: THe lifetimes returned from this function are returned as bounded by
+                // lifetime 'a, meaning that they cannot outlive this iterator's reference
+                // (shared or mutable) to the original TreeMap.
+                Some(unsafe { leaf_ptr.$leaf_accessor_func() })
             }
         }
 
-        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
-            for $name<'a, 'b, K, V, PREFIX_LEN>
-        {
-        }
+        impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for $name<'a, K, V, PREFIX_LEN> {}
     };
 }
 
-// SAFETY: Since we hold a shared reference is safe to
-// create a shared reference to the leaf
-gen_iter!(
-    Prefix,
-    &'a TreeMap<K, V, PREFIX_LEN>,
-    (&'a K, &'a V),
-    as_key_value_ref
+implement_prefix_iter!(
+    /// An iterator over a range of entries that all have the same key prefix in a [`TreeMap`].
+    ///
+    /// This struct is created by the [`prefix`][TreeMap::prefix] method on `TreeMap`.
+    /// See its documentation for more details.
+    struct Prefix {
+        tree: &'a TreeMap<K, V, PREFIX_LEN>,
+        item: (&'a K, &'a V),
+        as_key_value_ref
+    }
 );
 
-// SAFETY: Since we hold a mutable reference is safe to
-// create a mutable reference to the leaf
-gen_iter!(
-    PrefixMut,
-    &'a mut TreeMap<K, V, PREFIX_LEN>,
-    (&'a K, &'a mut V),
-    as_key_ref_value_mut
-);
-
-// SAFETY: Since we hold a shared reference is safe to
-// create a shared reference to the leaf
-gen_iter!(PrefixKeys, &'a TreeMap<K, V, PREFIX_LEN>, &'a K, as_key_ref);
-
-// SAFETY: Since we hold a shared reference is safe to
-// create a shared reference to the leaf
-gen_iter!(
-    PrefixValues,
-    &'a TreeMap<K, V, PREFIX_LEN>,
-    &'a V,
-    as_value_ref
-);
-
-// SAFETY: Since we hold a mutable reference is safe to
-// create a mutable reference to the leaf
-gen_iter!(
-    PrefixValuesMut,
-    &'a mut TreeMap<K, V, PREFIX_LEN>,
-    &'a mut V,
-    as_value_mut
+implement_prefix_iter!(
+    /// A mutable iterator over a range of entries that all have the same key prefix in a [`TreeMap`].
+    ///
+    /// This struct is created by the [`prefix_mut`][TreeMap::prefix_mut] method on `TreeMap`.
+    /// See its documentation for more details.
+    struct PrefixMut {
+        tree: &'a mut TreeMap<K, V, PREFIX_LEN>,
+        item: (&'a K, &'a mut V),
+        as_key_ref_value_mut
+    }
 );
 
 #[cfg(test)]
 mod tests {
-    use crate::TreeMap;
+    use crate::{tests_common::swap, TreeMap};
 
     #[test]
     fn prefix() {
@@ -305,5 +182,41 @@ mod tests {
         let p1: Vec<_> = t.prefix(c"abcde".to_bytes()).rev().collect();
         assert_eq!(p0, vec![(&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
         assert_eq!(p1, vec![(&c"abcdexxy", &0), (&c"abcdexxx", &0)]);
+    }
+
+    #[test]
+    fn empty_tree_returns_no_entries() {
+        let tree = TreeMap::<[u8; 2], usize>::new();
+
+        assert_eq!(tree.prefix(&[]).count(), 0);
+    }
+
+    #[test]
+    fn empty_prefix_returns_all_entries() {
+        let tree: TreeMap<_, _> = [[0, 0, 0], [255, 12, 12], [127, 8, 2]]
+            .into_iter()
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        assert_eq!(tree.prefix(&[]).count(), 3);
+    }
+
+    #[test]
+    fn singleton_tree_wrong_key_returns_no_entries() {
+        let tree: TreeMap<_, _> = [[0, 0, 0]].into_iter().enumerate().map(swap).collect();
+
+        assert_eq!(tree.prefix(&[255, 255, 255]).count(), 0);
+    }
+
+    #[test]
+    fn non_existent_prefix_returns_no_entries() {
+        let tree: TreeMap<_, _> = [[0, 0, 0], [255, 12, 12], [127, 8, 2]]
+            .into_iter()
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        assert_eq!(tree.prefix(&[128]).count(), 0);
     }
 }

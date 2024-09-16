@@ -351,6 +351,9 @@ mod tests {
     use super::*;
 
     #[test]
+    // disabled for miri because the runtime is too large, and this does not test any
+    // safety-critical stuff
+    #[cfg(not(miri))]
     fn key_generator_returns_expected_number_of_entries() {
         #[track_caller]
         fn check<K: AsBytes>(it: impl IntoIterator<Item = K>, expected_num_entries: usize) {
@@ -369,9 +372,7 @@ mod tests {
         check(generate_key_fixed_length([15, 2]), 16 * 3);
         check(generate_key_fixed_length([255]), 256);
         check(generate_key_fixed_length([127]), 128);
-        if cfg!(not(miri)) {
-            check(generate_key_fixed_length([7; 5]), 8 * 8 * 8 * 8 * 8);
-        }
+        check(generate_key_fixed_length([7; 5]), 8 * 8 * 8 * 8 * 8);
 
         let no_op_expansion = [PrefixExpansion {
             base_index: 0,
