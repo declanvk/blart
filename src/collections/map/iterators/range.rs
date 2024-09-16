@@ -539,13 +539,11 @@ implement_range_iter!(
 
 #[cfg(test)]
 mod tests {
+    use crate::tests_common::swap;
+
     use super::*;
 
     fn fixture_tree() -> TreeMap<[u8; 3], usize> {
-        fn swap<A, B>((a, b): (A, B)) -> (B, A) {
-            (b, a)
-        }
-
         [
             [0, 0, 0],
             [0, 0, u8::MAX],

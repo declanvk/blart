@@ -172,7 +172,7 @@ mod tests {
         Arc,
     };
 
-    use crate::{AsBytes, NoPrefixesBytes, OrderedBytes};
+    use crate::{tests_common::swap, AsBytes, NoPrefixesBytes, OrderedBytes};
 
     use super::*;
 
@@ -224,10 +224,6 @@ mod tests {
     fn setup_will_deallocate_unconsumed_iter_values(
         drop_counter: &Arc<AtomicUsize>,
     ) -> TreeMap<DropCounter<[u8; 3]>, usize> {
-        fn swap<A, B>((a, b): (A, B)) -> (B, A) {
-            (b, a)
-        }
-
         assert_eq!(drop_counter.load(Ordering::Relaxed), 0);
 
         [

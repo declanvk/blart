@@ -5,6 +5,14 @@ use std::{collections::HashSet, iter};
 use crate::{AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr, TreeMap};
 
 /// This function swaps the elements of a 2-tuple.
+///
+/// # Examples
+///
+/// ```
+/// use blart::tests_common::swap;
+///
+/// assert_eq!(swap((1, 2)), (2, 1));
+/// ```
 pub fn swap<A, B>((a, b): (A, B)) -> (B, A) {
     (b, a)
 }
