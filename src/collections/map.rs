@@ -1256,7 +1256,8 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
 
     /// Gets an iterator over the entries of the map that start with `prefix`
     ///
-    /// # Example
+    /// # Examples
+    ///
     /// ```rust
     /// use blart::TreeMap;
     ///
@@ -1272,7 +1273,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// assert_eq!(p, vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
     /// ```
-    pub fn prefix<'a, 'b>(&'a self, prefix: &'b [u8]) -> Prefix<'a, 'b, K, V, PREFIX_LEN>
+    pub fn prefix(&self, prefix: &[u8]) -> Prefix<'_, K, V, PREFIX_LEN>
     where
         K: AsBytes,
     {
@@ -1282,7 +1283,8 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// Gets a mutable iterator over the entries of the map that start with
     /// `prefix`
     ///
-    /// # Example
+    /// # Examples
+    ///
     /// ```rust
     /// use blart::TreeMap;
     ///
@@ -1298,93 +1300,11 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// assert_eq!(p, vec![(&c"abcde", &mut 0), (&c"abcdexxx", &mut 0), (&c"abcdexxy", &mut 0)]);
     /// ```
-    pub fn prefix_mut<'a, 'b>(&'a mut self, prefix: &'b [u8]) -> PrefixMut<'a, 'b, K, V, PREFIX_LEN>
+    pub fn prefix_mut(&mut self, prefix: &[u8]) -> PrefixMut<'_, K, V, PREFIX_LEN>
     where
         K: AsBytes,
     {
         PrefixMut::new(self, prefix)
-    }
-
-    /// Gets an iterator over the keys of the map that start with `prefix`
-    ///
-    /// # Example
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map = TreeMap::new();
-    /// map.insert(c"abcde", 0);
-    /// map.insert(c"abcdexxx", 0);
-    /// map.insert(c"abcdexxy", 0);
-    /// map.insert(c"abcdx", 0);
-    /// map.insert(c"abcx", 0);
-    /// map.insert(c"bx", 0);
-    ///
-    /// let p: Vec<_> = map.prefix_keys(c"abcde".to_bytes()).collect();
-    ///
-    /// assert_eq!(p, vec![&c"abcde", &c"abcdexxx", &c"abcdexxy"]);
-    /// ```
-    pub fn prefix_keys<'a, 'b>(&'a self, prefix: &'b [u8]) -> PrefixKeys<'a, 'b, K, V, PREFIX_LEN>
-    where
-        K: AsBytes,
-    {
-        PrefixKeys::new(self, prefix)
-    }
-
-    /// Gets an iterator over the values of the map that start with `prefix`
-    ///
-    /// # Example
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map = TreeMap::new();
-    /// map.insert(c"abcde", 0);
-    /// map.insert(c"abcdexxx", 1);
-    /// map.insert(c"abcdexxy", 2);
-    /// map.insert(c"abcdx", 3);
-    /// map.insert(c"abcx", 4);
-    /// map.insert(c"bx", 5);
-    ///
-    /// let p: Vec<_> = map.prefix_values(c"abcde".to_bytes()).collect();
-    ///
-    /// assert_eq!(p, vec![&0, &1, &2]);
-    /// ```
-    pub fn prefix_values<'a, 'b>(
-        &'a self,
-        prefix: &'b [u8],
-    ) -> PrefixValues<'a, 'b, K, V, PREFIX_LEN>
-    where
-        K: AsBytes,
-    {
-        PrefixValues::new(self, prefix)
-    }
-
-    /// Gets a mutable iterator over the values of the map that start with
-    /// `prefix`
-    ///
-    /// # Example
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map = TreeMap::new();
-    /// map.insert(c"abcde", 0);
-    /// map.insert(c"abcdexxx", 1);
-    /// map.insert(c"abcdexxy", 2);
-    /// map.insert(c"abcdx", 3);
-    /// map.insert(c"abcx", 4);
-    /// map.insert(c"bx", 5);
-    ///
-    /// let p: Vec<_> = map.prefix_values(c"abcde".to_bytes()).collect();
-    ///
-    /// assert_eq!(p, vec![&mut 0, &mut 1, &mut 2]);
-    /// ```
-    pub fn prefix_values_mut<'a, 'b>(
-        &'a mut self,
-        prefix: &'b [u8],
-    ) -> PrefixValuesMut<'a, 'b, K, V, PREFIX_LEN>
-    where
-        K: AsBytes,
-    {
-        PrefixValuesMut::new(self, prefix)
     }
 
     /// Returns the number of elements in the map.
