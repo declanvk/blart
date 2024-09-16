@@ -2,7 +2,8 @@ use std::{ffi::CString, sync::OnceLock};
 
 use blart::{
     tests_common::{
-        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
+        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
+        PrefixExpansion,
     },
     AsBytes, TreeMap,
 };
@@ -137,10 +138,6 @@ pub fn with_prefixes_tree() -> &'static TreeMap<Box<[u8]>, usize> {
 }
 
 pub fn dictionary_tree() -> &'static TreeMap<CString, usize> {
-    fn swap<A, B>((a, b): (A, B)) -> (B, A) {
-        (b, a)
-    }
-
     static TREE: OnceLock<TreeMap<CString, usize>> = OnceLock::new();
 
     TREE.get_or_init(|| {

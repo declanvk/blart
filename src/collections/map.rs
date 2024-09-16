@@ -1479,7 +1479,7 @@ where
 
 impl<K, V, const PREFIX_LEN: usize> Debug for TreeMap<K, V, PREFIX_LEN>
 where
-    K: Debug + AsBytes,
+    K: Debug,
     V: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1487,7 +1487,7 @@ where
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> Default for TreeMap<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Default for TreeMap<K, V, PREFIX_LEN> {
     fn default() -> Self {
         Self::with_prefix_len()
     }
@@ -1544,7 +1544,7 @@ where
 
 impl<K, V, const PREFIX_LEN: usize> Hash for TreeMap<K, V, PREFIX_LEN>
 where
-    K: Hash + AsBytes,
+    K: Hash,
     V: Hash,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -1567,7 +1567,7 @@ where
     }
 }
 
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator for &'a TreeMap<K, V, PREFIX_LEN> {
+impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a TreeMap<K, V, PREFIX_LEN> {
     type IntoIter = TreeIterator<'a, K, V, PREFIX_LEN>;
     type Item = (&'a K, &'a V);
 
@@ -1576,9 +1576,7 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator for &'a TreeMap<K,
     }
 }
 
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator
-    for &'a mut TreeMap<K, V, PREFIX_LEN>
-{
+impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a mut TreeMap<K, V, PREFIX_LEN> {
     type IntoIter = TreeIteratorMut<'a, K, V, PREFIX_LEN>;
     type Item = (&'a K, &'a mut V);
 
@@ -1587,7 +1585,7 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator for TreeMap<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> IntoIterator for TreeMap<K, V, PREFIX_LEN> {
     type IntoIter = iterators::IntoIter<K, V, PREFIX_LEN>;
     type Item = (K, V);
 
@@ -1598,7 +1596,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> IntoIterator for TreeMap<K, V, PREF
 
 impl<K, V, const PREFIX_LEN: usize> Ord for TreeMap<K, V, PREFIX_LEN>
 where
-    K: Ord + AsBytes,
+    K: Ord,
     V: Ord,
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -1608,7 +1606,7 @@ where
 
 impl<K, V, const PREFIX_LEN: usize> PartialOrd for TreeMap<K, V, PREFIX_LEN>
 where
-    K: PartialOrd + AsBytes,
+    K: PartialOrd,
     V: PartialOrd,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -1618,14 +1616,14 @@ where
 
 impl<K, V, const PREFIX_LEN: usize> Eq for TreeMap<K, V, PREFIX_LEN>
 where
-    K: Eq + AsBytes,
+    K: Eq,
     V: Eq,
 {
 }
 
 impl<K, V, const PREFIX_LEN: usize> PartialEq for TreeMap<K, V, PREFIX_LEN>
 where
-    K: PartialEq + AsBytes,
+    K: PartialEq,
     V: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -1638,7 +1636,7 @@ where
 // are also safe
 unsafe impl<K, V, const PREFIX_LEN: usize> Send for TreeMap<K, V, PREFIX_LEN>
 where
-    K: Send + AsBytes,
+    K: Send,
     V: Send,
 {
 }
@@ -1648,7 +1646,7 @@ where
 // are also safe
 unsafe impl<K, V, const PREFIX_LEN: usize> Sync for TreeMap<K, V, PREFIX_LEN>
 where
-    K: Sync + AsBytes,
+    K: Sync,
     V: Sync,
 {
 }
