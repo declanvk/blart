@@ -1,8 +1,8 @@
 use crate::{
     maximum_unchecked, minimum_unchecked,
     rust_nightly_apis::{assume, likely, unlikely},
-    AsBytes, ConcreteNodePtr, InnerNode, InnerNode4, LeafNode, MatchPrefixResult, Mismatch,
-    NodePtr, OpaqueNodePtr,
+    AsBytes, ConcreteNodePtr, ExplicitMismatch, InnerNode, InnerNode4, LeafNode, NodePtr,
+    OpaqueNodePtr, PrefixMatch,
 };
 use std::{
     error::Error,
@@ -525,7 +525,7 @@ pub enum InsertSearchResultType<K, V, const PREFIX_LEN: usize> {
     /// the prefix that did match, and update the existing inner node
     MismatchPrefix {
         /// Data about the matching if the prefix
-        mismatch: Mismatch<K, V, PREFIX_LEN>,
+        mismatch: ExplicitMismatch<K, V, PREFIX_LEN>,
         /// A pointer to the inner node which had a mismatched prefix
         mismatched_inner_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
     },
@@ -612,7 +612,7 @@ where
         key: &[u8],
         current_depth: &mut usize,
     ) -> Result<
-        ControlFlow<Mismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>,
+        ControlFlow<ExplicitMismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>,
         InsertPrefixError,
     >
     where
@@ -624,10 +624,10 @@ where
         // enforced the "no concurrent reads or writes" requirement on the
         // `search_unchecked` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
-        let match_prefix = inner_node.match_prefix(key, *current_depth);
+        let match_prefix = inner_node.match_full_prefix(key, *current_depth);
         match match_prefix {
-            MatchPrefixResult::Mismatch { mismatch } => Ok(ControlFlow::Break(mismatch)),
-            MatchPrefixResult::Match { matched_bytes } => {
+            Err(mismatch) => Ok(ControlFlow::Break(mismatch)),
+            Ok(PrefixMatch { matched_bytes }) => {
                 // Since the prefix matched, advance the depth by the size of the prefix
                 *current_depth += matched_bytes;
 

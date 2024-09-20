@@ -9,8 +9,9 @@ use std::{
 };
 
 use crate::{
-    map::NonEmptyTree, maximum_unchecked, minimum_unchecked, AsBytes, ConcreteNodePtr, InnerNode,
-    LeafNode, MatchPrefixResult, NodePtr, OpaqueNodePtr, RawIterator, TreeMap,
+    map::NonEmptyTree, maximum_unchecked, minimum_unchecked, AsBytes, AttemptOptimisticPrefixMatch,
+    ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatchBehavior, RawIterator,
+    TreeMap,
 };
 
 /// This struct contains details of where and why the search stopped in an inner
@@ -116,6 +117,7 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
         inner_ptr: NodePtr<PREFIX_LEN, N>,
         key_bytes: &[u8],
         current_depth: &mut usize,
+        prefix_match_behavior: &mut PrefixMatchBehavior,
     ) -> ControlFlow<InnerNodeSearchResult<K, V, PREFIX_LEN>, OpaqueNodePtr<K, V, PREFIX_LEN>>
     where
         N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
@@ -126,9 +128,10 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
         // enforced the "no concurrent reads or writes" requirement on the
         // `check_prefix_lookup_child` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
-        let match_prefix = inner_node.match_prefix(key_bytes, *current_depth);
+        let match_prefix =
+            prefix_match_behavior.match_prefix(inner_node, &key_bytes[*current_depth..]);
         match match_prefix {
-            MatchPrefixResult::Mismatch { .. } => {
+            Err(_) => {
                 let (full_prefix, _) = inner_node.read_full_prefix(*current_depth);
                 let upper_bound = (*current_depth + full_prefix.len()).min(key_bytes.len());
                 let key_segment = &key_bytes[(*current_depth)..upper_bound];
@@ -142,7 +145,7 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
                     node_prefix_comparison_to_search_key_segment,
                 })
             },
-            MatchPrefixResult::Match { matched_bytes } => {
+            Ok(AttemptOptimisticPrefixMatch { matched_bytes, .. }) => {
                 // Since the prefix matched, advance the depth by the size of the prefix
                 *current_depth += matched_bytes;
 
@@ -182,28 +185,49 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
 
     let mut current_node = root;
     let mut current_depth = 0;
+    let mut prefix_match_behavior = PrefixMatchBehavior::default();
 
     loop {
         let next_node = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety documentation on the
                 // containing function
-                check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
+                check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_behavior,
+                )
             },
             ConcreteNodePtr::Node16(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety documentation on the
                 // containing function
-                check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
+                check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_behavior,
+                )
             },
             ConcreteNodePtr::Node48(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety documentation on the
                 // containing function
-                check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
+                check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_behavior,
+                )
             },
             ConcreteNodePtr::Node256(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety documentation on the
                 // containing function
-                check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
+                check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_behavior,
+                )
             },
             ConcreteNodePtr::LeafNode(leaf_ptr) => {
                 // SAFETY: The shared reference is bounded to this block and there are no
@@ -211,7 +235,7 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
                 let leaf_node = unsafe { leaf_ptr.as_ref() };
 
                 let leaf_key_comparison_to_search_key =
-                    leaf_node.key_ref().as_bytes().cmp(key_bytes);
+                    prefix_match_behavior.compare_leaf_key(leaf_node, key_bytes, current_depth);
 
                 return TerminatingNodeSearchResult::Leaf {
                     leaf_ptr,
@@ -539,7 +563,7 @@ implement_range_iter!(
 
 #[cfg(test)]
 mod tests {
-    use crate::tests_common::swap;
+    use crate::tests_common::{generate_key_with_prefix, swap, PrefixExpansion};
 
     use super::*;
 
@@ -832,6 +856,46 @@ mod tests {
                 ([255, 0, 255], 0),
                 ([255, 255, 0], 0),
                 ([255, 255, 255], 0)
+            ]
+        );
+    }
+
+    #[test]
+    fn lookup_on_tree_with_implicit_prefix_bytes() {
+        let mut tree = TreeMap::<_, _, 0>::with_prefix_len();
+
+        for (key, value) in generate_key_with_prefix(
+            [3, 3, 3],
+            [PrefixExpansion {
+                base_index: 0,
+                expanded_length: 4,
+            }],
+        )
+        .enumerate()
+        .map(swap)
+        {
+            let _ = tree.try_insert(key, value).unwrap();
+        }
+
+        assert_eq!(
+            tree.range(Box::from([0u8, 0, 0, 0, 0, 0])..Box::from([0u8, 0, 0, 0, 0, 4]))
+                .collect::<Vec<_>>(),
+            &[
+                (&[0, 0, 0, 0, 0, 0].into(), &0),
+                (&[0, 0, 0, 0, 0, 1].into(), &1),
+                (&[0, 0, 0, 0, 0, 2].into(), &2),
+                (&[0, 0, 0, 0, 0, 3].into(), &3)
+            ]
+        );
+
+        assert_eq!(
+            tree.range(Box::from([0u8, 0])..Box::from([0u8, 0, 0, 0, 0, 4]))
+                .collect::<Vec<_>>(),
+            &[
+                (&[0, 0, 0, 0, 0, 0].into(), &0),
+                (&[0, 0, 0, 0, 0, 1].into(), &1),
+                (&[0, 0, 0, 0, 0, 2].into(), &2),
+                (&[0, 0, 0, 0, 0, 3].into(), &3)
             ]
         );
     }

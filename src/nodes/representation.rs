@@ -637,37 +637,30 @@ pub trait Node<const PREFIX_LEN: usize>: private::Sealed {
     type Value;
 }
 
-/// Result of prefix match
-pub enum MatchPrefixResult<K, V, const PREFIX_LEN: usize> {
-    /// If prefixes don't match
-    Mismatch {
-        /// Mismatch object
-        mismatch: Mismatch<K, V, PREFIX_LEN>,
-    },
-    /// If the prefixes match entirely
-    Match {
-        /// How many bytes were matched
-        matched_bytes: usize,
-    },
+/// This struct represents a successful match against a prefix using either the
+/// [`InnerNode::optimistic_match_prefix`] or [`InnerNode::match_full_prefix`]
+/// functions.
+#[derive(Debug)]
+pub struct PrefixMatch {
+    /// How many bytes were matched
+    pub matched_bytes: usize,
 }
 
-impl<K, V, const PREFIX_LEN: usize> fmt::Debug for MatchPrefixResult<K, V, PREFIX_LEN> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Mismatch { mismatch } => f
-                .debug_struct("Mismatch")
-                .field("mismatch", mismatch)
-                .finish(),
-            Self::Match { matched_bytes } => f
-                .debug_struct("Match")
-                .field("matched_bytes", matched_bytes)
-                .finish(),
-        }
-    }
+/// This struct represents a successful match against a prefix using the
+/// [`InnerNode::attempt_pessimistic_match_prefix`] function.
+#[derive(Debug)]
+pub struct AttemptOptimisticPrefixMatch {
+    /// How many bytes were matched
+    pub matched_bytes: usize,
+    /// This flag will be true if the `attempt_pessimistic_match_prefix`
+    /// function fell back to an optimistic mode, and assumed prefix match by
+    /// key length.
+    pub any_implicit_bytes: bool,
 }
 
-/// Represents a prefix mismatch
-pub struct Mismatch<K, V, const PREFIX_LEN: usize> {
+/// Represents a prefix mismatch when looking at the entire prefix, including in
+/// cases where it is read from a child leaf node.
+pub struct ExplicitMismatch<K, V, const PREFIX_LEN: usize> {
     /// How many bytes were matched
     pub matched_bytes: usize,
     /// Value of the byte that made it not match
@@ -676,7 +669,7 @@ pub struct Mismatch<K, V, const PREFIX_LEN: usize> {
     pub leaf_ptr: OptionalLeafPtr<K, V, PREFIX_LEN>,
 }
 
-impl<K, V, const PREFIX_LEN: usize> fmt::Debug for Mismatch<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ExplicitMismatch<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Mismatch")
             .field("matched_bytes", &self.matched_bytes)
@@ -684,6 +677,36 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for Mismatch<K, V, PREFIX_LEN> {
             .field("leaf_ptr", &self.leaf_ptr)
             .finish()
     }
+}
+
+/// Represents a prefix mismatch when looking only at the prefix content present
+/// in an [`InnerNode`] header.
+#[derive(Debug)]
+pub struct PessimisticMismatch {
+    /// How many bytes were matched
+    pub matched_bytes: usize,
+    /// Value of the byte that made it not match.
+    ///
+    /// If this field is `None`, then the mismatch happened in the implicit
+    /// prefix bytes.
+    pub prefix_byte: Option<u8>,
+}
+
+impl From<OptimisticMismatch> for PessimisticMismatch {
+    fn from(value: OptimisticMismatch) -> Self {
+        Self {
+            matched_bytes: value.matched_bytes,
+            prefix_byte: None,
+        }
+    }
+}
+
+/// Represents a prefix mismatch when looking only at the prefix content present
+/// in an [`InnerNode`] header.
+#[derive(Debug)]
+pub struct OptimisticMismatch {
+    /// How many bytes were matched
+    pub matched_bytes: usize,
 }
 
 /// Common methods implemented by all inner node.
@@ -783,29 +806,104 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
     ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + FusedIterator;
 
+    /// Test the given key against the inner node header prefix by checking that
+    /// the key length is greater than or equal to the length of the header
+    /// prefix.
+    ///
+    /// The `truncated_key` argument should be the overall key bytes shortened
+    /// to the current depth.
+    ///
+    /// This is called "optimistic" matching, because it assumes that there will
+    /// not be a mismatch in the contents of the header prefix when compared to
+    /// the key. The caller who uses this function must perform a final check
+    /// against the leaf key bytes to make sure that the search key matches the
+    /// found key.
+    fn optimistic_match_prefix(
+        &self,
+        truncated_key: &[u8],
+    ) -> Result<PrefixMatch, OptimisticMismatch> {
+        if truncated_key.len() < self.header().prefix_len() {
+            Err(OptimisticMismatch {
+                matched_bytes: truncated_key.len(),
+            })
+        } else {
+            Ok(PrefixMatch {
+                matched_bytes: self.header().prefix_len(),
+            })
+        }
+    }
+
+    /// Test the given key against the inner node header prefix by comparing the
+    /// bytes.
+    ///
+    /// The `truncated_key` argument should be the overall key bytes shortened
+    /// to the current depth.
+    ///
+    /// If the length of the header prefix is greater than the number of bytes
+    /// stored (there are implicit bytes), then this falls back to using
+    /// [`optimistic_match_prefix`][InnerNode::optimistic_match_prefix].
+    ///
+    /// If this function fell into that condition, then the `any_implicit_bytes`
+    /// flag will be set to `true` in the `Ok` case and `prefix_byte` will be
+    /// set to `None` in the `Err` case.
+    ///
+    /// If either of those conditions are true, and the caller of this function
+    /// reaches a leaf node using these results, then the caller must perform a
+    /// final check against the leaf key bytes to make sure that the search
+    /// key matches the found key.
+    #[inline(always)]
+    fn attempt_pessimistic_match_prefix(
+        &self,
+        truncated_key: &[u8],
+    ) -> Result<AttemptOptimisticPrefixMatch, PessimisticMismatch> {
+        if PREFIX_LEN < self.header().prefix_len() {
+            let PrefixMatch { matched_bytes } = self.optimistic_match_prefix(truncated_key)?;
+
+            Ok(AttemptOptimisticPrefixMatch {
+                matched_bytes,
+                any_implicit_bytes: true,
+            })
+        } else {
+            // All bytes are explicit, this can proceed as normal
+
+            let prefix = self.header().read_prefix();
+
+            let matched_bytes = prefix
+                .iter()
+                .zip(truncated_key)
+                .take_while(|(a, b)| **a == **b)
+                .count();
+            if matched_bytes < self.header().prefix_len() {
+                Err(PessimisticMismatch {
+                    matched_bytes,
+                    prefix_byte: Some(prefix[matched_bytes]),
+                })
+            } else {
+                Ok(AttemptOptimisticPrefixMatch {
+                    matched_bytes,
+                    any_implicit_bytes: false,
+                })
+            }
+        }
+    }
+
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
+    ///
+    /// This function will read the full prefix for this inner node, even if it
+    /// needs to search a descendant leaf node to find implicit bytes.
     ///
     /// # Safety
     ///  - `current_depth` > key len
     #[inline(always)]
-    fn match_prefix(
+    fn match_full_prefix(
         &self,
         key: &[u8],
         current_depth: usize,
-    ) -> MatchPrefixResult<Self::Key, Self::Value, PREFIX_LEN>
+    ) -> Result<PrefixMatch, ExplicitMismatch<Self::Key, Self::Value, PREFIX_LEN>>
     where
         Self::Key: AsBytes,
     {
-        // TODO: We could optimize the usage of this function by splitting it into two
-        // cases:
-        //  1. Where we read the full prefix, in cases of an insert when we need to
-        //     determine where to split the prefix
-        //  2. Where we read only the inline part of the prefix, in cases of a lookup
-        //     where we can still check the final leaf key for equality at the end of
-        //     the search
-        // This would speed up the `lookup` case, since we wouldn't need to load the
-        // full prefix for some of those cases.
         #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: Since we are iterating the key and prefixes, we
@@ -823,15 +921,13 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
             .take_while(|(a, b)| **a == **b)
             .count();
         if matched_bytes < prefix.len() {
-            MatchPrefixResult::Mismatch {
-                mismatch: Mismatch {
-                    matched_bytes,
-                    prefix_byte: prefix[matched_bytes],
-                    leaf_ptr,
-                },
-            }
+            Err(ExplicitMismatch {
+                matched_bytes,
+                prefix_byte: prefix[matched_bytes],
+                leaf_ptr,
+            })
         } else {
-            MatchPrefixResult::Match { matched_bytes }
+            Ok(PrefixMatch { matched_bytes })
         }
     }
 

@@ -1,6 +1,9 @@
 use crate::{
-    nodes::NodePtr, search_unchecked, InnerNode, InnerNode16, InnerNode256, InnerNode4,
-    InnerNode48, LeafNode, OpaqueNodePtr,
+    nodes::NodePtr,
+    search_unchecked,
+    tests_common::{generate_key_with_prefix, swap, PrefixExpansion},
+    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, OpaqueNodePtr,
+    TreeMap,
 };
 
 #[test]
@@ -676,4 +679,30 @@ fn lookup_on_n4_n4_layer_tree() {
         assert!(search_unchecked(root, [1, 2, 3, 5, 60, 1].as_ref()).is_none());
         assert!(search_unchecked(root, [1, 2, 4, 7, 80, 3].as_ref()).is_none());
     }
+}
+
+#[test]
+fn lookup_on_tree_with_implicit_prefix_bytes() {
+    let mut tree = TreeMap::<_, _, 0>::with_prefix_len();
+
+    for (key, value) in generate_key_with_prefix(
+        [3, 3, 3],
+        [PrefixExpansion {
+            base_index: 0,
+            expanded_length: 4,
+        }],
+    )
+    .enumerate()
+    .map(swap)
+    {
+        let _ = tree.try_insert(key, value).unwrap();
+    }
+
+    assert_eq!(tree.get([0u8, 0, 0, 0, 0, 0].as_slice()), Some(&0));
+    assert_eq!(tree.get([0u8, 0, 0, 0, 0, 1].as_slice()), Some(&1));
+    assert_eq!(tree.get([0u8, 0, 0, 0, 0, 4].as_slice()), None);
+    assert_eq!(tree.get([4u8, 4, 4, 0, 0, 0].as_slice()), None);
+
+    // This one should end in the middle of a prefix
+    assert_eq!(tree.get([0u8, 0].as_slice()), None);
 }

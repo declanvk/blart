@@ -3,6 +3,8 @@ use crate::{
     OpaqueNodePtr,
 };
 
+use super::PrefixMatchBehavior;
+
 /// Remove a child node from the given inner node, return the child node
 /// pointer if it was compressed.
 ///
@@ -315,35 +317,57 @@ where
     let mut current_parent = None;
     let mut current_node = root;
     let mut current_depth = 0;
+    let mut prefix_match_state = PrefixMatchBehavior::default();
 
     loop {
         let next_node = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
-                lookup::check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
+                lookup::check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_state,
+                )
             },
             ConcreteNodePtr::Node16(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
-                lookup::check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
+                lookup::check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_state,
+                )
             },
             ConcreteNodePtr::Node48(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
-                lookup::check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
+                lookup::check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_state,
+                )
             },
             ConcreteNodePtr::Node256(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
-                lookup::check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
+                lookup::check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_state,
+                )
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                let leaf_node = leaf_node_ptr.read();
+                // SAFETY: TODO
+                let leaf = unsafe { leaf_node_ptr.as_ref() };
 
                 // Specifically we are matching the leaf node stored key against the full search
                 // key to confirm that it is the right value.
-                if leaf_node.matches_full_key(key_bytes) {
+                if prefix_match_state.matches_leaf_key(leaf, key_bytes, current_depth) {
                     return Some(DeletePoint {
                         grandparent_ptr_and_parent_key_byte: current_grandparent,
                         parent_ptr_and_child_key_byte: current_parent,
