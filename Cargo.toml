@@ -18,6 +18,8 @@ exclude = [
     "rustfmt.toml",
     "examples/example-data/",
     ".github/",
+    "benches/data/",
+    "release.toml",
 ]
 
 # All benchmarks must be registered manually
