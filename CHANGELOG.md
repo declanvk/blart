@@ -72,8 +72,7 @@ The crate is tested several ways:
    tree, and unit tests for the sizes of the different node types.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/declanvk/wall-a/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/declanvk/wall-a/compare/v0.2.0...v0.2.0
+[Unreleased]: https://github.com/declanvk/blart/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/declanvk/blart/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/declanvk/blart/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/declanvk/blart/compare/v0.1.0...v0.1.1
