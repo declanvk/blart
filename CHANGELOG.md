@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - ReleaseDate
 
+### Added
+
+ - Added `TreeMap::{range, range_mut}` iterators. These iterators allow for querying sub-sections of the trie, using the natural keys as bounds and even the Rust range syntax.
+
+### Changed
+
+ - Marked `MalformedTreeError` as `#[non_exhaustive]` and added some new variants relating to a linked list of leaf nodes.
+ - Modified the leaf nodes to have a doubly-linked list for fast iteration. This added some extra work in the insert and delete operations, but made it a lot cheaper to iterate. See [#33](https://github.com/declanvk/blart/pull/33) for more details and benchmarks
+   - Modified the existing `TreeMap::{iter, iter_mut, prefix, prefix_mut, into_iter, into_keys, into_values, iter, iter_mut, key, values, values_mut}` to use this new linked list to speed up iteration
+ - Optimize lookup (and "find delete point" and range iteration) by only reading prefix bytes from the inner node header. Previously, when a lookup encountered a prefix that was longer than the fixed number of bytes in the header, the procedure would go look up those missing bytes from a descendant leaf node.
+   - Now these functions will track whether or not these implicit bytes are used and just perform a final comparison with the leaf node key to make sure there were no mismatches. This "optimistic" behavior gets the lookup to the leaf node quicker, but could hit false positives in some cases.
+
+### Removed
+
+ - Removed the `TreeMap::{fuzzy_keys, fuzzy_values, fuzzy_values_mut, prefix_keys, prefix_values, prefix_values_mut}` and the associated iterator types. These functions didn't provide a lot of added value versus just appending a `.map(...)` combinator on one of the iterators that return the key-value tuples.
+
 ## [0.2.0] - 2024-08-18
 
 The 0.2.0 has been entirely (99%) contributed by @Gab-Menezes, thank you for all the new features!
