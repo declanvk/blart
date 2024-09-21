@@ -2,12 +2,11 @@ use std::mem::replace;
 
 use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
 
+use super::DEFAULT_PREFIX_LEN;
+
 /// A view into an occupied entry in a [`TreeMap`]. It is part of the [`Entry`]
 /// enum.
-pub struct OccupiedEntry<'a, K, V, const PREFIX_LEN: usize>
-where
-    K: AsBytes,
-{
+pub struct OccupiedEntry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
     pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 
     /// Used for the removal
@@ -16,6 +15,20 @@ where
     pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     /// Used for the removal
     pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
+}
+
+// SAFETY: This struct contains a `&mut TreeMap<K, V>` which mean `K` and `V`
+// must be `Send` for the struct to be `Send`.
+unsafe impl<'a, K: Send, V: Send, const PREFIX_LEN: usize> Send
+    for OccupiedEntry<'a, K, V, PREFIX_LEN>
+{
+}
+
+// SAFETY: This type has no interior mutability, and requires all internally
+// referenced types to be `Sync` for the whole thing to be `Sync`.
+unsafe impl<'a, K: Sync, V: Sync, const PREFIX_LEN: usize> Sync
+    for OccupiedEntry<'a, K, V, PREFIX_LEN>
+{
 }
 
 impl<'a, K, V, const PREFIX_LEN: usize> OccupiedEntry<'a, K, V, PREFIX_LEN>
@@ -87,19 +100,27 @@ where
 
 /// A view into a vacant entry in a [`TreeMap`]. It is part of the [`Entry`]
 /// enum.
-pub struct VacantEntry<'a, K, V, const PREFIX_LEN: usize>
-where
-    K: AsBytes,
-{
+pub struct VacantEntry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
     pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN>,
     pub(crate) key: K,
     pub(crate) insert_point: Option<InsertPoint<K, V, PREFIX_LEN>>,
 }
 
-impl<'a, K, V, const PREFIX_LEN: usize> VacantEntry<'a, K, V, PREFIX_LEN>
-where
-    K: AsBytes,
+// SAFETY: This struct contains a `&mut TreeMap<K, V>` which mean `K` and `V`
+// must be `Send` for the struct to be `Send`.
+unsafe impl<'a, K: Send, V: Send, const PREFIX_LEN: usize> Send
+    for VacantEntry<'a, K, V, PREFIX_LEN>
 {
+}
+
+// SAFETY: This type has no interior mutability, and requires all internally
+// referenced types to be `Sync` for the whole thing to be `Sync`.
+unsafe impl<'a, K: Sync, V: Sync, const PREFIX_LEN: usize> Sync
+    for VacantEntry<'a, K, V, PREFIX_LEN>
+{
+}
+
+impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> VacantEntry<'a, K, V, PREFIX_LEN> {
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a mutable reference to it.
     pub fn insert(self, value: V) -> &'a mut V {
@@ -148,10 +169,7 @@ where
 /// A view into a single entry in a map, which may either be vacant or occupied.
 ///
 /// This enum is constructed from the [`TreeMap::entry`].
-pub enum Entry<'a, K, V, const PREFIX_LEN: usize>
-where
-    K: AsBytes,
-{
+pub enum Entry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
     /// A view into an occupied entry in a [`TreeMap`].
     Occupied(OccupiedEntry<'a, K, V, PREFIX_LEN>),
     /// A view into a vacant entry in a [`TreeMap`].
@@ -304,6 +322,23 @@ mod tests {
     use crate::TreeMap;
 
     use super::*;
+
+    #[test]
+    fn iterators_are_send_sync() {
+        fn is_send<T: Send>() {}
+        fn is_sync<T: Sync>() {}
+
+        fn entry_is_send<'a, K: Send + 'a, V: Send + 'a>() {
+            is_send::<Entry<'a, K, V>>();
+        }
+
+        fn entry_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<Entry<'a, K, V>>();
+        }
+
+        entry_is_send::<[u8; 3], usize>();
+        entry_is_sync::<[u8; 3], usize>();
+    }
 
     #[test]
     fn and_modify() {

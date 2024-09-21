@@ -441,7 +441,10 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode4<K, V, PREFIX
 
 impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode16<K, V, PREFIX_LEN>;
-    type Iter<'a> = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN> where Self: 'a;
+    type Iter<'a>
+        = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN>
+    where
+        Self: 'a;
     type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
 
     fn header(&self) -> &Header<PREFIX_LEN> {
@@ -597,7 +600,10 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFI
 
 impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode48<K, V, PREFIX_LEN>;
-    type Iter<'a> = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN> where Self: 'a;
+    type Iter<'a>
+        = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN>
+    where
+        Self: 'a;
     type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
 
     fn header(&self) -> &Header<PREFIX_LEN> {

@@ -1,4 +1,6 @@
-use crate::{maximum_unchecked, minimum_unchecked, AsBytes, RawIterator, TreeMap};
+use crate::{
+    map::DEFAULT_PREFIX_LEN, maximum_unchecked, minimum_unchecked, AsBytes, RawIterator, TreeMap,
+};
 use std::iter::FusedIterator;
 
 use super::{
@@ -16,7 +18,7 @@ macro_rules! implement_prefix_iter {
         }
     ) => {
         $(#[$outer])*
-        pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
             inner: RawIterator<K, V, PREFIX_LEN>,
             _tree: $tree_ty,
         }
@@ -127,6 +129,24 @@ implement_prefix_iter!(
     }
 );
 
+// SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
+// and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Prefix<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
+// SAFETY: This iterator has no interior mutability and can be shared across
+// thread so long as the reference `TreeMap<K, V>` can as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Prefix<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 implement_prefix_iter!(
     /// A mutable iterator over a range of entries that all have the same key prefix in a [`TreeMap`].
     ///
@@ -139,9 +159,58 @@ implement_prefix_iter!(
     }
 );
 
+// SAFETY: This iterator has a mutable reference to the underlying `TreeMap` and
+// can be moved across threads if `&mut TreeMap<K, V>` is `Send`, which requires
+// `TreeMap<K, V>` to be `Send` as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for PrefixMut<'a, K, V, PREFIX_LEN>
+where
+    K: Send,
+    V: Send,
+{
+}
+
+// SAFETY: This iterator uses no interior mutability and can be shared across
+// threads so long as `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for PrefixMut<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{tests_common::swap, TreeMap};
+
+    use super::*;
+
+    #[test]
+    fn iterators_are_send_sync() {
+        fn is_send<T: Send>() {}
+        fn is_sync<T: Sync>() {}
+
+        fn prefix_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_send::<Prefix<'a, K, V>>();
+        }
+
+        fn prefix_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<Prefix<'a, K, V>>();
+        }
+
+        prefix_is_send::<[u8; 3], usize>();
+        prefix_is_sync::<[u8; 3], usize>();
+
+        fn prefix_mut_is_send<'a, K: Send + 'a, V: Send + 'a>() {
+            is_send::<PrefixMut<'a, K, V>>();
+        }
+
+        fn prefix_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<PrefixMut<'a, K, V>>();
+        }
+
+        prefix_mut_is_send::<[u8; 3], usize>();
+        prefix_mut_is_sync::<[u8; 3], usize>();
+    }
 
     #[test]
     fn prefix() {

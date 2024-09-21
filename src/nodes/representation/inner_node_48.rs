@@ -160,15 +160,21 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFI
 impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode256<K, V, PREFIX_LEN>;
     #[cfg(not(feature = "nightly"))]
-    type Iter<'a> = Node48Iter<'a, K, V, PREFIX_LEN> where Self: 'a;
+    type Iter<'a>
+        = Node48Iter<'a, K, V, PREFIX_LEN>
+    where
+        Self: 'a;
     #[cfg(feature = "nightly")]
-    type Iter<'a> = Map<
+    type Iter<'a>
+        = Map<
         FilterMap<
             Enumerate<Iter<'a, RestrictedNodeIndex<48>>>,
             impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>,
         >,
         impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
-    > where Self: 'a;
+    >
+    where
+        Self: 'a;
     type ShrunkNode = InnerNode16<K, V, PREFIX_LEN>;
 
     fn header(&self) -> &Header<PREFIX_LEN> {

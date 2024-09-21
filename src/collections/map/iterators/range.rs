@@ -9,9 +9,9 @@ use std::{
 };
 
 use crate::{
-    map::NonEmptyTree, maximum_unchecked, minimum_unchecked, AsBytes, AttemptOptimisticPrefixMatch,
-    ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatchBehavior, RawIterator,
-    TreeMap,
+    map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
+    maximum_unchecked, minimum_unchecked, AsBytes, AttemptOptimisticPrefixMatch, ConcreteNodePtr,
+    InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatchBehavior, RawIterator, TreeMap,
 };
 
 /// This struct contains details of where and why the search stopped in an inner
@@ -415,7 +415,7 @@ macro_rules! implement_range_iter {
         }
     ) => {
         $(#[$outer])*
-        pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
             inner: RawIterator<K, V, PREFIX_LEN>,
             _tree: $tree_ty,
         }
@@ -549,6 +549,24 @@ implement_range_iter!(
     }
 );
 
+// SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
+// and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Range<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
+// SAFETY: This iterator has no interior mutability and can be shared across
+// thread so long as the reference `TreeMap<K, V>` can as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Range<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 implement_range_iter!(
     /// A mutable iterator over a sub-range of entries in a [`TreeMap`].
     ///
@@ -561,11 +579,58 @@ implement_range_iter!(
     }
 );
 
+// SAFETY: This iterator has a mutable reference to the underlying `TreeMap` and
+// can be moved across threads if `&mut TreeMap<K, V>` is `Send`, which requires
+// `TreeMap<K, V>` to be `Send` as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for RangeMut<'a, K, V, PREFIX_LEN>
+where
+    K: Send,
+    V: Send,
+{
+}
+
+// SAFETY: This iterator uses no interior mutability and can be shared across
+// threads so long as `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for RangeMut<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 #[cfg(test)]
 mod tests {
     use crate::tests_common::{generate_key_with_prefix, swap, PrefixExpansion};
 
     use super::*;
+
+    #[test]
+    fn iterators_are_send_sync() {
+        fn is_send<T: Send>() {}
+        fn is_sync<T: Sync>() {}
+
+        fn range_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_send::<Range<'a, K, V>>();
+        }
+
+        fn range_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<Range<'a, K, V>>();
+        }
+
+        range_is_send::<[u8; 3], usize>();
+        range_is_sync::<[u8; 3], usize>();
+
+        fn range_mut_is_send<'a, K: Send + 'a, V: Send + 'a>() {
+            is_send::<RangeMut<'a, K, V>>();
+        }
+
+        fn range_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<RangeMut<'a, K, V>>();
+        }
+
+        range_mut_is_send::<[u8; 3], usize>();
+        range_mut_is_sync::<[u8; 3], usize>();
+    }
 
     fn fixture_tree() -> TreeMap<[u8; 3], usize> {
         [

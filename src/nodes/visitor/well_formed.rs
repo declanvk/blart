@@ -33,6 +33,7 @@ impl<const LEN: usize> PartialEq<[u8; LEN]> for KeyPrefix {
 /// An issue with the well-formed-ness of the tree. See the documentation on
 /// [`WellFormedChecker`] for more context.
 #[derive(PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MalformedTreeError<K, V, const PREFIX_LEN: usize> {
     /// A loop was observed between nodes
     LoopFound {
