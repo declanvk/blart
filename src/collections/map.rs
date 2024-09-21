@@ -26,8 +26,10 @@ pub use entry::*;
 pub use entry_ref::*;
 pub use iterators::*;
 
+const DEFAULT_PREFIX_LEN: usize = 16;
+
 /// An ordered map based on an adaptive radix tree.
-pub struct TreeMap<K, V, const PREFIX_LEN: usize = 16> {
+pub struct TreeMap<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
@@ -377,102 +379,6 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         Q: AsBytes + ?Sized,
     {
         FuzzyMut::new(self, key.as_bytes(), max_edit_dist)
-    }
-
-    /// Makes a fuzzy search in the tree by `key`,
-    /// returning all keys and values that are
-    /// less than or equal to `max_edit_dist`
-    ///
-    /// This is done by using Levenshtein distance
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map: TreeMap<_, _> = TreeMap::new();
-    ///
-    /// map.insert(c"abc", 0);
-    /// map.insert(c"abd", 1);
-    /// map.insert(c"abdefg", 2);
-    ///
-    /// let fuzzy: Vec<_> = map.fuzzy_keys(c"ab", 2).collect();
-    /// assert_eq!(fuzzy, vec![&c"abd", &c"abc"]);
-    /// ```
-    pub fn fuzzy_keys<'a, 'b, Q>(
-        &'a self,
-        key: &'b Q,
-        max_edit_dist: usize,
-    ) -> FuzzyKeys<'a, 'b, K, V, PREFIX_LEN>
-    where
-        K: Borrow<Q> + AsBytes,
-        Q: AsBytes + ?Sized,
-    {
-        FuzzyKeys::new(self, key.as_bytes(), max_edit_dist)
-    }
-
-    /// Makes a fuzzy search in the tree by `key`,
-    /// returning all keys and values that are
-    /// less than or equal to `max_edit_dist`.
-    ///
-    /// This is done by using Levenshtein distance
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map: TreeMap<_, _> = TreeMap::new();
-    ///
-    /// map.insert(c"abc", 0);
-    /// map.insert(c"abd", 1);
-    /// map.insert(c"abdefg", 2);
-    ///
-    /// let fuzzy: Vec<_> = map.fuzzy_values(c"ab", 2).collect();
-    /// assert_eq!(fuzzy, vec![&1, &0]);
-    /// ```
-    pub fn fuzzy_values<'a, 'b, Q>(
-        &'a self,
-        key: &'b Q,
-        max_edit_dist: usize,
-    ) -> FuzzyValues<'a, 'b, K, V, PREFIX_LEN>
-    where
-        K: Borrow<Q> + AsBytes,
-        Q: AsBytes + ?Sized,
-    {
-        FuzzyValues::new(self, key.as_bytes(), max_edit_dist)
-    }
-
-    /// Makes a fuzzy search in the tree by `key`,
-    /// returning all keys and values that are
-    /// less than or equal to `max_edit_dist`
-    ///
-    /// This is done by using Levenshtein distance
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map: TreeMap<_, _> = TreeMap::new();
-    ///
-    /// map.insert(c"abc", 0);
-    /// map.insert(c"abd", 1);
-    /// map.insert(c"abdefg", 2);
-    ///
-    /// let fuzzy: Vec<_> = map.fuzzy_values(c"ab", 2).collect();
-    /// assert_eq!(fuzzy, vec![&mut 1, &mut 0]);
-    /// ```
-    pub fn fuzzy_values_mut<'a, 'b, Q>(
-        &'a mut self,
-        key: &'b Q,
-        max_edit_dist: usize,
-    ) -> FuzzyValuesMut<'a, 'b, K, V, PREFIX_LEN>
-    where
-        K: Borrow<Q> + AsBytes,
-        Q: AsBytes + ?Sized,
-    {
-        FuzzyValuesMut::new(self, key.as_bytes(), max_edit_dist)
     }
 
     /// Returns true if the map contains a value for the specified key.
@@ -1152,8 +1058,8 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(iter.next().unwrap(), (&4, &'z'));
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn iter(&self) -> TreeIterator<'_, K, V, PREFIX_LEN> {
-        TreeIterator::new(self)
+    pub fn iter(&self) -> Iter<'_, K, V, PREFIX_LEN> {
+        Iter::new(self)
     }
 
     /// Gets a mutable iterator over the entries of the map, sorted by key.
@@ -1177,8 +1083,8 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn iter_mut(&mut self) -> TreeIteratorMut<'_, K, V, PREFIX_LEN> {
-        TreeIteratorMut::new(self)
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V, PREFIX_LEN> {
+        IterMut::new(self)
     }
 
     /// Gets an iterator over the keys of the map, in sorted order.
@@ -1568,7 +1474,7 @@ where
 }
 
 impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a TreeMap<K, V, PREFIX_LEN> {
-    type IntoIter = TreeIterator<'a, K, V, PREFIX_LEN>;
+    type IntoIter = Iter<'a, K, V, PREFIX_LEN>;
     type Item = (&'a K, &'a V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1577,7 +1483,7 @@ impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a TreeMap<K, V, PREFI
 }
 
 impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a mut TreeMap<K, V, PREFIX_LEN> {
-    type IntoIter = TreeIteratorMut<'a, K, V, PREFIX_LEN>;
+    type IntoIter = IterMut<'a, K, V, PREFIX_LEN>;
     type Item = (&'a K, &'a mut V);
 
     fn into_iter(self) -> Self::IntoIter {

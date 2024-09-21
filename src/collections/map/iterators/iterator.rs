@@ -1,11 +1,11 @@
 use std::iter::FusedIterator;
 
-use crate::{RawIterator, TreeMap};
+use crate::{map::DEFAULT_PREFIX_LEN, RawIterator, TreeMap};
 
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s
-        pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
             inner: RawIterator<K, V, PREFIX_LEN>,
             size: usize,
             _tree: $tree,
@@ -86,7 +86,7 @@ macro_rules! gen_iter {
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
 gen_iter!(
-    TreeIterator,
+    Iter,
     &'a TreeMap<K, V, PREFIX_LEN>,
     (&'a K, &'a V),
     as_key_value_ref
@@ -95,11 +95,15 @@ gen_iter!(
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
-    TreeIteratorMut,
+    IterMut,
     &'a mut TreeMap<K, V, PREFIX_LEN>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
+
+// The `Keys`, `Values`, and `ValuesMut` iterator only exist to match the
+// interface of the `std::collections::BTreeMap`, otherwise I would not
+// generally include them as they're mostly redundant with `Iter` and `IterMut`.
 
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf

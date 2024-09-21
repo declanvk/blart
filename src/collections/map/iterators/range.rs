@@ -9,9 +9,9 @@ use std::{
 };
 
 use crate::{
-    map::NonEmptyTree, maximum_unchecked, minimum_unchecked, AsBytes, AttemptOptimisticPrefixMatch,
-    ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatchBehavior, RawIterator,
-    TreeMap,
+    map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
+    maximum_unchecked, minimum_unchecked, AsBytes, AttemptOptimisticPrefixMatch, ConcreteNodePtr,
+    InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatchBehavior, RawIterator, TreeMap,
 };
 
 /// This struct contains details of where and why the search stopped in an inner
@@ -415,7 +415,7 @@ macro_rules! implement_range_iter {
         }
     ) => {
         $(#[$outer])*
-        pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
             inner: RawIterator<K, V, PREFIX_LEN>,
             _tree: $tree_ty,
         }

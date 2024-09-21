@@ -1,4 +1,5 @@
 use crate::{
+    map::DEFAULT_PREFIX_LEN,
     rust_nightly_apis::{assume, box_new_uninit_slice},
     AsBytes, ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
     OpaqueNodePtr, TreeMap,
@@ -308,7 +309,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s within a specific edit distance
-        pub struct $name<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> {
+        pub struct $name<'a, 'b, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
             nodes_to_search: Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
             old_row: Box<[MaybeUninit<usize>]>,
             new_row: Box<[MaybeUninit<usize>]>,
@@ -466,25 +467,6 @@ gen_iter!(
     &'a mut TreeMap<K, V, PREFIX_LEN>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
-);
-// SAFETY: Since we hold a shared reference is safe to
-// create a shared reference to the leaf
-gen_iter!(FuzzyKeys, &'a TreeMap<K, V, PREFIX_LEN>, &'a K, as_key_ref);
-// SAFETY: Since we hold a shared reference is safe to
-// create a shared reference to the leaf
-gen_iter!(
-    FuzzyValues,
-    &'a TreeMap<K, V, PREFIX_LEN>,
-    &'a V,
-    as_value_ref
-);
-// SAFETY: Since we hold a mutable reference is safe to
-// create a mutable reference to the leaf
-gen_iter!(
-    FuzzyValuesMut,
-    &'a mut TreeMap<K, V, PREFIX_LEN>,
-    &'a mut V,
-    as_value_mut
 );
 
 #[cfg(test)]

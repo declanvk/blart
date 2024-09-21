@@ -3,7 +3,10 @@ use std::{
     mem::{self, ManuallyDrop},
 };
 
-use crate::{deallocate_leaves, deallocate_tree_non_leaves, NodePtr, RawIterator, TreeMap};
+use crate::{
+    deallocate_leaves, deallocate_tree_non_leaves, map::DEFAULT_PREFIX_LEN, NodePtr, RawIterator,
+    TreeMap,
+};
 
 /// An owning iterator over the entries of a `TreeMap`.
 ///
@@ -13,7 +16,7 @@ use crate::{deallocate_leaves, deallocate_tree_non_leaves, NodePtr, RawIterator,
 /// [`into_iter`]: IntoIterator::into_iter
 /// [`IntoIterator`]: core::iter::IntoIterator
 #[derive(Debug)]
-pub struct IntoIter<K, V, const PREFIX_LEN: usize> {
+pub struct IntoIter<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
     inner: RawIterator<K, V, PREFIX_LEN>,
     size: usize,
 }
@@ -103,7 +106,7 @@ impl<K, V, const PREFIX_LEN: usize> FusedIterator for IntoIter<K, V, PREFIX_LEN>
 ///
 /// This `struct` is created by the [`crate::TreeMap::into_keys`] method on
 /// [`TreeMap`]. See its documentation for more.
-pub struct IntoKeys<K, V, const PREFIX_LEN: usize>(IntoIter<K, V, PREFIX_LEN>);
+pub struct IntoKeys<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN>(IntoIter<K, V, PREFIX_LEN>);
 
 impl<K, V, const PREFIX_LEN: usize> IntoKeys<K, V, PREFIX_LEN> {
     pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN>) -> Self {
@@ -137,7 +140,9 @@ impl<K, V, const PREFIX_LEN: usize> ExactSizeIterator for IntoKeys<K, V, PREFIX_
 /// See its documentation for more.
 ///
 /// [`into_values`]: crate::TreeMap::into_values
-pub struct IntoValues<K, V, const PREFIX_LEN: usize>(IntoIter<K, V, PREFIX_LEN>);
+pub struct IntoValues<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN>(
+    IntoIter<K, V, PREFIX_LEN>,
+);
 
 impl<K, V, const PREFIX_LEN: usize> IntoValues<K, V, PREFIX_LEN> {
     pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN>) -> Self {

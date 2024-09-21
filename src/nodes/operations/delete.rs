@@ -362,7 +362,8 @@ where
                 )
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                // SAFETY: TODO
+                // SAFETY: The created reference doesn't escape the block and there are no
+                // concurrent mutable references.
                 let leaf = unsafe { leaf_node_ptr.as_ref() };
 
                 // Specifically we are matching the leaf node stored key against the full search

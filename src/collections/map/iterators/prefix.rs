@@ -1,4 +1,6 @@
-use crate::{maximum_unchecked, minimum_unchecked, AsBytes, RawIterator, TreeMap};
+use crate::{
+    map::DEFAULT_PREFIX_LEN, maximum_unchecked, minimum_unchecked, AsBytes, RawIterator, TreeMap,
+};
 use std::iter::FusedIterator;
 
 use super::{
@@ -16,7 +18,7 @@ macro_rules! implement_prefix_iter {
         }
     ) => {
         $(#[$outer])*
-        pub struct $name<'a, K, V, const PREFIX_LEN: usize> {
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
             inner: RawIterator<K, V, PREFIX_LEN>,
             _tree: $tree_ty,
         }
