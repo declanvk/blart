@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - ReleaseDate
 
+## [0.3.0] - 2024-09-21
+
 ### Added
 
  - Added `TreeMap::{range, range_mut}` iterators. These iterators allow for querying sub-sections of the trie, using the natural keys as bounds and even the Rust range syntax.
@@ -88,7 +90,8 @@ The crate is tested several ways:
    tree, and unit tests for the sizes of the different node types.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/declanvk/blart/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/declanvk/blart/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/declanvk/blart/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/declanvk/blart/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/declanvk/blart/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/declanvk/blart/compare/v0.1.0...v0.1.1
