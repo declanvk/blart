@@ -1572,6 +1572,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn map_is_send_sync() {
+        fn is_send<T: Send>() {}
+        fn is_sync<T: Sync>() {}
+
+        fn map_is_send<K: Send, V: Send>() {
+            is_send::<TreeMap<K, V>>();
+        }
+
+        fn map_is_sync<K: Sync, V: Sync>() {
+            is_sync::<TreeMap<K, V>>();
+        }
+
+        map_is_send::<[u8; 3], usize>();
+        map_is_sync::<[u8; 3], usize>();
+    }
+
+    #[test]
     fn tree_map_create_empty() {
         let map = TreeMap::<Box<[u8]>, ()>::new();
 

@@ -460,6 +460,28 @@ gen_iter!(
     (&'a K, &'a V),
     as_key_value_ref
 );
+
+// SAFETY: This iterator is safe to `Send` across threads when the `K` and `V`
+// are `Sync` because it holds a `&TreeMap<K, V>`. `&TreeMap<K, V>` is `Send`
+// when `TreeMap<K, V>` is `Sync`.
+//
+// The other parts of this iterator are safe to send cross thread.
+unsafe impl<'a, 'b, K, V, const PREFIX_LEN: usize> Send for Fuzzy<'a, 'b, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
+// SAFETY: This iterator is safe to share immutable across threads because there
+// is no interior mutability and the underlying tree reference is `Send`.
+unsafe impl<'a, 'b, K, V, const PREFIX_LEN: usize> Sync for Fuzzy<'a, 'b, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
@@ -469,11 +491,57 @@ gen_iter!(
     as_key_ref_value_mut
 );
 
+// SAFETY: TODO
+unsafe impl<'a, 'b, K, V, const PREFIX_LEN: usize> Send for FuzzyMut<'a, 'b, K, V, PREFIX_LEN>
+where
+    K: Send,
+    V: Send,
+{
+}
+
+// SAFETY: TODO
+unsafe impl<'a, 'b, K, V, const PREFIX_LEN: usize> Sync for FuzzyMut<'a, 'b, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::CString;
 
     use crate::TreeMap;
+
+    use super::*;
+
+    #[test]
+    fn iterators_are_send_sync() {
+        fn is_send<T: Send>() {}
+        fn is_sync<T: Sync>() {}
+
+        fn fuzzy_is_send<K: Sync, V: Sync>() {
+            is_send::<Fuzzy<K, V>>();
+        }
+
+        fn fuzzy_is_sync<K: Sync, V: Sync>() {
+            is_sync::<Fuzzy<K, V>>();
+        }
+
+        fuzzy_is_send::<[u8; 3], usize>();
+        fuzzy_is_sync::<[u8; 3], usize>();
+
+        fn fuzzy_mut_is_send<K: Send, V: Send>() {
+            is_send::<FuzzyMut<K, V>>();
+        }
+
+        fn fuzzy_mut_is_sync<K: Sync, V: Sync>() {
+            is_sync::<FuzzyMut<K, V>>();
+        }
+
+        fuzzy_mut_is_send::<[u8; 3], usize>();
+        fuzzy_mut_is_sync::<[u8; 3], usize>();
+    }
 
     #[test]
     fn fuzzy() {

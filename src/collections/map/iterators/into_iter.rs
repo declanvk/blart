@@ -21,6 +21,25 @@ pub struct IntoIter<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
     size: usize,
 }
 
+// SAFETY: This iterator is the unique owner of  the remainder of the `TreeMap`
+// it was constructed from and is safe to move across threads, so long as the
+// keys and values are as well.
+unsafe impl<K, V, const PREFIX_LEN: usize> Send for IntoIter<K, V, PREFIX_LEN>
+where
+    K: Send,
+    V: Send,
+{
+}
+
+// SAFETY: This iterator has no interior mutability and can be shared across
+// threads, so long as the keys and values can be as well.
+unsafe impl<K, V, const PREFIX_LEN: usize> Sync for IntoIter<K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 impl<K, V, const PREFIX_LEN: usize> Drop for IntoIter<K, V, PREFIX_LEN> {
     fn drop(&mut self) {
         // SAFETY: The `deallocate_tree_non_leaves` function is called earlier on the
@@ -180,6 +199,45 @@ mod tests {
     use crate::{tests_common::swap, AsBytes, NoPrefixesBytes, OrderedBytes};
 
     use super::*;
+
+    #[test]
+    fn iterators_are_send_sync() {
+        fn is_send<T: Send>() {}
+        fn is_sync<T: Sync>() {}
+
+        fn into_iter_is_send<K: Send, V: Send>() {
+            is_send::<IntoIter<K, V>>();
+        }
+
+        fn into_iter_is_sync<K: Sync, V: Sync>() {
+            is_sync::<IntoIter<K, V>>();
+        }
+
+        into_iter_is_send::<[u8; 3], usize>();
+        into_iter_is_sync::<[u8; 3], usize>();
+
+        fn into_keys_is_send<K: Send, V: Send>() {
+            is_send::<IntoKeys<K, V>>();
+        }
+
+        fn into_keys_is_sync<K: Sync, V: Sync>() {
+            is_sync::<IntoKeys<K, V>>();
+        }
+
+        into_keys_is_send::<[u8; 3], usize>();
+        into_keys_is_sync::<[u8; 3], usize>();
+
+        fn into_values_is_send<K: Send, V: Send>() {
+            is_send::<IntoValues<K, V>>();
+        }
+
+        fn into_values_is_sync<K: Sync, V: Sync>() {
+            is_sync::<IntoValues<K, V>>();
+        }
+
+        into_values_is_send::<[u8; 3], usize>();
+        into_values_is_sync::<[u8; 3], usize>();
+    }
 
     #[derive(Debug)]
     struct DropCounter<T>(Arc<AtomicUsize>, T);

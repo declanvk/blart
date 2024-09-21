@@ -92,6 +92,24 @@ gen_iter!(
     as_key_value_ref
 );
 
+// SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
+// and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Iter<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
+// SAFETY: This iterator has no interior mutability and can be shared across
+// thread so long as the reference `TreeMap<K, V>` can as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Iter<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
@@ -101,6 +119,25 @@ gen_iter!(
     as_key_ref_value_mut
 );
 
+// SAFETY: This iterator has a mutable reference to the underlying `TreeMap` and
+// can be moved across threads if `&mut TreeMap<K, V>` is `Send`, which requires
+// `TreeMap<K, V>` to be `Send` as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for IterMut<'a, K, V, PREFIX_LEN>
+where
+    K: Send,
+    V: Send,
+{
+}
+
+// SAFETY: This iterator uses no interior mutability and can be shared across
+// threads so long as `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for IterMut<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 // The `Keys`, `Values`, and `ValuesMut` iterator only exist to match the
 // interface of the `std::collections::BTreeMap`, otherwise I would not
 // generally include them as they're mostly redundant with `Iter` and `IterMut`.
@@ -109,9 +146,45 @@ gen_iter!(
 // create a shared reference to the leaf
 gen_iter!(Keys, &'a TreeMap<K, V, PREFIX_LEN>, &'a K, as_key_ref);
 
+// SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
+// and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Keys<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
+// SAFETY: This iterator has no interior mutability and can be shared across
+// thread so long as the reference `TreeMap<K, V>` can as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Keys<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
 gen_iter!(Values, &'a TreeMap<K, V, PREFIX_LEN>, &'a V, as_value_ref);
+
+// SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
+// and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Values<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
+// SAFETY: This iterator has no interior mutability and can be shared across
+// thread so long as the reference `TreeMap<K, V>` can as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Values<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
 
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
@@ -122,9 +195,95 @@ gen_iter!(
     as_value_mut
 );
 
+// SAFETY: This iterator has a mutable reference to the underlying `TreeMap` and
+// can be moved across threads if `&mut TreeMap<K, V>` is `Send`, which requires
+// `TreeMap<K, V>` to be `Send` as well.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for ValuesMut<'a, K, V, PREFIX_LEN>
+where
+    K: Send,
+    V: Send,
+{
+}
+
+// SAFETY: This iterator uses no interior mutability and can be shared across
+// threads so long as `TreeMap<K, V>: Sync`.
+unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for ValuesMut<'a, K, V, PREFIX_LEN>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{tests_common::generate_key_fixed_length, TreeMap};
+
+    use super::*;
+
+    #[test]
+    fn iterators_are_send_sync() {
+        fn is_send<T: Send>() {}
+        fn is_sync<T: Sync>() {}
+
+        // For `Iter`, `Keys`, and `Values` the requirement reads:
+        // `unsafe impl<K: Sync, V: Sync> Send for Iter<K, V> {}`. The `Sync` bounds are
+        // required because we're transferring a `&'a TreeMap<K, V>` across threads and
+        // `&'a T` is only `Send` when `T` is `Sync`.
+        fn iter_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_send::<Iter<'a, K, V>>();
+        }
+
+        fn iter_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<Iter<'a, K, V>>();
+        }
+
+        iter_is_send::<[u8; 3], usize>();
+        iter_is_sync::<[u8; 3], usize>();
+
+        fn iter_mut_is_send<'a, K: Send + 'a, V: Send + 'a>() {
+            is_send::<IterMut<'a, K, V>>();
+        }
+
+        fn iter_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<IterMut<'a, K, V>>();
+        }
+
+        iter_mut_is_send::<[u8; 3], usize>();
+        iter_mut_is_sync::<[u8; 3], usize>();
+
+        fn keys_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_send::<Keys<'a, K, V>>();
+        }
+
+        fn keys_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<Keys<'a, K, V>>();
+        }
+
+        keys_is_send::<[u8; 3], usize>();
+        keys_is_sync::<[u8; 3], usize>();
+
+        fn values_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_send::<Values<'a, K, V>>();
+        }
+
+        fn values_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<Values<'a, K, V>>();
+        }
+
+        values_is_send::<[u8; 3], usize>();
+        values_is_sync::<[u8; 3], usize>();
+
+        fn values_mut_is_send<'a, K: Send + 'a, V: Send + 'a>() {
+            is_send::<ValuesMut<'a, K, V>>();
+        }
+
+        fn values_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
+            is_sync::<ValuesMut<'a, K, V>>();
+        }
+
+        values_mut_is_send::<[u8; 3], usize>();
+        values_mut_is_sync::<[u8; 3], usize>();
+    }
 
     #[test]
     fn small_tree_iterator_front_and_back() {
