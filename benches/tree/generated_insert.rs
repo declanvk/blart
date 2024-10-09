@@ -26,7 +26,6 @@ fn gen_group(c: &mut Criterion, group: &str, keys: Vec<Box<[u8]>>) {
     });
 }
 
-#[inline(always)]
 fn bench(c: &mut Criterion) {
     let skewed: Vec<_> = generate_keys_skewed(u8::MAX as usize).collect();
     let fixed_length: Vec<_> = generate_key_fixed_length([2; 8]).map(Box::from).collect();

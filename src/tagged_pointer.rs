@@ -8,10 +8,9 @@
 //! pointed-to type, so that it can store several bits of information. For a
 //! type with alignment `A`, the number of available bits is `log_2(A)`.
 
-use std::{fmt, mem::align_of, ptr::NonNull};
+use std::{fmt, mem::align_of, num::NonZeroUsize, ptr::NonNull};
 
-#[cfg(not(feature = "nightly"))]
-use sptr::Strict;
+use crate::rust_nightly_apis::ptr;
 
 /// A non-null pointer type which carries several bits of metadata.
 ///
@@ -85,7 +84,7 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
         // assumes that null is always a zero value.
         let unchecked_ptr = unsafe { NonNull::new_unchecked(pointer) };
 
-        let ptr_addr = unchecked_ptr.as_ptr().addr();
+        let ptr_addr = ptr::mut_addr(unchecked_ptr.as_ptr());
 
         // Double-check that there are no existing bits stored in the data-carrying
         // positions
@@ -117,15 +116,17 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// memory location.
     ///
     /// This pointer is guaranteed to be non-null.
-    pub fn to_ptr(self) -> *mut P {
-        self.0
-            .as_ptr()
-            .map_addr(|ptr_addr| ptr_addr & Self::POINTER_MASK)
+    #[inline]
+    pub fn to_ptr(self) -> NonNull<P> {
+        ptr::nonnull_map_addr(self.0, |ptr_addr|
+            // SAFETY: TODO
+            unsafe { NonZeroUsize::new_unchecked(ptr_addr.get() & Self::POINTER_MASK) })
     }
 
     /// Consume this tagged pointer and produce the data it carries.
+    #[inline]
     pub fn to_data(self) -> usize {
-        let ptr_addr = self.0.as_ptr().addr();
+        let ptr_addr = ptr::mut_addr(self.0.as_ptr());
         ptr_addr & Self::DATA_MASK
     }
 
@@ -142,42 +143,16 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
         );
         let data = data & Self::DATA_MASK;
 
-        let ptr_with_new_data = self
-            .0
-            .as_ptr()
-            .map_addr(|ptr_addr| (ptr_addr & Self::POINTER_MASK) | data);
-
-        // The `ptr_with_new_data` is guaranteed to be non-null because it's pointer
-        // address was derived from a non-null pointer using operations that would not
-        // have zeroed out the address.
-        //
-        // The bit-and operation combining the original pointer address (non-null)
-        // combined with the POINTER_MASK would not have produced a zero value because
-        // the POINTER_MASK value must have the high bits set.
-        self.0 = unsafe { NonNull::new_unchecked(ptr_with_new_data) };
-    }
-
-    /// Casts to a [`TaggedPointer`] of another type.
-    ///
-    /// This function will transfer the data bits from the original pointer to
-    /// the new pointer.
-    ///
-    /// # Safety
-    ///  - The alignment of the new type must be equal to the alignment of the
-    ///    existing type. This is because the number of data-carrying bits could
-    ///    be different.
-    pub fn cast<Q>(self) -> TaggedPointer<Q, MIN_BITS> {
-        let data = self.to_data();
-        let raw_ptr = self.to_ptr();
-        let cast_raw_ptr = raw_ptr.cast::<Q>();
-
-        // SAFETY: The `cast_raw_ptr` is guaranteed to be non-null because it is derived
-        // from an existing `TaggedPointer` which carries that guarantee.
-        let mut new_tagged = unsafe { TaggedPointer::new_unchecked(cast_raw_ptr) };
-
-        new_tagged.set_data(data);
-
-        new_tagged
+        self.0 = ptr::nonnull_map_addr(self.0, |ptr_addr| unsafe {
+            // SAFETY: The `ptr_with_new_data` is guaranteed to be non-null because it's
+            // pointer address was derived from a non-null pointer using
+            // operations that would not have zeroed out the address.
+            //
+            // The bit-and operation combining the original pointer address (non-null)
+            // combined with the POINTER_MASK would not have produced a zero value because
+            // the POINTER_MASK value must have the high bits set.
+            NonZeroUsize::new_unchecked(ptr_addr.get() & Self::POINTER_MASK) | data
+        });
     }
 }
 
@@ -193,7 +168,7 @@ impl<P, const MIN_BITS: u32> From<TaggedPointer<P, MIN_BITS>> for NonNull<P> {
     fn from(pointer: TaggedPointer<P, MIN_BITS>) -> Self {
         // SAFETY: The pointer produced by the `TaggedPointer::to_ptr` is guaranteed to
         // be non-null.
-        unsafe { NonNull::new_unchecked(pointer.to_ptr()) }
+        unsafe { NonNull::new_unchecked(pointer.to_ptr().as_ptr()) }
     }
 }
 
@@ -270,40 +245,17 @@ mod tests {
         let mut tagged_pointer =
             TaggedPointer::<&str, 3>::new_with_data(pointer, tag_data).unwrap();
 
-        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
+        assert_eq!(unsafe { *tagged_pointer.to_ptr().as_ptr() }, "Hello world!");
         assert_eq!(tagged_pointer.to_data(), 0b101);
 
         tagged_pointer.set_data(0b010);
 
-        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, "Hello world!");
+        assert_eq!(unsafe { *tagged_pointer.to_ptr().as_ptr() }, "Hello world!");
         assert_eq!(tagged_pointer.to_data(), 0b010);
 
         // Collecting the data into `Box` to safely drop it
         unsafe {
-            drop(Box::from_raw(tagged_pointer.to_ptr()));
-        }
-    }
-
-    #[test]
-    fn cast_and_back() {
-        let pointee = u64::MAX;
-        let pointer = Box::into_raw(Box::new(pointee));
-        let tag_data = 0b010usize;
-
-        let mut tagged_pointer = TaggedPointer::<u64, 3>::new_with_data(pointer, tag_data).unwrap();
-
-        assert_eq!(unsafe { *tagged_pointer.to_ptr() }, u64::MAX);
-        assert_eq!(tagged_pointer.to_data(), 0b010);
-
-        tagged_pointer.set_data(0b101);
-
-        let new_tagged_pointer = tagged_pointer.cast::<i64>();
-
-        assert_eq!(unsafe { *new_tagged_pointer.to_ptr() }, -1);
-        assert_eq!(new_tagged_pointer.to_data(), 0b101);
-
-        unsafe {
-            drop(Box::from_raw(tagged_pointer.to_ptr()));
+            drop(Box::from_raw(tagged_pointer.to_ptr().as_ptr()));
         }
     }
 
@@ -316,14 +268,14 @@ mod tests {
 
         p.set_data(1);
         assert_eq!(p.to_data(), 1);
-        assert_eq!(unsafe { *p.to_ptr() }, 10);
+        assert_eq!(unsafe { *p.to_ptr().as_ptr() }, 10);
 
         p.set_data(3);
         assert_eq!(p.to_data(), 3);
-        assert_eq!(unsafe { *p.to_ptr() }, 10);
+        assert_eq!(unsafe { *p.to_ptr().as_ptr() }, 10);
 
         unsafe {
-            let _ = Box::from_raw(p.to_ptr());
+            let _ = Box::from_raw(p.to_ptr().as_ptr());
         };
     }
 
@@ -333,14 +285,14 @@ mod tests {
 
         let mut p = TaggedPointer::<_, 2>::new_with_data(raw_pointer, 3).unwrap();
         assert_eq!(p.to_data(), 3);
-        assert_eq!(unsafe { *p.to_ptr() }, 30);
+        assert_eq!(unsafe { *p.to_ptr().as_ptr() }, 30);
 
         p.set_data(0);
-        assert_eq!(unsafe { *p.to_ptr() }, 30);
+        assert_eq!(unsafe { *p.to_ptr().as_ptr() }, 30);
         assert_eq!(p.to_data(), 0);
 
         unsafe {
-            let _ = Box::from_raw(p.to_ptr());
+            let _ = Box::from_raw(p.to_ptr().as_ptr());
         };
     }
 
@@ -394,47 +346,47 @@ mod tests {
         let mut p5 = TaggedPointer::<_, 3>::new(Box::into_raw(Box::new(5u64))).unwrap();
 
         assert_eq!(p0.to_data(), 0);
-        assert_eq!(unsafe { *p0.to_ptr() }.len(), 0);
+        assert_eq!(unsafe { *p0.to_ptr().as_ptr() }.len(), 0);
         p0.set_data(0);
-        assert_eq!(unsafe { *p0.to_ptr() }.len(), 0);
+        assert_eq!(unsafe { *p0.to_ptr().as_ptr() }.len(), 0);
         assert_eq!(p0.to_data(), 0);
 
         assert_eq!(p1.to_data(), 0);
-        assert!(unsafe { !*p1.to_ptr() });
+        assert!(unsafe { !*p1.to_ptr().as_ptr() });
         p1.set_data(0);
         assert_eq!(p1.to_data(), 0);
-        assert!(unsafe { !*p1.to_ptr() });
+        assert!(unsafe { !*p1.to_ptr().as_ptr() });
 
         assert_eq!(p2.to_data(), 0);
-        assert_eq!(unsafe { *p2.to_ptr() }, 2);
+        assert_eq!(unsafe { *p2.to_ptr().as_ptr() }, 2);
         p2.set_data(0);
         assert_eq!(p2.to_data(), 0);
-        assert_eq!(unsafe { *p2.to_ptr() }, 2);
+        assert_eq!(unsafe { *p2.to_ptr().as_ptr() }, 2);
 
         assert_eq!(p3.to_data(), 0);
-        assert_eq!(unsafe { *p3.to_ptr() }, 3);
+        assert_eq!(unsafe { *p3.to_ptr().as_ptr() }, 3);
         p3.set_data(1);
         assert_eq!(p3.to_data(), 1);
-        assert_eq!(unsafe { *p3.to_ptr() }, 3);
+        assert_eq!(unsafe { *p3.to_ptr().as_ptr() }, 3);
 
         assert_eq!(p4.to_data(), 0);
-        assert_eq!(unsafe { *p4.to_ptr() }, 4);
+        assert_eq!(unsafe { *p4.to_ptr().as_ptr() }, 4);
         p4.set_data(3);
         assert_eq!(p4.to_data(), 3);
-        assert_eq!(unsafe { *p4.to_ptr() }, 4);
+        assert_eq!(unsafe { *p4.to_ptr().as_ptr() }, 4);
 
         assert_eq!(p5.to_data(), 0);
-        assert_eq!(unsafe { *p5.to_ptr() }, 5);
+        assert_eq!(unsafe { *p5.to_ptr().as_ptr() }, 5);
         p5.set_data(7);
         assert_eq!(p5.to_data(), 7);
-        assert_eq!(unsafe { *p5.to_ptr() }, 5);
+        assert_eq!(unsafe { *p5.to_ptr().as_ptr() }, 5);
 
         unsafe {
-            drop(Box::from_raw(p1.to_ptr()));
-            drop(Box::from_raw(p2.to_ptr()));
-            drop(Box::from_raw(p3.to_ptr()));
-            drop(Box::from_raw(p4.to_ptr()));
-            drop(Box::from_raw(p5.to_ptr()));
+            drop(Box::from_raw(p1.to_ptr().as_ptr()));
+            drop(Box::from_raw(p2.to_ptr().as_ptr()));
+            drop(Box::from_raw(p3.to_ptr().as_ptr()));
+            drop(Box::from_raw(p4.to_ptr().as_ptr()));
+            drop(Box::from_raw(p5.to_ptr().as_ptr()));
         }
     }
 
@@ -490,25 +442,5 @@ mod tests {
             TaggedPointer::<u128, 3>::POINTER_MASK,
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_0000_usize
         );
-    }
-
-    #[test]
-    fn cast_checks_alignment() {
-        let mut p1 = TaggedPointer::<_, 3>::new(Box::into_raw(Box::new(1u64))).unwrap();
-        let mut p2 = TaggedPointer::<_, 2>::new(Box::into_raw(Box::new(2u32))).unwrap();
-
-        p1.set_data(1);
-        p2.set_data(2);
-
-        let p1_i64 = p1.cast::<i64>();
-        assert_eq!(p1_i64.to_data(), 1);
-
-        let p2_i32 = p2.cast::<i32>();
-        assert_eq!(p2_i32.to_data(), 2);
-
-        unsafe {
-            drop(Box::from_raw(p1.to_ptr()));
-            drop(Box::from_raw(p2.to_ptr()));
-        }
     }
 }
