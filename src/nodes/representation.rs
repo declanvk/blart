@@ -149,7 +149,7 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     where
         N: Node<PREFIX_LEN, Value = V>,
     {
-        let mut tagged_ptr = TaggedPointer::from(pointer).cast::<OpaqueValue>();
+        let mut tagged_ptr = TaggedPointer::from(pointer.cast::<OpaqueValue>());
         tagged_ptr.set_data(N::TYPE as usize);
 
         OpaqueNodePtr(tagged_ptr, PhantomData)
@@ -164,9 +164,10 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     /// Create a non-opaque node pointer that will eliminate future type
     /// assertions, if the type of the pointed node matches the given
     /// node type.
+    #[inline]
     pub fn cast<N: Node<PREFIX_LEN>>(self) -> Option<NodePtr<PREFIX_LEN, N>> {
         if self.is::<N>() {
-            Some(NodePtr(self.0.cast::<N>().into()))
+            Some(NodePtr(self.0.to_ptr().cast::<N>()))
         } else {
             None
         }
@@ -176,25 +177,30 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     /// concrete node type.
     pub fn to_node_ptr(self) -> ConcreteNodePtr<K, V, PREFIX_LEN> {
         match self.node_type() {
-            NodeType::Node4 => ConcreteNodePtr::Node4(NodePtr(
-                self.0.cast::<InnerNode4<K, V, PREFIX_LEN>>().into(),
-            )),
+            NodeType::Node4 => {
+                ConcreteNodePtr::Node4(NodePtr(
+                    self.0.to_ptr().cast::<InnerNode4<K, V, PREFIX_LEN>>(),
+                ))
+            },
             NodeType::Node16 => ConcreteNodePtr::Node16(NodePtr(
-                self.0.cast::<InnerNode16<K, V, PREFIX_LEN>>().into(),
+                self.0.to_ptr().cast::<InnerNode16<K, V, PREFIX_LEN>>(),
             )),
             NodeType::Node48 => ConcreteNodePtr::Node48(NodePtr(
-                self.0.cast::<InnerNode48<K, V, PREFIX_LEN>>().into(),
+                self.0.to_ptr().cast::<InnerNode48<K, V, PREFIX_LEN>>(),
             )),
             NodeType::Node256 => ConcreteNodePtr::Node256(NodePtr(
-                self.0.cast::<InnerNode256<K, V, PREFIX_LEN>>().into(),
+                self.0.to_ptr().cast::<InnerNode256<K, V, PREFIX_LEN>>(),
             )),
-            NodeType::Leaf => ConcreteNodePtr::LeafNode(NodePtr(
-                self.0.cast::<LeafNode<K, V, PREFIX_LEN>>().into(),
-            )),
+            NodeType::Leaf => {
+                ConcreteNodePtr::LeafNode(NodePtr(
+                    self.0.to_ptr().cast::<LeafNode<K, V, PREFIX_LEN>>(),
+                ))
+            },
         }
     }
 
     /// Retrieve the runtime node type information.
+    #[inline]
     pub fn node_type(self) -> NodeType {
         // SAFETY: We know that we can convert the usize into a `NodeType` because
         // we have only stored `NodeType` values into this pointer
@@ -237,7 +243,7 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     ///    lifetime, the memory the pointer points to must not get accessed
     ///    (read or written) through any other pointer.
     pub(crate) unsafe fn header_mut_unchecked<'h>(self) -> &'h mut Header<PREFIX_LEN> {
-        unsafe { &mut *self.0.cast::<Header<PREFIX_LEN>>().to_ptr() }
+        unsafe { self.0.to_ptr().cast::<Header<PREFIX_LEN>>().as_mut() }
     }
 
     /// Get a shared reference to the header, this doesn't check if the pointer
@@ -251,7 +257,7 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     ///    lifetime, the memory the pointer points to must not be mutated
     ///    through any other pointer.
     pub(crate) unsafe fn header_ref_unchecked<'h>(self) -> &'h Header<PREFIX_LEN> {
-        unsafe { &*self.0.cast::<Header<PREFIX_LEN>>().to_ptr() }
+        unsafe { self.0.to_ptr().cast::<Header<PREFIX_LEN>>().as_ref() }
     }
 }
 
@@ -725,6 +731,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
         Self: 'a;
 
     /// Create an empty [`InnerNode`], with no children and no prefix
+    #[inline]
     fn empty() -> Self {
         Self::from_header(Header::empty())
     }
@@ -818,6 +825,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
     /// the key. The caller who uses this function must perform a final check
     /// against the leaf key bytes to make sure that the search key matches the
     /// found key.
+    #[inline]
     fn optimistic_match_prefix(
         &self,
         truncated_key: &[u8],
@@ -851,7 +859,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
     /// reaches a leaf node using these results, then the caller must perform a
     /// final check against the leaf key bytes to make sure that the search
     /// key matches the found key.
-    #[inline(always)]
+    #[inline]
     fn attempt_pessimistic_match_prefix(
         &self,
         truncated_key: &[u8],
@@ -895,7 +903,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
     ///
     /// # Safety
     ///  - `current_depth` > key len
-    #[inline(always)]
+    #[inline]
     fn match_full_prefix(
         &self,
         key: &[u8],
@@ -933,7 +941,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
 
     /// Read the prefix as a whole, by reconstructing it if necessary from a
     /// leaf
-    #[inline(always)]
+    #[inline]
     fn read_full_prefix(
         &self,
         current_depth: usize,
@@ -1232,38 +1240,43 @@ impl<const PREFIX_LEN: usize, K, V> Node<PREFIX_LEN> for LeafNode<K, V, PREFIX_L
 
 #[cfg(test)]
 mod tests {
+    use crate::rust_nightly_apis::ptr::const_addr;
+
     use super::*;
     use std::mem;
-
-    #[cfg(not(feature = "nightly"))]
-    use sptr::Strict;
 
     // This test is important because it verifies that we can transform a tagged
     // pointer to a type with large and small alignment and back without issues.
     #[test]
     fn leaf_node_alignment() {
-        let mut p0 = TaggedPointer::<LeafNode<[u8; 0], _, 16>, 3>::new(Box::into_raw(Box::new(
-            LeafNode::with_no_siblings([], 3u8),
-        )))
-        .unwrap()
-        .cast::<OpaqueValue>();
+        let mut p0 = TaggedPointer::<OpaqueValue, 3>::new(
+            Box::into_raw(Box::<LeafNode<[u8; 0], _, 16>>::new(
+                LeafNode::with_no_siblings([], 3u8),
+            ))
+            .cast::<OpaqueValue>(),
+        )
+        .unwrap();
         p0.set_data(0b001);
 
         #[repr(align(64))]
         struct LargeAlignment;
 
-        let mut p1 = TaggedPointer::<LeafNode<LargeAlignment, _, 16>, 3>::new(Box::into_raw(
-            Box::new(LeafNode::with_no_siblings(LargeAlignment, 2u16)),
-        ))
-        .unwrap()
-        .cast::<OpaqueValue>();
+        let mut p1 = TaggedPointer::<OpaqueValue, 3>::new(
+            Box::into_raw(Box::<LeafNode<LargeAlignment, _, 16>>::new(
+                LeafNode::with_no_siblings(LargeAlignment, 2u16),
+            ))
+            .cast::<OpaqueValue>(),
+        )
+        .unwrap();
         p1.set_data(0b011);
 
-        let mut p2 = TaggedPointer::<LeafNode<_, LargeAlignment, 16>, 3>::new(Box::into_raw(
-            Box::new(LeafNode::with_no_siblings(1u64, LargeAlignment)),
-        ))
-        .unwrap()
-        .cast::<OpaqueValue>();
+        let mut p2 = TaggedPointer::<OpaqueValue, 3>::new(
+            Box::into_raw(Box::<LeafNode<_, LargeAlignment, 16>>::new(
+                LeafNode::with_no_siblings(1u64, LargeAlignment),
+            ))
+            .cast::<OpaqueValue>(),
+        )
+        .unwrap();
         p2.set_data(0b111);
 
         unsafe {
@@ -1272,13 +1285,17 @@ mod tests {
             // are required, even though the tests pass under normal execution otherwise (I
             // guess normal test execution doesn't care about leaked memory?)
             drop(Box::from_raw(
-                p0.cast::<LeafNode<[u8; 0], u8, 16>>().to_ptr(),
+                p0.to_ptr().cast::<LeafNode<[u8; 0], u8, 16>>().as_ptr(),
             ));
             drop(Box::from_raw(
-                p1.cast::<LeafNode<LargeAlignment, u16, 16>>().to_ptr(),
+                p1.to_ptr()
+                    .cast::<LeafNode<LargeAlignment, u16, 16>>()
+                    .as_ptr(),
             ));
             drop(Box::from_raw(
-                p2.cast::<LeafNode<u64, LargeAlignment, 16>>().to_ptr(),
+                p2.to_ptr()
+                    .cast::<LeafNode<u64, LargeAlignment, 16>>()
+                    .as_ptr(),
             ));
         }
     }
@@ -1384,10 +1401,10 @@ mod tests {
         let n48 = InnerNode4::<Box<[u8]>, (), 16>::empty();
         let n256 = InnerNode4::<Box<[u8]>, (), 16>::empty();
 
-        let n4_ptr = (&n4 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
-        let n16_ptr = (&n16 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
-        let n48_ptr = (&n48 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
-        let n256_ptr = (&n256 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+        let n4_ptr = const_addr(&n4 as *const InnerNode4<Box<[u8]>, (), 16>);
+        let n16_ptr = const_addr(&n16 as *const InnerNode4<Box<[u8]>, (), 16>);
+        let n48_ptr = const_addr(&n48 as *const InnerNode4<Box<[u8]>, (), 16>);
+        let n256_ptr = const_addr(&n256 as *const InnerNode4<Box<[u8]>, (), 16>);
 
         // Ensure that there are 3 bits of unused space in the node pointer because of
         // the alignment.

@@ -401,7 +401,7 @@ where
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-#[inline(always)]
+#[inline]
 pub unsafe fn find_minimum_to_delete<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 ) -> DeletePoint<K, V, PREFIX_LEN> {
@@ -439,7 +439,7 @@ pub unsafe fn find_minimum_to_delete<K, V, const PREFIX_LEN: usize>(
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-#[inline(always)]
+#[inline]
 pub unsafe fn find_maximum_to_delete<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 ) -> DeletePoint<K, V, PREFIX_LEN> {

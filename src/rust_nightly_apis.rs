@@ -17,7 +17,7 @@
 /// issue is [#63569][issue-63569]**
 ///
 /// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
-#[inline(always)]
+#[inline]
 pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
     slice: &[std::mem::MaybeUninit<T>],
 ) -> &[T] {
@@ -54,7 +54,7 @@ pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
 /// issue is [#63569][issue-63569]**
 ///
 /// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
-#[inline(always)]
+#[inline]
 pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
     slice: &mut [std::mem::MaybeUninit<T>],
 ) -> &mut [T] {
@@ -99,7 +99,7 @@ pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
 /// issue is [#96762][issue-96762]**
 ///
 /// [issue-96762]: https://github.com/rust-lang/rust/issues/96762
-#[inline(always)]
+#[inline]
 pub fn hasher_write_length_prefix<H: std::hash::Hasher>(state: &mut H, num_entries: usize) {
     #[cfg(feature = "nightly")]
     {
@@ -125,7 +125,7 @@ pub fn hasher_write_length_prefix<H: std::hash::Hasher>(state: &mut H, num_entri
 ///
 /// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
 #[cfg(feature = "nightly")]
-#[inline(always)]
+#[inline]
 pub const fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeUninit<T>; N] {
     std::mem::MaybeUninit::uninit_array()
 }
@@ -143,7 +143,7 @@ pub const fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeU
 ///
 /// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
 #[cfg(not(feature = "nightly"))]
-#[inline(always)]
+#[inline]
 pub fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeUninit<T>; N] {
     std::array::from_fn(|_| std::mem::MaybeUninit::uninit())
 }
@@ -154,7 +154,7 @@ pub fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeUninit<
 /// issue is [#63291][issue-63291]**
 ///
 /// [issue-63291]: https://github.com/rust-lang/rust/issues/63291
-#[inline(always)]
+#[inline]
 pub fn box_new_uninit_slice<T>(len: usize) -> Box<[std::mem::MaybeUninit<T>]> {
     #[cfg(feature = "nightly")]
     {
@@ -272,3 +272,73 @@ macro_rules! unlikely {
 }
 
 pub(crate) use unlikely;
+
+pub(crate) mod ptr {
+    //! This module contains shim functions for strict-provenance stuff related
+    //! to pointers
+
+    use std::{num::NonZeroUsize, ptr::NonNull};
+
+    #[inline]
+    #[cfg(not(feature = "nightly"))]
+    #[allow(clippy::transmutes_expressible_as_ptr_casts)]
+    pub fn mut_addr<T>(ptr: *mut T) -> usize {
+        // FIXME(strict_provenance_magic): I am magic and should be a compiler
+        // intrinsic. SAFETY: Pointer-to-integer transmutes are valid (if you
+        // are okay with losing the provenance).
+        unsafe { std::mem::transmute(ptr.cast::<()>()) }
+    }
+
+    #[inline]
+    #[cfg(feature = "nightly")]
+    pub fn mut_addr<T>(ptr: *mut T) -> usize {
+        ptr.addr()
+    }
+
+    #[cfg(test)]
+    #[inline]
+    #[cfg(not(feature = "nightly"))]
+    pub fn const_addr<T>(ptr: *const T) -> usize {
+        // FIXME(strict_provenance_magic): I am magic and should be a compiler
+        // intrinsic. SAFETY: Pointer-to-integer transmutes are valid (if you
+        // are okay with losing the provenance).
+        unsafe { std::mem::transmute(ptr.cast::<()>()) }
+    }
+
+    #[cfg(test)]
+    #[inline]
+    #[cfg(feature = "nightly")]
+    pub fn const_addr<T>(ptr: *const T) -> usize {
+        ptr.addr()
+    }
+
+    #[inline]
+    #[cfg(not(feature = "nightly"))]
+    pub fn nonnull_map_addr<T>(
+        ptr: NonNull<T>,
+        f: impl FnOnce(NonZeroUsize) -> NonZeroUsize,
+    ) -> NonNull<T> {
+        let ptr = ptr.as_ptr();
+        let old_addr = mut_addr(ptr);
+        let new_addr = f(unsafe {
+            // SAFETY: TODO
+            NonZeroUsize::new_unchecked(old_addr)
+        });
+        let offset = new_addr.get().wrapping_sub(old_addr);
+
+        // This is the canonical desugaring of this operation
+        let new_ptr = ptr.wrapping_byte_offset(offset as isize);
+
+        // SAFETY: TODO
+        unsafe { NonNull::new_unchecked(new_ptr) }
+    }
+
+    #[inline]
+    #[cfg(feature = "nightly")]
+    pub fn nonnull_map_addr<T>(
+        ptr: NonNull<T>,
+        f: impl FnOnce(NonZeroUsize) -> NonZeroUsize,
+    ) -> NonNull<T> {
+        ptr.map_addr(f)
+    }
+}

@@ -45,7 +45,7 @@ enum Action {
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
     let mut tree = TreeMap::<_, u32>::new();
-    let mut next_key = 0;
+    let mut next_value = 0;
 
     for action in actions {
         match action {
@@ -58,25 +58,25 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             Action::GetMinimum => {
                 let min = tree.first_key_value();
                 if let Some((_, min_value)) = min {
-                    assert!(*min_value < next_key);
+                    assert!(*min_value < next_value);
                 }
             },
             Action::PopMinimum => {
                 let min = tree.pop_first();
                 if let Some((_, min_value)) = min {
-                    assert!(min_value < next_key);
+                    assert!(min_value < next_value);
                 }
             },
             Action::GetMaximum => {
                 let max = tree.last_key_value();
                 if let Some((_, max_value)) = max {
-                    assert!(*max_value < next_key);
+                    assert!(*max_value < next_value);
                 }
             },
             Action::PopMaximum => {
                 let max = tree.pop_last();
                 if let Some((_, max_value)) = max {
-                    assert!(max_value < next_key);
+                    assert!(max_value < next_value);
                 }
             },
             Action::GetKey(key) => {
@@ -104,19 +104,19 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
             Action::Remove(key) => {
                 if let Some(value) = tree.remove(key.as_ref()) {
-                    assert!(value < next_key);
+                    assert!(value < next_value);
                 }
             },
             Action::TryInsert(key) => {
-                let value = next_key;
-                next_key += 1;
+                let value = next_value;
+                next_value += 1;
 
                 let _ = tree.try_insert(key, value);
             },
             Action::Extend(new_keys) => {
                 for key in new_keys {
-                    let value = next_key;
-                    next_key += 1;
+                    let value = next_value;
+                    next_value += 1;
 
                     let _ = tree.try_insert(key, value);
                 }
@@ -137,8 +137,8 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
             Action::Entry(ea, key) => {
                 if let Ok(entry) = tree.try_entry(key) {
-                    let value = next_key;
-                    next_key += 1;
+                    let value = next_value;
+                    next_value += 1;
                     match ea {
                         EntryAction::AndModify => {
                             entry.and_modify(|v| *v = v.saturating_sub(1));
@@ -174,8 +174,8 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
             Action::EntryRef(ea, key) => {
                 if let Ok(entry) = tree.try_entry_ref(&key) {
-                    let value = next_key;
-                    next_key += 1;
+                    let value = next_value;
+                    next_value += 1;
                     match ea {
                         EntryAction::AndModify => {
                             entry.and_modify(|v| *v = v.saturating_sub(1));

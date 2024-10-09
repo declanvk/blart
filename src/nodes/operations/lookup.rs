@@ -59,6 +59,7 @@ impl PrefixMatchBehavior {
     /// This function will choose between different "match prefix" methods
     /// depending on the current behavior and attempt to match the prefix of the
     /// given inner node against the given key.
+    #[inline]
     pub fn match_prefix<K, V, const PREFIX_LEN: usize>(
         &mut self,
         inner_node: &impl InnerNode<PREFIX_LEN, Key = K, Value = V>,

@@ -16,3 +16,6 @@ profile.json
 
 # coverage info
 lcov.info
+
+# perf data
+perf.data*

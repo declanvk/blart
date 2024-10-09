@@ -91,7 +91,7 @@ impl StackArena {
 /// SAFETY: `old` and `new` must have the same length, and be >= 1
 ///
 /// SAFETY: `key` length + 1 == `new` or `old` length
-#[inline(always)]
+#[inline]
 fn edit_dist(
     key: &[u8],
     c: u8,
@@ -142,7 +142,7 @@ fn edit_dist(
 }
 
 /// SAFETY: `old_row` length == `new_row` length
-#[inline(always)]
+#[inline]
 unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize>]) {
     // SAFETY: It's safe to transmute initialized data to uninitialized
     let temp = unsafe {
@@ -162,7 +162,7 @@ trait FuzzySearch<K: AsBytes, V, const PREFIX_LEN: usize> {
         max_edit_dist: usize,
     ) -> bool;
 
-    #[inline(always)]
+    #[inline]
     fn fuzzy_search_prefix(
         &self,
         key: &[u8],
@@ -355,7 +355,7 @@ macro_rules! gen_iter {
         {
             type Item = $ret;
 
-            #[inline(always)]
+            #[inline]
             fn next(&mut self) -> Option<Self::Item> {
                 let mut old_row = self.old_row.as_mut();
                 let mut new_row = self.new_row.as_mut();

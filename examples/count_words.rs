@@ -1,6 +1,8 @@
 use argh::FromArgs;
 use blart::TreeMap;
-use std::{collections::BTreeMap, error::Error, fs::OpenOptions, io::Read, path::PathBuf};
+use std::{
+    collections::BTreeMap, error::Error, ffi::CString, fs::OpenOptions, io::Read, path::PathBuf,
+};
 
 /// Count words in file
 #[derive(FromArgs)]
@@ -50,48 +52,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 #[derive(Debug)]
 #[allow(dead_code)] // this struct is used for its debug repr
-struct WordStats<'b> {
+struct WordStats {
     num_unique: u64,
-    first_word: &'b [u8],
+    first_word: CString,
     first_word_count: u64,
-    last_word: &'b [u8],
+    last_word: CString,
     last_word_count: u64,
 }
 
 fn count_words_blart(contents: &[u8]) -> WordStats {
-    let mut map = TreeMap::<&[u8], u64>::new();
+    let mut map = TreeMap::<CString, u64>::new();
 
     for word in contents.split_inclusive(|b| *b == SPLIT_BYTE) {
-        if let Some(count) = map.get_mut(word) {
-            *count += 1;
-        } else {
-            map.try_insert(word, 1).unwrap();
-        }
-    }
+        let word = CString::new(word).unwrap();
 
-    let (first_word, first_word_count) = map
-        .first_key_value()
-        .expect("there should be at least 1 word in the map");
-
-    let (last_word, last_word_count) = map
-        .last_key_value()
-        .expect("there should be at least 1 word in the map");
-
-    WordStats {
-        num_unique: map.len() as u64,
-        last_word,
-        last_word_count: *last_word_count,
-        first_word,
-        first_word_count: *first_word_count,
-    }
-}
-
-const SPLIT_BYTE: u8 = b' ';
-
-fn count_words_std(contents: &[u8]) -> WordStats {
-    let mut map = BTreeMap::<&[u8], u64>::new();
-
-    for word in contents.split_inclusive(|b| *b == SPLIT_BYTE) {
         map.entry(word)
             .and_modify(|count| {
                 *count += 1;
@@ -109,9 +83,41 @@ fn count_words_std(contents: &[u8]) -> WordStats {
 
     WordStats {
         num_unique: map.len() as u64,
-        last_word,
+        last_word: last_word.clone(),
         last_word_count: *last_word_count,
-        first_word,
+        first_word: first_word.clone(),
+        first_word_count: *first_word_count,
+    }
+}
+
+const SPLIT_BYTE: u8 = b' ';
+
+fn count_words_std(contents: &[u8]) -> WordStats {
+    let mut map = BTreeMap::<CString, u64>::new();
+
+    for word in contents.split_inclusive(|b| *b == SPLIT_BYTE) {
+        let word = CString::new(word).unwrap();
+
+        map.entry(word)
+            .and_modify(|count| {
+                *count += 1;
+            })
+            .or_insert(1);
+    }
+
+    let (first_word, first_word_count) = map
+        .first_key_value()
+        .expect("there should be at least 1 word in the map");
+
+    let (last_word, last_word_count) = map
+        .last_key_value()
+        .expect("there should be at least 1 word in the map");
+
+    WordStats {
+        num_unique: map.len() as u64,
+        last_word: last_word.clone(),
+        last_word_count: *last_word_count,
+        first_word: first_word.clone(),
         first_word_count: *first_word_count,
     }
 }
