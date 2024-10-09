@@ -8,7 +8,6 @@ use blart::{
 };
 use criterion::{criterion_group, measurement::Measurement, BenchmarkGroup, Criterion};
 
-#[inline(always)]
 fn run_benchmarks<M: Measurement>(
     group: &mut BenchmarkGroup<M>,
     key_vec: &[Box<[u8]>],
@@ -38,7 +37,6 @@ fn run_benchmarks<M: Measurement>(
     //     - a tree node that is full and will need to grow
 }
 
-#[inline(always)]
 fn setup_tree_run_benches_cleanup(
     c: &mut Criterion,
     keys: impl Iterator<Item = Box<[u8]>>,
@@ -60,7 +58,6 @@ fn setup_tree_run_benches_cleanup(
     }
 }
 
-#[inline(always)]
 fn bench(c: &mut Criterion) {
     // number of keys = 256
     setup_tree_run_benches_cleanup(

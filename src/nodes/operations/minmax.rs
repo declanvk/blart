@@ -6,7 +6,7 @@ use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-#[inline(always)]
+#[inline]
 pub unsafe fn minimum_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 ) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
@@ -31,7 +31,7 @@ pub unsafe fn minimum_unchecked<K, V, const PREFIX_LEN: usize>(
 ///  - This function cannot be called concurrently with any mutating operation
 ///    on `root` or any child node of `root`. This function will arbitrarily
 ///    read to any child in the given tree.
-#[inline(always)]
+#[inline]
 pub unsafe fn maximum_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 ) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {

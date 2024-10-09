@@ -607,6 +607,7 @@ pub unsafe fn search_for_insert_point<K, V, const PREFIX_LEN: usize>(
 where
     K: AsBytes,
 {
+    #[inline]
     fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
         inner_ptr: NodePtr<PREFIX_LEN, N>,
         key: &[u8],

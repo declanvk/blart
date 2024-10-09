@@ -26,7 +26,7 @@ pub struct Header<const PREFIX_LEN: usize> {
 }
 
 impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
-    #[inline(always)]
+    #[inline]
     pub fn new(prefix: &[u8], prefix_len: usize) -> Self {
         let mut header = Self {
             num_children: 0,
@@ -40,7 +40,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
     }
 
     /// Create a new `Header` for an empty node.
-    #[inline(always)]
+    #[inline]
     pub fn empty() -> Self {
         Self {
             num_children: 0,
@@ -50,25 +50,25 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
     }
 
     /// Read the initialized portion of the prefix present in the header.
-    #[inline(always)]
+    #[inline]
     pub fn read_prefix(&self) -> &[u8] {
         &self.prefix[0..self.capped_prefix_len()]
     }
 
     /// Get the number of bytes in the prefix.
-    #[inline(always)]
+    #[inline]
     pub fn prefix_len(&self) -> usize {
         self.prefix_len as usize
     }
 
     /// Minimum between [`Self::prefix_len`] and `PREFIX_LEN`.
-    #[inline(always)]
+    #[inline]
     pub fn capped_prefix_len(&self) -> usize {
         (self.prefix_len as usize).min(PREFIX_LEN)
     }
 
     /// Return the number of children of this node.
-    #[inline(always)]
+    #[inline]
     pub fn num_children(&self) -> usize {
         usize::from(self.num_children)
     }
@@ -78,7 +78,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
     ///
     /// # Panics
     ///  - If `len` > length of the prefix
-    #[inline(always)]
+    #[inline]
     pub fn ltrim_by(&mut self, len: usize) {
         assert!(
             (len as u32) <= self.prefix_len,
@@ -106,7 +106,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
 
     /// Set the length of the prefix to 0 and returns a copy of the
     /// prefix, length and capped length
-    #[inline(always)]
+    #[inline]
     pub fn clear_prefix(&mut self) -> ([u8; PREFIX_LEN], usize, usize) {
         let len = self.prefix_len();
         let capped_len = self.capped_prefix_len();
@@ -116,7 +116,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
     }
 
     /// Append `new` to the prefix and sums `new_len` to the prefix length
-    #[inline(always)]
+    #[inline]
     pub fn push_prefix(&mut self, new: &[u8], new_len: usize) {
         let begin = self.capped_prefix_len();
         let end = (begin + new.len()).min(PREFIX_LEN);
@@ -126,24 +126,24 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
     }
 
     /// Increments the number of children
-    #[inline(always)]
+    #[inline]
     pub fn inc_num_children(&mut self) {
         self.num_children += 1;
     }
 
     /// Decrements the number of children
-    #[inline(always)]
+    #[inline]
     pub fn dec_num_children(&mut self) {
         self.num_children -= 1;
     }
 
     /// Reset the number of children to 0.
-    #[inline(always)]
+    #[inline]
     pub fn reset_num_children(&mut self) {
         self.num_children = 0;
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn ltrim_by_with_leaf<K: AsBytes, V>(
         &mut self,
         len: usize,
@@ -177,7 +177,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         self.prefix[..len.min(PREFIX_LEN)].copy_from_slice(leaf_key)
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn inner_read_full_prefix<'a, N: InnerNode<PREFIX_LEN>>(
         &'a self,
         node: &'a N,

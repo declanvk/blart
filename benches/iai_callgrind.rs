@@ -5,7 +5,9 @@ use crate::common::{
     with_prefixes_tree,
 };
 use blart::{AsBytes, TreeMap};
-use iai_callgrind::{library_benchmark, library_benchmark_group, main, LibraryBenchmarkConfig};
+use iai_callgrind::{
+    library_benchmark, library_benchmark_group, main, FlamegraphConfig, LibraryBenchmarkConfig,
+};
 
 #[macro_use]
 mod common;
@@ -177,6 +179,7 @@ library_benchmark_group!(name = bench_iterator_group; benchmarks = bench_full_it
 fn config() -> LibraryBenchmarkConfig {
     let mut c = LibraryBenchmarkConfig::default();
     c.truncate_description(Some(0));
+    c.flamegraph(FlamegraphConfig::default());
     c
 }
 

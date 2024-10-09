@@ -100,6 +100,22 @@ cargo +nightly fuzz coverage fuzz_tree_map_api && cargo cov -- show fuzz/target/
     > index.html
 ```
 
+```bash
+TARGET_TRIPLE="x86_64-unknown-linux-gnu"
+/home/declan/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-cov show -format=html \
+  -instr-profile=fuzz/coverage/fuzz_tree_map_api/coverage.profdata \
+  -Xdemangler=rustfilt \
+  -ignore-filename-regex=\.cargo/registry \
+  fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_tree_map_api
+  > cov.html
+
+/home/declan/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-cov show \
+    --instr-profile=/home/declan/repos/github/declanvk/blart/fuzz/coverage/fuzz_tree_map_api/coverage.profdata \
+    --show-instantiations --show-line-counts-or-regions --Xdemangler=rustfilt \
+    --format=html --ignore-filename-regex=/home/declan/.cargo/registry --ignore-filename-regex=/home/declan/.rustup/\
+    target/x86_64-unknown-linux-gnu/coverage/x86_64-unknown-linux-gnu/release/fuzz_tree_map_api > coverage.html
+```
+
 ## Benchmarks
 
 To run the benchmarks, install [`cargo-criterion`][cargo-criterion], then run:
@@ -134,7 +150,7 @@ curl -o data/Ulysses.txt https://www.gutenberg.org/cache/epub/4300/pg4300.txt
 Then build the word count example using the `profiling` profile:
 
 ```bash
-cargo build --profile profiling --exampleps
+RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling --examples
 ```
 
 Then run the count words workload on the downloaded data while profiling:
