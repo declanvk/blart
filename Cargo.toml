@@ -28,7 +28,6 @@ autobenches = false
 [dependencies]
 bytemuck = { version = "1.16.1", features = ["min_const_generics"] }
 paste = "1.0.15"
-sptr = "0.3.2"
 
 [features]
 nightly = []
