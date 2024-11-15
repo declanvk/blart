@@ -1,8 +1,10 @@
 //! This module contains the implementation of `clone()` for the trie.
 
 use crate::{
-    AsBytes, ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, LeafNode, Node, NodePtr,
-    OpaqueNodePtr,
+    raw::{
+        ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, LeafNode, Node, NodePtr, OpaqueNodePtr,
+    },
+    AsBytes,
 };
 
 /// The result of cloning a trie

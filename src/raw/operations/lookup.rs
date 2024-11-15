@@ -1,8 +1,11 @@
 use std::cmp::Ordering;
 
 use crate::{
-    AsBytes, AttemptOptimisticPrefixMatch, ConcreteNodePtr, InnerNode, LeafNode, NodePtr,
-    OpaqueNodePtr, OptionalLeafPtr, PessimisticMismatch, PrefixMatch,
+    raw::{
+        AttemptOptimisticPrefixMatch, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
+        OptionalLeafPtr, PessimisticMismatch, PrefixMatch,
+    },
+    AsBytes,
 };
 
 #[rustfmt::skip]

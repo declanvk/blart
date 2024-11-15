@@ -1,4 +1,4 @@
-use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::raw::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr};
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
@@ -53,9 +53,10 @@ pub unsafe fn maximum_unchecked<K, V, const PREFIX_LEN: usize>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        deallocate_tree, maximum_unchecked, minimum_unchecked,
+        raw::{
+            deallocate_tree, maximum_unchecked, minimum_unchecked, LeafNode, NodePtr, OpaqueNodePtr,
+        },
         tests_common::{generate_key_fixed_length, generate_keys_skewed, insert_unchecked},
-        LeafNode, NodePtr, OpaqueNodePtr,
     };
 
     #[test]

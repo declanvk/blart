@@ -44,16 +44,16 @@
 
 mod bytes;
 mod collections;
-mod nodes;
 mod rust_nightly_apis;
 mod tagged_pointer;
 
+pub mod raw;
 #[doc(hidden)]
 pub mod tests_common;
 
 pub use bytes::*;
 pub use collections::*;
-pub use nodes::{visitor, *};
+pub use raw::visitor;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

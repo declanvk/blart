@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
-    deallocate_tree, search_unchecked,
+    raw::{deallocate_tree, search_unchecked, NodeType},
     tests_common::{generate_key_with_prefix, setup_tree_from_entries, swap, PrefixExpansion},
-    NodeType, TreeMap,
+    TreeMap,
 };
 
 #[test]

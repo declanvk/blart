@@ -1,6 +1,6 @@
 use crate::{
+    raw::{Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex},
     rust_nightly_apis::{assume, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array},
-    Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
 use std::{
     fmt,
@@ -675,8 +675,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, 
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        nodes::representation::tests::{
+    use crate::raw::{
+        representation::tests::{
             inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
             FixtureReturn,
         },

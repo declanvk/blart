@@ -1,6 +1,6 @@
 use std::iter::FusedIterator;
 
-use crate::{map::DEFAULT_PREFIX_LEN, RawIterator, TreeMap};
+use crate::{map::DEFAULT_PREFIX_LEN, raw::RawIterator, TreeMap};
 
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {

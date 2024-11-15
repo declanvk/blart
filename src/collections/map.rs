@@ -2,14 +2,15 @@
 //! iterators/etc.
 
 use crate::{
-    clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
-    maximum_unchecked, minimum_unchecked,
+    raw::{
+        clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
+        maximum_unchecked, minimum_unchecked, search_for_delete_point, search_for_insert_point,
+        search_unchecked, CloneResult, DeletePoint, DeleteResult, InsertPoint, InsertPrefixError,
+        InsertResult, InsertSearchResultType::Exact, LeafNode, NodePtr, OpaqueNodePtr,
+    },
     rust_nightly_apis::hasher_write_length_prefix,
-    search_for_delete_point, search_for_insert_point, search_unchecked,
     visitor::{MalformedTreeError, WellFormedChecker},
-    AsBytes, CloneResult, DeletePoint, DeleteResult, InsertPoint, InsertPrefixError, InsertResult,
-    InsertSearchResultType::Exact,
-    LeafNode, NoPrefixesBytes, NodePtr, OpaqueNodePtr,
+    AsBytes, NoPrefixesBytes,
 };
 use std::{
     borrow::Borrow,

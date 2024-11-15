@@ -2,7 +2,10 @@
 
 use std::{collections::HashSet, iter};
 
-use crate::{AsBytes, InsertPrefixError, InsertResult, OpaqueNodePtr, TreeMap};
+use crate::{
+    raw::{InsertPrefixError, InsertResult, OpaqueNodePtr},
+    AsBytes, TreeMap,
+};
 
 /// This function swaps the elements of a 2-tuple.
 ///
@@ -330,7 +333,7 @@ pub(crate) unsafe fn insert_unchecked<'a, K, V, const PREFIX_LEN: usize>(
 where
     K: AsBytes + 'a,
 {
-    use crate::search_for_insert_point;
+    use crate::raw::search_for_insert_point;
 
     let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
     Ok(unsafe { insert_point.apply(key, value) })

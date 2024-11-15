@@ -1,6 +1,6 @@
 use crate::{
-    nodes::operations::lookup, AsBytes, ConcreteNodePtr, InnerNode, LeafNode, NodePtr,
-    OpaqueNodePtr,
+    raw::{operations::lookup, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr},
+    AsBytes,
 };
 
 use super::PrefixMatchBehavior;

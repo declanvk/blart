@@ -1,8 +1,10 @@
 use crate::{
-    maximum_unchecked, minimum_unchecked,
+    raw::{
+        maximum_unchecked, minimum_unchecked, ConcreteNodePtr, ExplicitMismatch, InnerNode,
+        InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch,
+    },
     rust_nightly_apis::{assume, likely, unlikely},
-    AsBytes, ConcreteNodePtr, ExplicitMismatch, InnerNode, InnerNode4, LeafNode, NodePtr,
-    OpaqueNodePtr, PrefixMatch,
+    AsBytes,
 };
 use std::{
     error::Error,

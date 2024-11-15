@@ -1,8 +1,9 @@
 use std::ops::Add;
 
 use crate::{
+    raw::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode},
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, TreeMap,
+    AsBytes, TreeMap,
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
