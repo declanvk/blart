@@ -20,10 +20,8 @@ use std::{
 };
 
 mod entry;
-mod entry_ref;
 mod iterators;
 pub use entry::*;
-pub use entry_ref::*;
 pub use iterators::*;
 
 const DEFAULT_PREFIX_LEN: usize = 16;
@@ -1283,47 +1281,6 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         Ok(entry)
     }
 
-    /// Tries to get the given key’s corresponding entry in the map for in-place
-    /// manipulation.
-    pub fn try_entry_ref<'a, 'b, Q>(
-        &'a mut self,
-        key: &'b Q,
-    ) -> Result<EntryRef<'a, 'b, K, V, Q, PREFIX_LEN>, InsertPrefixError>
-    where
-        K: AsBytes + Borrow<Q> + From<&'b Q>,
-        Q: AsBytes + ?Sized,
-    {
-        let entry = match &self.state {
-            Some(state) => {
-                // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
-                // that there are no other references (mutable or immutable) to this same
-                // object. Meaning that our access to the root node is unique and there are no
-                // other accesses to any node in the tree.
-                let insert_point = unsafe { search_for_insert_point(state.root, key.as_bytes())? };
-                match insert_point.insert_type {
-                    Exact { leaf_node_ptr } => EntryRef::Occupied(OccupiedEntryRef {
-                        map: self,
-                        leaf_node_ptr,
-                        grandparent_ptr_and_parent_key_byte: insert_point
-                            .grandparent_ptr_and_parent_key_byte,
-                        parent_ptr_and_child_key_byte: insert_point.parent_ptr_and_child_key_byte,
-                    }),
-                    _ => EntryRef::Vacant(VacantEntryRef {
-                        key,
-                        insert_point: Some(insert_point),
-                        map: self,
-                    }),
-                }
-            },
-            None => EntryRef::Vacant(VacantEntryRef {
-                key,
-                insert_point: None,
-                map: self,
-            }),
-        };
-        Ok(entry)
-    }
-
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V, PREFIX_LEN>
@@ -1332,17 +1289,6 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     {
         // This will never fail because of the safety contract of `NoPrefixesBytes`
         unsafe { self.try_entry(key).unwrap_unchecked() }
-    }
-
-    /// Gets the given key’s corresponding entry in the map for in-place
-    /// manipulation.
-    pub fn entry_ref<'a, 'b, Q>(&'a mut self, key: &'b Q) -> EntryRef<'a, 'b, K, V, Q, PREFIX_LEN>
-    where
-        K: NoPrefixesBytes + Borrow<Q> + From<&'b Q>,
-        Q: NoPrefixesBytes + ?Sized,
-    {
-        // This will never fail because of the safety contract of `NoPrefixesBytes`
-        unsafe { self.try_entry_ref(key).unwrap_unchecked() }
     }
 }
 
