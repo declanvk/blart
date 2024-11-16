@@ -1,6 +1,6 @@
 use std::{ffi::CString, ptr::NonNull};
 
-use blart::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr};
+use blart::raw::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr};
 use criterion::{criterion_group, measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 

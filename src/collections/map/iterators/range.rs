@@ -10,8 +10,11 @@ use std::{
 
 use crate::{
     map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
-    maximum_unchecked, minimum_unchecked, AsBytes, AttemptOptimisticPrefixMatch, ConcreteNodePtr,
-    InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatchBehavior, RawIterator, TreeMap,
+    raw::{
+        maximum_unchecked, minimum_unchecked, AttemptOptimisticPrefixMatch, ConcreteNodePtr,
+        InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatchBehavior, RawIterator,
+    },
+    AsBytes, TreeMap,
 };
 
 /// This struct contains details of where and why the search stopped in an inner

@@ -1,6 +1,9 @@
 use crate::{
-    nodes::visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr, OptionalLeafPtr, TreeMap,
+    raw::{
+        visitor::{Visitable, Visitor},
+        InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr, OptionalLeafPtr,
+    },
+    AsBytes, TreeMap,
 };
 use std::{
     cmp::Ordering,
@@ -560,23 +563,23 @@ where
         Ok(o1? + o2?)
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_node4(&mut self, t: &super::InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_node16(&mut self, t: &super::InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_node48(&mut self, t: &super::InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_node256(&mut self, t: &super::InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
         self.visit_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &super::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
         if !t.key_ref().as_bytes().starts_with(&self.current_key_prefix) {
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::PrefixMismatch {
@@ -624,9 +627,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        deallocate_tree,
+        raw::{deallocate_tree, InnerNode16, InnerNode4, LeafNode, NodePtr},
         tests_common::{generate_key_fixed_length, setup_tree_from_entries},
-        InnerNode16, InnerNode4, LeafNode, NodePtr, TreeMap,
+        TreeMap,
     };
 
     #[test]

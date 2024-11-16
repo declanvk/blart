@@ -1,6 +1,9 @@
 use std::mem::replace;
 
-use crate::{AsBytes, DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr, TreeMap};
+use crate::{
+    raw::{DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr},
+    AsBytes, TreeMap,
+};
 
 use super::DEFAULT_PREFIX_LEN;
 

@@ -1,10 +1,12 @@
 use crate::{
+    raw::{
+        Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodeType,
+        OpaqueNodePtr,
+    },
     rust_nightly_apis::{
         assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
         maybe_uninit_uninit_array,
     },
-    Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodeType,
-    OpaqueNodePtr,
 };
 use std::{
     cmp::Ordering,
@@ -605,8 +607,8 @@ impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for Node48Iter<'a, K, V, P
 mod tests {
     use std::ops::{Bound, RangeBounds};
 
-    use crate::{
-        nodes::representation::tests::{
+    use crate::raw::{
+        representation::tests::{
             inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
             FixtureReturn,
         },

@@ -1,4 +1,4 @@
-use crate::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawIterator};
+use crate::raw::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawIterator};
 
 /// Deallocate all the leaf nodes in the linked list starting that are within
 /// the given iterator.

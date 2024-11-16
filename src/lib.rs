@@ -4,13 +4,10 @@
         impl_trait_in_assoc_type,
         maybe_uninit_slice,
         maybe_uninit_uninit_array,
-        const_maybe_uninit_uninit_array,
         maybe_uninit_array_assume_init,
         slice_ptr_get,
         hasher_prefixfree_extras,
-        new_uninit,
         core_intrinsics,
-        strict_provenance,
         portable_simd
     )
 )]
@@ -44,16 +41,16 @@
 
 mod bytes;
 mod collections;
-mod nodes;
 mod rust_nightly_apis;
 mod tagged_pointer;
 
+pub mod raw;
 #[doc(hidden)]
 pub mod tests_common;
 
 pub use bytes::*;
 pub use collections::*;
-pub use nodes::{visitor, *};
+pub use raw::visitor;
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

@@ -3,9 +3,9 @@
 use std::fmt::Debug;
 
 use crate::{
-    minimum_unchecked,
+    raw::{minimum_unchecked, InnerNode, LeafNode, NodePtr},
     rust_nightly_apis::{assume, likely},
-    AsBytes, InnerNode, LeafNode, NodePtr,
+    AsBytes,
 };
 
 /// The common header for all inner nodes

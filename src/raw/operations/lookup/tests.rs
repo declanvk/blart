@@ -1,8 +1,9 @@
 use crate::{
-    nodes::NodePtr,
-    search_unchecked,
+    raw::{
+        search_unchecked, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode,
+        NodePtr, OpaqueNodePtr,
+    },
     tests_common::{generate_key_with_prefix, swap, PrefixExpansion},
-    InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, OpaqueNodePtr,
     TreeMap,
 };
 

@@ -4,10 +4,11 @@ mod pretty_printer;
 mod tree_stats;
 mod well_formed;
 
-use crate::{
+use super::{
     ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, Node,
     NodePtr, OpaqueNodePtr,
 };
+
 pub use pretty_printer::*;
 pub use tree_stats::*;
 pub use well_formed::*;

@@ -1,4 +1,4 @@
-use blart::{InnerNode, InnerNode256, InnerNode48, LeafNode, NodePtr};
+use blart::raw::{InnerNode, InnerNode256, InnerNode48, LeafNode, NodePtr};
 use criterion::{criterion_group, Criterion};
 
 fn bench(c: &mut Criterion) {

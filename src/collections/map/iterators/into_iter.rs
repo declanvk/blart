@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::{
-    deallocate_leaves, deallocate_tree_non_leaves, map::DEFAULT_PREFIX_LEN, NodePtr, RawIterator,
+    map::DEFAULT_PREFIX_LEN,
+    raw::{deallocate_leaves, deallocate_tree_non_leaves, NodePtr, RawIterator},
     TreeMap,
 };
 

@@ -1,6 +1,7 @@
 use crate::{
+    raw::{InnerNode, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
-    AsBytes, InnerNode, NoPrefixesBytes, NodeType, OpaqueNodePtr, OrderedBytes, TreeMap,
+    AsBytes, NoPrefixesBytes, OrderedBytes, TreeMap,
 };
 use std::{
     borrow::Borrow,
@@ -161,23 +162,23 @@ where
         unimplemented!("this visitor should never combine outputs")
     }
 
-    fn visit_node4(&mut self, t: &crate::InnerNode4<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_node4(&mut self, t: &super::InnerNode4<K, T, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &crate::InnerNode16<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_node16(&mut self, t: &super::InnerNode16<K, T, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &crate::InnerNode48<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_node48(&mut self, t: &super::InnerNode48<K, T, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &crate::InnerNode256<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_node256(&mut self, t: &super::InnerNode256<K, T, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &crate::LeafNode<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &super::LeafNode<K, T, PREFIX_LEN>) -> Self::Output {
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;
@@ -269,7 +270,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{deallocate_tree, AsBytes};
+    use crate::{raw::deallocate_tree, AsBytes};
 
     use super::*;
 

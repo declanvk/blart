@@ -1,5 +1,7 @@
 use crate::{
-    map::DEFAULT_PREFIX_LEN, maximum_unchecked, minimum_unchecked, AsBytes, RawIterator, TreeMap,
+    map::DEFAULT_PREFIX_LEN,
+    raw::{maximum_unchecked, minimum_unchecked, RawIterator},
+    AsBytes, TreeMap,
 };
 use std::iter::FusedIterator;
 

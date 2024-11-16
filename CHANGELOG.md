@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - ReleaseDate
 
+### Added
+
+### Changed
+
+### Removed
+
+ - Remove the `TreeMap::{try_entry_ref, entry_ref}` functions. The value add of `*entry_ref` was that you could pass a `&Q` to do the lookup, just like the `get` method allows. On insert, then the `&Q` would be converted to a `K`. I didn't think the value of that delayed conversion was worth keeping the whole module around, since you can emulate the `entry*` interface using `get`/`insert` calls directly.
+ - Removed the glob import of the `nodes` module from the top-level of the crate. Most of the types that were there previously can now be found under the `raw` module (which was renamed from `nodes` internally).
+
 ## [0.3.0] - 2024-09-21
 
 ### Added
