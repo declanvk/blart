@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["InsertSearchResultType"],"fn":["search_for_insert_point"],"struct":["InsertPoint","InsertPrefixError","InsertResult"]};
