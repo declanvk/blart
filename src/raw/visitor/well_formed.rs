@@ -1,4 +1,5 @@
 use crate::{
+    alloc::Allocator,
     raw::{
         visitor::{Visitable, Visitor},
         InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr, OptionalLeafPtr,
@@ -353,8 +354,8 @@ where
     ///
     /// # Errors
     ///  - Returns an error if the given tree is not well-formed.
-    pub fn check(
-        tree: &TreeMap<K, V, PREFIX_LEN>,
+    pub fn check<A: Allocator>(
+        tree: &TreeMap<K, V, PREFIX_LEN, A>,
     ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
         tree.state
             .as_ref()
@@ -627,7 +628,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        raw::{deallocate_tree, InnerNode16, InnerNode4, LeafNode, NodePtr},
+        alloc::Global,
+        raw::{InnerNode16, InnerNode4, LeafNode, NodePtr},
         tests_common::{generate_key_fixed_length, setup_tree_from_entries},
         TreeMap,
     };
@@ -653,7 +655,7 @@ mod tests {
             41
         );
 
-        unsafe { deallocate_tree(root) };
+        unsafe { TreeMap::from_raw(Some(root)).unwrap() };
     }
 
     #[test]
@@ -676,19 +678,20 @@ mod tests {
         let l2 = LeafNode::with_no_siblings(Box::new([1, 2, 3, 5, 6, 2]), 123562);
         let l3 = LeafNode::with_no_siblings(Box::new([1, 2, 4, 7, 8, 3]), 124783);
 
-        let l1_ptr: NodePtr<16, LeafNode<Box<[u8; 6]>, i32, 16>> = NodePtr::allocate_node_ptr(l1);
-        let l2_ptr = NodePtr::allocate_node_ptr(l2);
-        let l3_ptr = NodePtr::allocate_node_ptr(l3);
+        let l1_ptr: NodePtr<16, LeafNode<Box<[u8; 6]>, i32, 16>> =
+            NodePtr::allocate_node_ptr(l1, &Global);
+        let l2_ptr = NodePtr::allocate_node_ptr(l2, &Global);
+        let l3_ptr = NodePtr::allocate_node_ptr(l3, &Global);
 
         let n4_left = InnerNode4::from_prefix(&[5, 6], 2);
         let n4_right = InnerNode4::from_prefix(&[7, 8], 2);
         let n16 = InnerNode16::from_prefix(&[1, 2], 2);
 
-        let n4_left_ptr = NodePtr::allocate_node_ptr(n4_left);
-        let n4_right_ptr = NodePtr::allocate_node_ptr(n4_right);
+        let n4_left_ptr = NodePtr::allocate_node_ptr(n4_left, &Global);
+        let n4_right_ptr = NodePtr::allocate_node_ptr(n4_right, &Global);
 
         // construct root early
-        let root = NodePtr::allocate_node_ptr(n16);
+        let root = NodePtr::allocate_node_ptr(n16, &Global);
 
         {
             let n4_left = unsafe { n4_left_ptr.as_mut() };
@@ -732,22 +735,22 @@ mod tests {
         // assumes no loops, if we did use `deallocate_tree` it would hit a
         // use-after-free error
         unsafe {
-            let _ = NodePtr::deallocate_node_ptr(root);
+            let _ = NodePtr::deallocate_node_ptr(root, &Global);
         };
         unsafe {
-            let _ = NodePtr::deallocate_node_ptr(n4_left_ptr);
+            let _ = NodePtr::deallocate_node_ptr(n4_left_ptr, &Global);
         };
         unsafe {
-            let _ = NodePtr::deallocate_node_ptr(n4_right_ptr);
+            let _ = NodePtr::deallocate_node_ptr(n4_right_ptr, &Global);
         };
         unsafe {
-            let _ = NodePtr::deallocate_node_ptr(l1_ptr);
+            let _ = NodePtr::deallocate_node_ptr(l1_ptr, &Global);
         };
         unsafe {
-            let _ = NodePtr::deallocate_node_ptr(l2_ptr);
+            let _ = NodePtr::deallocate_node_ptr(l2_ptr, &Global);
         };
         unsafe {
-            let _ = NodePtr::deallocate_node_ptr(l3_ptr);
+            let _ = NodePtr::deallocate_node_ptr(l3_ptr, &Global);
         };
     }
 

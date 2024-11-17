@@ -1,7 +1,13 @@
 //! Trie node representation
 
-use crate::{rust_nightly_apis::assume, tagged_pointer::TaggedPointer, AsBytes};
+use crate::{
+    alloc::{do_alloc, Allocator},
+    rust_nightly_apis::assume,
+    tagged_pointer::TaggedPointer,
+    AsBytes,
+};
 use std::{
+    alloc::Layout,
     fmt,
     hash::Hash,
     iter::FusedIterator,
@@ -404,10 +410,19 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
 
     /// Allocate the given [`Node`] on the [`std::alloc::Global`] heap and
     /// return a [`NodePtr`] that wrap the raw pointer.
-    pub fn allocate_node_ptr(node: N) -> Self {
+    pub fn allocate_node_ptr(node: N, alloc: &impl Allocator) -> Self {
+        let layout = Layout::new::<mem::MaybeUninit<N>>();
+        let mut ptr: NonNull<mem::MaybeUninit<N>> =
+            do_alloc(alloc, layout).expect("memory is infinite").cast();
+
         // SAFETY: The pointer from [`Box::into_raw`] is non-null, aligned, and valid
         // for reads and writes of the [`Node`] `N`.
-        unsafe { NodePtr::new(Box::into_raw(Box::new(node))) }
+        let ptr: NonNull<N> = unsafe {
+            ptr.as_mut().write(node);
+            ptr.cast()
+        };
+
+        NodePtr(ptr)
     }
 
     /// Deallocate a [`Node`] object created with the
@@ -415,10 +430,33 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     ///
     /// # Safety
     ///  - This function can only be called once for a given node object.
+    ///  - The given allocator must be the same one that was used in the call to
+    ///    [`NodePtr::allocate_node_ptr`]
     #[must_use]
-    pub unsafe fn deallocate_node_ptr(node: Self) -> N {
-        // SAFETY: Covered by safety condition on function
-        unsafe { *Box::from_raw(node.to_ptr()) }
+    pub unsafe fn deallocate_node_ptr(node: Self, alloc: &impl Allocator) -> N {
+        // Read the value out onto the stack
+        // SAFETY: From the constructors (`new`/`allocate_node_ptr`) we know that this
+        // pointer will valid for reads, properly aligned, and initialized. We prevent
+        // double drop by deallocating the memory in the following lines without ever
+        // calling `drop_in_place`.
+        let value = unsafe { ptr::read(node.0.as_ptr()) };
+
+        let layout = Layout::new::<N>();
+        if layout.size() != 0 {
+            // If the value has a non-zero size (should be true of all nodes),
+            // then deallocate the node object without dropping it (even) though
+            // all `Node`s don't implement drop.
+
+            // SAFETY:
+            //  - The safety condition on this function requires that this allocator is the
+            //    same one which initially allocated the memory block
+            //  - The layout fits the block of memory because it was the same layout used to
+            //    create the block (in `allocate_node_ptr`).
+            unsafe {
+                alloc.deallocate(node.0.cast(), layout);
+            }
+        }
+        value
     }
 
     /// Moves `new_value` into the referenced `dest`, returning the previous

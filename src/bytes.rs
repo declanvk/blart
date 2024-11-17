@@ -251,7 +251,7 @@ impl AsBytes for PathBuf {
 #[cfg(any(unix, target_os = "wasi"))]
 unsafe impl OrderedBytes for PathBuf {}
 
-impl<'a, B> AsBytes for Cow<'a, B>
+impl<B> AsBytes for Cow<'_, B>
 where
     B: ToOwned + AsBytes + ?Sized,
 {
@@ -280,7 +280,7 @@ where
 {
 }
 
-impl<'a, T> AsBytes for &'a T
+impl<T> AsBytes for &T
 where
     T: AsBytes + ?Sized,
 {
@@ -292,14 +292,14 @@ where
 // SAFETY: This trait is safe to implement because the underlying
 // type is already implements `OrderedBytes`, and the `Ord` impl works the same
 // way
-unsafe impl<'a, T> OrderedBytes for &'a T where T: OrderedBytes + ?Sized {}
+unsafe impl<T> OrderedBytes for &T where T: OrderedBytes + ?Sized {}
 
 // SAFETY: This trait is safe to implement because the underlying
 // type is already implements `NoPrefixesBytes`, and the wrapper type would not
 // change that property
-unsafe impl<'a, T> NoPrefixesBytes for &'a T where T: NoPrefixesBytes + ?Sized {}
+unsafe impl<T> NoPrefixesBytes for &T where T: NoPrefixesBytes + ?Sized {}
 
-impl<'a, T> AsBytes for &'a mut T
+impl<T> AsBytes for &mut T
 where
     T: AsBytes + ?Sized,
 {
@@ -311,12 +311,12 @@ where
 // SAFETY: This trait is safe to implement because the underlying
 // type is already implements `OrderedBytes`, and the `Ord` impl works the same
 // way
-unsafe impl<'a, T> OrderedBytes for &'a mut T where T: OrderedBytes + ?Sized {}
+unsafe impl<T> OrderedBytes for &mut T where T: OrderedBytes + ?Sized {}
 
 // SAFETY: This trait is safe to implement because the underlying
 // type is already implements `NoPrefixesBytes`, and the wrapper type would not
 // change that property
-unsafe impl<'a, T> NoPrefixesBytes for &'a mut T where T: NoPrefixesBytes + ?Sized {}
+unsafe impl<T> NoPrefixesBytes for &mut T where T: NoPrefixesBytes + ?Sized {}
 
 impl<T> AsBytes for Rc<T>
 where
@@ -394,13 +394,13 @@ unsafe impl<T> OrderedBytes for ManuallyDrop<T> where T: OrderedBytes + ?Sized {
 // change that property
 unsafe impl<T> NoPrefixesBytes for ManuallyDrop<T> where T: NoPrefixesBytes + ?Sized {}
 
-impl<'a> AsBytes for IoSlice<'a> {
+impl AsBytes for IoSlice<'_> {
     fn as_bytes(&self) -> &[u8] {
         self
     }
 }
 
-impl<'a> AsBytes for IoSliceMut<'a> {
+impl AsBytes for IoSliceMut<'_> {
     fn as_bytes(&self) -> &[u8] {
         self
     }
@@ -471,19 +471,15 @@ mod tests {
             b"hello world"
         );
         assert_eq!(
-            <CStr as AsBytes>::as_bytes(CStr::from_bytes_with_nul(b"hello world\0").unwrap()),
+            <CStr as AsBytes>::as_bytes(c"hello world"),
             b"hello world\0"
         );
         assert_eq!(
-            <CString as AsBytes>::as_bytes(
-                &CStr::from_bytes_with_nul(b"hello world\0").unwrap().into()
-            ),
+            <CString as AsBytes>::as_bytes(&c"hello world".into()),
             b"hello world\0"
         );
         assert_eq!(
-            <CString as AsBytes>::as_bytes(
-                &CStr::from_bytes_with_nul(b"hello world\0").unwrap().into()
-            ),
+            <CString as AsBytes>::as_bytes(&c"hello world".into()),
             b"hello world\0"
         );
         #[cfg(any(unix, target_os = "wasi"))]

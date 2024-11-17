@@ -1,6 +1,7 @@
 use std::mem::replace;
 
 use crate::{
+    alloc::{Allocator, Global},
     raw::{DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr},
     AsBytes, TreeMap,
 };
@@ -9,11 +10,17 @@ use super::DEFAULT_PREFIX_LEN;
 
 /// A view into an occupied entry in a [`TreeMap`]. It is part of the [`Entry`]
 /// enum.
-pub struct OccupiedEntry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
+pub struct OccupiedEntry<
+    'a,
+    K,
+    V,
+    const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN,
+    A: Allocator = Global,
+> {
     pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 
     /// Used for the removal
-    pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN>,
+    pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     /// Used for the removal
     pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     /// Used for the removal
@@ -22,19 +29,19 @@ pub struct OccupiedEntry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN>
 
 // SAFETY: This struct contains a `&mut TreeMap<K, V>` which mean `K` and `V`
 // must be `Send` for the struct to be `Send`.
-unsafe impl<'a, K: Send, V: Send, const PREFIX_LEN: usize> Send
-    for OccupiedEntry<'a, K, V, PREFIX_LEN>
+unsafe impl<K: Send, V: Send, const PREFIX_LEN: usize, A: Send + Allocator> Send
+    for OccupiedEntry<'_, K, V, PREFIX_LEN, A>
 {
 }
 
 // SAFETY: This type has no interior mutability, and requires all internally
 // referenced types to be `Sync` for the whole thing to be `Sync`.
-unsafe impl<'a, K: Sync, V: Sync, const PREFIX_LEN: usize> Sync
-    for OccupiedEntry<'a, K, V, PREFIX_LEN>
+unsafe impl<K: Sync, V: Sync, const PREFIX_LEN: usize, A: Sync + Allocator> Sync
+    for OccupiedEntry<'_, K, V, PREFIX_LEN, A>
 {
 }
 
-impl<'a, K, V, const PREFIX_LEN: usize> OccupiedEntry<'a, K, V, PREFIX_LEN>
+impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> OccupiedEntry<'a, K, V, PREFIX_LEN, A>
 where
     K: AsBytes,
 {
@@ -103,27 +110,29 @@ where
 
 /// A view into a vacant entry in a [`TreeMap`]. It is part of the [`Entry`]
 /// enum.
-pub struct VacantEntry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
-    pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN>,
+pub struct VacantEntry<'a, K, V, const PREFIX_LEN: usize, A: Allocator> {
+    pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     pub(crate) key: K,
     pub(crate) insert_point: Option<InsertPoint<K, V, PREFIX_LEN>>,
 }
 
 // SAFETY: This struct contains a `&mut TreeMap<K, V>` which mean `K` and `V`
 // must be `Send` for the struct to be `Send`.
-unsafe impl<'a, K: Send, V: Send, const PREFIX_LEN: usize> Send
-    for VacantEntry<'a, K, V, PREFIX_LEN>
+unsafe impl<K: Send, V: Send, A: Send + Allocator, const PREFIX_LEN: usize> Send
+    for VacantEntry<'_, K, V, PREFIX_LEN, A>
 {
 }
 
 // SAFETY: This type has no interior mutability, and requires all internally
 // referenced types to be `Sync` for the whole thing to be `Sync`.
-unsafe impl<'a, K: Sync, V: Sync, const PREFIX_LEN: usize> Sync
-    for VacantEntry<'a, K, V, PREFIX_LEN>
+unsafe impl<K: Sync, V: Sync, A: Sync + Allocator, const PREFIX_LEN: usize> Sync
+    for VacantEntry<'_, K, V, PREFIX_LEN, A>
 {
 }
 
-impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> VacantEntry<'a, K, V, PREFIX_LEN> {
+impl<'a, K: AsBytes, V, A: Allocator, const PREFIX_LEN: usize>
+    VacantEntry<'a, K, V, PREFIX_LEN, A>
+{
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a mutable reference to it.
     pub fn insert(self, value: V) -> &'a mut V {
@@ -134,7 +143,7 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> VacantEntry<'a, K, V, PREFIX_LE
 
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a [`OccupiedEntry`].
-    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN> {
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A> {
         let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
             match self.insert_point {
                 Some(insert_point) => {
@@ -172,14 +181,14 @@ impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> VacantEntry<'a, K, V, PREFIX_LE
 /// A view into a single entry in a map, which may either be vacant or occupied.
 ///
 /// This enum is constructed from the [`TreeMap::entry`].
-pub enum Entry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
+pub enum Entry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global> {
     /// A view into an occupied entry in a [`TreeMap`].
-    Occupied(OccupiedEntry<'a, K, V, PREFIX_LEN>),
+    Occupied(OccupiedEntry<'a, K, V, PREFIX_LEN, A>),
     /// A view into a vacant entry in a [`TreeMap`].
-    Vacant(VacantEntry<'a, K, V, PREFIX_LEN>),
+    Vacant(VacantEntry<'a, K, V, PREFIX_LEN, A>),
 }
 
-impl<'a, K, V, const PREFIX_LEN: usize> Entry<'a, K, V, PREFIX_LEN>
+impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> Entry<'a, K, V, PREFIX_LEN, A>
 where
     K: AsBytes,
 {
@@ -201,7 +210,7 @@ where
     }
 
     /// Sets the value of the entry, and returns an [`OccupiedEntry`].
-    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN> {
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A> {
         match self {
             Entry::Occupied(mut entry) => {
                 entry.insert(value);
@@ -274,7 +283,7 @@ where
     }
 
     /// Similar to [`Entry::or_default`] but yields an [`OccupiedEntry`]
-    pub fn or_default_entry(self) -> OccupiedEntry<'a, K, V, PREFIX_LEN>
+    pub fn or_default_entry(self) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A>
     where
         V: Default,
     {
@@ -285,7 +294,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN> {
+    pub fn or_insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A> {
         match self {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(entry) => entry.insert_entry(value),
@@ -293,7 +302,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert_with`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, PREFIX_LEN>
+    pub fn or_insert_with_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A>
     where
         F: FnOnce() -> V,
     {
@@ -304,7 +313,7 @@ where
     }
 
     /// Similar to [`Entry::or_insert_with_key`] but yields an [`OccupiedEntry`]
-    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, PREFIX_LEN>
+    pub fn or_insert_with_key_entry<F>(self, f: F) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A>
     where
         F: FnOnce(&K) -> V,
     {
@@ -331,16 +340,16 @@ mod tests {
         fn is_send<T: Send>() {}
         fn is_sync<T: Sync>() {}
 
-        fn entry_is_send<'a, K: Send + 'a, V: Send + 'a>() {
-            is_send::<Entry<'a, K, V>>();
+        fn entry_is_send<'a, K: Send + 'a, V: Send + 'a, A: Send + Allocator + 'a>() {
+            is_send::<Entry<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn entry_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<Entry<'a, K, V>>();
+        fn entry_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<Entry<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        entry_is_send::<[u8; 3], usize>();
-        entry_is_sync::<[u8; 3], usize>();
+        entry_is_send::<[u8; 3], usize, Global>();
+        entry_is_sync::<[u8; 3], usize, Global>();
     }
 
     #[test]

@@ -26,12 +26,14 @@ exclude = [
 autobenches = false
 
 [dependencies]
+allocator-api2 = { version = "0.2.20", optional = true }
 bytemuck = { version = "1.16.1", features = ["min_const_generics"] }
 paste = "1.0.15"
 
 [features]
 nightly = []
 bench-perf-events = []
+allocator-api2 = ["dep:allocator-api2"]
 
 [dev-dependencies]
 argh = "0.1.12"
@@ -40,6 +42,7 @@ dhat = "0.3.3"
 rand = "0.8.5"
 iai-callgrind = "0.13.4"
 zipf = "7.0.1"
+bumpalo = { version = "3.16.0", features = ["allocator-api2"] }
 
 [[bench]]
 name = "criterion"

@@ -3,6 +3,7 @@
 use std::{collections::HashSet, iter};
 
 use crate::{
+    alloc::Global,
     raw::{InsertPrefixError, InsertResult, OpaqueNodePtr},
     AsBytes, TreeMap,
 };
@@ -336,7 +337,7 @@ where
     use crate::raw::search_for_insert_point;
 
     let insert_point = unsafe { search_for_insert_point(root, key.as_bytes())? };
-    Ok(unsafe { insert_point.apply(key, value) })
+    Ok(unsafe { insert_point.apply(key, value, &Global) })
 }
 
 #[allow(dead_code)]

@@ -1,9 +1,11 @@
 use std::{
     iter::FusedIterator,
     mem::{self, ManuallyDrop},
+    ptr,
 };
 
 use crate::{
+    alloc::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{deallocate_leaves, deallocate_tree_non_leaves, NodePtr, RawIterator},
     TreeMap,
@@ -17,70 +19,92 @@ use crate::{
 /// [`into_iter`]: IntoIterator::into_iter
 /// [`IntoIterator`]: core::iter::IntoIterator
 #[derive(Debug)]
-pub struct IntoIter<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
+pub struct IntoIter<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global> {
     inner: RawIterator<K, V, PREFIX_LEN>,
     size: usize,
+    alloc: A,
 }
 
 // SAFETY: This iterator is the unique owner of  the remainder of the `TreeMap`
 // it was constructed from and is safe to move across threads, so long as the
 // keys and values are as well.
-unsafe impl<K, V, const PREFIX_LEN: usize> Send for IntoIter<K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for IntoIter<K, V, PREFIX_LEN, A>
 where
     K: Send,
     V: Send,
+    A: Send + Allocator,
 {
 }
 
 // SAFETY: This iterator has no interior mutability and can be shared across
 // threads, so long as the keys and values can be as well.
-unsafe impl<K, V, const PREFIX_LEN: usize> Sync for IntoIter<K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for IntoIter<K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
-impl<K, V, const PREFIX_LEN: usize> Drop for IntoIter<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> Drop for IntoIter<K, V, PREFIX_LEN, A> {
     fn drop(&mut self) {
-        // SAFETY: The `deallocate_tree_non_leaves` function is called earlier on the
-        // trie (which we have unique access to), so the leaves will still be allocated.
-        unsafe { deallocate_leaves(mem::replace(&mut self.inner, RawIterator::empty())) }
+        // SAFETY:
+        //  - The `deallocate_tree_non_leaves` function is called earlier on the trie
+        //    (which we have unique access to), so the leaves will still be allocated.
+        //  - `self.alloc` was taken from the `TreeMap` and was the same allocator used
+        //    to allocate all the nodes of the trie.
+        unsafe {
+            deallocate_leaves(
+                mem::replace(&mut self.inner, RawIterator::empty()),
+                &self.alloc,
+            )
+        }
 
         // Just to be safe, clear the iterator size
         self.size = 0;
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> IntoIter<K, V, PREFIX_LEN> {
-    pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN>) -> Self {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> IntoIter<K, V, PREFIX_LEN, A> {
+    pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN, A>) -> Self {
         // We need to inhibit `TreeMap::drop` since it would cause a double-free
         // otherwise.
         let tree = ManuallyDrop::new(tree);
+        // SAFETY: Since we're reading from an `&A` that was coerced to a `*const A` we
+        // know that the pointer is valid for reads, properly aligned, and properly
+        // initialized.
+        //
+        // Also this is safe from a double-free since we're using `ManuallyDrop` to
+        // inhibit the first copy of `A` (in the `tree` value) from doing anything.
+        let alloc = unsafe { ptr::read(&tree.alloc) };
 
         if let Some(state) = &tree.state {
             // SAFETY: By construction (and maintained on insert/delete), the `min_leaf` is
             // always before or equal to `max_leaf` in the leaf node order.
             let inner = unsafe { RawIterator::new(state.min_leaf, state.max_leaf) };
 
-            // SAFETY: Since this function takes an owned `TreeMap`, we can assume there is
-            // no concurrent read or modification, that this is a unique handle to the trie.
-            unsafe { deallocate_tree_non_leaves(state.root) }
+            // SAFETY:
+            //  - Since this function takes an owned `TreeMap`, we can assume there is no
+            //    concurrent read or modification, that this is a unique handle to the trie.
+            //  - `tree.alloc` was used to allocate all the nodes of the tree
+            unsafe { deallocate_tree_non_leaves(state.root, &tree.alloc) }
 
             Self {
                 inner,
                 size: tree.num_entries,
+                alloc,
             }
         } else {
             Self {
                 inner: RawIterator::empty(),
                 size: 0,
+                alloc,
             }
         }
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Iterator for IntoIter<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> Iterator for IntoIter<K, V, PREFIX_LEN, A> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -89,9 +113,12 @@ impl<K, V, const PREFIX_LEN: usize> Iterator for IntoIter<K, V, PREFIX_LEN> {
         let leaf_ptr = unsafe { self.inner.next() };
 
         leaf_ptr.map(|leaf_ptr| {
-            // SAFETY: This function is only called once for a given `leaf_ptr` since the
-            // iterator will never repeat
-            unsafe { NodePtr::deallocate_node_ptr(leaf_ptr) }.into_entry()
+            // SAFETY:
+            //  - This function is only called once for a given `leaf_ptr` since the
+            //    iterator will never repeat an element
+            //  - `self.alloc` is the same allocator which was used to allocate all the
+            //    nodes of the tree, since it was taken from the `TreeMap` value.
+            unsafe { NodePtr::deallocate_node_ptr(leaf_ptr, &self.alloc) }.into_entry()
         })
     }
 
@@ -100,41 +127,50 @@ impl<K, V, const PREFIX_LEN: usize> Iterator for IntoIter<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for IntoIter<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> DoubleEndedIterator
+    for IntoIter<K, V, PREFIX_LEN, A>
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         // SAFETY: By construction of the `IntoIter` we know that we have ownership over
         // the trie, and there will be no other concurrent access (read or write).
         let leaf_ptr = unsafe { self.inner.next_back() };
 
         leaf_ptr.map(|leaf_ptr| {
-            // SAFETY: This function is only called once for a given `leaf_ptr` since the
-            // iterator will never repeat
-            unsafe { NodePtr::deallocate_node_ptr(leaf_ptr) }.into_entry()
+            // SAFETY:
+            //  - This function is only called once for a given `leaf_ptr` since the
+            //    iterator will never repeat an element
+            //  - `self.alloc` is the same allocator which was used to allocate all the
+            //    nodes of the tree, since it was taken from the `TreeMap` value.
+            unsafe { NodePtr::deallocate_node_ptr(leaf_ptr, &self.alloc) }.into_entry()
         })
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> ExactSizeIterator for IntoIter<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> ExactSizeIterator
+    for IntoIter<K, V, PREFIX_LEN, A>
+{
     fn len(&self) -> usize {
         self.size
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> FusedIterator for IntoIter<K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for IntoIter<K, V, PREFIX_LEN, A> {}
 
 /// An owning iterator over the keys of a [`TreeMap`].
 ///
 /// This `struct` is created by the [`crate::TreeMap::into_keys`] method on
 /// [`TreeMap`]. See its documentation for more.
-pub struct IntoKeys<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN>(IntoIter<K, V, PREFIX_LEN>);
+pub struct IntoKeys<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global>(
+    IntoIter<K, V, PREFIX_LEN, A>,
+);
 
-impl<K, V, const PREFIX_LEN: usize> IntoKeys<K, V, PREFIX_LEN> {
-    pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN>) -> Self {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> IntoKeys<K, V, PREFIX_LEN, A> {
+    pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN, A>) -> Self {
         IntoKeys(IntoIter::new(tree))
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Iterator for IntoKeys<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> Iterator for IntoKeys<K, V, PREFIX_LEN, A> {
     type Item = K;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -146,13 +182,18 @@ impl<K, V, const PREFIX_LEN: usize> Iterator for IntoKeys<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for IntoKeys<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> DoubleEndedIterator
+    for IntoKeys<K, V, PREFIX_LEN, A>
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.0.next_back()?.0)
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> ExactSizeIterator for IntoKeys<K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> ExactSizeIterator
+    for IntoKeys<K, V, PREFIX_LEN, A>
+{
+}
 
 /// An owning iterator over the values of a [`TreeMap`].
 ///
@@ -160,17 +201,17 @@ impl<K, V, const PREFIX_LEN: usize> ExactSizeIterator for IntoKeys<K, V, PREFIX_
 /// See its documentation for more.
 ///
 /// [`into_values`]: crate::TreeMap::into_values
-pub struct IntoValues<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN>(
-    IntoIter<K, V, PREFIX_LEN>,
+pub struct IntoValues<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global>(
+    IntoIter<K, V, PREFIX_LEN, A>,
 );
 
-impl<K, V, const PREFIX_LEN: usize> IntoValues<K, V, PREFIX_LEN> {
-    pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN>) -> Self {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> IntoValues<K, V, PREFIX_LEN, A> {
+    pub(crate) fn new(tree: TreeMap<K, V, PREFIX_LEN, A>) -> Self {
         IntoValues(IntoIter::new(tree))
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Iterator for IntoValues<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> Iterator for IntoValues<K, V, PREFIX_LEN, A> {
     type Item = V;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -182,13 +223,18 @@ impl<K, V, const PREFIX_LEN: usize> Iterator for IntoValues<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for IntoValues<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> DoubleEndedIterator
+    for IntoValues<K, V, PREFIX_LEN, A>
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         Some(self.0.next_back()?.1)
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> ExactSizeIterator for IntoValues<K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> ExactSizeIterator
+    for IntoValues<K, V, PREFIX_LEN, A>
+{
+}
 
 #[cfg(test)]
 mod tests {
@@ -206,38 +252,38 @@ mod tests {
         fn is_send<T: Send>() {}
         fn is_sync<T: Sync>() {}
 
-        fn into_iter_is_send<K: Send, V: Send>() {
-            is_send::<IntoIter<K, V>>();
+        fn into_iter_is_send<K: Send, V: Send, A: Send + Allocator>() {
+            is_send::<IntoIter<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn into_iter_is_sync<K: Sync, V: Sync>() {
-            is_sync::<IntoIter<K, V>>();
+        fn into_iter_is_sync<K: Sync, V: Sync, A: Sync + Allocator>() {
+            is_sync::<IntoIter<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        into_iter_is_send::<[u8; 3], usize>();
-        into_iter_is_sync::<[u8; 3], usize>();
+        into_iter_is_send::<[u8; 3], usize, Global>();
+        into_iter_is_sync::<[u8; 3], usize, Global>();
 
-        fn into_keys_is_send<K: Send, V: Send>() {
-            is_send::<IntoKeys<K, V>>();
+        fn into_keys_is_send<K: Send, V: Send, A: Send + Allocator>() {
+            is_send::<IntoKeys<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn into_keys_is_sync<K: Sync, V: Sync>() {
-            is_sync::<IntoKeys<K, V>>();
+        fn into_keys_is_sync<K: Sync, V: Sync, A: Sync + Allocator>() {
+            is_sync::<IntoKeys<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        into_keys_is_send::<[u8; 3], usize>();
-        into_keys_is_sync::<[u8; 3], usize>();
+        into_keys_is_send::<[u8; 3], usize, Global>();
+        into_keys_is_sync::<[u8; 3], usize, Global>();
 
-        fn into_values_is_send<K: Send, V: Send>() {
-            is_send::<IntoValues<K, V>>();
+        fn into_values_is_send<K: Send, V: Send, A: Send + Allocator>() {
+            is_send::<IntoValues<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn into_values_is_sync<K: Sync, V: Sync>() {
-            is_sync::<IntoValues<K, V>>();
+        fn into_values_is_sync<K: Sync, V: Sync, A: Sync + Allocator>() {
+            is_sync::<IntoValues<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        into_values_is_send::<[u8; 3], usize>();
-        into_values_is_sync::<[u8; 3], usize>();
+        into_values_is_send::<[u8; 3], usize, Global>();
+        into_values_is_sync::<[u8; 3], usize, Global>();
     }
 
     #[derive(Debug)]

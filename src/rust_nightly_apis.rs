@@ -295,6 +295,24 @@ pub(crate) mod ptr {
         ptr.addr()
     }
 
+    #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+    #[inline]
+    #[cfg(not(feature = "nightly"))]
+    pub fn mut_with_addr<T>(ptr: *mut T, addr: usize) -> *mut T {
+        let self_addr = mut_addr(ptr) as isize;
+        let dest_addr = addr as isize;
+        let offset = dest_addr.wrapping_sub(self_addr);
+
+        ptr.wrapping_byte_offset(offset)
+    }
+
+    #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+    #[inline]
+    #[cfg(feature = "nightly")]
+    pub fn mut_with_addr<T>(ptr: *mut T, addr: usize) -> *mut T {
+        ptr.with_addr(addr)
+    }
+
     #[cfg(test)]
     #[inline]
     #[cfg(not(feature = "nightly"))]
@@ -302,7 +320,7 @@ pub(crate) mod ptr {
         // FIXME(strict_provenance_magic): I am magic and should be a compiler
         // intrinsic. SAFETY: Pointer-to-integer transmutes are valid (if you
         // are okay with losing the provenance).
-        unsafe { std::mem::transmute(ptr.cast::<()>()) }
+        ptr.cast::<()>() as usize
     }
 
     #[cfg(test)]
@@ -310,6 +328,34 @@ pub(crate) mod ptr {
     #[cfg(feature = "nightly")]
     pub fn const_addr<T>(ptr: *const T) -> usize {
         ptr.addr()
+    }
+
+    #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+    #[inline]
+    #[cfg(not(feature = "nightly"))]
+    pub fn nonnull_addr<T>(ptr: NonNull<T>) -> NonZeroUsize {
+        unsafe { NonZeroUsize::new_unchecked(mut_addr(ptr.as_ptr())) }
+    }
+
+    #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+    #[inline]
+    #[cfg(feature = "nightly")]
+    pub fn nonnull_addr<T>(ptr: NonNull<T>) -> NonZeroUsize {
+        ptr.addr()
+    }
+
+    #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+    #[inline]
+    #[cfg(not(feature = "nightly"))]
+    pub fn nonnull_with_addr<T>(ptr: NonNull<T>, addr: NonZeroUsize) -> NonNull<T> {
+        unsafe { NonNull::new_unchecked(mut_with_addr(ptr.as_ptr(), addr.get())) }
+    }
+
+    #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+    #[inline]
+    #[cfg(feature = "nightly")]
+    pub fn nonnull_with_addr<T>(ptr: NonNull<T>, addr: NonZeroUsize) -> NonNull<T> {
+        ptr.with_addr(addr)
     }
 
     #[inline]
@@ -321,15 +367,18 @@ pub(crate) mod ptr {
         let ptr = ptr.as_ptr();
         let old_addr = mut_addr(ptr);
         let new_addr = f(unsafe {
-            // SAFETY: TODO
+            // SAFETY: `ptr` was a `NonNull` pointer, the address was required to be
+            // non-zero.
             NonZeroUsize::new_unchecked(old_addr)
         });
-        let offset = new_addr.get().wrapping_sub(old_addr);
 
+        let offset = new_addr.get().wrapping_sub(old_addr);
         // This is the canonical desugaring of this operation
         let new_ptr = ptr.wrapping_byte_offset(offset as isize);
 
-        // SAFETY: TODO
+        // SAFETY: The 2 lines of code above are just changing the address of the
+        // pointer, while trying to retain the same provenance. Since the `new_addr`
+        // returned from `f` is non-zero, then the `new_ptr` must be non-null.
         unsafe { NonNull::new_unchecked(new_ptr) }
     }
 

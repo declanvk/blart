@@ -2,6 +2,7 @@
 //! iterators/etc.
 
 use crate::{
+    alloc::{Allocator, Global},
     raw::{
         clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
         maximum_unchecked, minimum_unchecked, search_for_delete_point, search_for_insert_point,
@@ -18,6 +19,7 @@ use std::{
     hash::Hash,
     mem::ManuallyDrop,
     ops::{Index, RangeBounds},
+    ptr,
 };
 
 mod entry;
@@ -25,14 +27,18 @@ mod iterators;
 pub use entry::*;
 pub use iterators::*;
 
-const DEFAULT_PREFIX_LEN: usize = 16;
+/// This is the default number of bytes that are used in each inner node for
+/// storing key prefixes.
+pub const DEFAULT_PREFIX_LEN: usize = 16;
 
 /// An ordered map based on an adaptive radix tree.
-pub struct TreeMap<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
+pub struct TreeMap<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global> {
     /// The number of entries present in the tree.
     num_entries: usize,
     /// A pointer to the tree root, if present.
     pub(crate) state: Option<NonEmptyTree<K, V, PREFIX_LEN>>,
+    /// The allocator which will be used to alloc and dealloc tree nodes.
+    alloc: A,
 }
 
 pub(crate) struct NonEmptyTree<K, V, const PREFIX_LEN: usize> {
@@ -42,7 +48,7 @@ pub(crate) struct NonEmptyTree<K, V, const PREFIX_LEN: usize> {
 }
 
 impl<K, V> TreeMap<K, V> {
-    /// Create a new, empty [`crate::TreeMap`] with the default number of prefix
+    /// Create a new, empty [`TreeMap`] with the default number of prefix
     /// bytes (16).
     ///
     /// This function will not pre-allocate anything.
@@ -61,94 +67,65 @@ impl<K, V> TreeMap<K, V> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
-    /// Create a new, empty [`crate::TreeMap`].
+impl<K, V, A: Allocator> TreeMap<K, V, DEFAULT_PREFIX_LEN, A> {
+    /// Create a new, empty [`TreeMap`] with the default number of prefix bytes
+    /// (16), which will allocate tree nodes using the given allocator.
     ///
     /// This function will not pre-allocate anything.
+    #[cfg_attr(
+        any(feature = "nightly", feature = "allocator-api2"),
+        doc = r##"
+# Examples
+
+```rust
+use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
+use std::alloc::System;
+
+let mut map = TreeMap::<_, i32, DEFAULT_PREFIX_LEN, _>::new_in(System);
+assert!(map.is_empty());
+map.insert(c"abc", 0);
+assert_eq!(*map.get(c"abc").unwrap(), 0);
+```
+    "##
+    )]
+    pub fn new_in(alloc: A) -> Self {
+        Self::with_prefix_len_in(alloc)
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
+    /// Create a new, empty [`TreeMap`] with a non-default node prefix
+    /// length.
+    ///
+    /// This function will not pre-allocate anything. The prefix length is
+    /// inferred as a const-generic parameter on the type.
     ///
     /// # Examples
     ///
     /// ```rust
     /// use blart::TreeMap;
     ///
-    /// let map = TreeMap::<Box<[u8]>, (), 16>::with_prefix_len();
-    /// assert_eq!(map, TreeMap::new());
+    /// let map = TreeMap::<Box<[u8]>, (), 8>::with_prefix_len();
     /// assert!(map.is_empty());
     /// ```
     pub fn with_prefix_len() -> Self {
         TreeMap {
             num_entries: 0,
             state: None,
+            alloc: Global,
         }
-    }
-
-    /// Clear the map, removing all elements.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
-    ///
-    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-    /// assert_eq!(map.len(), 1);
-    ///
-    /// map.clear();
-    /// assert!(map.is_empty());
-    /// assert!(map.get([1, 2, 3].as_ref()).is_none());
-    /// ```
-    pub fn clear(&mut self) {
-        if let Some(state) = &mut self.state {
-            // SAFETY: Since we have a mutable reference to the map, we know that there are
-            // no other mutable references to any node in the tree, meaning we can
-            // deallocate all of them.
-            unsafe {
-                deallocate_tree(state.root);
-            }
-
-            self.num_entries = 0;
-            self.state = None;
-        }
-    }
-
-    /// Consume the tree, returning a raw pointer to the root node.
-    ///
-    /// If the results is `None`, this means the tree is empty.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use blart::TreeMap;
-    ///
-    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
-    ///
-    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-    /// assert_eq!(map.len(), 1);
-    ///
-    /// let root = TreeMap::into_raw(map);
-    /// assert!(root.is_some());
-    ///
-    /// // SAFETY: The root pointer came directly from the `into_raw` result.
-    /// let _map = unsafe { TreeMap::from_raw(root) }.unwrap();
-    /// ```
-    pub fn into_raw(tree: Self) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
-        // We need this `ManuallyDrop` so that the `TreeMap::drop` is not called.
-        // Since the `root` field is `Copy`, it can be moved out of the tree without
-        // inhibiting `Drop`
-        let tree = ManuallyDrop::new(tree);
-        tree.state.as_ref().map(|state| state.root)
     }
 
     /// Constructs a [`TreeMap`] from a raw node pointer.
     ///
     /// # Safety
     ///
-    /// The raw pointer must have been previously returned by a call to
-    /// [`TreeMap::into_raw`].
-    ///
-    /// This function also requires that this the given `root` pointer is
-    /// unique, and that there are no other pointers into the tree.
+    ///  - The raw pointer must have been previously returned by a call to
+    ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`].
+    ///     - The allocator of the previous tree must have been the "default"
+    ///       allocator named `Global`.
+    ///  - The given `root` pointer must be unique and there are no other
+    ///    pointers into the tree.
     ///
     /// # Errors
     ///
@@ -178,6 +155,222 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     where
         K: AsBytes,
     {
+        // SAFETY: The safety requirement of `from_raw_in` are a superset of the ones on
+        // `from_raw`.
+        unsafe { Self::from_raw_in(root, Global) }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
+    /// Returns a reference to the underlying allocator.
+    #[cfg_attr(
+        any(feature = "nightly", feature = "allocator-api2"),
+        doc = r##"
+# Examples
+
+```rust
+use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
+use std::alloc::System;
+
+let map = TreeMap::<Box<[u8]>, i32, DEFAULT_PREFIX_LEN, _>::new_in(System);
+assert!(matches!(map.allocator(), &System));
+```
+    "##
+    )]
+    pub fn allocator(&self) -> &A {
+        &self.alloc
+    }
+
+    /// Create a new, empty [`TreeMap`] with a non-default node prefix
+    /// length, and the given allocator for allocating tree nodes.
+    ///
+    /// This function will not pre-allocate anything. The prefix length is
+    /// inferred as a const-generic parameter on the type.
+    #[cfg_attr(
+        any(feature = "nightly", feature = "allocator-api2"),
+        doc = r##"
+# Examples
+
+```rust
+use blart::TreeMap;
+use std::alloc::System;
+
+let map = TreeMap::<Box<[u8]>, i32, 8, _>::with_prefix_len_in(System);
+assert!(matches!(map.allocator(), &System));
+```
+    "##
+    )]
+    pub fn with_prefix_len_in(alloc: A) -> Self {
+        TreeMap {
+            num_entries: 0,
+            state: None,
+            alloc,
+        }
+    }
+
+    /// Clear the map, removing all elements.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    ///
+    /// map.clear();
+    /// assert!(map.is_empty());
+    /// assert!(map.get([1, 2, 3].as_ref()).is_none());
+    /// ```
+    pub fn clear(&mut self) {
+        if let Some(state) = &mut self.state {
+            // SAFETY:
+            //  - Since we have a mutable reference to the map, we know that there are no
+            //    other mutable references to any node in the tree, meaning we can
+            //    deallocate all of them.
+            //  - `self.alloc` was used to allocate all the nodes of the trie
+            unsafe {
+                deallocate_tree(state.root, &self.alloc);
+            }
+
+            self.num_entries = 0;
+            self.state = None;
+        }
+    }
+
+    /// Consume the tree, returning a raw pointer to the root node.
+    ///
+    /// If the results is `None`, this means the tree is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    ///
+    /// let root = TreeMap::into_raw(map);
+    /// assert!(root.is_some());
+    ///
+    /// // SAFETY: The root pointer came directly from the `into_raw` result.
+    /// let _map = unsafe { TreeMap::from_raw(root) }.unwrap();
+    /// ```
+    pub fn into_raw(tree: Self) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
+        Self::into_raw_with_allocator(tree).0
+    }
+
+    /// Consume the tree, returning a raw pointer to the root node and the
+    /// allocator of the tree.
+    ///
+    /// If the results is `None`, this means the tree is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    ///
+    /// let (root, alloc) = TreeMap::into_raw_with_allocator(map);
+    /// assert!(root.is_some());
+    ///
+    /// // SAFETY: The root pointer came directly from the `into_raw` result.
+    /// let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
+    /// ```
+    pub fn into_raw_with_allocator(tree: Self) -> (Option<OpaqueNodePtr<K, V, PREFIX_LEN>>, A) {
+        // We need this `ManuallyDrop` so that the `TreeMap::drop` is not called.
+        // Since the `root` field is `Copy`, it can be moved out of the tree without
+        // inhibiting `Drop`
+        let tree = ManuallyDrop::new(tree);
+        // SAFETY: Since we're reading from an `&A` that was coerced to a `*const A` we
+        // know that the pointer is valid for reads, properly aligned, and properly
+        // initialized.
+        //
+        // Also this is safe from a double-free since we're using `ManuallyDrop` to
+        // inhibit the first copy of `A` (in the `tree` value) from doing anything.
+        let alloc = unsafe { ptr::read(&tree.alloc) };
+        let root = tree.state.as_ref().map(|state| state.root);
+
+        (root, alloc)
+    }
+
+    /// Constructs a [`TreeMap`] from a raw node pointer and the given
+    /// allocator.
+    ///
+    /// # Safety
+    ///
+    ///  - The raw pointer must have been previously returned by a call to
+    ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`] with a
+    ///    known allocator.
+    ///  - The given `root` pointer must be unique and there are no other
+    ///    pointers into the tree.
+    ///  - The given `alloc` must have been used to allocate all of the nodes
+    ///    referenced by the given `root` pointer.
+    ///
+    /// # Errors
+    ///
+    /// This function runs a series of checks to ensure that the returned tree
+    /// is well-formed. See [`WellFormedChecker`] for details on the
+    /// requirements.
+    #[cfg_attr(
+        any(feature = "nightly", feature = "allocator-api2"),
+        doc = r##"
+# Examples
+
+Using the [`TreeMap::into_raw`] function to get the root node pointer:
+
+```rust
+use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
+use std::alloc::System;
+
+let mut map = TreeMap::<Box<[u8]>, char, DEFAULT_PREFIX_LEN, _>::new_in(System);
+
+map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+assert_eq!(map.len(), 1);
+assert!(matches!(map.allocator(), &System));
+
+let root = TreeMap::into_raw(map);
+assert!(root.is_some());
+
+// SAFETY: The root pointer came directly from the `into_raw` result.
+let _map = unsafe { TreeMap::from_raw_in(root, System) }.unwrap();
+```
+
+Using the [`TreeMap::into_raw_with_allocator`] function to get the root
+node pointer and allocator:
+
+```rust
+use blart::TreeMap;
+
+let mut map = TreeMap::<Box<[u8]>, char>::new();
+
+map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+assert_eq!(map.len(), 1);
+
+let (root, alloc) = TreeMap::into_raw_with_allocator(map);
+
+assert!(root.is_some());
+
+// SAFETY: The root pointer came directly from the `into_raw` result.
+let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
+```
+    "##
+    )]
+    pub unsafe fn from_raw_in(
+        root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
+        alloc: A,
+    ) -> Result<Self, MalformedTreeError<K, V, PREFIX_LEN>>
+    where
+        K: AsBytes,
+    {
         match root {
             Some(root) => {
                 // SAFETY: The safety doc of this function guarantees the uniqueness of the
@@ -196,9 +389,10 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
                         max_leaf,
                     }),
                     num_entries: stats.num_leaf,
+                    alloc,
                 })
             },
-            None => Ok(Self::with_prefix_len()),
+            None => Ok(Self::with_prefix_len_in(alloc)),
         }
     }
 
@@ -340,7 +534,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         &'a self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> Fuzzy<'a, 'b, K, V, PREFIX_LEN>
+    ) -> Fuzzy<'a, 'b, K, V, PREFIX_LEN, A>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -372,7 +566,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         &'a mut self,
         key: &'b Q,
         max_edit_dist: usize,
-    ) -> FuzzyMut<'a, 'b, K, V, PREFIX_LEN>
+    ) -> FuzzyMut<'a, 'b, K, V, PREFIX_LEN, A>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -527,7 +721,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
 
     fn init_tree(&mut self, key: K, value: V) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
         // Since this is a singleton tree, the single leaf node has no siblings
-        let leaf = NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value));
+        let leaf = NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), &self.alloc);
         let state = NonEmptyTree {
             root: leaf.to_opaque(),
             min_leaf: leaf,
@@ -547,9 +741,11 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     where
         K: AsBytes,
     {
-        // SAFETY: This call is safe because we have a mutable reference on the tree, so
-        // no other operation can be concurrent with this one.
-        let insert_result = unsafe { insert_point.apply(key, value) };
+        // SAFETY:
+        //  - This call is safe because we have a mutable reference on the tree, so no
+        //    other operation can be concurrent with this one.
+        //  - The same allocator is used for all inserts and deletes
+        let insert_result = unsafe { insert_point.apply(key, value, &self.alloc) };
 
         match &mut self.state {
             Some(state) => {
@@ -590,12 +786,15 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         &mut self,
         delete_point: DeletePoint<K, V, PREFIX_LEN>,
     ) -> DeleteResult<K, V, PREFIX_LEN> {
-        // SAFETY: The root is sure to not be `None`, since the we somehow got a
-        // `DeletePoint`. So the caller must have checked this. Also, since we have a
-        // mutable reference to the tree, no other read or write operation can be
-        // happening concurrently.
+        // SAFETY:
+        // - The root is sure to not be `None`, since the we somehow got a
+        //   `DeletePoint`. So the caller must have checked this. Also, since we have a
+        //   mutable reference to the tree, no other read or write operation can be
+        //   happening concurrently.
+        // - `self.alloc` is the same allocator which is used for all inserts and
+        //   deletes on this trie
         let delete_result =
-            unsafe { delete_point.apply(self.state.as_ref().unwrap_unchecked().root) };
+            unsafe { delete_point.apply(self.state.as_ref().unwrap_unchecked().root, &self.alloc) };
 
         match &mut self.state {
             Some(state) => {
@@ -835,7 +1034,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// }
     /// assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
     /// ```
-    pub fn range<Q, R>(&self, range: R) -> iterators::Range<K, V, PREFIX_LEN>
+    pub fn range<Q, R>(&self, range: R) -> iterators::Range<K, V, PREFIX_LEN, A>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -885,7 +1084,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(map["Carol"], 200);
     /// assert_eq!(map["Cheryl"], 200);
     /// ```
-    pub fn range_mut<Q, R>(&mut self, range: R) -> iterators::RangeMut<K, V, PREFIX_LEN>
+    pub fn range_mut<Q, R>(&mut self, range: R) -> iterators::RangeMut<K, V, PREFIX_LEN, A>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -927,7 +1126,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     // assert_eq!(b[[41].as_ref()], "e");
     // ```
     #[allow(dead_code)]
-    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, PREFIX_LEN>
+    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, PREFIX_LEN, A>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -1007,7 +1206,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(iter.next().unwrap(), 4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_keys(self) -> iterators::IntoKeys<K, V, PREFIX_LEN> {
+    pub fn into_keys(self) -> iterators::IntoKeys<K, V, PREFIX_LEN, A> {
         iterators::IntoKeys::new(self)
     }
 
@@ -1033,7 +1232,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(iter.next().unwrap(), 'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn into_values(self) -> iterators::IntoValues<K, V, PREFIX_LEN> {
+    pub fn into_values(self) -> iterators::IntoValues<K, V, PREFIX_LEN, A> {
         iterators::IntoValues::new(self)
     }
 
@@ -1057,7 +1256,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(iter.next().unwrap(), (&4, &'z'));
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn iter(&self) -> Iter<'_, K, V, PREFIX_LEN> {
+    pub fn iter(&self) -> Iter<'_, K, V, PREFIX_LEN, A> {
         Iter::new(self)
     }
 
@@ -1082,7 +1281,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn iter_mut(&mut self) -> IterMut<'_, K, V, PREFIX_LEN> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V, PREFIX_LEN, A> {
         IterMut::new(self)
     }
 
@@ -1106,7 +1305,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(iter.next().unwrap(), &4);
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn keys(&self) -> Keys<'_, K, V, PREFIX_LEN> {
+    pub fn keys(&self) -> Keys<'_, K, V, PREFIX_LEN, A> {
         Keys::new(self)
     }
 
@@ -1130,7 +1329,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(iter.next().unwrap(), &'z');
     /// assert_eq!(iter.next(), None);
     /// ```
-    pub fn values(&self) -> Values<'_, K, V, PREFIX_LEN> {
+    pub fn values(&self) -> Values<'_, K, V, PREFIX_LEN, A> {
         Values::new(self)
     }
 
@@ -1155,7 +1354,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     /// assert_eq!(map[&3], 'A');
     /// assert_eq!(map[&4], 'Z');
     /// ```
-    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V, PREFIX_LEN> {
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V, PREFIX_LEN, A> {
         ValuesMut::new(self)
     }
 
@@ -1178,7 +1377,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// assert_eq!(p, vec![(&c"abcde", &0), (&c"abcdexxx", &0), (&c"abcdexxy", &0)]);
     /// ```
-    pub fn prefix(&self, prefix: &[u8]) -> Prefix<'_, K, V, PREFIX_LEN>
+    pub fn prefix(&self, prefix: &[u8]) -> Prefix<'_, K, V, PREFIX_LEN, A>
     where
         K: AsBytes,
     {
@@ -1205,7 +1404,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     /// assert_eq!(p, vec![(&c"abcde", &mut 0), (&c"abcdexxx", &mut 0), (&c"abcdexxy", &mut 0)]);
     /// ```
-    pub fn prefix_mut(&mut self, prefix: &[u8]) -> PrefixMut<'_, K, V, PREFIX_LEN>
+    pub fn prefix_mut(&mut self, prefix: &[u8]) -> PrefixMut<'_, K, V, PREFIX_LEN, A>
     where
         K: AsBytes,
     {
@@ -1244,10 +1443,10 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, PREFIX_LEN>, InsertPrefixError>
+    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, PREFIX_LEN, A>, InsertPrefixError>
     where
         K: AsBytes,
     {
@@ -1284,7 +1483,7 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
 
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, PREFIX_LEN>
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, PREFIX_LEN, A>
     where
         K: NoPrefixesBytes,
     {
@@ -1293,16 +1492,17 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Drop for TreeMap<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> Drop for TreeMap<K, V, PREFIX_LEN, A> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Clone for TreeMap<K, V, PREFIX_LEN>
+impl<K, V, A, const PREFIX_LEN: usize> Clone for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Clone + AsBytes,
     V: Clone,
+    A: Allocator + Clone,
 {
     fn clone(&self) -> Self {
         match &self.state {
@@ -1311,7 +1511,7 @@ where
                     root,
                     min_leaf,
                     max_leaf,
-                } = unsafe { clone_unchecked(state.root) };
+                } = unsafe { clone_unchecked(state.root, &self.alloc) };
 
                 TreeMap {
                     num_entries: self.num_entries,
@@ -1320,20 +1520,23 @@ where
                         min_leaf,
                         max_leaf,
                     }),
+                    alloc: self.alloc.clone(),
                 }
             },
             None => TreeMap {
                 num_entries: 0,
                 state: None,
+                alloc: self.alloc.clone(),
             },
         }
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Debug for TreeMap<K, V, PREFIX_LEN>
+impl<K, V, A, const PREFIX_LEN: usize> Debug for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Debug,
     V: Debug,
+    A: Allocator,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
@@ -1346,10 +1549,11 @@ impl<K, V, const PREFIX_LEN: usize> Default for TreeMap<K, V, PREFIX_LEN> {
     }
 }
 
-impl<'a, K, V, const PREFIX_LEN: usize> Extend<(&'a K, &'a V)> for TreeMap<K, V, PREFIX_LEN>
+impl<'a, K, V, A, const PREFIX_LEN: usize> Extend<(&'a K, &'a V)> for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Copy + NoPrefixesBytes,
     V: Copy,
+    A: Allocator,
 {
     fn extend<T: IntoIterator<Item = (&'a K, &'a V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1358,9 +1562,10 @@ where
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Extend<(K, V)> for TreeMap<K, V, PREFIX_LEN>
+impl<K, V, A, const PREFIX_LEN: usize> Extend<(K, V)> for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: NoPrefixesBytes,
+    A: Allocator,
 {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
         for (key, value) in iter {
@@ -1395,10 +1600,11 @@ where
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Hash for TreeMap<K, V, PREFIX_LEN>
+impl<K, V, A, const PREFIX_LEN: usize> Hash for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Hash,
     V: Hash,
+    A: Allocator,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         hasher_write_length_prefix(state, self.num_entries);
@@ -1408,10 +1614,11 @@ where
     }
 }
 
-impl<Q, K, V, const PREFIX_LEN: usize> Index<&Q> for TreeMap<K, V, PREFIX_LEN>
+impl<Q, K, V, A, const PREFIX_LEN: usize> Index<&Q> for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Borrow<Q> + AsBytes,
     Q: AsBytes + ?Sized,
+    A: Allocator,
 {
     type Output = V;
 
@@ -1420,8 +1627,10 @@ where
     }
 }
 
-impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a TreeMap<K, V, PREFIX_LEN> {
-    type IntoIter = Iter<'a, K, V, PREFIX_LEN>;
+impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> IntoIterator
+    for &'a TreeMap<K, V, PREFIX_LEN, A>
+{
+    type IntoIter = Iter<'a, K, V, PREFIX_LEN, A>;
     type Item = (&'a K, &'a V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1429,8 +1638,10 @@ impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a TreeMap<K, V, PREFI
     }
 }
 
-impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a mut TreeMap<K, V, PREFIX_LEN> {
-    type IntoIter = IterMut<'a, K, V, PREFIX_LEN>;
+impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> IntoIterator
+    for &'a mut TreeMap<K, V, PREFIX_LEN, A>
+{
+    type IntoIter = IterMut<'a, K, V, PREFIX_LEN, A>;
     type Item = (&'a K, &'a mut V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1438,8 +1649,8 @@ impl<'a, K, V, const PREFIX_LEN: usize> IntoIterator for &'a mut TreeMap<K, V, P
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> IntoIterator for TreeMap<K, V, PREFIX_LEN> {
-    type IntoIter = iterators::IntoIter<K, V, PREFIX_LEN>;
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> IntoIterator for TreeMap<K, V, PREFIX_LEN, A> {
+    type IntoIter = iterators::IntoIter<K, V, PREFIX_LEN, A>;
     type Item = (K, V);
 
     fn into_iter(self) -> Self::IntoIter {
@@ -1447,37 +1658,41 @@ impl<K, V, const PREFIX_LEN: usize> IntoIterator for TreeMap<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Ord for TreeMap<K, V, PREFIX_LEN>
+impl<K, V, A, const PREFIX_LEN: usize> Ord for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Ord,
     V: Ord,
+    A: Allocator,
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.iter().cmp(other.iter())
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> PartialOrd for TreeMap<K, V, PREFIX_LEN>
+impl<K, V, A, const PREFIX_LEN: usize> PartialOrd for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: PartialOrd,
     V: PartialOrd,
+    A: Allocator,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.iter().partial_cmp(other.iter())
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Eq for TreeMap<K, V, PREFIX_LEN>
+impl<K, V, A, const PREFIX_LEN: usize> Eq for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Eq,
     V: Eq,
+    A: Allocator,
 {
 }
 
-impl<K, V, const PREFIX_LEN: usize> PartialEq for TreeMap<K, V, PREFIX_LEN>
+impl<K, V, A, const PREFIX_LEN: usize> PartialEq for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: PartialEq,
     V: PartialEq,
+    A: Allocator,
 {
     fn eq(&self, other: &Self) -> bool {
         self.num_entries == other.num_entries && self.iter().eq(other.iter())
@@ -1487,20 +1702,22 @@ where
 // SAFETY: This is safe to implement if `K` and `V` are also `Send`.
 // This container is safe to `Send` for the same reasons why other container
 // are also safe
-unsafe impl<K, V, const PREFIX_LEN: usize> Send for TreeMap<K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Send,
     V: Send,
+    A: Send + Allocator,
 {
 }
 
 // SAFETY: This is safe to implement if `K` and `V` are also `Sync`.
 // This container is safe to `Sync` for the same reasons why other container
 // are also safe
-unsafe impl<K, V, const PREFIX_LEN: usize> Sync for TreeMap<K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for TreeMap<K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -1982,5 +2199,180 @@ mod tests {
         tree.clear();
         assert_eq!(tree.len(), 0);
         assert_eq!(tree.pop_first(), None);
+    }
+}
+
+#[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+mod custom_allocator_tests {
+    use super::*;
+
+    use crate::{
+        alloc::AllocError,
+        rust_nightly_apis::ptr::{nonnull_addr, nonnull_with_addr},
+    };
+
+    use std::{
+        alloc::Layout,
+        cell::{Cell, UnsafeCell},
+        marker::PhantomPinned,
+        mem::MaybeUninit,
+        num::NonZeroUsize,
+        pin::Pin,
+        ptr::{addr_of_mut, NonNull},
+    };
+
+    struct BumpAllocator<const N: usize> {
+        block: UnsafeCell<MaybeUninit<[u8; N]>>,
+
+        // Points to start of block
+        start: Cell<NonNull<u8>>,
+        // Points to end of block
+        end: Cell<NonNull<u8>>,
+        // Points somewhere between `start` and `end`, is
+        // the end of the next allocation
+        ptr: Cell<NonNull<u8>>,
+
+        alloc_count: Cell<usize>,
+        dealloc_count: Cell<usize>,
+
+        // Prevent Unpin
+        _marker: PhantomPinned,
+    }
+
+    impl<const N: usize> BumpAllocator<N> {
+        fn new() -> Pin<Box<Self>> {
+            let mut alloc = Box::new(Self {
+                block: UnsafeCell::new(MaybeUninit::uninit()),
+
+                // These three will be fixed up after allocating the allocator
+                start: Cell::new(NonNull::dangling()),
+                end: Cell::new(NonNull::dangling()),
+                ptr: Cell::new(NonNull::dangling()),
+
+                alloc_count: Cell::new(0),
+                dealloc_count: Cell::new(0),
+
+                _marker: PhantomPinned,
+            });
+
+            let alloc_start = NonNull::new(addr_of_mut!(alloc.block).cast::<u8>()).unwrap();
+            alloc.start.set(alloc_start);
+            alloc.end.set(
+                NonNull::new(unsafe { alloc_start.as_ptr().offset(N.try_into().unwrap()) })
+                    .unwrap(),
+            );
+            alloc.ptr.set(alloc.end.get());
+
+            Box::into_pin(alloc)
+        }
+    }
+
+    unsafe impl<const N: usize> Allocator for Pin<Box<BumpAllocator<N>>> {
+        #[inline]
+        fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+            self.alloc_count.set(self.alloc_count.get() + 1);
+
+            let size = layout.size();
+            let align = layout.align();
+
+            debug_assert!(align > 0);
+            debug_assert!(align.is_power_of_two());
+
+            let ptr = nonnull_addr(self.ptr.get());
+
+            let new_ptr = ptr.get().checked_sub(size).unwrap();
+
+            // Round down to the requested alignment.
+            let new_ptr = NonZeroUsize::new(new_ptr & !(align - 1)).unwrap();
+
+            let start = nonnull_addr(self.start.get());
+            if new_ptr < start {
+                // Didn't have enough capacity!
+                return Err(AllocError);
+            }
+
+            self.ptr.set(nonnull_with_addr(self.ptr.get(), new_ptr));
+            Ok(NonNull::slice_from_raw_parts(self.ptr.get(), size))
+        }
+
+        #[inline]
+        unsafe fn deallocate(&self, _ptr: NonNull<u8>, _layout: Layout) {
+            self.dealloc_count.set(self.dealloc_count.get() + 1);
+        }
+    }
+
+    // Just a simple test to make sure the allocator works as expected outside of
+    // the tree
+    #[test]
+    fn non_tree_allocation() {
+        let allocator = BumpAllocator::<64>::new();
+
+        let ptr = allocator.allocate(Layout::new::<[u8; 32]>());
+        assert!(ptr.is_ok());
+        let ptr = allocator.allocate(Layout::new::<[u8; 32]>());
+        assert!(ptr.is_ok());
+        let ptr = allocator.allocate(Layout::new::<[u8; 1]>());
+        assert!(ptr.is_err());
+        let ptr = allocator.allocate(Layout::new::<[u8; 0]>());
+        assert!(ptr.is_ok());
+
+        assert_eq!(allocator.alloc_count.get(), 4);
+        assert_eq!(allocator.dealloc_count.get(), 0);
+    }
+
+    #[test]
+    fn small_tree() {
+        let allocator = BumpAllocator::<
+            {
+                std::mem::size_of::<
+                    crate::raw::InnerNode4<
+                        &std::ffi::CStr,
+                        i32,
+                        { crate::map::DEFAULT_PREFIX_LEN },
+                    >,
+                >() + (2 * std::mem::size_of::<
+                    crate::raw::LeafNode<&std::ffi::CStr, i32, { crate::map::DEFAULT_PREFIX_LEN }>,
+                >())
+            },
+        >::new();
+
+        let mut tree = TreeMap::new_in(allocator);
+        tree.insert(c"abc", 0);
+        tree.insert(c"xyz", 1);
+        assert_eq!(tree.get(c"abc").unwrap(), &0);
+        assert_eq!(tree.get(c"xyz").unwrap(), &1);
+
+        let (root, allocator) = TreeMap::into_raw_with_allocator(tree);
+
+        // 1 Node4, 2 LeafNodes
+        // assert_eq!(allocator.alloc_count.get(), 3);
+        // assert_eq!(allocator.dealloc_count.get(), 0);
+
+        unsafe {
+            deallocate_tree(root.unwrap(), &allocator);
+        }
+
+        // Each node alloc and dealloced
+        // assert_eq!(allocator.alloc_count.get(), 3);
+        // assert_eq!(allocator.dealloc_count.get(), 3);
+    }
+
+    struct EmptyAllocator;
+
+    unsafe impl Allocator for EmptyAllocator {
+        #[inline]
+        fn allocate(&self, _layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+            Err(AllocError)
+        }
+
+        #[inline]
+        unsafe fn deallocate(&self, _ptr: NonNull<u8>, _layout: Layout) {}
+    }
+
+    #[test]
+    #[should_panic(expected = "memory is infinite")]
+    fn out_of_memory() {
+        let mut tree = TreeMap::new_in(EmptyAllocator);
+        tree.insert(c"abc", 0);
     }
 }

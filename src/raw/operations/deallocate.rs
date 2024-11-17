@@ -1,4 +1,7 @@
-use crate::raw::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawIterator};
+use crate::{
+    alloc::Allocator,
+    raw::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawIterator},
+};
 
 /// Deallocate all the leaf nodes in the linked list starting that are within
 /// the given iterator.
@@ -9,13 +12,16 @@ use crate::raw::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, R
 ///    result.
 ///  - This function should not be called concurrently with any read of the
 ///    tree, otherwise it could result in a use-after-free.
-pub unsafe fn deallocate_leaves<K, V, const PREFIX_LEN: usize>(
+///  - `alloc` must be the same allocator which was used to allocate all the
+///    leaves of the tree.
+pub unsafe fn deallocate_leaves<K, V, const PREFIX_LEN: usize, A: Allocator>(
     mut leaf_range: RawIterator<K, V, PREFIX_LEN>,
+    alloc: &A,
 ) {
     // SAFETY: Covered by function safety doc
     while let Some(leaf_ptr) = unsafe { leaf_range.next() } {
         // SAFETY: Covered by function safety doc
-        let _ = unsafe { NodePtr::deallocate_node_ptr(leaf_ptr) };
+        let _ = unsafe { NodePtr::deallocate_node_ptr(leaf_ptr, alloc) };
     }
 }
 
@@ -27,8 +33,11 @@ pub unsafe fn deallocate_leaves<K, V, const PREFIX_LEN: usize>(
 ///    descendants, otherwise a double-free could result.
 ///  - This function should not be called concurrently with any read of the
 ///    tree, otherwise it could result in a use-after-free.
-pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize>(
+///  - `alloc` must be the same allocator which was used to allocate all the
+///    inner nodes of the tree.
+pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize, A: Allocator>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    alloc: &A,
 ) {
     fn not_leaf<K, V, const PREFIX_LEN: usize>(node: &OpaqueNodePtr<K, V, PREFIX_LEN>) -> bool {
         !node.is::<LeafNode<K, V, PREFIX_LEN>>()
@@ -46,19 +55,19 @@ pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize>(
         match next_node_ptr.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, not_leaf)
+                deallocate_inner_node(&mut stack, inner_ptr, not_leaf, alloc)
             },
             ConcreteNodePtr::Node16(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, not_leaf)
+                deallocate_inner_node(&mut stack, inner_ptr, not_leaf, alloc)
             },
             ConcreteNodePtr::Node48(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, not_leaf)
+                deallocate_inner_node(&mut stack, inner_ptr, not_leaf, alloc)
             },
             ConcreteNodePtr::Node256(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, not_leaf)
+                deallocate_inner_node(&mut stack, inner_ptr, not_leaf, alloc)
             },
             ConcreteNodePtr::LeafNode(_) => {
                 unreachable!("should never encounter a leaf node")
@@ -76,8 +85,11 @@ pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize>(
 ///    descendants, otherwise a double-free could result.
 ///  - This function should not be called concurrently with any read of the
 ///    tree, otherwise it could result in a use-after-free.
-pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize>(
+///  - `alloc` must be the same allocator which was used to allocate all the
+///    nodes of the tree.
+pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize, A: Allocator>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    alloc: &A,
 ) {
     fn accept_all<K, V, const PREFIX_LEN: usize>(_: &OpaqueNodePtr<K, V, PREFIX_LEN>) -> bool {
         true
@@ -91,24 +103,24 @@ pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize>(
         match next_node_ptr.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, accept_all)
+                deallocate_inner_node(&mut stack, inner_ptr, accept_all, alloc)
             },
             ConcreteNodePtr::Node16(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, accept_all)
+                deallocate_inner_node(&mut stack, inner_ptr, accept_all, alloc)
             },
             ConcreteNodePtr::Node48(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, accept_all)
+                deallocate_inner_node(&mut stack, inner_ptr, accept_all, alloc)
             },
             ConcreteNodePtr::Node256(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, accept_all)
+                deallocate_inner_node(&mut stack, inner_ptr, accept_all, alloc)
             },
             ConcreteNodePtr::LeafNode(inner) => {
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
-                drop(unsafe { NodePtr::deallocate_node_ptr(inner) })
+                drop(unsafe { NodePtr::deallocate_node_ptr(inner, alloc) })
             },
         }
     }
@@ -122,10 +134,11 @@ pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize>(
 ///  - This function must only be called once for this inner node
 ///  - This function cannot be called concurrently with any read of modification
 ///    of the trie.
-unsafe fn deallocate_inner_node<K, V, N, const PREFIX_LEN: usize>(
+unsafe fn deallocate_inner_node<K, V, N, A: Allocator, const PREFIX_LEN: usize>(
     stack: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
     inner_ptr: NodePtr<PREFIX_LEN, N>,
     filter_children: for<'a> fn(&'a OpaqueNodePtr<K, V, PREFIX_LEN>) -> bool,
+    alloc: &A,
 ) where
     N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
 {
@@ -146,5 +159,5 @@ unsafe fn deallocate_inner_node<K, V, N, const PREFIX_LEN: usize>(
 
     // SAFETY: The single call per node requirement is enforced by the safety
     // requirements on this function.
-    drop(unsafe { NodePtr::deallocate_node_ptr(inner_ptr) });
+    drop(unsafe { NodePtr::deallocate_node_ptr(inner_ptr, alloc) });
 }

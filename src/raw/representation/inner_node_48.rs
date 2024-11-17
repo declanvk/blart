@@ -565,7 +565,7 @@ pub struct Node48Iter<'a, K, V, const PREFIX_LEN: usize> {
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K, V, const PREFIX_LEN: usize> Iterator for Node48Iter<'a, K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Iterator for Node48Iter<'_, K, V, PREFIX_LEN> {
     type Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -584,7 +584,7 @@ impl<'a, K, V, const PREFIX_LEN: usize> Iterator for Node48Iter<'a, K, V, PREFIX
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node48Iter<'a, K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node48Iter<'_, K, V, PREFIX_LEN> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some((key, idx)) = self.it.next_back() {
             if idx.is_empty() {
@@ -601,7 +601,7 @@ impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node48Iter<'a, K
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for Node48Iter<'a, K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize> FusedIterator for Node48Iter<'_, K, V, PREFIX_LEN> {}
 
 #[cfg(test)]
 mod tests {

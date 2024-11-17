@@ -1,17 +1,28 @@
 use std::iter::FusedIterator;
 
-use crate::{map::DEFAULT_PREFIX_LEN, raw::RawIterator, TreeMap};
+use crate::{
+    alloc::{Allocator, Global},
+    map::DEFAULT_PREFIX_LEN,
+    raw::RawIterator,
+    TreeMap,
+};
 
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s
-        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
+        pub struct $name<
+            'a,
+            K,
+            V,
+            const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN,
+            A: Allocator = Global,
+        > {
             inner: RawIterator<K, V, PREFIX_LEN>,
             size: usize,
             _tree: $tree,
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> $name<'a, K, V, PREFIX_LEN, A> {
             /// Create a new iterator that will visit all leaf nodes descended from the
             /// given node.
             pub(crate) fn new(tree: $tree) -> Self {
@@ -30,7 +41,9 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> Iterator for $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> Iterator
+            for $name<'a, K, V, PREFIX_LEN, A>
+        {
             type Item = $ret;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -56,8 +69,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator
-            for $name<'a, K, V, PREFIX_LEN>
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> DoubleEndedIterator
+            for $name<'a, K, V, PREFIX_LEN, A>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
                 // SAFETY: This iterator has either a mutable or shared reference to the
@@ -73,9 +86,14 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for $name<'a, K, V, PREFIX_LEN> {}
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator
+            for $name<'a, K, V, PREFIX_LEN, A>
+        {
+        }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> ExactSizeIterator for $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> ExactSizeIterator
+            for $name<'a, K, V, PREFIX_LEN, A>
+        {
             fn len(&self) -> usize {
                 self.size
             }
@@ -87,26 +105,28 @@ macro_rules! gen_iter {
 // create a shared reference to the leaf
 gen_iter!(
     Iter,
-    &'a TreeMap<K, V, PREFIX_LEN>,
+    &'a TreeMap<K, V, PREFIX_LEN, A>,
     (&'a K, &'a V),
     as_key_value_ref
 );
 
 // SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
 // and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Iter<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for Iter<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
 // SAFETY: This iterator has no interior mutability and can be shared across
 // thread so long as the reference `TreeMap<K, V>` can as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Iter<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for Iter<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -114,7 +134,7 @@ where
 // create a mutable reference to the leaf
 gen_iter!(
     IterMut,
-    &'a mut TreeMap<K, V, PREFIX_LEN>,
+    &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
@@ -122,19 +142,21 @@ gen_iter!(
 // SAFETY: This iterator has a mutable reference to the underlying `TreeMap` and
 // can be moved across threads if `&mut TreeMap<K, V>` is `Send`, which requires
 // `TreeMap<K, V>` to be `Send` as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for IterMut<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for IterMut<'_, K, V, PREFIX_LEN, A>
 where
     K: Send,
     V: Send,
+    A: Send + Allocator,
 {
 }
 
 // SAFETY: This iterator uses no interior mutability and can be shared across
 // threads so long as `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for IterMut<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for IterMut<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -144,45 +166,54 @@ where
 
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
-gen_iter!(Keys, &'a TreeMap<K, V, PREFIX_LEN>, &'a K, as_key_ref);
+gen_iter!(Keys, &'a TreeMap<K, V, PREFIX_LEN, A>, &'a K, as_key_ref);
 
 // SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
 // and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Keys<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for Keys<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
 // SAFETY: This iterator has no interior mutability and can be shared across
 // thread so long as the reference `TreeMap<K, V>` can as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Keys<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for Keys<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
-gen_iter!(Values, &'a TreeMap<K, V, PREFIX_LEN>, &'a V, as_value_ref);
+gen_iter!(
+    Values,
+    &'a TreeMap<K, V, PREFIX_LEN, A>,
+    &'a V,
+    as_value_ref
+);
 
 // SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
 // and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Values<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for Values<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
 // SAFETY: This iterator has no interior mutability and can be shared across
 // thread so long as the reference `TreeMap<K, V>` can as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Values<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for Values<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -190,7 +221,7 @@ where
 // create a mutable reference to the leaf
 gen_iter!(
     ValuesMut,
-    &'a mut TreeMap<K, V, PREFIX_LEN>,
+    &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     &'a mut V,
     as_value_mut
 );
@@ -198,19 +229,21 @@ gen_iter!(
 // SAFETY: This iterator has a mutable reference to the underlying `TreeMap` and
 // can be moved across threads if `&mut TreeMap<K, V>` is `Send`, which requires
 // `TreeMap<K, V>` to be `Send` as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for ValuesMut<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for ValuesMut<'_, K, V, PREFIX_LEN, A>
 where
     K: Send,
     V: Send,
+    A: Send + Allocator,
 {
 }
 
 // SAFETY: This iterator uses no interior mutability and can be shared across
 // threads so long as `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for ValuesMut<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for ValuesMut<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -229,60 +262,60 @@ mod tests {
         // `unsafe impl<K: Sync, V: Sync> Send for Iter<K, V> {}`. The `Sync` bounds are
         // required because we're transferring a `&'a TreeMap<K, V>` across threads and
         // `&'a T` is only `Send` when `T` is `Sync`.
-        fn iter_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_send::<Iter<'a, K, V>>();
+        fn iter_is_send<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_send::<Iter<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn iter_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<Iter<'a, K, V>>();
+        fn iter_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<Iter<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        iter_is_send::<[u8; 3], usize>();
-        iter_is_sync::<[u8; 3], usize>();
+        iter_is_send::<[u8; 3], usize, Global>();
+        iter_is_sync::<[u8; 3], usize, Global>();
 
-        fn iter_mut_is_send<'a, K: Send + 'a, V: Send + 'a>() {
-            is_send::<IterMut<'a, K, V>>();
+        fn iter_mut_is_send<'a, K: Send + 'a, V: Send + 'a, A: Send + Allocator + 'a>() {
+            is_send::<IterMut<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn iter_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<IterMut<'a, K, V>>();
+        fn iter_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<IterMut<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        iter_mut_is_send::<[u8; 3], usize>();
-        iter_mut_is_sync::<[u8; 3], usize>();
+        iter_mut_is_send::<[u8; 3], usize, Global>();
+        iter_mut_is_sync::<[u8; 3], usize, Global>();
 
-        fn keys_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_send::<Keys<'a, K, V>>();
+        fn keys_is_send<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_send::<Keys<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn keys_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<Keys<'a, K, V>>();
+        fn keys_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<Keys<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        keys_is_send::<[u8; 3], usize>();
-        keys_is_sync::<[u8; 3], usize>();
+        keys_is_send::<[u8; 3], usize, Global>();
+        keys_is_sync::<[u8; 3], usize, Global>();
 
-        fn values_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_send::<Values<'a, K, V>>();
+        fn values_is_send<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_send::<Values<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn values_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<Values<'a, K, V>>();
+        fn values_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<Values<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        values_is_send::<[u8; 3], usize>();
-        values_is_sync::<[u8; 3], usize>();
+        values_is_send::<[u8; 3], usize, Global>();
+        values_is_sync::<[u8; 3], usize, Global>();
 
-        fn values_mut_is_send<'a, K: Send + 'a, V: Send + 'a>() {
-            is_send::<ValuesMut<'a, K, V>>();
+        fn values_mut_is_send<'a, K: Send + 'a, V: Send + 'a, A: Send + Allocator + 'a>() {
+            is_send::<ValuesMut<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn values_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<ValuesMut<'a, K, V>>();
+        fn values_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<ValuesMut<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        values_mut_is_send::<[u8; 3], usize>();
-        values_mut_is_sync::<[u8; 3], usize>();
+        values_mut_is_send::<[u8; 3], usize, Global>();
+        values_mut_is_sync::<[u8; 3], usize, Global>();
     }
 
     #[test]
