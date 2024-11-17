@@ -299,7 +299,7 @@ pub(crate) mod ptr {
     #[inline]
     #[cfg(not(feature = "nightly"))]
     pub fn mut_with_addr<T>(ptr: *mut T, addr: usize) -> *mut T {
-        let self_addr = ptr.addr() as isize;
+        let self_addr = mut_addr(ptr) as isize;
         let dest_addr = addr as isize;
         let offset = dest_addr.wrapping_sub(self_addr);
 

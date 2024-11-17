@@ -2255,11 +2255,12 @@ mod custom_allocator_tests {
                 _marker: PhantomPinned,
             });
 
-            let alloc_start = NonNull::new(addr_of_mut!((*alloc).block).cast::<u8>()).unwrap();
+            let alloc_start = NonNull::new(addr_of_mut!(alloc.block).cast::<u8>()).unwrap();
             alloc.start.set(alloc_start);
-            alloc
-                .end
-                .set(unsafe { alloc_start.offset(N.try_into().unwrap()) });
+            alloc.end.set(
+                NonNull::new(unsafe { alloc_start.as_ptr().offset(N.try_into().unwrap()) })
+                    .unwrap(),
+            );
             alloc.ptr.set(alloc.end.get());
 
             Box::into_pin(alloc)
