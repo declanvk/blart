@@ -1,10 +1,10 @@
-use crate::{
-    raw::{Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex},
-    rust_nightly_apis::maybe_uninit_uninit_array,
+use crate::raw::{
+    Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
 use std::{
     fmt,
     iter::{Enumerate, FusedIterator},
+    mem::MaybeUninit,
     ops::Bound,
     slice::Iter,
 };
@@ -116,7 +116,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
 
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = maybe_uninit_uninit_array();
+        let mut child_pointers = [MaybeUninit::uninit(); 48];
 
         for (child_index, (key_byte, child_ptr)) in self.iter().enumerate() {
             // PANIC SAFETY: This `try_from` will not panic because the `next_index` value

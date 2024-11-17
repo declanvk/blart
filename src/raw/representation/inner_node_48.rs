@@ -5,7 +5,6 @@ use crate::{
     },
     rust_nightly_apis::{
         assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
-        maybe_uninit_uninit_array,
     },
 };
 use std::{
@@ -187,7 +186,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
         InnerNode48 {
             header,
             child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
-            child_pointers: maybe_uninit_uninit_array(),
+            child_pointers: [MaybeUninit::uninit(); 48],
         }
     }
 
@@ -323,7 +322,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
 
         let header = self.header.clone();
 
-        let mut key_and_child_ptrs = maybe_uninit_uninit_array::<_, 16>();
+        let mut key_and_child_ptrs = [MaybeUninit::uninit(); 16];
 
         for (idx, value) in self.iter().enumerate() {
             key_and_child_ptrs[idx].write(value);
@@ -342,8 +341,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
             init_key_and_child_ptrs
         };
 
-        let mut keys = maybe_uninit_uninit_array();
-        let mut child_pointers = maybe_uninit_uninit_array();
+        let mut keys = [MaybeUninit::uninit(); 16];
+        let mut child_pointers = [MaybeUninit::uninit(); 16];
 
         for (idx, (key_byte, child_ptr)) in init_key_and_child_ptrs.iter().copied().enumerate() {
             keys[idx].write(key_byte);

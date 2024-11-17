@@ -1,6 +1,6 @@
 use crate::{
     raw::{Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex},
-    rust_nightly_apis::{assume, maybe_uninit_slice_assume_init_ref, maybe_uninit_uninit_array},
+    rust_nightly_apis::{assume, maybe_uninit_slice_assume_init_ref},
 };
 use std::{
     fmt,
@@ -244,7 +244,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
 
         let header = self.header.clone();
         let mut keys = [MaybeUninit::new(0); NEW_SIZE];
-        let mut child_pointers = maybe_uninit_uninit_array();
+        let mut child_pointers = [MaybeUninit::uninit(); NEW_SIZE];
         let num_children = header.num_children();
 
         #[allow(unused_unsafe)]
@@ -279,7 +279,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     fn grow_node48(&self) -> InnerNode48<K, V, PREFIX_LEN> {
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = maybe_uninit_uninit_array();
+        let mut child_pointers = [MaybeUninit::uninit(); 48];
 
         let (keys, _) = self.initialized_portion();
 
@@ -454,8 +454,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, P
     fn from_header(header: Header<PREFIX_LEN>) -> Self {
         Self {
             header,
-            child_pointers: maybe_uninit_uninit_array(),
-            keys: maybe_uninit_uninit_array(),
+            child_pointers: [MaybeUninit::uninit(); 4],
+            keys: [MaybeUninit::uninit(); 4],
         }
     }
 
@@ -613,7 +613,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, 
     fn from_header(header: Header<PREFIX_LEN>) -> Self {
         Self {
             header,
-            child_pointers: maybe_uninit_uninit_array(),
+            child_pointers: [MaybeUninit::uninit(); 16],
             keys: [MaybeUninit::new(0); 16],
         }
     }
