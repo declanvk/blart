@@ -1,14 +1,15 @@
 #![cfg_attr(
     feature = "nightly",
     feature(
+        allocator_api,
+        core_intrinsics,
+        hasher_prefixfree_extras,
         impl_trait_in_assoc_type,
+        maybe_uninit_array_assume_init,
         maybe_uninit_slice,
         maybe_uninit_uninit_array,
-        maybe_uninit_array_assume_init,
+        portable_simd,
         slice_ptr_get,
-        hasher_prefixfree_extras,
-        core_intrinsics,
-        portable_simd
     )
 )]
 #![cfg_attr(feature = "nightly", allow(incomplete_features, internal_features))]
@@ -39,6 +40,7 @@
 //!
 //! [ART paper]: http://web.archive.org/web/20240508000744/https://db.in.tum.de/~leis/papers/ART.pdf
 
+mod alloc;
 mod bytes;
 mod collections;
 mod rust_nightly_apis;

@@ -9,6 +9,7 @@ use std::{
 };
 
 use crate::{
+    alloc::{Allocator, Global},
     map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
     raw::{
         maximum_unchecked, minimum_unchecked, AttemptOptimisticPrefixMatch, ConcreteNodePtr,
@@ -418,12 +419,12 @@ macro_rules! implement_range_iter {
         }
     ) => {
         $(#[$outer])*
-        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global> {
             inner: RawIterator<K, V, PREFIX_LEN>,
             _tree: $tree_ty,
         }
 
-        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize, A: Allocator> $name<'a, K, V, PREFIX_LEN, A> {
             /// Create a new range iterator over the given tree, starting and ending
             /// according to the given bounds.
             ///
@@ -506,7 +507,7 @@ macro_rules! implement_range_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> Iterator for $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> Iterator for $name<'a, K, V, PREFIX_LEN, A> {
             type Item = $item_ty;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -521,8 +522,8 @@ macro_rules! implement_range_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator
-            for $name<'a, K, V, PREFIX_LEN>
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> DoubleEndedIterator
+            for $name<'a, K, V, PREFIX_LEN, A>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
                 // SAFETY: This iterator has a reference (either shared or mutable) to the
@@ -536,7 +537,7 @@ macro_rules! implement_range_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for $name<'a, K, V, PREFIX_LEN> {}
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for $name<'a, K, V, PREFIX_LEN, A> {}
     };
 }
 
@@ -546,7 +547,7 @@ implement_range_iter!(
     /// This struct is created by the [`range`][TreeMap::range] method on `TreeMap`.
     /// See its documentation for more details.
     struct Range {
-        tree: &'a TreeMap<K, V, PREFIX_LEN>,
+        tree: &'a TreeMap<K, V, PREFIX_LEN, A>,
         item: (&'a K, &'a V),
         as_key_value_ref
     }
@@ -554,19 +555,21 @@ implement_range_iter!(
 
 // SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
 // and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Range<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for Range<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
 // SAFETY: This iterator has no interior mutability and can be shared across
 // thread so long as the reference `TreeMap<K, V>` can as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Range<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for Range<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -576,7 +579,7 @@ implement_range_iter!(
     /// This struct is created by the [`range_mut`][TreeMap::range_mut] method on `TreeMap`.
     /// See its documentation for more details.
     struct RangeMut {
-        tree: &'a mut TreeMap<K, V, PREFIX_LEN>,
+        tree: &'a mut TreeMap<K, V, PREFIX_LEN, A>,
         item: (&'a K, &'a mut V),
         as_key_ref_value_mut
     }
@@ -585,19 +588,21 @@ implement_range_iter!(
 // SAFETY: This iterator has a mutable reference to the underlying `TreeMap` and
 // can be moved across threads if `&mut TreeMap<K, V>` is `Send`, which requires
 // `TreeMap<K, V>` to be `Send` as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for RangeMut<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for RangeMut<'_, K, V, PREFIX_LEN, A>
 where
     K: Send,
     V: Send,
+    A: Send + Allocator,
 {
 }
 
 // SAFETY: This iterator uses no interior mutability and can be shared across
 // threads so long as `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for RangeMut<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for RangeMut<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -612,27 +617,27 @@ mod tests {
         fn is_send<T: Send>() {}
         fn is_sync<T: Sync>() {}
 
-        fn range_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_send::<Range<'a, K, V>>();
+        fn range_is_send<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_send::<Range<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn range_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<Range<'a, K, V>>();
+        fn range_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<Range<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        range_is_send::<[u8; 3], usize>();
-        range_is_sync::<[u8; 3], usize>();
+        range_is_send::<[u8; 3], usize, Global>();
+        range_is_sync::<[u8; 3], usize, Global>();
 
-        fn range_mut_is_send<'a, K: Send + 'a, V: Send + 'a>() {
-            is_send::<RangeMut<'a, K, V>>();
+        fn range_mut_is_send<'a, K: Send + 'a, V: Send + 'a, A: Send + Allocator + 'a>() {
+            is_send::<RangeMut<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn range_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<RangeMut<'a, K, V>>();
+        fn range_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<RangeMut<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        range_mut_is_send::<[u8; 3], usize>();
-        range_mut_is_sync::<[u8; 3], usize>();
+        range_mut_is_send::<[u8; 3], usize, Global>();
+        range_mut_is_sync::<[u8; 3], usize, Global>();
     }
 
     fn fixture_tree() -> TreeMap<[u8; 3], usize> {

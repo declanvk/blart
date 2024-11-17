@@ -1,4 +1,5 @@
 use crate::{
+    alloc::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{maximum_unchecked, minimum_unchecked, RawIterator},
     AsBytes, TreeMap,
@@ -20,12 +21,12 @@ macro_rules! implement_prefix_iter {
         }
     ) => {
         $(#[$outer])*
-        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
+        pub struct $name<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global> {
             inner: RawIterator<K, V, PREFIX_LEN>,
             _tree: $tree_ty,
         }
 
-        impl<'a, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K: AsBytes, V, A: Allocator, const PREFIX_LEN: usize> $name<'a, K, V, PREFIX_LEN, A> {
             /// Create a new prefix iterator over the given tree, the iterator returning all
             /// key-value pairs where the key starts with the given prefix.
             pub(crate) fn new(
@@ -85,7 +86,7 @@ macro_rules! implement_prefix_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> Iterator for $name<'a, K, V, PREFIX_LEN> {
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> Iterator for $name<'a, K, V, PREFIX_LEN, A> {
             type Item = $item_ty;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -100,8 +101,8 @@ macro_rules! implement_prefix_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator
-            for $name<'a, K, V, PREFIX_LEN>
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> DoubleEndedIterator
+            for $name<'a, K, V, PREFIX_LEN, A>
         {
             fn next_back(&mut self) -> Option<Self::Item> {
                 // SAFETY: This iterator has a reference (either shared or mutable) to the
@@ -115,7 +116,7 @@ macro_rules! implement_prefix_iter {
             }
         }
 
-        impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for $name<'a, K, V, PREFIX_LEN> {}
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for $name<'a, K, V, PREFIX_LEN, A> {}
     };
 }
 
@@ -125,7 +126,7 @@ implement_prefix_iter!(
     /// This struct is created by the [`prefix`][TreeMap::prefix] method on `TreeMap`.
     /// See its documentation for more details.
     struct Prefix {
-        tree: &'a TreeMap<K, V, PREFIX_LEN>,
+        tree: &'a TreeMap<K, V, PREFIX_LEN, A>,
         item: (&'a K, &'a V),
         as_key_value_ref
     }
@@ -133,19 +134,21 @@ implement_prefix_iter!(
 
 // SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
 // and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for Prefix<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for Prefix<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
 // SAFETY: This iterator has no interior mutability and can be shared across
 // thread so long as the reference `TreeMap<K, V>` can as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for Prefix<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for Prefix<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -155,7 +158,7 @@ implement_prefix_iter!(
     /// This struct is created by the [`prefix_mut`][TreeMap::prefix_mut] method on `TreeMap`.
     /// See its documentation for more details.
     struct PrefixMut {
-        tree: &'a mut TreeMap<K, V, PREFIX_LEN>,
+        tree: &'a mut TreeMap<K, V, PREFIX_LEN, A>,
         item: (&'a K, &'a mut V),
         as_key_ref_value_mut
     }
@@ -164,19 +167,21 @@ implement_prefix_iter!(
 // SAFETY: This iterator has a mutable reference to the underlying `TreeMap` and
 // can be moved across threads if `&mut TreeMap<K, V>` is `Send`, which requires
 // `TreeMap<K, V>` to be `Send` as well.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Send for PrefixMut<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for PrefixMut<'_, K, V, PREFIX_LEN, A>
 where
     K: Send,
     V: Send,
+    A: Send + Allocator,
 {
 }
 
 // SAFETY: This iterator uses no interior mutability and can be shared across
 // threads so long as `TreeMap<K, V>: Sync`.
-unsafe impl<'a, K, V, const PREFIX_LEN: usize> Sync for PrefixMut<'a, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for PrefixMut<'_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -191,27 +196,27 @@ mod tests {
         fn is_send<T: Send>() {}
         fn is_sync<T: Sync>() {}
 
-        fn prefix_is_send<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_send::<Prefix<'a, K, V>>();
+        fn prefix_is_send<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_send::<Prefix<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn prefix_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<Prefix<'a, K, V>>();
+        fn prefix_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<Prefix<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        prefix_is_send::<[u8; 3], usize>();
-        prefix_is_sync::<[u8; 3], usize>();
+        prefix_is_send::<[u8; 3], usize, Global>();
+        prefix_is_sync::<[u8; 3], usize, Global>();
 
-        fn prefix_mut_is_send<'a, K: Send + 'a, V: Send + 'a>() {
-            is_send::<PrefixMut<'a, K, V>>();
+        fn prefix_mut_is_send<'a, K: Send + 'a, V: Send + 'a, A: Send + Allocator + 'a>() {
+            is_send::<PrefixMut<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn prefix_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a>() {
-            is_sync::<PrefixMut<'a, K, V>>();
+        fn prefix_mut_is_sync<'a, K: Sync + 'a, V: Sync + 'a, A: Sync + Allocator + 'a>() {
+            is_sync::<PrefixMut<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        prefix_mut_is_send::<[u8; 3], usize>();
-        prefix_mut_is_sync::<[u8; 3], usize>();
+        prefix_mut_is_send::<[u8; 3], usize, Global>();
+        prefix_mut_is_sync::<[u8; 3], usize, Global>();
     }
 
     #[test]

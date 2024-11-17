@@ -1,4 +1,5 @@
 use crate::{
+    alloc::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{
         ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
@@ -312,7 +313,14 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
 macro_rules! gen_iter {
     ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
         /// An iterator over all the `LeafNode`s within a specific edit distance
-        pub struct $name<'a, 'b, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN> {
+        pub struct $name<
+            'a,
+            'b,
+            K,
+            V,
+            const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN,
+            A: Allocator = Global,
+        > {
             nodes_to_search: Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
             old_row: Box<[MaybeUninit<usize>]>,
             new_row: Box<[MaybeUninit<usize>]>,
@@ -324,7 +332,9 @@ macro_rules! gen_iter {
             _tree: $tree,
         }
 
-        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> $name<'a, 'b, K, V, PREFIX_LEN> {
+        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize, A: Allocator>
+            $name<'a, 'b, K, V, PREFIX_LEN, A>
+        {
             pub(crate) fn new(tree: $tree, key: &'b [u8], max_edit_dist: usize) -> Self {
                 let mut arena = StackArena::new(key.len() + 1);
                 let n = arena.size();
@@ -353,8 +363,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> Iterator
-            for $name<'a, 'b, K, V, PREFIX_LEN>
+        impl<'a, 'b, K: AsBytes, V, A: Allocator, const PREFIX_LEN: usize> Iterator
+            for $name<'a, 'b, K, V, PREFIX_LEN, A>
         {
             type Item = $ret;
 
@@ -448,8 +458,8 @@ macro_rules! gen_iter {
             }
         }
 
-        impl<'a, 'b, K: AsBytes, V, const PREFIX_LEN: usize> FusedIterator
-            for $name<'a, 'b, K, V, PREFIX_LEN>
+        impl<'a, 'b, K: AsBytes, V, A: Allocator, const PREFIX_LEN: usize> FusedIterator
+            for $name<'a, 'b, K, V, PREFIX_LEN, A>
         {
         }
     };
@@ -459,7 +469,7 @@ macro_rules! gen_iter {
 // create a shared reference to the leaf
 gen_iter!(
     Fuzzy,
-    &'a TreeMap<K, V, PREFIX_LEN>,
+    &'a TreeMap<K, V, PREFIX_LEN, A>,
     (&'a K, &'a V),
     as_key_value_ref
 );
@@ -469,19 +479,21 @@ gen_iter!(
 // when `TreeMap<K, V>` is `Sync`.
 //
 // The other parts of this iterator are safe to send cross thread.
-unsafe impl<'a, 'b, K, V, const PREFIX_LEN: usize> Send for Fuzzy<'a, 'b, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for Fuzzy<'_, '_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
 // SAFETY: This iterator is safe to share immutable across threads because there
 // is no interior mutability and the underlying tree reference is `Send`.
-unsafe impl<'a, 'b, K, V, const PREFIX_LEN: usize> Sync for Fuzzy<'a, 'b, K, V, PREFIX_LEN>
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for Fuzzy<'_, '_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -489,24 +501,34 @@ where
 // create a mutable reference to the leaf
 gen_iter!(
     FuzzyMut,
-    &'a mut TreeMap<K, V, PREFIX_LEN>,
+    &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     (&'a K, &'a mut V),
     as_key_ref_value_mut
 );
 
-// SAFETY: TODO
-unsafe impl<'a, 'b, K, V, const PREFIX_LEN: usize> Send for FuzzyMut<'a, 'b, K, V, PREFIX_LEN>
+// SAFETY:
+//  1. `FuzzyMut` holds a mutable reference to the original tree
+//  2. `&mut T` is `Send` when `T` is `Send`
+//  3. `TreeMap<K, V, PREFIX_LEN, A>` is `Send` if `K`, `V`, and `A` are all
+//     `Send`
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for FuzzyMut<'_, '_, K, V, PREFIX_LEN, A>
 where
     K: Send,
     V: Send,
+    A: Send + Allocator,
 {
 }
 
-// SAFETY: TODO
-unsafe impl<'a, 'b, K, V, const PREFIX_LEN: usize> Sync for FuzzyMut<'a, 'b, K, V, PREFIX_LEN>
+// SAFETY:
+//  1. `FuzzyMut` holds a mutable reference to the original tree
+//  2. `&mut T` is `Sync` if and only if `T` is `Sync`
+//  3. `TreeMap<K, V, PREFIX_LEN, A>` is `Sync` if `K`, `V`, and `A` are all
+//     `Sync`
+unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for FuzzyMut<'_, '_, K, V, PREFIX_LEN, A>
 where
     K: Sync,
     V: Sync,
+    A: Sync + Allocator,
 {
 }
 
@@ -523,27 +545,27 @@ mod tests {
         fn is_send<T: Send>() {}
         fn is_sync<T: Sync>() {}
 
-        fn fuzzy_is_send<K: Sync, V: Sync>() {
-            is_send::<Fuzzy<K, V>>();
+        fn fuzzy_is_send<K: Sync, V: Sync, A: Sync + Allocator>() {
+            is_send::<Fuzzy<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn fuzzy_is_sync<K: Sync, V: Sync>() {
-            is_sync::<Fuzzy<K, V>>();
+        fn fuzzy_is_sync<K: Sync, V: Sync, A: Sync + Allocator>() {
+            is_sync::<Fuzzy<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fuzzy_is_send::<[u8; 3], usize>();
-        fuzzy_is_sync::<[u8; 3], usize>();
+        fuzzy_is_send::<[u8; 3], usize, Global>();
+        fuzzy_is_sync::<[u8; 3], usize, Global>();
 
-        fn fuzzy_mut_is_send<K: Send, V: Send>() {
-            is_send::<FuzzyMut<K, V>>();
+        fn fuzzy_mut_is_send<K: Send, V: Send, A: Send + Allocator>() {
+            is_send::<FuzzyMut<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fn fuzzy_mut_is_sync<K: Sync, V: Sync>() {
-            is_sync::<FuzzyMut<K, V>>();
+        fn fuzzy_mut_is_sync<K: Sync, V: Sync, A: Sync + Allocator>() {
+            is_sync::<FuzzyMut<K, V, DEFAULT_PREFIX_LEN, A>>();
         }
 
-        fuzzy_mut_is_send::<[u8; 3], usize>();
-        fuzzy_mut_is_sync::<[u8; 3], usize>();
+        fuzzy_mut_is_send::<[u8; 3], usize, Global>();
+        fuzzy_mut_is_sync::<[u8; 3], usize, Global>();
     }
 
     #[test]

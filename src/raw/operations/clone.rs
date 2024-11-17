@@ -1,6 +1,7 @@
 //! This module contains the implementation of `clone()` for the trie.
 
 use crate::{
+    alloc::Allocator,
     raw::{
         ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, LeafNode, Node, NodePtr, OpaqueNodePtr,
     },
@@ -27,8 +28,14 @@ pub struct CloneResult<K, V, const PREFIX_LEN: usize> {
 ///
 /// This function can only be called while there are no mutable references to
 /// any of the nodes in this trie.
-pub unsafe fn clone_unchecked<K: Clone + AsBytes, V: Clone, const PREFIX_LEN: usize>(
+pub unsafe fn clone_unchecked<
+    K: Clone + AsBytes,
+    V: Clone,
+    A: Allocator,
+    const PREFIX_LEN: usize,
+>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    alloc: &A,
 ) -> CloneResult<K, V, PREFIX_LEN> {
     /// Update the current parent node with the newly cloned child, inserting it
     /// at the given key byte.
@@ -113,15 +120,17 @@ pub unsafe fn clone_unchecked<K: Clone + AsBytes, V: Clone, const PREFIX_LEN: us
     ///    references to any of the nodes in the trie referenced by `inner_ptr`.
     ///  - Additionally, there must not be any other mutable references to nodes
     ///    in the `unfinished_nodes_stack` stack.
-    unsafe fn clone_inner_node<N, K, V, const PREFIX_LEN: usize>(
+    unsafe fn clone_inner_node<N, K, V, A, const PREFIX_LEN: usize>(
         unfinished_nodes_stack: &mut Vec<(usize, ConcreteInnerNodePtr<K, V, PREFIX_LEN>)>,
         dfs_stack: &mut Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
         new_root_node: &mut Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         key_byte: u8,
         inner_ptr: NodePtr<PREFIX_LEN, N>,
+        alloc: &A,
     ) where
         N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
         ConcreteInnerNodePtr<K, V, PREFIX_LEN>: From<NodePtr<PREFIX_LEN, N>>,
+        A: Allocator,
     {
         // SAFETY: Covered by function safety comment
         let inner = unsafe { inner_ptr.as_ref() };
@@ -137,7 +146,7 @@ pub unsafe fn clone_unchecked<K: Clone + AsBytes, V: Clone, const PREFIX_LEN: us
         // At this point the header records 0 children, but has a copy of the prefix
         // from the original node There are no child pointers in the node
 
-        let new_node_ptr = NodePtr::allocate_node_ptr(new_node);
+        let new_node_ptr = NodePtr::allocate_node_ptr(new_node, alloc);
 
         // SAFETY: Covered by function safety doc, since there are no other mutable
         // references to nodes in the `unfinished_nodes_stack` stack.
@@ -184,6 +193,7 @@ pub unsafe fn clone_unchecked<K: Clone + AsBytes, V: Clone, const PREFIX_LEN: us
                     &mut new_root_node,
                     key_byte,
                     inner_ptr,
+                    alloc,
                 );
             },
             ConcreteNodePtr::Node16(inner_ptr) => unsafe {
@@ -196,6 +206,7 @@ pub unsafe fn clone_unchecked<K: Clone + AsBytes, V: Clone, const PREFIX_LEN: us
                     &mut new_root_node,
                     key_byte,
                     inner_ptr,
+                    alloc,
                 );
             },
             ConcreteNodePtr::Node48(inner_ptr) => unsafe {
@@ -208,6 +219,7 @@ pub unsafe fn clone_unchecked<K: Clone + AsBytes, V: Clone, const PREFIX_LEN: us
                     &mut new_root_node,
                     key_byte,
                     inner_ptr,
+                    alloc,
                 );
             },
             ConcreteNodePtr::Node256(inner_ptr) => unsafe {
@@ -220,6 +232,7 @@ pub unsafe fn clone_unchecked<K: Clone + AsBytes, V: Clone, const PREFIX_LEN: us
                     &mut new_root_node,
                     key_byte,
                     inner_ptr,
+                    alloc,
                 );
             },
             ConcreteNodePtr::LeafNode(leaf_ptr) => {
@@ -228,7 +241,7 @@ pub unsafe fn clone_unchecked<K: Clone + AsBytes, V: Clone, const PREFIX_LEN: us
                 let leaf = unsafe { leaf_ptr.as_ref() };
 
                 let new_leaf = leaf.clone_without_siblings();
-                let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf);
+                let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf, alloc);
                 if let Some(previous_ptr) = previous_leaf {
                     // SAFETY: The `clone_unchecked` safety comment covers other mutable references
                     // to the original trie

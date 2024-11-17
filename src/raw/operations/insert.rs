@@ -1,4 +1,5 @@
 use crate::{
+    alloc::Allocator,
     raw::{
         maximum_unchecked, minimum_unchecked, ConcreteNodePtr, ExplicitMismatch, InnerNode,
         InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch,
@@ -103,17 +104,26 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
     ///
     /// # Safety
     ///
-    /// This function must not be called concurrently with and other read or
-    /// modification of the trie.
-    pub unsafe fn apply<'a>(self, key: K, value: V) -> InsertResult<'a, K, V, PREFIX_LEN>
+    ///  - This function must not be called concurrently with and other read or
+    ///    modification of the trie.
+    ///  - The given allocator must be the same one that was used to allocate
+    ///    the nodes of this trie.
+    pub unsafe fn apply<'a, A>(
+        self,
+        key: K,
+        value: V,
+        alloc: &A,
+    ) -> InsertResult<'a, K, V, PREFIX_LEN>
     where
         K: AsBytes + 'a,
         V: 'a,
+        A: Allocator,
     {
-        fn write_new_child_in_existing_node<'a, K, V, const PREFIX_LEN: usize>(
+        fn write_new_child_in_existing_node<'a, K, V, A, const PREFIX_LEN: usize>(
             inner_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
             new_leaf_node: LeafNode<K, V, PREFIX_LEN>,
             key_bytes_used: usize,
+            alloc: &A,
         ) -> (
             OpaqueNodePtr<K, V, PREFIX_LEN>,
             NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
@@ -121,11 +131,13 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
         where
             K: AsBytes + 'a,
             V: 'a,
+            A: Allocator,
         {
-            fn write_new_child_in_existing_inner_node<'a, K, V, N, const PREFIX_LEN: usize>(
+            fn write_new_child_in_existing_inner_node<'a, K, V, N, A, const PREFIX_LEN: usize>(
                 inner_node_ptr: NodePtr<PREFIX_LEN, N>,
                 new_leaf_node: LeafNode<K, V, PREFIX_LEN>,
                 key_bytes_used: usize,
+                alloc: &A,
             ) -> (
                 OpaqueNodePtr<K, V, PREFIX_LEN>,
                 NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
@@ -134,6 +146,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
                 K: AsBytes + 'a,
                 V: 'a,
+                A: Allocator,
             {
                 /// This function will:
                 ///   1. Find the nearest (previous or next) sibling leaf for
@@ -193,7 +206,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 let inner_node = unsafe { inner_node_ptr.as_mut() };
 
                 let new_leaf_key_byte = new_leaf_node.key_ref().as_bytes()[key_bytes_used];
-                let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node);
+                let new_leaf_ptr = NodePtr::allocate_node_ptr(new_leaf_node, alloc);
                 let new_leaf_ptr_opaque = new_leaf_ptr.to_opaque();
                 if inner_node.is_full() {
                     // we will create a new node of the next larger type and copy all the
@@ -204,12 +217,12 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
 
                     insert_new_leaf_in_linked_list(new_leaf_ptr, &mut new_node, new_leaf_key_byte);
 
-                    let new_inner_node = NodePtr::allocate_node_ptr(new_node).to_opaque();
+                    let new_inner_node = NodePtr::allocate_node_ptr(new_node, alloc).to_opaque();
 
                     // SAFETY: The `deallocate_node_ptr` function is only called a
                     // single time.
                     unsafe {
-                        drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
+                        drop(NodePtr::deallocate_node_ptr(inner_node_ptr, alloc));
                     };
 
                     (new_inner_node, new_leaf_ptr)
@@ -223,18 +236,30 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
             }
 
             match inner_node_ptr.to_node_ptr() {
-                ConcreteNodePtr::Node4(inner_ptr) => {
-                    write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
-                },
-                ConcreteNodePtr::Node16(inner_ptr) => {
-                    write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
-                },
-                ConcreteNodePtr::Node48(inner_ptr) => {
-                    write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
-                },
-                ConcreteNodePtr::Node256(inner_ptr) => {
-                    write_new_child_in_existing_inner_node(inner_ptr, new_leaf_node, key_bytes_used)
-                },
+                ConcreteNodePtr::Node4(inner_ptr) => write_new_child_in_existing_inner_node(
+                    inner_ptr,
+                    new_leaf_node,
+                    key_bytes_used,
+                    alloc,
+                ),
+                ConcreteNodePtr::Node16(inner_ptr) => write_new_child_in_existing_inner_node(
+                    inner_ptr,
+                    new_leaf_node,
+                    key_bytes_used,
+                    alloc,
+                ),
+                ConcreteNodePtr::Node48(inner_ptr) => write_new_child_in_existing_inner_node(
+                    inner_ptr,
+                    new_leaf_node,
+                    key_bytes_used,
+                    alloc,
+                ),
+                ConcreteNodePtr::Node256(inner_ptr) => write_new_child_in_existing_inner_node(
+                    inner_ptr,
+                    new_leaf_node,
+                    key_bytes_used,
+                    alloc,
+                ),
                 ConcreteNodePtr::LeafNode(_) => {
                     unreachable!("Cannot have insert into existing with leaf node");
                 },
@@ -313,7 +338,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
 
                 let new_leaf_pointer =
-                    NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value));
+                    NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), alloc);
                 let new_leaf_pointer_opaque = new_leaf_pointer.to_opaque();
 
                 let mut new_n4 = {
@@ -386,7 +411,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 }
 
                 (
-                    NodePtr::allocate_node_ptr(new_n4).to_opaque(),
+                    NodePtr::allocate_node_ptr(new_n4, alloc).to_opaque(),
                     new_leaf_pointer,
                 )
             },
@@ -446,7 +471,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 let leaf_node_key_byte = leaf_bytes[new_key_bytes_used];
                 let new_leaf_node_key_byte = key_bytes[new_key_bytes_used];
                 let new_leaf_node_pointer =
-                    NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value));
+                    NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), alloc);
 
                 unsafe {
                     // SAFETY: This is a new node 4 so it's empty and we have
@@ -478,7 +503,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 }
 
                 (
-                    NodePtr::allocate_node_ptr(new_n4).to_opaque(),
+                    NodePtr::allocate_node_ptr(new_n4, alloc).to_opaque(),
                     new_leaf_node_pointer,
                 )
             },
@@ -487,6 +512,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     inner_node_ptr,
                     LeafNode::with_no_siblings(key, value),
                     key_bytes_used,
+                    alloc,
                 )
             },
         };

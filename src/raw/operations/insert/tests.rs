@@ -1,4 +1,5 @@
 use crate::{
+    alloc::Global,
     raw::{
         deallocate_tree, search_unchecked, InnerNode, InnerNode4, InnerNodeCompressed,
         InsertPrefixError, LeafNode, NodePtr, NodeType, OpaqueNodePtr,
@@ -10,6 +11,7 @@ use crate::{
 fn insert_to_small_trees() {
     let first_leaf: NodePtr<16, LeafNode<Box<_>, String, 16>> = NodePtr::allocate_node_ptr(
         LeafNode::with_no_siblings(Box::from([1, 2, 3, 4]), "1234".to_string()),
+        &Global,
     );
 
     let mut tree = first_leaf.to_opaque();
@@ -53,7 +55,7 @@ fn insert_to_small_trees() {
     assert!(unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 5, 7].as_ref()).is_none() });
     assert!(unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 3, 5].as_ref()).is_none() });
 
-    unsafe { deallocate_tree(new_root.to_opaque()) };
+    unsafe { deallocate_tree(new_root.to_opaque(), &Global) };
 }
 
 #[test]
@@ -66,7 +68,8 @@ fn insert_into_left_skewed_tree_deallocate() {
 
     let mut keys = generate_keys_skewed(KEY_LENGTH_LIMIT);
     let mut current_root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
-        NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(keys.next().unwrap(), 0)).to_opaque();
+        NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(keys.next().unwrap(), 0), &Global)
+            .to_opaque();
 
     for (idx, key) in keys.enumerate() {
         current_root = unsafe {
@@ -82,13 +85,14 @@ fn insert_into_left_skewed_tree_deallocate() {
         assert_eq!(*search_result.unwrap().read().value_ref(), value);
     }
 
-    unsafe { deallocate_tree(current_root) };
+    unsafe { deallocate_tree(current_root, &Global) };
 }
 
 #[test]
 fn insert_prefix_key_errors() {
     let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> = NodePtr::allocate_node_ptr(
         LeafNode::<Box<[u8]>, _, 16>::with_no_siblings(Box::from([1, 2, 3, 4]), "1234".to_string()),
+        &Global,
     );
 
     let tree = first_leaf.to_opaque();
@@ -101,13 +105,14 @@ fn insert_prefix_key_errors() {
         }
     );
 
-    unsafe { deallocate_tree(tree) }
+    unsafe { deallocate_tree(tree, &Global) }
 }
 
 #[test]
 fn insert_prefix_key_with_existing_prefix_errors() {
     let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> = NodePtr::allocate_node_ptr(
         LeafNode::<Box<[u8]>, _, 16>::with_no_siblings(Box::from([1, 2]), "12".to_string()),
+        &Global,
     );
 
     let tree = first_leaf.to_opaque();
@@ -120,16 +125,18 @@ fn insert_prefix_key_with_existing_prefix_errors() {
         }
     );
 
-    unsafe { deallocate_tree(tree) }
+    unsafe { deallocate_tree(tree, &Global) }
 }
 
 #[test]
 fn insert_key_with_long_prefix_then_split() {
-    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, i32, 16>> =
-        NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16>::with_no_siblings(
+    let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, i32, 16>> = NodePtr::allocate_node_ptr(
+        LeafNode::<Box<[u8]>, _, 16>::with_no_siblings(
             Box::from([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255]),
             0,
-        ));
+        ),
+        &Global,
+    );
 
     let mut tree = first_leaf.to_opaque();
     tree = unsafe {
@@ -172,7 +179,7 @@ fn insert_key_with_long_prefix_then_split() {
         &2
     );
 
-    unsafe { deallocate_tree(tree) }
+    unsafe { deallocate_tree(tree, &Global) }
 }
 
 #[test]
@@ -186,7 +193,8 @@ fn insert_split_prefix_at_implicit_byte() {
     let mut keys = KEYS.iter().map(|k| Box::<[u8]>::from(&k[..]));
 
     let mut current_root: OpaqueNodePtr<Box<[u8]>, usize, 16> =
-        NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(keys.next().unwrap(), 0)).to_opaque();
+        NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(keys.next().unwrap(), 0), &Global)
+            .to_opaque();
 
     for (idx, key) in keys.enumerate() {
         current_root = unsafe {
@@ -202,13 +210,14 @@ fn insert_split_prefix_at_implicit_byte() {
         assert_eq!(search_result.unwrap().read().value_ref(), &value);
     }
 
-    unsafe { deallocate_tree(current_root) };
+    unsafe { deallocate_tree(current_root, &Global) };
 }
 
 #[test]
 fn insert_fails_new_key_prefix_of_existing_entry() {
     let mut current_root: OpaqueNodePtr<Box<[u8]>, i32, 16> = NodePtr::allocate_node_ptr(
         LeafNode::with_no_siblings(Box::<[u8]>::from(&[1, 2, 3, 4][..]), 0),
+        &Global,
     )
     .to_opaque();
     current_root = unsafe {
@@ -229,13 +238,14 @@ fn insert_fails_new_key_prefix_of_existing_entry() {
         }
     );
 
-    unsafe { deallocate_tree(current_root) };
+    unsafe { deallocate_tree(current_root, &Global) };
 }
 
 #[test]
 fn insert_fails_existing_key_prefixed() {
     let mut current_root: OpaqueNodePtr<Box<[u8]>, i32, 16> = NodePtr::allocate_node_ptr(
         LeafNode::with_no_siblings(Box::<[u8]>::from(&[1, 2, 3, 4][..]), 0),
+        &Global,
     )
     .to_opaque();
     current_root = unsafe {
@@ -256,7 +266,7 @@ fn insert_fails_existing_key_prefixed() {
         }
     );
 
-    unsafe { deallocate_tree(current_root) };
+    unsafe { deallocate_tree(current_root, &Global) };
 }
 
 #[test]
@@ -363,5 +373,5 @@ fn insert_existing_key_overwrite() {
         'W'
     );
 
-    unsafe { deallocate_tree(current_root) }
+    unsafe { deallocate_tree(current_root, &Global) }
 }

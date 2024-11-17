@@ -1,4 +1,5 @@
 use crate::{
+    alloc::Allocator,
     raw::{InnerNode, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
     AsBytes, NoPrefixesBytes, OrderedBytes, TreeMap,
@@ -30,9 +31,9 @@ pub struct DotPrinter<O: Write> {
 
 impl<O: Write> DotPrinter<O> {
     /// Write the dot-format of the given tree to the given output.
-    pub fn print<K, V, const PREFIX_LEN: usize>(
+    pub fn print<K, V, const PREFIX_LEN: usize, A: Allocator>(
         output: O,
-        tree: &TreeMap<K, V, PREFIX_LEN>,
+        tree: &TreeMap<K, V, PREFIX_LEN, A>,
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where
@@ -270,7 +271,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{raw::deallocate_tree, AsBytes};
+    use crate::{alloc::Global, raw::deallocate_tree, AsBytes};
 
     use super::*;
 
@@ -366,6 +367,6 @@ n0:c3 -> n16:h0
 "
         );
 
-        unsafe { deallocate_tree(root) };
+        unsafe { deallocate_tree(root, &Global) };
     }
 }

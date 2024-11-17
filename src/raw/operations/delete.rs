@@ -1,4 +1,5 @@
 use crate::{
+    alloc::Allocator,
     raw::{operations::lookup, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr},
     AsBytes,
 };
@@ -17,12 +18,16 @@ use super::PrefixMatchBehavior;
 ///    any other mutable references.
 ///  - There must not be any mutable references to the children of the given
 ///    inner node either.
+///  - `alloc` must be the same allocator that was used to allocate the nodes of
+///    the trie.
 unsafe fn remove_child_from_inner_node_and_compress<
     const PREFIX_LEN: usize,
     N: InnerNode<PREFIX_LEN>,
+    A: Allocator,
 >(
     inner_node_ptr: NodePtr<PREFIX_LEN, N>,
     key_fragment: u8,
+    alloc: &A,
 ) -> Option<OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>> {
     // SAFETY: The `inner_node` reference is scoped to this function and dropped
     // before cases where the inner node is deallocated. It is a unique reference,
@@ -78,19 +83,19 @@ unsafe fn remove_child_from_inner_node_and_compress<
         // SAFETY: Since this function requires a unique pointer to the original
         // `inner_node_ptr`, we know that no other code will deallocate the pointer
         unsafe {
-            drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
+            drop(NodePtr::deallocate_node_ptr(inner_node_ptr, alloc));
         }
 
         Some(child_node_ptr)
     } else if N::TYPE.should_shrink_inner_node(inner_node.header().num_children()) {
         let new_inner_node = inner_node.shrink();
 
-        let new_inner_node_ptr = NodePtr::allocate_node_ptr(new_inner_node).to_opaque();
+        let new_inner_node_ptr = NodePtr::allocate_node_ptr(new_inner_node, alloc).to_opaque();
 
         // SAFETY: Since this function requires a unique pointer to the original
         // `inner_node_ptr`, we know that no other code will deallocate the pointer
         unsafe {
-            drop(NodePtr::deallocate_node_ptr(inner_node_ptr));
+            drop(NodePtr::deallocate_node_ptr(inner_node_ptr, alloc));
         }
 
         Some(new_inner_node_ptr)
@@ -110,28 +115,31 @@ unsafe fn remove_child_from_inner_node_and_compress<
 ///    have any other mutable references.
 ///  - `leaf_node_ptr` must be a unique pointer to the node and not have any
 ///    other mutable references.
-unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize>(
+///  - `alloc` must be the same allocator that was used to allocate the nodes of
+///    the trie.
+unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allocator>(
     leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V, PREFIX_LEN>, u8),
     grandparent_node_ptr: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     original_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    alloc: &A,
 ) -> DeleteResult<K, V, PREFIX_LEN> {
     let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
         ConcreteNodePtr::Node4(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte)
+            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
         },
         ConcreteNodePtr::Node16(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte)
+            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
         },
         ConcreteNodePtr::Node48(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte)
+            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
         },
         ConcreteNodePtr::Node256(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte)
+            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
         },
         ConcreteNodePtr::LeafNode(_) => unreachable!("Cannot have delete from leaf node"),
     };
@@ -182,7 +190,7 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize>(
 
     // SAFETY: `leaf_node_ptr` is a unique pointer to the leaf node, no other code
     // will deallocate this
-    let leaf_node = unsafe { NodePtr::deallocate_node_ptr(leaf_node_ptr) };
+    let leaf_node = unsafe { NodePtr::deallocate_node_ptr(leaf_node_ptr, alloc) };
 
     let new_root = match (new_parent_node_ptr, grandparent_node_ptr) {
         (Some(new_parent_node_ptr), None) => new_parent_node_ptr,
@@ -249,9 +257,12 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
     ///  - This function cannot be called concurrently to any reads or writes of
     ///    the `root` node or any child node of `root`. This function will
     ///    arbitrarily read or write to any child in the given tree.
-    pub unsafe fn apply(
+    ///  - `alloc` must be the same allocator that was used to allocate the
+    ///    nodes of the trie.
+    pub unsafe fn apply<A: Allocator>(
         self,
         root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+        alloc: &A,
     ) -> DeleteResult<K, V, PREFIX_LEN> {
         let DeletePoint {
             grandparent_ptr_and_parent_key_byte: grandparent_node_ptr,
@@ -267,7 +278,7 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
                 // SAFETY: The original `root` node pointer is a unique pointer to the tree
                 // (required by safety doc), which means that leaf_node_ptr is also unique and
                 // can be deallocated.
-                let leaf_node = unsafe { NodePtr::deallocate_node_ptr(leaf_node_ptr) };
+                let leaf_node = unsafe { NodePtr::deallocate_node_ptr(leaf_node_ptr, alloc) };
 
                 DeleteResult {
                     new_root: None,
@@ -290,6 +301,7 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
                     parent_node_ptr,
                     grandparent_node_ptr,
                     root,
+                    alloc,
                 )
             },
         }

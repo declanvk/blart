@@ -1,6 +1,7 @@
 use std::ops::Add;
 
 use crate::{
+    alloc::Allocator,
     raw::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode},
     visitor::{Visitable, Visitor},
     AsBytes, TreeMap,
@@ -16,8 +17,8 @@ pub struct TreeStatsCollector {
 impl TreeStatsCollector {
     /// Run the tree stats collection on the given root node, then return the
     /// accumulated stats.
-    pub fn collect<K: AsBytes, V, const PREFIX_LEN: usize>(
-        tree: &TreeMap<K, V, PREFIX_LEN>,
+    pub fn collect<K: AsBytes, V, A: Allocator, const PREFIX_LEN: usize>(
+        tree: &TreeMap<K, V, PREFIX_LEN, A>,
     ) -> Option<TreeStats> {
         if let Some(state) = &tree.state {
             let mut collector = TreeStatsCollector {

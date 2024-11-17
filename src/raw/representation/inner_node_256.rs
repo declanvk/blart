@@ -307,7 +307,7 @@ pub struct Node256Iter<'a, K, V, const PREFIX_LEN: usize> {
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K, V, const PREFIX_LEN: usize> Iterator for Node256Iter<'a, K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Iterator for Node256Iter<'_, K, V, PREFIX_LEN> {
     type Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -322,7 +322,7 @@ impl<'a, K, V, const PREFIX_LEN: usize> Iterator for Node256Iter<'a, K, V, PREFI
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node256Iter<'a, K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node256Iter<'_, K, V, PREFIX_LEN> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some((key, node)) = self.it.next_back() {
             match node {
@@ -335,7 +335,7 @@ impl<'a, K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node256Iter<'a, 
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<'a, K, V, const PREFIX_LEN: usize> FusedIterator for Node256Iter<'a, K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize> FusedIterator for Node256Iter<'_, K, V, PREFIX_LEN> {}
 
 #[cfg(test)]
 mod tests {

@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    alloc::Global,
     raw::{deallocate_tree, search_unchecked, NodeType},
     tests_common::{generate_key_with_prefix, setup_tree_from_entries, swap, PrefixExpansion},
     TreeMap,
@@ -7,10 +8,10 @@ use crate::{
 
 #[test]
 fn delete_singleton_tree_leaf() {
-    let first_leaf = NodePtr::allocate_node_ptr(LeafNode::<Box<[u8]>, _, 16>::with_no_siblings(
-        Box::from([1, 2, 3, 4]),
-        "1234".to_string(),
-    ));
+    let first_leaf = NodePtr::allocate_node_ptr(
+        LeafNode::<Box<[u8]>, _, 16>::with_no_siblings(Box::from([1, 2, 3, 4]), "1234".to_string()),
+        &Global,
+    );
 
     let root: OpaqueNodePtr<Box<[u8]>, String, 16> = first_leaf.to_opaque();
 
@@ -22,7 +23,7 @@ fn delete_singleton_tree_leaf() {
 
         let delete_result = search_for_delete_point(root, [1, 2, 3, 4].as_ref())
             .unwrap()
-            .apply(root);
+            .apply(root, &Global);
         assert!(delete_result.new_root.is_none());
         assert_eq!(delete_result.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4]);
         assert_eq!(delete_result.deleted_leaf.value_ref(), &"1234");
@@ -54,7 +55,7 @@ fn delete_entire_small_tree() {
 
         let delete_result = search_for_delete_point(root, [1, 2, 3, 4, 7, 8].as_ref())
             .unwrap()
-            .apply(root);
+            .apply(root, &Global);
         assert_eq!(
             delete_result.deleted_leaf.key_ref().as_ref(),
             &[1, 2, 3, 4, 7, 8]
@@ -76,7 +77,7 @@ fn delete_entire_small_tree() {
 
         let delete_result = search_for_delete_point(root, [1, 2, 3, 4, 5, 9].as_ref())
             .unwrap()
-            .apply(root);
+            .apply(root, &Global);
         assert_eq!(
             delete_result.deleted_leaf.key_ref().as_ref(),
             &[1, 2, 3, 4, 5, 9]
@@ -88,7 +89,7 @@ fn delete_entire_small_tree() {
 
         let delete_result = search_for_delete_point(root, [2, 4, 6, 8, 10, 12].as_ref())
             .unwrap()
-            .apply(root);
+            .apply(root, &Global);
         assert_eq!(
             delete_result.deleted_leaf.key_ref().as_ref(),
             &[2, 4, 6, 8, 10, 12]
@@ -101,7 +102,7 @@ fn delete_entire_small_tree() {
 
         let delete_result = search_for_delete_point(root, [1, 2, 3, 4, 5, 6].as_ref())
             .unwrap()
-            .apply(root);
+            .apply(root, &Global);
         assert_eq!(
             delete_result.deleted_leaf.key_ref().as_ref(),
             &[1, 2, 3, 4, 5, 6]
@@ -137,7 +138,7 @@ fn delete_one_entry_n16_remains() {
     unsafe {
         let delete_result = search_for_delete_point(root, [1, 2, 3, 9, 5, 6].as_ref())
             .unwrap()
-            .apply(root);
+            .apply(root, &Global);
         assert_eq!(delete_result.new_root.unwrap(), root);
         assert_eq!(delete_result.deleted_leaf.value_ref(), &'E');
         assert_eq!(
@@ -148,7 +149,7 @@ fn delete_one_entry_n16_remains() {
         root = delete_result.new_root.unwrap();
         assert_eq!(root.node_type(), NodeType::Node16);
 
-        deallocate_tree(root);
+        deallocate_tree(root, &Global);
     }
 }
 
@@ -163,7 +164,7 @@ fn delete_one_entry_n48_shrinks() {
     unsafe {
         let delete_result = search_for_delete_point(root, [1, 2, 3, 9, 5, 6].as_ref())
             .unwrap()
-            .apply(root);
+            .apply(root, &Global);
 
         assert_ne!(delete_result.new_root.unwrap(), root);
         assert_eq!(delete_result.deleted_leaf.value_ref(), &9);
@@ -175,7 +176,7 @@ fn delete_one_entry_n48_shrinks() {
         root = delete_result.new_root.unwrap();
         assert_eq!(root.node_type(), NodeType::Node16);
 
-        deallocate_tree(root);
+        deallocate_tree(root, &Global);
     }
 }
 
@@ -190,7 +191,7 @@ fn delete_one_entry_n256_shrinks() {
     let delete = unsafe {
         search_for_delete_point(root, [1, 2, 3, 24, 5, 6].as_ref())
             .unwrap()
-            .apply(root)
+            .apply(root, &Global)
     };
 
     assert_ne!(delete.new_root.unwrap(), root);
@@ -200,18 +201,19 @@ fn delete_one_entry_n256_shrinks() {
     root = delete.new_root.unwrap();
     assert_eq!(root.node_type(), NodeType::Node48);
 
-    unsafe { deallocate_tree(root) };
+    unsafe { deallocate_tree(root, &Global) };
 }
 
 #[test]
 fn delete_minimum_singleton_tree() {
     let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> = NodePtr::allocate_node_ptr(
         LeafNode::<Box<[u8]>, _, 16>::with_no_siblings(Box::from([1, 2, 3, 4]), "1234".to_string()),
+        &Global,
     );
 
     let root = first_leaf.to_opaque();
 
-    let delete_result = unsafe { find_minimum_to_delete(root).apply(root) };
+    let delete_result = unsafe { find_minimum_to_delete(root).apply(root, &Global) };
     assert!(delete_result.new_root.is_none());
     assert_eq!(delete_result.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4]);
     assert_eq!(delete_result.deleted_leaf.value_ref(), &"1234");
@@ -235,7 +237,7 @@ fn delete_minimum_entire_small_tree() {
 
     assert_eq!(root.node_type(), NodeType::Node4);
 
-    let d1 = unsafe { find_minimum_to_delete(root).apply(root) };
+    let d1 = unsafe { find_minimum_to_delete(root).apply(root, &Global) };
     assert_eq!(d1.deleted_leaf.value_ref(), &'A');
     assert_eq!(d1.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 6]);
 
@@ -253,14 +255,14 @@ fn delete_minimum_entire_small_tree() {
         }
     }
 
-    let d2 = unsafe { find_minimum_to_delete(root).apply(root) };
+    let d2 = unsafe { find_minimum_to_delete(root).apply(root, &Global) };
     assert_eq!(d2.deleted_leaf.value_ref(), &'D');
     assert_eq!(d2.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 9]);
     let new_root = d2.new_root.unwrap();
     assert_eq!(new_root, root);
     root = new_root;
 
-    let d3 = unsafe { find_minimum_to_delete(root).apply(root) };
+    let d3 = unsafe { find_minimum_to_delete(root).apply(root, &Global) };
     assert_eq!(d3.deleted_leaf.value_ref(), &'C');
     assert_eq!(d3.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 7, 8]);
     let new_root = d3.new_root.unwrap();
@@ -268,7 +270,7 @@ fn delete_minimum_entire_small_tree() {
     root = new_root;
     assert_eq!(root.node_type(), NodeType::Leaf);
 
-    let d4 = unsafe { find_minimum_to_delete(root).apply(root) };
+    let d4 = unsafe { find_minimum_to_delete(root).apply(root, &Global) };
     assert_eq!(d4.deleted_leaf.value_ref(), &'B');
     assert_eq!(d4.deleted_leaf.key_ref().as_ref(), &[2, 4, 6, 8, 10, 12]);
     assert!(d4.new_root.is_none());
@@ -278,11 +280,12 @@ fn delete_minimum_entire_small_tree() {
 fn delete_maximum_singleton_tree() {
     let first_leaf: NodePtr<16, LeafNode<Box<[u8]>, String, 16>> = NodePtr::allocate_node_ptr(
         LeafNode::<Box<[u8]>, _, 16>::with_no_siblings(Box::from([1, 2, 3, 4]), "1234".to_string()),
+        &Global,
     );
 
     let root = first_leaf.to_opaque();
 
-    let delete_result = unsafe { find_maximum_to_delete(root).apply(root) };
+    let delete_result = unsafe { find_maximum_to_delete(root).apply(root, &Global) };
     assert!(delete_result.new_root.is_none());
     assert_eq!(delete_result.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4]);
     assert_eq!(delete_result.deleted_leaf.value_ref(), &"1234");
@@ -306,7 +309,7 @@ fn delete_maximum_entire_small_tree() {
 
     assert_eq!(root.node_type(), NodeType::Node4);
 
-    let d1 = unsafe { find_maximum_to_delete(root).apply(root) };
+    let d1 = unsafe { find_maximum_to_delete(root).apply(root, &Global) };
     assert_eq!(d1.deleted_leaf.value_ref(), &'B');
     assert_eq!(d1.deleted_leaf.key_ref().as_ref(), &[2, 4, 6, 8, 10, 12]);
 
@@ -325,7 +328,7 @@ fn delete_maximum_entire_small_tree() {
         }
     }
 
-    let d2 = unsafe { find_maximum_to_delete(root).apply(root) };
+    let d2 = unsafe { find_maximum_to_delete(root).apply(root, &Global) };
     assert_eq!(d2.deleted_leaf.value_ref(), &'C');
     assert_eq!(d2.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 7, 8]);
     let new_root = d2.new_root.unwrap();
@@ -333,7 +336,7 @@ fn delete_maximum_entire_small_tree() {
     assert_ne!(new_root, root);
     root = new_root;
 
-    let d3 = unsafe { find_maximum_to_delete(root).apply(root) };
+    let d3 = unsafe { find_maximum_to_delete(root).apply(root, &Global) };
     assert_eq!(d3.deleted_leaf.value_ref(), &'D');
     assert_eq!(d3.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 9]);
     let new_root = d3.new_root.unwrap();
@@ -341,7 +344,7 @@ fn delete_maximum_entire_small_tree() {
     root = new_root;
     assert_eq!(root.node_type(), NodeType::Leaf);
 
-    let d4 = unsafe { find_maximum_to_delete(root).apply(root) };
+    let d4 = unsafe { find_maximum_to_delete(root).apply(root, &Global) };
     assert_eq!(d4.deleted_leaf.value_ref(), &'A');
     assert_eq!(d4.deleted_leaf.key_ref().as_ref(), &[1, 2, 3, 4, 5, 6]);
     assert!(d4.new_root.is_none());

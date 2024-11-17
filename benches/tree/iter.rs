@@ -62,7 +62,7 @@ fn bench(c: &mut Criterion) {
     });
 
     group.bench_function("dict/range", |b| {
-        let range = get_middle_key(&tree, 1, 2)..get_middle_key(&tree, 2, 1);
+        let range = get_middle_key(tree, 1, 2)..get_middle_key(tree, 2, 1);
         b.iter(|| {
             tree.range::<CString, _>(range.clone()).for_each(|(k, v)| {
                 std::hint::black_box((k, v));
