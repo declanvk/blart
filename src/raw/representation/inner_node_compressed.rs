@@ -521,6 +521,7 @@ pub type InnerNode16<K, V, const PREFIX_LEN: usize> = InnerNodeCompressed<K, V, 
 
 impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed for InnerNode16<K, V, PREFIX_LEN> {
     #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         // SAFETY: Even though the type is marked is uninit data, when
         // crated this is filled with initialized data, we just use it to
@@ -551,6 +552,7 @@ impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed for InnerNode16<K,
     }
 
     #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
     fn find_write_point(&self, key_fragment: u8) -> WritePoint {
         match self.lookup_child_index(key_fragment) {
             Some(child_index) => WritePoint::Existing(child_index),
@@ -677,8 +679,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, 
 mod tests {
     use crate::raw::{
         representation::tests::{
-            inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
-            FixtureReturn,
+            inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
+            inner_node_write_child_test, FixtureReturn,
         },
         LeafNode, NodePtr,
     };
@@ -756,6 +758,11 @@ mod tests {
         let n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
 
         n4.shrink();
+    }
+
+    #[test]
+    fn node4_min_max() {
+        inner_node_min_max_test(InnerNode4::<_, _, 16>::empty(), 4);
     }
 
     #[test]
@@ -847,6 +854,11 @@ mod tests {
                       children. Currently has [5] children."]
     fn node16_shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 5);
+    }
+
+    #[test]
+    fn node16_min_max() {
+        inner_node_min_max_test(InnerNode16::<_, _, 16>::empty(), 16);
     }
 
     fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {

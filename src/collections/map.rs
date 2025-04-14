@@ -2053,12 +2053,14 @@ mod tests {
         assert_eq!(tree.try_insert(Box::new([1]), 0), Ok(None));
 
         assert_eq!(tree.len(), 1);
+        assert!(!tree.is_empty());
 
         // insert to existing leaf, should replace the key and value, and not change the
         // length
         assert_eq!(tree.try_insert(Box::new([1]), 1), Ok(Some(0)));
 
         assert_eq!(tree.len(), 1);
+        assert!(!tree.is_empty());
 
         // several more regular inserts, should add 3 to length
         assert_eq!(tree.try_insert(Box::new([0]), 2), Ok(None));
@@ -2203,6 +2205,7 @@ mod tests {
 }
 
 #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+#[cfg_attr(test, mutants::skip)]
 mod custom_allocator_tests {
     use super::*;
 

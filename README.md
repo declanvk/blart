@@ -144,7 +144,7 @@ For further details please take a look at the following [link][superuser-run-per
 I use a somewhat realistic benchmark: counting words in a text file. To get started, download a text file like:
 
 ```bash
-curl -o data/Ulysses.txt https://www.gutenberg.org/cache/epub/4300/pg4300.txt
+curl -o profiling-data/Ulysses.txt https://www.gutenberg.org/cache/epub/4300/pg4300.txt
 ```
 
 Then build the word count example using the `profiling` profile:
@@ -156,8 +156,43 @@ RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling --exampl
 Then run the count words workload on the downloaded data while profiling:
 
 ```bash
-samply record ./target/profiling/examples/count_words blart data/book-chapters-combined.txt
+samply record ./target/profiling/examples/count_words blart profiling-data/book-chapters-combined.txt
 ```
+
+## Mutation Testing
+
+> cargo-mutants helps you improve your program's quality by finding places where bugs could be inserted without causing any tests to fail.
+
+ - https://github.com/sourcefrog/cargo-mutants
+ - https://mutants.rs/
+
+To get the initial list of failed mutants, run:
+
+```bash
+cargo mutants
+```
+
+To iterate on an existing `mutants.out` directory, update the code with more tests and run:
+
+```bash
+cargo mutants --iterate
+```
+
+If you want to run mutants for a specific file, use:
+
+```bash
+cargo mutants -f example.rs
+```
+
+If you have `cargo-nextest` installed, you can add `--test-tool=nextest` to the CLI invocations.
+
+To get the current list of mutants:
+
+```bash
+cargo mutants --iterate --list | sort
+```
+
+The `sort` call is useful to group files together.
 
 ## License
 
