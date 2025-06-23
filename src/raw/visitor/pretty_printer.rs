@@ -271,7 +271,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{alloc::Global, raw::deallocate_tree, AsBytes};
+    use crate::AsBytes;
 
     use super::*;
 
@@ -297,25 +297,30 @@ mod tests {
             }
         }
 
-        let root: OpaqueNodePtr<DisplayAsDebug<_>, usize, 16> =
-            crate::tests_common::setup_tree_from_entries(
-                crate::tests_common::generate_key_fixed_length([3, 3])
-                    .enumerate()
-                    .map(|(a, b)| (DisplayAsDebug(b), a)),
-            );
+        // SAFETY: `DisplayAsDebug` is just a container, it does not modify the
+        // `AsBytes` logic
+        unsafe impl<T> NoPrefixesBytes for DisplayAsDebug<T> where T: NoPrefixesBytes {}
+
+        let tree: TreeMap<_, _> = crate::tests_common::generate_key_fixed_length([3, 3])
+            .enumerate()
+            .map(|(a, b)| (DisplayAsDebug(b), a))
+            .inspect(|(k, _)| {
+                // quick check that we're just passing through the bytes
+                assert_eq!(k.as_bytes(), k.0.as_bytes());
+            })
+            .collect();
+
         let mut buffer = Vec::new();
 
-        // SAFETY: There are no concurrent mutation to the tree node or its children
-        unsafe {
-            DotPrinter::print_tree(
-                &mut buffer,
-                &root,
-                DotPrinterSettings {
-                    display_node_address: false,
-                },
-            )
-            .unwrap()
-        };
+        DotPrinter::print(
+            &mut buffer,
+            &tree,
+            DotPrinterSettings {
+                display_node_address: false,
+            },
+        )
+        .unwrap()
+        .unwrap();
 
         let output = String::from_utf8(buffer).unwrap();
         assert_eq!(
@@ -366,7 +371,5 @@ n0:c3 -> n16:h0
 }
 "
         );
-
-        unsafe { deallocate_tree(root, &Global) };
     }
 }

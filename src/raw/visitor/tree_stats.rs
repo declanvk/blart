@@ -356,4 +356,198 @@ mod tests {
 
         assert_eq!(stats, expected);
     }
+
+    #[test]
+    fn test_inner_node_stats_calculations() {
+        let stats1 = InnerNodeStats {
+            count: 0,
+            mem_usage: 100,
+            sum_capped_prefix_len_bytes: 50,
+            total_header_bytes: 100,
+            ..Default::default()
+        };
+
+        assert_eq!(stats1.node_size(), None);
+        assert_eq!(stats1.percentage_header_bytes(), 0.5);
+
+        let stats2 = InnerNodeStats {
+            count: 10,
+            mem_usage: 100,
+            sum_capped_prefix_len_bytes: 50,
+            total_header_bytes: 100,
+            ..Default::default()
+        };
+
+        assert_eq!(stats2.node_size(), Some(10));
+        assert_eq!(stats2.percentage_header_bytes(), 0.5);
+
+        let stats3 = InnerNodeStats {
+            total_header_bytes: 0,
+            sum_capped_prefix_len_bytes: 0,
+            ..Default::default()
+        };
+        assert!(stats3.percentage_header_bytes().is_nan());
+
+        let stats4 = InnerNodeStats {
+            total_header_bytes: 0,
+            sum_capped_prefix_len_bytes: 50,
+            ..Default::default()
+        };
+        assert!(stats4.percentage_header_bytes().is_infinite());
+        assert!(stats4.percentage_header_bytes().is_sign_positive());
+
+        let stats5 = InnerNodeStats {
+            count: 10,
+            mem_usage: 0,
+            ..Default::default()
+        };
+        assert_eq!(stats5.node_size(), Some(0));
+
+        let stats6 = InnerNodeStats {
+            count: 100,
+            mem_usage: 100,
+            ..Default::default()
+        };
+        assert_eq!(stats6.node_size(), Some(1));
+
+        let stats7 = InnerNodeStats {
+            count: 10,
+            total_slots: 100,
+            sum_slots: 20,
+            sum_prefix_len_bytes: 30,
+            sum_capped_prefix_len_bytes: 25,
+            total_header_bytes: 50,
+            ..Default::default()
+        };
+
+        assert_eq!(stats7.free_slots(), 80);
+        assert_eq!(stats7.percentage_slots(), 0.2);
+        assert_eq!(stats7.avg_prefix_len(), 3.0);
+        assert_eq!(stats7.avg_capped_prefix_len(), 2.5);
+        assert_eq!(stats7.free_header_bytes(), 25);
+
+        let stats_div_zero = InnerNodeStats::default();
+        assert!(stats_div_zero.percentage_slots().is_nan());
+        assert!(stats_div_zero.avg_prefix_len().is_nan());
+        assert!(stats_div_zero.avg_capped_prefix_len().is_nan());
+    }
+
+    #[test]
+    fn test_leaf_stats_add() {
+        let stats1 = LeafStats {
+            count: 10,
+            sum_key_bytes: 100,
+            mem_usage: 1000,
+        };
+
+        let stats2 = LeafStats {
+            count: 5,
+            sum_key_bytes: 50,
+            mem_usage: 500,
+        };
+
+        let expected_sum = LeafStats {
+            count: 15,
+            sum_key_bytes: 150,
+            mem_usage: 1500,
+        };
+
+        assert_eq!(stats1 + stats2, expected_sum);
+
+        let default = LeafStats::default();
+        let sum_with_default = stats1 + default;
+
+        assert_eq!(sum_with_default, stats1);
+    }
+
+    #[test]
+    fn test_inner_node_stats_add() {
+        let stats1 = InnerNodeStats {
+            count: 1,
+            total_slots: 2,
+            sum_slots: 3,
+            total_header_bytes: 4,
+            sum_prefix_len_bytes: 5,
+            sum_capped_prefix_len_bytes: 6,
+            max_prefix_len_bytes: 7,
+            mem_usage: 8,
+        };
+        let stats2 = InnerNodeStats {
+            count: 10,
+            total_slots: 20,
+            sum_slots: 30,
+            total_header_bytes: 40,
+            sum_prefix_len_bytes: 50,
+            sum_capped_prefix_len_bytes: 60,
+            max_prefix_len_bytes: 70,
+            mem_usage: 80,
+        };
+        let sum = stats1 + stats2;
+        assert_eq!(sum.count, 11);
+        assert_eq!(sum.total_slots, 22);
+        assert_eq!(sum.sum_slots, 33);
+        assert_eq!(sum.total_header_bytes, 44);
+        assert_eq!(sum.sum_prefix_len_bytes, 55);
+        assert_eq!(sum.sum_capped_prefix_len_bytes, 66);
+        assert_eq!(sum.max_prefix_len_bytes, 70);
+        assert_eq!(sum.mem_usage, 88);
+    }
+
+    #[test]
+    fn test_tree_stats_calculations() {
+        let tree_stats = TreeStats {
+            tree: InnerNodeStats {
+                mem_usage: 1000,
+                ..Default::default()
+            },
+            leaf: LeafStats {
+                count: 50,
+                mem_usage: 500,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        assert_eq!(tree_stats.total_memory_usage(), 1500);
+        assert_eq!(tree_stats.bytes_per_entry(), 20.0);
+        assert_eq!(tree_stats.bytes_per_entry_with_leaf(), 30.0);
+
+        let empty_tree_stats = TreeStats::default();
+        assert!(empty_tree_stats.bytes_per_entry().is_nan());
+        assert!(empty_tree_stats.bytes_per_entry_with_leaf().is_nan());
+
+        let no_leaf_stats = TreeStats {
+            tree: InnerNodeStats {
+                mem_usage: 1000,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(no_leaf_stats.bytes_per_entry().is_infinite());
+        assert!(no_leaf_stats.bytes_per_entry_with_leaf().is_infinite());
+    }
+
+    #[test]
+    fn tree_with_node48_and_node256() {
+        let mut tree: TreeMap<Vec<u8>, u8> = TreeMap::new();
+        // This will create a Node4, then grow to Node16, then to Node48
+        for i in 0u8..48 {
+            tree.try_insert(vec![i], i).unwrap();
+        }
+        let stats = TreeStatsCollector::collect(&tree).unwrap();
+        assert_eq!(stats.node48.count, 1);
+        assert_eq!(stats.node4.count, 0);
+        assert_eq!(stats.node16.count, 0);
+        assert_eq!(stats.node256.count, 0);
+
+        // This will grow the Node48 to a Node256
+        for i in 48u8..255 {
+            tree.try_insert(vec![i], i).unwrap();
+        }
+        let stats = TreeStatsCollector::collect(&tree).unwrap();
+        assert_eq!(stats.node256.count, 1);
+        assert_eq!(stats.node48.count, 0);
+        assert_eq!(stats.node16.count, 0);
+        assert_eq!(stats.node4.count, 0);
+    }
 }
