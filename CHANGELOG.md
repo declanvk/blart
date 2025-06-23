@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
+ - Update MSRV to 1.82.
+
 ### Removed
 
  - Removed the `TreeMap::{try_entry_ref, entry_ref}` functions. The value of `*entry_ref` was that you could pass a `&Q` to do the lookup, just like the `get` method. Then on insert, the `&Q` would be converted to a `K`. I didn't think the value of that delayed conversion was worth keeping the whole module around, since you can emulate the `entry*` interface using `get`/`insert` calls directly.
