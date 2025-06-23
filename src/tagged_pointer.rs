@@ -121,7 +121,7 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
         ptr::nonnull_map_addr(self.0, |ptr_addr|
             // SAFETY:
             //  1. The `new` function requires that the pointer passed is not null
-            //  2. The `new_unchecked` function requires that the pointer is aligned such 
+            //  2. The `new_unchecked` function requires that the pointer is aligned such
             //     that the bottom NUM_BITS are all zero.
             // This means that the rest of the bits must be non-zero for the original
             // non-null condition to hold.
@@ -202,7 +202,7 @@ impl<P, const MIN_BITS: u32> Ord for TaggedPointer<P, MIN_BITS> {
 
 impl<P, const MIN_BITS: u32> PartialOrd for TaggedPointer<P, MIN_BITS> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.0.cmp(&other.0))
+        Some(self.cmp(other))
     }
 }
 

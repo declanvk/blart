@@ -252,7 +252,7 @@ impl std::fmt::Display for TreeStats {
             tree,
             ..
         } = self;
-        write!(f, "{:#?}", self)?;
+        write!(f, "{self:#?}")?;
         f.write_str("\n")?;
         f.write_fmt(format_args!("memory usage (inner nodes):        {} bytes\n", tree.mem_usage))?;
         f.write_fmt(format_args!("memory usage (inner nodes + leaf): {} bytes\n", self.total_memory_usage()))?;

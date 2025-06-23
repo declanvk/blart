@@ -737,7 +737,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         insert_point: InsertPoint<K, V, PREFIX_LEN>,
         key: K,
         value: V,
-    ) -> InsertResult<K, V, PREFIX_LEN>
+    ) -> InsertResult<'_, K, V, PREFIX_LEN>
     where
         K: AsBytes,
     {
@@ -1034,7 +1034,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// }
     /// assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
     /// ```
-    pub fn range<Q, R>(&self, range: R) -> iterators::Range<K, V, PREFIX_LEN, A>
+    pub fn range<Q, R>(&self, range: R) -> iterators::Range<'_, K, V, PREFIX_LEN, A>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -1084,7 +1084,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// assert_eq!(map["Carol"], 200);
     /// assert_eq!(map["Cheryl"], 200);
     /// ```
-    pub fn range_mut<Q, R>(&mut self, range: R) -> iterators::RangeMut<K, V, PREFIX_LEN, A>
+    pub fn range_mut<Q, R>(&mut self, range: R) -> iterators::RangeMut<'_, K, V, PREFIX_LEN, A>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -1446,7 +1446,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
 impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, PREFIX_LEN, A>, InsertPrefixError>
+    pub fn try_entry(&mut self, key: K) -> Result<Entry<'_, K, V, PREFIX_LEN, A>, InsertPrefixError>
     where
         K: AsBytes,
     {
