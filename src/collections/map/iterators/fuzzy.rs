@@ -10,7 +10,7 @@ use crate::{
 };
 use std::{iter::FusedIterator, mem::MaybeUninit};
 
-struct StackArena {
+pub(crate) struct StackArena {
     data: Vec<MaybeUninit<usize>>,
     n: usize,
 }
@@ -96,7 +96,7 @@ impl StackArena {
 ///
 /// SAFETY: `key` length + 1 == `new` or `old` length
 #[inline]
-fn edit_dist(
+pub(crate) fn edit_dist(
     key: &[u8],
     c: u8,
     old: &[usize],
@@ -533,101 +533,4 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use std::ffi::CString;
-
-    use crate::TreeMap;
-
-    use super::*;
-
-    #[test]
-    fn iterators_are_send_sync() {
-        fn is_send<T: Send>() {}
-        fn is_sync<T: Sync>() {}
-
-        fn fuzzy_is_send<K: Sync, V: Sync, A: Sync + Allocator>() {
-            is_send::<Fuzzy<K, V, DEFAULT_PREFIX_LEN, A>>();
-        }
-
-        fn fuzzy_is_sync<K: Sync, V: Sync, A: Sync + Allocator>() {
-            is_sync::<Fuzzy<K, V, DEFAULT_PREFIX_LEN, A>>();
-        }
-
-        fuzzy_is_send::<[u8; 3], usize, Global>();
-        fuzzy_is_sync::<[u8; 3], usize, Global>();
-
-        fn fuzzy_mut_is_send<K: Send, V: Send, A: Send + Allocator>() {
-            is_send::<FuzzyMut<K, V, DEFAULT_PREFIX_LEN, A>>();
-        }
-
-        fn fuzzy_mut_is_sync<K: Sync, V: Sync, A: Sync + Allocator>() {
-            is_sync::<FuzzyMut<K, V, DEFAULT_PREFIX_LEN, A>>();
-        }
-
-        fuzzy_mut_is_send::<[u8; 3], usize, Global>();
-        fuzzy_mut_is_sync::<[u8; 3], usize, Global>();
-    }
-
-    #[test]
-    fn fuzzy() {
-        for n in [4, 5, 17, 49] {
-            let it = 48u8..48 + n;
-            let mut tree: TreeMap<CString, usize> = TreeMap::new();
-            let search = CString::new("a").unwrap();
-            for c in it.clone() {
-                let c = c as char;
-                let s = CString::new(format!("a{c}")).unwrap();
-                tree.insert(s, 0usize);
-            }
-            let results: Vec<_> = tree.fuzzy(&search, 1).collect();
-            for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
-                let c = c as char;
-                let s = CString::new(format!("a{c}")).unwrap();
-                assert_eq!(k, &s);
-            }
-
-            let mut tree: TreeMap<CString, usize> = TreeMap::new();
-            let search = CString::new("a").unwrap();
-            for c in it.clone() {
-                let s = if c % 2 == 0 {
-                    let c = c as char;
-                    CString::new(format!("a{c}")).unwrap()
-                } else {
-                    let c = c as char;
-                    CString::new(format!("a{c}a")).unwrap()
-                };
-                tree.insert(s, 0usize);
-            }
-            let results: Vec<_> = tree.fuzzy(&search, 1).collect();
-            for ((k, _), c) in results.into_iter().rev().zip((it.clone()).step_by(2)) {
-                let c = c as char;
-                let s = CString::new(format!("a{c}")).unwrap();
-                assert_eq!(k, &s);
-            }
-
-            let mut tree: TreeMap<CString, usize> = TreeMap::new();
-            let search = CString::new("a").unwrap();
-            for c in it.clone() {
-                let s = if c % 2 == 0 {
-                    let c = c as char;
-                    CString::new(format!("a{c}")).unwrap()
-                } else {
-                    let c = c as char;
-                    CString::new(format!("a{c}a")).unwrap()
-                };
-                tree.insert(s, 0usize);
-            }
-            let results: Vec<_> = tree.fuzzy(&search, 2).collect();
-            for ((k, _), c) in results.into_iter().rev().zip(it.clone()) {
-                let s = if c % 2 == 0 {
-                    let c = c as char;
-                    CString::new(format!("a{c}")).unwrap()
-                } else {
-                    let c = c as char;
-                    CString::new(format!("a{c}a")).unwrap()
-                };
-                assert_eq!(k, &s);
-            }
-        }
-    }
-}
+mod tests;

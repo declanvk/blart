@@ -178,7 +178,7 @@ macro_rules! impl_ord_for_mapped {
     ($(const $const_ident:ident: $const_ty:ty => )? $mapping:ty, $data:ty) => {
         impl<$(const $const_ident: $const_ty)?> PartialOrd for Mapped<$mapping, $data> {
             fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                Some(self.repr.cmp(&other.repr))
+                Some(self.cmp(other))
             }
         }
 
@@ -644,7 +644,7 @@ macro_rules! as_bytes_for_tuples {
                     <ConcatTuple<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {
                     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                        Some(self.repr.cmp(&other.repr))
+                        Some(self.cmp(other))
                     }
                 }
 
@@ -741,12 +741,8 @@ pub(super) mod tests {
         assert_eq!(
             a.cmp(&b),
             a_bytes.cmp(b_bytes),
-            "{:?} and {:?} compare differently than their byte representation \
-             (a_bytes={:?},b_bytes={:?})",
-            a,
-            b,
-            a_bytes,
-            b_bytes
+            "{a:?} and {b:?} compare differently than their byte representation \
+             (a_bytes={a_bytes:?},b_bytes={b_bytes:?})"
         );
 
         assert_eq!(B::from_bytes(B::to_bytes(a.clone())), a);

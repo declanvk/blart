@@ -1,0 +1,5 @@
+exclude_re = [
+    "impl (((std|core)::)?fmt::)?Debug for",
+    "impl (((std|core)::)?fmt::)?Display for",
+    "impl (((std|core)::)?fmt::)?Pointer for",
+]

@@ -43,6 +43,7 @@ rand = "0.8.5"
 iai-callgrind = "0.13.4"
 zipf = "7.0.1"
 bumpalo = { version = "3.16.0", features = ["allocator-api2"] }
+mutants = "0.0.3"
 
 [[bench]]
 name = "criterion"

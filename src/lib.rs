@@ -7,7 +7,6 @@
         impl_trait_in_assoc_type,
         maybe_uninit_array_assume_init,
         maybe_uninit_slice,
-        maybe_uninit_uninit_array,
         portable_simd,
         slice_ptr_get,
     )

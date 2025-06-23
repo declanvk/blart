@@ -33,11 +33,10 @@ do
     cargo "${TOOLCHAIN_ARG}" test   $extra_args --benches --release
     cargo "${TOOLCHAIN_ARG}" test   $extra_args --doc
 
-    cargo "${TOOLCHAIN_ARG}" clippy $extra_args --all-targets 
+    cargo "${TOOLCHAIN_ARG}" clippy $extra_args --all-targets
     cargo "${TOOLCHAIN_ARG}" doc    $extra_args --no-deps --document-private-items
 
     if [ "${TOOLCHAIN}" = "nightly" ]; then
         cargo "${TOOLCHAIN_ARG}" miri test --lib --bins --examples --tests $extra_args
     fi
 done
-

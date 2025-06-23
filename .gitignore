@@ -2,7 +2,7 @@
 Cargo.lock
 
 # output from memory usage tess
-dhat-output/
+/dhat-output
 
 # fuzzing artifacts
 default.profraw
@@ -11,7 +11,7 @@ default.profraw
 .vscode/
 
 # profiling workload data
-/data/
+/profiling-data
 profile.json
 
 # coverage info
@@ -19,3 +19,7 @@ lcov.info
 
 # perf data
 perf.data*
+
+# cargo-mutants data
+/mutants.out
+/mutants.out.old

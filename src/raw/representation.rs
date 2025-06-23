@@ -1550,6 +1550,53 @@ mod tests {
         }
     }
 
+    pub(crate) fn inner_node_min_max_test<const PREFIX_LEN: usize>(
+        mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+        num_children: usize,
+    ) {
+        assert!(
+            num_children >= 2,
+            "test harness must specify more than 1 child"
+        );
+
+        let mut leaves = Vec::with_capacity(num_children);
+        for _ in 0..num_children {
+            leaves.push(LeafNode::with_no_siblings(vec![].into(), ()));
+        }
+
+        let leaf_pointers = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect::<Vec<_>>();
+
+        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        }
+
+        assert_eq!(node.header().num_children(), num_children);
+
+        // generate list of interleaved `[(0, num_children - 1), (1, num_children -
+        // 2), (2, num_children - 3), ..., (midpoint, num_children - midpoint + 1)]`
+        let midpoint = num_children / 2;
+        let interleaved = (0..midpoint).zip((midpoint..num_children).rev());
+
+        for (min_idx, max_idx) in interleaved {
+            let (min_key_fragment, min_leaf_node) = node.min();
+            assert_eq!(min_leaf_node, node.remove_child(min_key_fragment).unwrap());
+            let expected_min_leaf_node =
+                NodePtr::from(leaves.get_mut(min_idx).unwrap()).to_opaque();
+            assert_eq!(expected_min_leaf_node, min_leaf_node);
+
+            let (max_key_fragment, max_leaf_node) = node.max();
+            assert_eq!(max_leaf_node, node.remove_child(max_key_fragment).unwrap());
+            let expected_max_leaf_node =
+                NodePtr::from(leaves.get_mut(max_idx).unwrap()).to_opaque();
+            assert_eq!(expected_max_leaf_node, max_leaf_node);
+        }
+
+        assert_eq!(node.header().num_children(), 0);
+    }
+
     // --------------------------------------- ITERATORS
     // ---------------------------------------
 

@@ -737,7 +737,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         insert_point: InsertPoint<K, V, PREFIX_LEN>,
         key: K,
         value: V,
-    ) -> InsertResult<K, V, PREFIX_LEN>
+    ) -> InsertResult<'_, K, V, PREFIX_LEN>
     where
         K: AsBytes,
     {
@@ -1034,7 +1034,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// }
     /// assert_eq!(map.range(&4..).next(), Some((&5, &"b")));
     /// ```
-    pub fn range<Q, R>(&self, range: R) -> iterators::Range<K, V, PREFIX_LEN, A>
+    pub fn range<Q, R>(&self, range: R) -> iterators::Range<'_, K, V, PREFIX_LEN, A>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -1084,7 +1084,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// assert_eq!(map["Carol"], 200);
     /// assert_eq!(map["Cheryl"], 200);
     /// ```
-    pub fn range_mut<Q, R>(&mut self, range: R) -> iterators::RangeMut<K, V, PREFIX_LEN, A>
+    pub fn range_mut<Q, R>(&mut self, range: R) -> iterators::RangeMut<'_, K, V, PREFIX_LEN, A>
     where
         Q: AsBytes + ?Sized,
         K: Borrow<Q> + AsBytes,
@@ -1446,7 +1446,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
 impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
     /// Tries to get the given key’s corresponding entry in the map for in-place
     /// manipulation.
-    pub fn try_entry(&mut self, key: K) -> Result<Entry<K, V, PREFIX_LEN, A>, InsertPrefixError>
+    pub fn try_entry(&mut self, key: K) -> Result<Entry<'_, K, V, PREFIX_LEN, A>, InsertPrefixError>
     where
         K: AsBytes,
     {
@@ -2005,24 +2005,40 @@ mod tests {
         let map_d = build_tree_map([b"0003", b"0004", b"0005", b"0010", b"0011", b"0012"]);
 
         assert_eq!(map_a.cmp(&map_a), Ordering::Equal);
+        assert_eq!(map_a.partial_cmp(&map_a), Some(Ordering::Equal));
         assert_eq!(map_a.cmp(&map_b), Ordering::Less);
+        assert_eq!(map_a.partial_cmp(&map_b), Some(Ordering::Less));
         assert_eq!(map_a.cmp(&map_c), Ordering::Greater);
+        assert_eq!(map_a.partial_cmp(&map_c), Some(Ordering::Greater));
         assert_eq!(map_a.cmp(&map_d), Ordering::Less);
+        assert_eq!(map_a.partial_cmp(&map_d), Some(Ordering::Less));
 
         assert_eq!(map_b.cmp(&map_a), Ordering::Greater);
+        assert_eq!(map_b.partial_cmp(&map_a), Some(Ordering::Greater));
         assert_eq!(map_b.cmp(&map_b), Ordering::Equal);
+        assert_eq!(map_b.partial_cmp(&map_b), Some(Ordering::Equal));
         assert_eq!(map_b.cmp(&map_c), Ordering::Greater);
+        assert_eq!(map_b.partial_cmp(&map_c), Some(Ordering::Greater));
         assert_eq!(map_b.cmp(&map_d), Ordering::Equal);
+        assert_eq!(map_b.partial_cmp(&map_d), Some(Ordering::Equal));
 
         assert_eq!(map_c.cmp(&map_a), Ordering::Less);
+        assert_eq!(map_c.partial_cmp(&map_a), Some(Ordering::Less));
         assert_eq!(map_c.cmp(&map_b), Ordering::Less);
+        assert_eq!(map_c.partial_cmp(&map_b), Some(Ordering::Less));
         assert_eq!(map_c.cmp(&map_c), Ordering::Equal);
+        assert_eq!(map_c.partial_cmp(&map_c), Some(Ordering::Equal));
         assert_eq!(map_c.cmp(&map_d), Ordering::Less);
+        assert_eq!(map_c.partial_cmp(&map_d), Some(Ordering::Less));
 
         assert_eq!(map_d.cmp(&map_a), Ordering::Greater);
+        assert_eq!(map_d.partial_cmp(&map_a), Some(Ordering::Greater));
         assert_eq!(map_d.cmp(&map_b), Ordering::Equal);
+        assert_eq!(map_d.partial_cmp(&map_b), Some(Ordering::Equal));
         assert_eq!(map_d.cmp(&map_c), Ordering::Greater);
+        assert_eq!(map_d.partial_cmp(&map_c), Some(Ordering::Greater));
         assert_eq!(map_d.cmp(&map_d), Ordering::Equal);
+        assert_eq!(map_d.partial_cmp(&map_d), Some(Ordering::Equal));
     }
 
     #[test]
@@ -2053,12 +2069,14 @@ mod tests {
         assert_eq!(tree.try_insert(Box::new([1]), 0), Ok(None));
 
         assert_eq!(tree.len(), 1);
+        assert!(!tree.is_empty());
 
         // insert to existing leaf, should replace the key and value, and not change the
         // length
         assert_eq!(tree.try_insert(Box::new([1]), 1), Ok(Some(0)));
 
         assert_eq!(tree.len(), 1);
+        assert!(!tree.is_empty());
 
         // several more regular inserts, should add 3 to length
         assert_eq!(tree.try_insert(Box::new([0]), 2), Ok(None));
@@ -2200,9 +2218,61 @@ mod tests {
         assert_eq!(tree.len(), 0);
         assert_eq!(tree.pop_first(), None);
     }
+
+    #[test]
+    fn test_contains_key_false() {
+        let mut map: TreeMap<Box<[u8]>, i32> = TreeMap::new();
+        map.try_insert(Box::from(*b"foo"), 1).unwrap();
+        assert!(!map.contains_key(b"bar" as &[u8]));
+    }
+
+    #[test]
+    fn test_extend_and_from() {
+        let mut map = TreeMap::<[u8; 4], i32>::new();
+        let data = vec![([0; 4], 1), ([1; 4], 2)];
+
+        // Test extending from an iterator of references
+        map.extend(data.iter().copied());
+        assert_eq!(map.len(), 2);
+
+        // Test `FromIterator`
+        let map2 = TreeMap::<[u8; 4], i32>::from_iter(data.clone());
+        assert_eq!(map, map2);
+
+        // Test `From` an array
+        let map3 = TreeMap::<[u8; 4], i32>::from([([0; 4], 1), ([1; 4], 2)]);
+        assert_eq!(map, map3);
+
+        // Test extending from an iterator of owned values
+        let mut map4 = TreeMap::<[u8; 4], i32>::new();
+        map4.extend(data);
+        assert_eq!(map, map4);
+    }
+
+    #[test]
+    fn test_hash_ne() {
+        use std::collections::HashSet;
+
+        let map1 = TreeMap::<[u8; 4], i32>::from_iter(vec![([0; 4], 1)]);
+        let map2 = TreeMap::<[u8; 4], i32>::from_iter(vec![([1; 4], 2)]);
+
+        let mut set = HashSet::new();
+        set.insert(map1);
+        set.insert(map2);
+
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_partial_eq_different_values() {
+        let map1 = TreeMap::<[u8; 4], i32>::from_iter(vec![([0; 4], 1), ([1; 4], 2)]);
+        let map2 = TreeMap::<[u8; 4], i32>::from_iter(vec![([0; 4], 3), ([1; 4], 4)]);
+        assert_ne!(map1, map2);
+    }
 }
 
 #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+#[cfg_attr(test, mutants::skip)]
 mod custom_allocator_tests {
     use super::*;
 

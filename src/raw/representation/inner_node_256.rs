@@ -1,10 +1,10 @@
-use crate::{
-    raw::{Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex},
-    rust_nightly_apis::maybe_uninit_uninit_array,
+use crate::raw::{
+    Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
 use std::{
     fmt,
     iter::{Enumerate, FusedIterator},
+    mem::MaybeUninit,
     ops::Bound,
     slice::Iter,
 };
@@ -116,7 +116,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
 
         let header = self.header.clone();
         let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = maybe_uninit_uninit_array();
+        let mut child_pointers = [MaybeUninit::uninit(); 48];
 
         for (child_index, (key_byte, child_ptr)) in self.iter().enumerate() {
             // PANIC SAFETY: This `try_from` will not panic because the `next_index` value
@@ -188,6 +188,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
     }
 
     #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         use crate::rust_nightly_apis::assume;
 
@@ -243,6 +244,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
     }
 
     #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         use crate::rust_nightly_apis::assume;
 
@@ -343,8 +345,8 @@ mod tests {
 
     use crate::raw::{
         representation::tests::{
-            inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
-            FixtureReturn,
+            inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
+            inner_node_write_child_test, FixtureReturn,
         },
         LeafNode, NodePtr,
     };
@@ -402,6 +404,11 @@ mod tests {
                       [49] children."]
     fn shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNode256::<_, _, 16>::empty(), 49);
+    }
+
+    #[test]
+    fn min_max() {
+        inner_node_min_max_test(InnerNode256::<_, _, 16>::empty(), 256);
     }
 
     fn fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, (), 16>, 4> {

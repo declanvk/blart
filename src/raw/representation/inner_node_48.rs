@@ -5,7 +5,6 @@ use crate::{
     },
     rust_nightly_apis::{
         assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
-        maybe_uninit_uninit_array,
     },
 };
 use std::{
@@ -187,7 +186,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
         InnerNode48 {
             header,
             child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
-            child_pointers: maybe_uninit_uninit_array(),
+            child_pointers: [MaybeUninit::uninit(); 48],
         }
     }
 
@@ -323,7 +322,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
 
         let header = self.header.clone();
 
-        let mut key_and_child_ptrs = maybe_uninit_uninit_array::<_, 16>();
+        let mut key_and_child_ptrs = [MaybeUninit::uninit(); 16];
 
         for (idx, value) in self.iter().enumerate() {
             key_and_child_ptrs[idx].write(value);
@@ -342,8 +341,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
             init_key_and_child_ptrs
         };
 
-        let mut keys = maybe_uninit_uninit_array();
-        let mut child_pointers = maybe_uninit_uninit_array();
+        let mut keys = [MaybeUninit::uninit(); 16];
+        let mut child_pointers = [MaybeUninit::uninit(); 16];
 
         for (idx, (key_byte, child_ptr)) in init_key_and_child_ptrs.iter().copied().enumerate() {
             keys[idx].write(key_byte);
@@ -431,6 +430,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
     }
 
     #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         // SAFETY: Since `RestrictedNodeIndex` is
         // repr(u8) is safe to transmute it
@@ -494,6 +494,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
     }
 
     #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         // SAFETY: Since `RestrictedNodeIndex` is
         // repr(u8) is safe to transmute it
@@ -609,8 +610,8 @@ mod tests {
 
     use crate::raw::{
         representation::tests::{
-            inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
-            FixtureReturn,
+            inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
+            inner_node_write_child_test, FixtureReturn,
         },
         LeafNode, NodePtr,
     };
@@ -692,6 +693,11 @@ mod tests {
                       children."]
     fn shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNode48::<_, _, 16>::empty(), 17);
+    }
+
+    #[test]
+    fn min_max() {
+        inner_node_min_max_test(InnerNode48::<_, _, 16>::empty(), 48);
     }
 
     fn fixture() -> FixtureReturn<InnerNode48<Box<[u8]>, (), 16>, 4> {

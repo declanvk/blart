@@ -24,16 +24,16 @@ pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
     #[cfg(feature = "nightly")]
     {
         // SAFETY: Covered by condition of containing function
-        unsafe { std::mem::MaybeUninit::slice_assume_init_ref(slice) }
+        unsafe { slice.assume_init_ref() }
     }
 
     #[cfg(not(feature = "nightly"))]
     {
         // SAFETY: casting `slice` to a `*const [T]` is safe since the caller guarantees
-        // that `slice` is initialized, and `MaybeUninit` is guaranteed to have
-        // the same layout as `T`. The pointer obtained is valid since it refers
-        // to memory owned by `slice` which is a reference and thus guaranteed
-        // to be valid for reads.
+        // that `slice` is initialized, and `MaybeUninit` is guaranteed to have the same
+        // layout as `T`. The pointer obtained is valid since it refers to memory owned
+        // by `slice` which is a reference and thus guaranteed to be valid for
+        // reads.
         unsafe { &*(slice as *const [std::mem::MaybeUninit<T>] as *const [T]) }
     }
 }
@@ -61,13 +61,14 @@ pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
     #[cfg(feature = "nightly")]
     {
         // SAFETY: Covered by condition of containing function
-        unsafe { std::mem::MaybeUninit::slice_assume_init_mut(slice) }
+        unsafe { slice.assume_init_mut() }
     }
 
     #[cfg(not(feature = "nightly"))]
     {
-        // SAFETY: similar to safety notes for `slice_get_ref`, but we have a
-        // mutable reference which is also guaranteed to be valid for writes.
+        // SAFETY: similar to safety notes for `maybe_uninit_slice_assume_init_ref`, but
+        // we have a mutable reference which is also guaranteed to be valid for
+        // writes.
         unsafe { &mut *(slice as *mut [std::mem::MaybeUninit<T>] as *mut [T]) }
     }
 }
@@ -110,42 +111,6 @@ pub fn hasher_write_length_prefix<H: std::hash::Hasher>(state: &mut H, num_entri
     {
         state.write_usize(num_entries);
     }
-}
-
-/// Create a new array of `MaybeUninit<T>` items, in an uninitialized state.
-///
-/// Note: in a future Rust version this method may become unnecessary
-/// when Rust allows
-/// [inline const expressions](https://github.com/rust-lang/rust/issues/76001).
-/// The example below could then use `let mut buf = [const {
-/// MaybeUninit::<u8>::uninit() }; 32];`.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#96097][issue-96097]**
-///
-/// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
-#[cfg(feature = "nightly")]
-#[inline]
-pub const fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeUninit<T>; N] {
-    std::mem::MaybeUninit::uninit_array()
-}
-
-/// Create a new array of `MaybeUninit<T>` items, in an uninitialized state.
-///
-/// Note: in a future Rust version this method may become unnecessary
-/// when Rust allows
-/// [inline const expressions](https://github.com/rust-lang/rust/issues/76001).
-/// The example below could then use `let mut buf = [const {
-/// MaybeUninit::<u8>::uninit() }; 32];`.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#96097][issue-96097]**
-///
-/// [issue-96097]: https://github.com/rust-lang/rust/issues/96097
-#[cfg(not(feature = "nightly"))]
-#[inline]
-pub fn maybe_uninit_uninit_array<T, const N: usize>() -> [std::mem::MaybeUninit<T>; N] {
-    std::array::from_fn(|_| std::mem::MaybeUninit::uninit())
 }
 
 /// Constructs a new boxed slice with uninitialized contents.

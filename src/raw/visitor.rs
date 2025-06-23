@@ -34,7 +34,7 @@ pub trait Visitable<K, T, const PREFIX_LEN: usize> {
     /// ```rust,compile_fail
     /// impl<K, T> Visitable<K, T, PREFIX_LEN> for InnerNode4<K, T> {
     ///     ...
-    ///  
+    ///
     ///     fn visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
     ///         visitor.visit_node4(self)
     ///     }

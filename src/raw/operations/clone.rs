@@ -61,8 +61,8 @@ pub unsafe fn clone_unchecked<
         let Some((expected_num_children, parent)) = unfinished_nodes_stack.last() else {
             debug_assert!(
                 new_root_node.is_none(),
-                "First cloned node [{:?}] is present while unfinished node stack is empty",
-                new_root_node
+                "First cloned node [{new_root_node:?}] is present while unfinished node stack is \
+                 empty",
             );
             // We know this is the root node since it has no parent
             *new_root_node = Some(new_node_ptr.to_opaque());
