@@ -294,12 +294,7 @@ mod tests {
     #[track_caller]
     fn check<K: AsBytes + Clone + PartialEq + fmt::Debug>(keys: impl IntoIterator<Item = K>) {
         let mut tree = TreeMap::new();
-        for (key, value) in keys
-            .into_iter()
-            .map(crate::visitor::DebugAsDisplay::from)
-            .enumerate()
-            .map(swap)
-        {
+        for (key, value) in keys.into_iter().enumerate().map(swap) {
             tree.try_insert(key, value).unwrap();
         }
 
