@@ -31,7 +31,10 @@ unsafe fn remove_child_from_inner_node_and_compress<
     key_fragment: u8,
     expected_leaf_node: NodePtr<PREFIX_LEN, LeafNode<N::Key, N::Value, PREFIX_LEN>>,
     alloc: &A,
-) -> Option<OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>> {
+) -> (
+    Option<OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>>,
+    ParentNodeChange<N::Key, N::Value, PREFIX_LEN>,
+) {
     // SAFETY: The `inner_node` reference is scoped to this function and dropped
     // before cases where the inner node is deallocated. It is a unique reference,
     // by the safety requirements of the containing function.
@@ -106,7 +109,10 @@ unsafe fn remove_child_from_inner_node_and_compress<
             drop(NodePtr::deallocate_node_ptr(inner_node_ptr, alloc));
         }
 
-        Some(child_node_ptr)
+        (
+            Some(child_node_ptr),
+            ParentNodeChange::SingletonCompressed { child_node_ptr },
+        )
     } else if N::TYPE.should_shrink_inner_node(inner_node.header().num_children()) {
         let new_inner_node = inner_node.shrink();
 
@@ -118,9 +124,14 @@ unsafe fn remove_child_from_inner_node_and_compress<
             drop(NodePtr::deallocate_node_ptr(inner_node_ptr, alloc));
         }
 
-        Some(new_inner_node_ptr)
+        (
+            Some(new_inner_node_ptr),
+            ParentNodeChange::Shrunk {
+                new_parent_node: new_inner_node_ptr,
+            },
+        )
     } else {
-        None
+        (None, ParentNodeChange::NoChange)
     }
 }
 
@@ -144,7 +155,7 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
     original_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     alloc: &A,
 ) -> DeleteResult<K, V, PREFIX_LEN> {
-    let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
+    let (new_parent_node_ptr, inner_node_modification) = match parent_node_ptr.to_node_ptr() {
         ConcreteNodePtr::Node4(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
             remove_child_from_inner_node_and_compress(
@@ -239,6 +250,7 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
 
     DeleteResult {
         new_root: Some(new_root),
+        parent_node_change: Some(inner_node_modification),
         deleted_leaf: leaf_node,
     }
 }
@@ -251,8 +263,54 @@ pub struct DeleteResult<K, V, const PREFIX_LEN: usize> {
     /// If `None`, that means the tree is now empty.
     pub new_root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
 
+    /// This field details what kind of changes happened to the parent node.
+    ///
+    /// If `None`, that means the tree is now empty and there is no relevant
+    /// parent node.
+    pub parent_node_change: Option<ParentNodeChange<K, V, PREFIX_LEN>>,
+
     /// The leaf node that was successfully deleted.
     pub deleted_leaf: LeafNode<K, V, PREFIX_LEN>,
+}
+
+pub enum ParentNodeChange<K, V, const PREFIX_LEN: usize> {
+    /// This variant indicates that after the delete the parent node didn't have
+    /// enough children for its node type, and needed to be shrunk to the
+    /// next smaller type.
+    Shrunk {
+        /// A pointer to the newly allocated (and smaller!) parent node.
+        new_parent_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    },
+    /// This variant indicates that after the delete there was only a single
+    /// child in the inner node, so the inner node needed to be removed and
+    /// compressed into the grandparent node (or become the root).
+    ///
+    /// In this case, the new parent is the original grandparent of the deleted
+    /// node.
+    SingletonCompressed {
+        /// Pointer to the child node which was pulled up to be a child of the
+        /// grandparent.
+        child_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    },
+    /// This variant indicates that there was no deallocation or replacement of
+    /// the parent node during the delete.
+    NoChange,
+}
+
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ParentNodeChange<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Shrunk { new_parent_node } => f
+                .debug_struct("Shrunk")
+                .field("new_parent_node", new_parent_node)
+                .finish(),
+            Self::SingletonCompressed { child_node_ptr } => f
+                .debug_struct("SingletonCompressed")
+                .field("child_node_ptr", child_node_ptr)
+                .finish(),
+            Self::NoChange => write!(f, "NoChange"),
+        }
+    }
 }
 
 /// This struct represents a location in the trie that can be deleted.
@@ -302,6 +360,10 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
     ///    arbitrarily read or write to any child in the given tree.
     ///  - `alloc` must be the same allocator that was used to allocate the
     ///    nodes of the trie.
+    ///  - This function may invalidate existing pointers into the trie when
+    ///    leaves are deleted and when inner nodes are deleted or shrunk.
+    ///    Callers must ensure that they delete invalidated pointers, the new
+    ///    pointers are returned in [`DeleteResult`].
     pub unsafe fn apply<A: Allocator>(
         self,
         root: OpaqueNodePtr<K, V, PREFIX_LEN>,
@@ -325,6 +387,7 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
 
                 DeleteResult {
                     new_root: None,
+                    parent_node_change: None,
                     deleted_leaf: leaf_node,
                 }
             },
