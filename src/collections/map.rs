@@ -981,54 +981,51 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         self.remove_entry(key).map(|(_, v)| v)
     }
 
-    /*
     /// Retains only the elements specified by the predicate.
     ///
     /// In other words, remove all pairs (k, v) for which f(&k, &mut v) returns
     /// false. The elements are visited in ascending key order.
-    pub(crate) fn retain<F>(&mut self, f: F)
+    pub fn retain<F>(&mut self, f: F)
     where
         F: FnMut(&K, &mut V) -> bool,
     {
-        self.drain_filter(f).for_each(|_| ());
+        self.extract_if(f).for_each(drop);
     }
 
     /// Moves all elements from other into self, leaving other empty.
-    //
-    // # Examples
-    //
-    // ```rust,should_panic
-    // use blart::TreeMap;
-    //
-    // let mut a = TreeMap::<u128, _>::new();
-    // a.try_insert(1, "a").unwrap();
-    // a.try_insert(2, "b").unwrap();
-    // a.try_insert(3, "c").unwrap(); // Note: Key (3) also present in b.
-    //
-    // let mut b = TreeMap::<u128, _>::new();
-    // b.try_insert(3, "d").unwrap(); // Note: Key (3) also present in a.
-    // b.try_insert(4, "e").unwrap();
-    // b.try_insert(5, "f").unwrap();
-    //
-    // a.append(&mut b);
-    //
-    // assert_eq!(a.len(), 5);
-    // assert_eq!(b.len(), 0);
-    //
-    // assert_eq!(a[&1], "a");
-    // assert_eq!(a[&2], "b");
-    // assert_eq!(a[&3], "d"); // Note: "c" has been overwritten.
-    // assert_eq!(a[&4], "e");
-    // assert_eq!(a[&5], "f");
-    // ```
-    #[allow(dead_code)]
-    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V, PREFIX_LEN>)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut a = TreeMap::<u128, _>::new();
+    /// a.try_insert(1, "a").unwrap();
+    /// a.try_insert(2, "b").unwrap();
+    /// a.try_insert(3, "c").unwrap(); // Note: Key (3) also present in b.
+    ///
+    /// let mut b = TreeMap::<u128, _>::new();
+    /// b.try_insert(3, "d").unwrap(); // Note: Key (3) also present in a.
+    /// b.try_insert(4, "e").unwrap();
+    /// b.try_insert(5, "f").unwrap();
+    ///
+    /// a.append(&mut b);
+    ///
+    /// assert_eq!(a.len(), 5);
+    /// assert_eq!(b.len(), 0);
+    ///
+    /// assert_eq!(a[&1], "a");
+    /// assert_eq!(a[&2], "b");
+    /// assert_eq!(a[&3], "d"); // Note: "c" has been overwritten.
+    /// assert_eq!(a[&4], "e");
+    /// assert_eq!(a[&5], "f");
+    /// ```
+    pub fn append(&mut self, other: &mut TreeMap<K, V, PREFIX_LEN>)
     where
         K: NoPrefixesBytes,
     {
-        self.extend(other.drain_filter(|_, _| true))
+        self.extend(other.extract_if(|_, _| true))
     }
-    */
 
     /// Constructs a double-ended iterator over a sub-range of elements in the
     /// map.
@@ -1118,44 +1115,47 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         )
     }
 
-    /*
     /// Splits the collection into two at the given key. Returns everything
     /// after the given key, including the key.
-    //
-    // # Examples
-    //
-    // ```rust,should_panic
-    // use blart::TreeMap;
-    //
-    // let mut a = TreeMap::new();
-    // a.try_insert(Box::from([1]), "a").unwrap();
-    // a.try_insert(Box::from([2]), "b").unwrap();
-    // a.try_insert(Box::from([3]), "c").unwrap();
-    // a.try_insert(Box::from([17]), "d").unwrap();
-    // a.try_insert(Box::from([41]), "e").unwrap();
-    //
-    // let b = a.split_off([3].as_ref());
-    //
-    // assert_eq!(a.len(), 2);
-    // assert_eq!(b.len(), 3);
-    //
-    // assert_eq!(a[[1].as_ref()], "a");
-    // assert_eq!(a[[2].as_ref()], "b");
-    //
-    // assert_eq!(b[[3].as_ref()], "c");
-    // assert_eq!(b[[17].as_ref()], "d");
-    // assert_eq!(b[[41].as_ref()], "e");
-    // ```
-    #[allow(dead_code)]
-    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, PREFIX_LEN, A>
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut a = TreeMap::new();
+    /// a.try_insert(Box::from([1]), "a").unwrap();
+    /// a.try_insert(Box::from([2]), "b").unwrap();
+    /// a.try_insert(Box::from([3]), "c").unwrap();
+    /// a.try_insert(Box::from([17]), "d").unwrap();
+    /// a.try_insert(Box::from([41]), "e").unwrap();
+    ///
+    /// let b = a.split_off([3].as_ref());
+    ///
+    /// assert_eq!(a.len(), 2);
+    /// assert_eq!(b.len(), 3);
+    ///
+    /// assert_eq!(a[[1].as_ref()], "a");
+    /// assert_eq!(a[[2].as_ref()], "b");
+    ///
+    /// assert_eq!(b[[3].as_ref()], "c");
+    /// assert_eq!(b[[17].as_ref()], "d");
+    /// assert_eq!(b[[41].as_ref()], "e");
+    /// ```
+    pub fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, PREFIX_LEN, A>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
+        A: Clone,
     {
-        let mut new_tree = TreeMap::new();
+        // TODO(opt): Optimize this by doing a tree search to find split point and then
+        // cutting the tree. This should save time versus reconstructing a whole new
+        // tree
+
+        let mut new_tree = TreeMap::with_prefix_len_in(self.alloc.clone());
 
         for (key, value) in
-            self.drain_filter(|key, _| split_key.as_bytes() <= key.borrow().as_bytes())
+            self.extract_if(|key, _| split_key.as_bytes() <= key.borrow().as_bytes())
         {
             // PANIC SAFETY: This will not panic because the property of any existing tree
             // containing no keys that are prefixes of any other key holds when the tree is
@@ -1168,43 +1168,38 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
 
     /// Creates an iterator that visits all elements (key-value pairs) in
     /// ascending key order and uses a closure to determine if an element should
-    /// be removed.
-    ///
-    /// If the closure returns true, the element is removed from the map and
-    /// yielded. If the closure returns false, or panics, the element
-    /// remains in the map and will not be yielded.
+    /// be removed. If the closure returns `true`, the element is removed from
+    /// the map and yielded. If the closure returns `false`, or panics, the
+    /// element remains in the map and will not be yielded.
     ///
     /// The iterator also lets you mutate the value of each element in the
     /// closure, regardless of whether you choose to keep or remove it.
     ///
-    /// If the iterator is only partially consumed or not consumed at all, each
-    /// of the remaining elements is still subjected to the closure, which may
-    /// change its value and, by returning true, have the element removed and
-    /// dropped.
+    /// If the returned `ExtractIf` is not exhausted, e.g. because it is dropped
+    /// without iterating or the iteration short-circuits, then the
+    /// remaining elements will be retained. Use [`retain`] with a negated
+    /// predicate if you do not need the returned iterator.
     ///
-    /// It is unspecified how many more elements will be subjected to the
-    /// closure if a panic occurs in the closure, or a panic occurs while
-    /// dropping an element, or if the [`DrainFilter`] value is leaked.
-    //
-    // # Examples
-    //
-    // ```rust,should_panic
-    // use blart::TreeMap;
-    //
-    // let mut map: TreeMap<u8, u8> = (0..8).map(|x| (x, x)).collect();
-    // let evens: TreeMap<_, _> = map.drain_filter(|k, _v| k % 2 == 0).collect();
-    // let odds = map;
-    // assert_eq!(evens.keys().copied().collect::<Vec<_>>(), [0, 2, 4, 6]);
-    // assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
-    // ```
-    #[allow(dead_code)]
-    pub fn extract_if<'a, F>(&'a mut self, pred: F) -> ExtractIf<'a, K, V, F>
+    /// [`retain`]: TreeMap::retain
+    ///
+    /// # Examples
+    ///
+    /// Splitting a map into even and odd keys, reusing the original map:
+    ///
+    /// ```
+    /// use blart::TreeMap;
+    /// let mut map: TreeMap<u8, u8> = (0..8).map(|x| (x, x)).collect();
+    /// let evens: TreeMap<_, _> = map.extract_if(|k, _v| k % 2 == 0).collect();
+    /// let odds = map;
+    /// assert_eq!(evens.keys().copied().collect::<Vec<_>>(), [0, 2, 4, 6]);
+    /// assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
+    /// ```
+    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, K, V, F, PREFIX_LEN, A>
     where
         F: FnMut(&K, &mut V) -> bool,
     {
         ExtractIf::new(self, pred)
     }
-    */
 
     /// Creates a consuming iterator visiting all the keys, in sorted order. The
     /// map cannot be used after calling this. The iterator element type is `K`.
