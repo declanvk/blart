@@ -75,7 +75,7 @@ unsafe fn remove_child_from_inner_node_and_compress<
         // node.
         let mut children = inner_node.iter();
         let (child_key_byte, child_node_ptr) = children.next().expect("expected single child");
-        assert!(
+        debug_assert!(
             children.next().is_none(),
             "expected only a single child, not more"
         );
@@ -261,7 +261,7 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
 
     DeleteResult {
         new_root: Some(new_root),
-        _parent_node_change: Some(inner_node_modification),
+        parent_node_change: Some(inner_node_modification),
         deleted_leaf: leaf_node,
     }
 }
@@ -278,7 +278,7 @@ pub struct DeleteResult<K, V, const PREFIX_LEN: usize> {
     ///
     /// If `None`, that means the tree is now empty and there is no relevant
     /// parent node.
-    pub _parent_node_change: Option<DeleteParentNodeChange<K, V, PREFIX_LEN>>,
+    pub parent_node_change: Option<DeleteParentNodeChange<K, V, PREFIX_LEN>>,
 
     /// The leaf node that was successfully deleted.
     pub deleted_leaf: LeafNode<K, V, PREFIX_LEN>,
@@ -376,7 +376,7 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
 
                 DeleteResult {
                     new_root: None,
-                    _parent_node_change: None,
+                    parent_node_change: None,
                     deleted_leaf: leaf_node,
                 }
             },

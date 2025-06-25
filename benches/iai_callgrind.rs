@@ -173,6 +173,86 @@ fn bench_range_iterator<K: AsBytes, V, R: RangeBounds<K>, const PREFIX_LEN: usiz
 
 library_benchmark_group!(name = bench_iterator_group; benchmarks = bench_full_iterator, bench_prefix_iterator, bench_fuzzy_iterator, bench_range_iterator);
 
+// MODIFYING
+
+#[library_benchmark]
+#[bench::all(dictionary_tree().clone(), "all")]
+#[bench::half(dictionary_tree().clone(), "half")]
+#[bench::none(dictionary_tree().clone(), "none")]
+fn bench_retain<K: AsBytes, V, const PREFIX_LEN: usize>(
+    mut tree: TreeMap<K, V, PREFIX_LEN>,
+    mode: &str,
+) {
+    match mode {
+        "all" => tree.retain(|_, _| true),
+        "half" => {
+            let mut i = 0;
+            tree.retain(|_, _| {
+                i += 1;
+                i % 2 == 0
+            })
+        },
+        "none" => tree.retain(|_, _| false),
+        _ => unreachable!(),
+    }
+    std::hint::black_box(tree);
+}
+
+fn u128_tree(range: std::ops::Range<u128>) -> TreeMap<u128, usize> {
+    range.map(|i| (i, i as usize)).collect()
+}
+
+#[library_benchmark]
+#[bench::no_overlap(u128_tree(0..1024), u128_tree(1024..2048))]
+#[bench::overlap(u128_tree(0..1024), u128_tree(512..1536))]
+fn bench_append(mut tree1: TreeMap<u128, usize>, mut tree2: TreeMap<u128, usize>) {
+    tree1.append(&mut tree2);
+    std::hint::black_box(tree1);
+}
+
+#[library_benchmark]
+#[bench::dictionary(dictionary_tree().clone(), get_middle_key(dictionary_tree(), 1, 1))]
+fn bench_split_off<K, V, const PREFIX_LEN: usize>(
+    mut tree: TreeMap<K, V, PREFIX_LEN>,
+    key: &K,
+) -> TreeMap<K, V, PREFIX_LEN>
+where
+    K: AsBytes + Borrow<K> + Clone,
+    V: Clone,
+{
+    tree.split_off(key)
+}
+
+#[library_benchmark]
+#[bench::all(dictionary_tree().clone(), "all")]
+#[bench::half(dictionary_tree().clone(), "half")]
+#[bench::none(dictionary_tree().clone(), "none")]
+fn bench_extract_if<K: AsBytes, V, const PREFIX_LEN: usize>(
+    mut tree: TreeMap<K, V, PREFIX_LEN>,
+    mode: &str,
+) {
+    let extracted: Vec<_> = match mode {
+        "all" => tree.extract_if(|_, _| true).collect(),
+        "half" => {
+            let mut i = 0;
+            tree.extract_if(|_, _| {
+                i += 1;
+                i % 2 == 0
+            })
+            .collect()
+        },
+        "none" => tree.extract_if(|_, _| false).collect(),
+        _ => unreachable!(),
+    };
+    std::hint::black_box(extracted);
+    std::hint::black_box(tree);
+}
+
+library_benchmark_group!(
+    name = bench_modifying_group;
+    benchmarks = bench_retain, bench_append, bench_split_off, bench_extract_if
+);
+
 // END
 
 fn config() -> LibraryBenchmarkConfig {
@@ -192,5 +272,6 @@ main!(
     bench_lookup_group,
     bench_remove_group,
     bench_insert_group,
-    bench_iterator_group
+    bench_iterator_group,
+    bench_modifying_group
 );
