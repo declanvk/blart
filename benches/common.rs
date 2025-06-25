@@ -71,11 +71,11 @@ pub fn select_zipfian_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     num_elements: usize,
 ) -> Vec<&K> {
     let keys = tree.keys().collect::<Vec<_>>();
-    let distr = zipf::ZipfDistribution::new(tree.len(), 1.78).unwrap();
+    let distr = rand_distr::Zipf::new(tree.len() as f64, 1.78).unwrap();
     let mut rng = rand::rngs::StdRng::from_seed([128; 32]);
 
     distr
-        .map(move |idx| keys[idx])
+        .map(move |idx| keys[idx as usize])
         .sample_iter(&mut rng)
         .take(num_elements)
         .collect()
