@@ -12,3 +12,6 @@ pub use fuzzy::*;
 
 mod range;
 pub use range::*;
+
+mod extract_if;
+pub use extract_if::*;
