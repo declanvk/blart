@@ -375,9 +375,9 @@ mod tests {
         tree.insert(a.clone(), String::from("a"));
         tree.insert(b.clone(), String::from("b"));
 
-        assert_eq!(tree.entry_ref(&a).key(), a.borrow());
-        assert_eq!(tree.entry_ref(&b).key(), b.borrow());
-        assert_eq!(tree.entry_ref(&c).key(), c.borrow());
+        assert_eq!(tree.entry_ref(&a).key(), a.as_c_str());
+        assert_eq!(tree.entry_ref(&b).key(), b.as_c_str());
+        assert_eq!(tree.entry_ref(&c).key(), c.as_c_str());
     }
 
     #[test]
