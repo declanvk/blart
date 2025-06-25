@@ -11,12 +11,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
+ - Added `TreeMap::{extract_if, retain, split_off}` methods.
  - Add an optional feature to allow custom allocator support for use with collections. If the `nightly` feature flag is enabled and the `nightly` toolchain is used, then any type which implements `std::alloc::Allocator` can be used as the custom allocator. If the `allocator-api2` feature flag is enabled, then any type which implements `allocator_api2::alloc::Allocator` can be used as the custom allocator.
     - The `nightly` feature flag takes precedence over the `allocator-api2` feature flag.
     - The `allocator-api2` feature flag works on stable, while the `nightly` feature flag does not.
 
 ### Changed
 
+ - `DotPrinter` now allows directly providing the `fmt` function for key/value display, instead of wrapping existing types.
  - Update MSRV to 1.82.
 
 ### Removed
