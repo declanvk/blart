@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     alloc::Allocator,
     raw::{operations::lookup, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr},
@@ -27,6 +29,10 @@ unsafe fn remove_child_from_inner_node_and_compress<
 >(
     inner_node_ptr: NodePtr<PREFIX_LEN, N>,
     key_fragment: u8,
+    #[cfg(debug_assertions)] expected_leaf_node: NodePtr<
+        PREFIX_LEN,
+        LeafNode<N::Key, N::Value, PREFIX_LEN>,
+    >,
     alloc: &A,
 ) -> Option<OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>> {
     // SAFETY: The `inner_node` reference is scoped to this function and dropped
@@ -34,9 +40,26 @@ unsafe fn remove_child_from_inner_node_and_compress<
     // by the safety requirements of the containing function.
     let inner_node = unsafe { inner_node_ptr.as_mut() };
 
-    inner_node
-        .remove_child(key_fragment)
-        .expect("child should be present");
+    let _removed = inner_node.remove_child(key_fragment);
+
+    #[cfg(debug_assertions)]
+    {
+        debug_assert!(
+            _removed.is_some(),
+            "child must be present at [{key_fragment}] in inner node [{inner_node:?}]"
+        );
+        let removed = _removed.unwrap();
+        debug_assert!(
+            removed.is::<LeafNode<N::Key, N::Value, PREFIX_LEN>>(),
+            "child at [{key_fragment}] in inner node [{inner_node:?}] must be a leaf node"
+        );
+        debug_assert_eq!(
+            removed,
+            expected_leaf_node.to_opaque(),
+            "child at [{key_fragment}] in inner node [{inner_node:?}] should be [{:?}]",
+            expected_leaf_node.to_opaque()
+        );
+    }
 
     if inner_node.header().num_children() == 1 {
         // need to compress node into child
@@ -119,7 +142,7 @@ unsafe fn remove_child_from_inner_node_and_compress<
 ///    the trie.
 unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allocator>(
     leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
-    (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V, PREFIX_LEN>, u8),
+    (parent_node_ptr, child_key_byte): (OpaqueNodePtr<K, V, PREFIX_LEN>, u8),
     grandparent_node_ptr: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     original_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     alloc: &A,
@@ -127,19 +150,43 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
     let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
         ConcreteNodePtr::Node4(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
+            remove_child_from_inner_node_and_compress(
+                parent_node_ptr,
+                child_key_byte,
+                #[cfg(debug_assertions)]
+                leaf_node_ptr,
+                alloc,
+            )
         },
         ConcreteNodePtr::Node16(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
+            remove_child_from_inner_node_and_compress(
+                parent_node_ptr,
+                child_key_byte,
+                #[cfg(debug_assertions)]
+                leaf_node_ptr,
+                alloc,
+            )
         },
         ConcreteNodePtr::Node48(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
+            remove_child_from_inner_node_and_compress(
+                parent_node_ptr,
+                child_key_byte,
+                #[cfg(debug_assertions)]
+                leaf_node_ptr,
+                alloc,
+            )
         },
         ConcreteNodePtr::Node256(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
+            remove_child_from_inner_node_and_compress(
+                parent_node_ptr,
+                child_key_byte,
+                #[cfg(debug_assertions)]
+                leaf_node_ptr,
+                alloc,
+            )
         },
         ConcreteNodePtr::LeafNode(_) => unreachable!("Cannot have delete from leaf node"),
     };
@@ -147,35 +194,35 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
     // If the parent node was changed to something else, we have to write the new
     // value to the grandparent
     if let Some(new_parent_node_ptr) = new_parent_node_ptr {
-        if let Some((grandparent_node_ptr, grandparent_key_byte)) = grandparent_node_ptr {
+        if let Some((grandparent_node_ptr, parent_key_byte)) = grandparent_node_ptr {
             match grandparent_node_ptr.to_node_ptr() {
                 ConcreteNodePtr::Node4(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
+                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::Node16(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
+                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::Node48(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
+                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::Node256(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
+                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::LeafNode(_) => {
                     unreachable!("Cannot modify children of a leaf node")
@@ -234,15 +281,18 @@ pub struct DeletePoint<K, V, const PREFIX_LEN: usize> {
     pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 }
 
-impl<K, V, const PREFIX_LEN: usize> std::fmt::Debug for DeletePoint<K, V, PREFIX_LEN> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DeleteSearchResult")
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for DeletePoint<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DeletePoint")
             .field(
-                "grandparent_node",
+                "grandparent_ptr_and_parent_key_byte",
                 &self.grandparent_ptr_and_parent_key_byte,
             )
-            .field("parent_node", &self.parent_ptr_and_child_key_byte)
-            .field("leaf_node", &self.leaf_node_ptr)
+            .field(
+                "parent_ptr_and_child_key_byte",
+                &self.parent_ptr_and_child_key_byte,
+            )
+            .field("leaf_node_ptr", &self.leaf_node_ptr)
             .finish()
     }
 }
