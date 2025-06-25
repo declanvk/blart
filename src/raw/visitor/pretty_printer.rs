@@ -2,13 +2,11 @@ use crate::{
     alloc::Allocator,
     raw::{InnerNode, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
-    AsBytes, NoPrefixesBytes, OrderedBytes, TreeMap,
+    AsBytes, TreeMap,
 };
 use std::{
-    borrow::Borrow,
-    fmt::{self, Debug, Display},
+    fmt::{self},
     io::{self, Write},
-    ops::Deref,
 };
 
 /// Settings which customize the output of the [`DotPrinter`] visitor.
@@ -23,27 +21,46 @@ pub struct DotPrinterSettings {
 ///
 /// See ['DOT Language | Graphviz'](https://graphviz.org/doc/info/lang.html) for
 /// information about syntax and example of the language.
-pub struct DotPrinter<O: Write> {
+pub struct DotPrinter<O: Write, K, V> {
     output: O,
     next_id: usize,
     settings: DotPrinterSettings,
+    key_fmt: fn(&K, &mut fmt::Formatter<'_>) -> fmt::Result,
+    value_fmt: fn(&V, &mut fmt::Formatter<'_>) -> fmt::Result,
 }
 
-impl<O: Write> DotPrinter<O> {
+impl<O: Write, K, V> DotPrinter<O, K, V> {
     /// Write the dot-format of the given tree to the given output.
-    pub fn print<K, V, const PREFIX_LEN: usize, A: Allocator>(
+    pub fn print<const PREFIX_LEN: usize, A: Allocator>(
         output: O,
         tree: &TreeMap<K, V, PREFIX_LEN, A>,
         settings: DotPrinterSettings,
     ) -> Option<io::Result<()>>
     where
-        K: Display,
-        V: Display,
+        K: fmt::Display,
+        V: fmt::Display,
     {
+        Self::print_with_fmt(
+            output,
+            tree,
+            settings,
+            <K as fmt::Display>::fmt,
+            <V as fmt::Display>::fmt,
+        )
+    }
+
+    /// Write the dot-format of the given tree to the given output.
+    pub fn print_with_fmt<const PREFIX_LEN: usize, A: Allocator>(
+        output: O,
+        tree: &TreeMap<K, V, PREFIX_LEN, A>,
+        settings: DotPrinterSettings,
+        key_fmt: fn(&K, &mut fmt::Formatter<'_>) -> fmt::Result,
+        value_fmt: fn(&V, &mut fmt::Formatter<'_>) -> fmt::Result,
+    ) -> Option<io::Result<()>> {
         tree.state.as_ref().map(|state| {
             // SAFETY: Since we get a reference to the `TreeMap`, we know the
             // node and all descendants will not be mutated
-            unsafe { Self::print_tree(output, &state.root, settings) }
+            unsafe { Self::print_tree(output, &state.root, settings, key_fmt, value_fmt) }
         })
     }
 
@@ -52,19 +69,19 @@ impl<O: Write> DotPrinter<O> {
     /// # Safety
     ///  - For the duration of this function, the given node and all its
     ///    children nodes must not get mutated.
-    pub(crate) unsafe fn print_tree<K, V, const PREFIX_LEN: usize>(
+    pub(crate) unsafe fn print_tree<const PREFIX_LEN: usize>(
         output: O,
         tree: &OpaqueNodePtr<K, V, PREFIX_LEN>,
         settings: DotPrinterSettings,
-    ) -> io::Result<()>
-    where
-        K: Display,
-        V: Display,
-    {
+        key_fmt: fn(&K, &mut fmt::Formatter<'_>) -> fmt::Result,
+        value_fmt: fn(&V, &mut fmt::Formatter<'_>) -> fmt::Result,
+    ) -> io::Result<()> {
         let mut visitor = DotPrinter {
             output,
             next_id: 0,
             settings,
+            key_fmt,
+            value_fmt,
         };
 
         visitor.output_prelude()?;
@@ -87,14 +104,9 @@ impl<O: Write> DotPrinter<O> {
         new_id
     }
 
-    fn write_inner_node<K, T, N, const PREFIX_LEN: usize>(
-        &mut self,
-        inner_node: &N,
-    ) -> io::Result<usize>
+    fn write_inner_node<N, const PREFIX_LEN: usize>(&mut self, inner_node: &N) -> io::Result<usize>
     where
-        K: Display,
-        T: Display,
-        N: InnerNode<PREFIX_LEN, Key = K, Value = T>,
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
     {
         let header = inner_node.header();
         let node_id = self.get_id();
@@ -147,10 +159,8 @@ impl<O: Write> DotPrinter<O> {
     }
 }
 
-impl<K, T, O, const PREFIX_LEN: usize> Visitor<K, T, PREFIX_LEN> for DotPrinter<O>
+impl<K, V, O, const PREFIX_LEN: usize> Visitor<K, V, PREFIX_LEN> for DotPrinter<O, K, V>
 where
-    K: Display,
-    T: Display,
     O: Write,
 {
     type Output = io::Result<usize>;
@@ -163,23 +173,32 @@ where
         unimplemented!("this visitor should never combine outputs")
     }
 
-    fn visit_node4(&mut self, t: &super::InnerNode4<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_node4(&mut self, t: &super::InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node16(&mut self, t: &super::InnerNode16<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_node16(&mut self, t: &super::InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node48(&mut self, t: &super::InnerNode48<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_node48(&mut self, t: &super::InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &super::InnerNode256<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_node256(&mut self, t: &super::InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 
-    fn visit_leaf(&mut self, t: &super::LeafNode<K, T, PREFIX_LEN>) -> Self::Output {
+    fn visit_leaf(&mut self, t: &super::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
+        let key = OverrideDisplay {
+            value: t.key_ref(),
+            fmt_fn: self.key_fmt,
+        };
+        let value = OverrideDisplay {
+            value: t.value_ref(),
+            fmt_fn: self.value_fmt,
+        };
+
         let node_id = self.get_id();
         write!(self.output, "n{node_id} ")?;
         write!(self.output, "[label=\"{{")?;
@@ -190,8 +209,8 @@ where
                 "{{<h0> {:p}}} | {{{:?}}} | {{{}}} | {{{}}} | {{{:p} {:p}}} }}\"]",
                 t as *const _,
                 NodeType::Leaf,
-                t.key_ref(),
-                t.value_ref(),
+                key,
+                value,
                 t.previous
                     .map_or(std::ptr::null_mut(), |prev| prev.to_ptr()),
                 t.next.map_or(std::ptr::null_mut(), |next| next.to_ptr()),
@@ -201,8 +220,8 @@ where
                 self.output,
                 "{{<h0> {:?}}} | {{{}}} | {{{}}}}}\"]",
                 NodeType::Leaf,
-                t.key_ref(),
-                t.value_ref()
+                key,
+                value
             )?;
         }
 
@@ -210,114 +229,67 @@ where
     }
 }
 
-/// This struct is intended to wrap a type which implements [`Debug`] and expose
-/// it as an implementation of [`Display`].
-///
-/// This is helpful when working with [`TreeMap`] key types which don't directly
-/// implement [`Display`], but you still want to print the tree using
-/// [`DotPrinter`].
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DebugAsDisplay<T>(T);
-
-impl<T> Deref for DebugAsDisplay<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+#[derive(Debug)]
+struct OverrideDisplay<'a, T> {
+    value: &'a T,
+    fmt_fn: fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result,
 }
 
-impl<T: AsBytes> AsBytes for DebugAsDisplay<T> {
-    fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-}
-
-// SAFETY: The underlying type already implements the `NoPrefixesBytes`, so this
-// is safe
-unsafe impl<T: NoPrefixesBytes> NoPrefixesBytes for DebugAsDisplay<T> {}
-
-// SAFETY: The underlying type already implements the `OrderedBytes`, so this is
-// safe
-unsafe impl<T: OrderedBytes> OrderedBytes for DebugAsDisplay<T> {}
-
-impl<T> Borrow<T> for DebugAsDisplay<T> {
-    fn borrow(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T> DebugAsDisplay<T> {
-    /// Consume this struct and return the inner value.
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T> From<T> for DebugAsDisplay<T> {
-    fn from(value: T) -> Self {
-        Self(value)
-    }
-}
-
-impl<T> fmt::Display for DebugAsDisplay<T>
-where
-    T: fmt::Debug,
-{
+impl<'a, T> fmt::Display for OverrideDisplay<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        <T as fmt::Debug>::fmt(&self.0, f)
+        (self.fmt_fn)(&self.value, f)
     }
+}
+
+/// Print a given value using the [`Debug::fmt`] implementation.
+///
+/// This function can be used to override the formatting of key or value types
+/// when printing with [`DotPrinter`].
+///
+/// [`Debug::fmt`]: std::fmt::Debug::fmt
+pub fn debug_as_display_fmt(value: &impl fmt::Debug, f: &mut fmt::Formatter) -> fmt::Result {
+    value.fmt(f)
+}
+
+/// Print the string "\[null\]".
+///
+/// This function can be used to override the formatting of key or value types
+/// when printing with [`DotPrinter`].
+pub fn null_display_fmt(_value: &impl fmt::Debug, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "[null]")
+}
+
+/// Print the byte representation of the given value as returned by [`AsBytes`].
+///
+/// This function can be used to override the formatting of key or value types
+/// when printing with [`DotPrinter`].
+pub fn bytes_display_fmt(value: &impl AsBytes, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{:?}", value.as_bytes())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::AsBytes;
+    use crate::tests_common::swap;
 
     use super::*;
 
     #[test]
     fn simple_tree_output_to_dot() {
-        struct DisplayAsDebug<T>(T);
-
-        impl<T> Display for DisplayAsDebug<T>
-        where
-            T: Debug,
-        {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                <T as Debug>::fmt(&self.0, f)
-            }
-        }
-
-        impl<T> AsBytes for DisplayAsDebug<T>
-        where
-            T: AsBytes,
-        {
-            fn as_bytes(&self) -> &[u8] {
-                self.0.as_bytes()
-            }
-        }
-
-        // SAFETY: `DisplayAsDebug` is just a container, it does not modify the
-        // `AsBytes` logic
-        unsafe impl<T> NoPrefixesBytes for DisplayAsDebug<T> where T: NoPrefixesBytes {}
-
         let tree: TreeMap<_, _> = crate::tests_common::generate_key_fixed_length([3, 3])
             .enumerate()
-            .map(|(a, b)| (DisplayAsDebug(b), a))
-            .inspect(|(k, _)| {
-                // quick check that we're just passing through the bytes
-                assert_eq!(k.as_bytes(), k.0.as_bytes());
-            })
+            .map(swap)
             .collect();
 
         let mut buffer = Vec::new();
 
-        DotPrinter::print(
+        DotPrinter::print_with_fmt(
             &mut buffer,
             &tree,
             DotPrinterSettings {
                 display_node_address: false,
             },
+            debug_as_display_fmt,
+            <usize as fmt::Display>::fmt,
         )
         .unwrap()
         .unwrap();
