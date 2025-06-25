@@ -6,7 +6,8 @@ use crate::common::{
 };
 use blart::{AsBytes, TreeMap};
 use iai_callgrind::{
-    library_benchmark, library_benchmark_group, main, FlamegraphConfig, LibraryBenchmarkConfig,
+    library_benchmark, library_benchmark_group, main, Callgrind, FlamegraphConfig,
+    LibraryBenchmarkConfig, OutputFormat,
 };
 
 #[macro_use]
@@ -177,9 +178,13 @@ library_benchmark_group!(name = bench_iterator_group; benchmarks = bench_full_it
 // END
 
 fn config() -> LibraryBenchmarkConfig {
+    let mut output = OutputFormat::default();
+    output.truncate_description(Some(0));
+    let mut tool = Callgrind::default();
+    tool.flamegraph(FlamegraphConfig::default());
     let mut c = LibraryBenchmarkConfig::default();
-    c.truncate_description(Some(0));
-    c.flamegraph(FlamegraphConfig::default());
+    c.output_format(output);
+    c.tool(tool);
     c
 }
 

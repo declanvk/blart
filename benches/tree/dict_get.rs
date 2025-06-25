@@ -2,7 +2,7 @@ use std::{ffi::CString, time::Duration};
 
 use blart::TreeMap;
 use criterion::{criterion_group, Criterion};
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use rand::{rngs::StdRng, seq::IndexedRandom, SeedableRng};
 
 fn bench(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(69420);
