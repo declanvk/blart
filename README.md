@@ -89,7 +89,13 @@ This will run the fuzzer for a total of 3600 seconds (1 hour), using 8 jobs (hal
 
 ### Coverage
 
-To generate coverage reports from fuzzing corpus:
+To generate coverage data from fuzzing corpus:
+
+```bash
+cargo +nightly fuzz coverage tree_map_api
+```
+
+To generate an HTML report of line-level coverage:
 
 ```bash
 TARGET_TRIPLE="$(rustc --print host-tuple)"

@@ -26,6 +26,13 @@ enum OccupiedEntryAction {
 }
 
 #[derive(Arbitrary, Debug)]
+enum RetainKind {
+    All,
+    None,
+    Half,
+}
+
+#[derive(Arbitrary, Debug)]
 enum Action {
     Clear,
     ContainsKey(Box<[u8]>),
@@ -48,6 +55,7 @@ enum Action {
     Fuzzy(Box<[u8]>),
     Prefix(Box<[u8]>),
     IntoIter { take_front: usize, take_back: usize },
+    Retain(RetainKind),
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -234,6 +242,28 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 );
                 assert!(front_count <= take_front);
                 assert!(back_count <= take_back);
+            },
+            Action::Retain(kind) => match kind {
+                RetainKind::All => {
+                    tree.retain(|_, _| true);
+                    oracle.retain(|_, _| true);
+                },
+                RetainKind::None => {
+                    tree.retain(|_, _| false);
+                    oracle.retain(|_, _| false);
+                },
+                RetainKind::Half => {
+                    let mut i = 0;
+                    tree.retain(|_, _| {
+                        i += 1;
+                        i % 2 == 0
+                    });
+                    i = 0;
+                    oracle.retain(|_, _| {
+                        i += 1;
+                        i % 2 == 0
+                    });
+                },
             },
         }
 

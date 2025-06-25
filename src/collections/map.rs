@@ -18,7 +18,7 @@ use std::{
     borrow::Borrow,
     fmt::Debug,
     hash::Hash,
-    mem::ManuallyDrop,
+    mem::{self, ManuallyDrop},
     ops::{Index, RangeBounds},
     panic::UnwindSafe,
     ptr,
@@ -1187,54 +1187,71 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         self.remove_entry(key).map(|(_, v)| v)
     }
 
-    /*
     /// Retains only the elements specified by the predicate.
     ///
-    /// In other words, remove all pairs (k, v) for which f(&k, &mut v) returns
-    /// false. The elements are visited in ascending key order.
-    pub(crate) fn retain<F>(&mut self, f: F)
+    /// In other words, remove all pairs `(k, v)` for which `f(&k, &mut v)`
+    /// returns `false`. The elements are visited in ascending key order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use blart::TreeMap;
+    ///
+    /// let mut map: TreeMap<i32, i32> = (0..8).map(|x| (x, x*10)).collect();
+    /// // Keep only the elements with even-numbered keys.
+    /// map.retain(|&k, _| k % 2 == 0);
+    /// assert!(map.into_iter().eq(vec![(0, 0), (2, 20), (4, 40), (6, 60)]));
+    /// ```
+    pub fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&K, &mut V) -> bool,
     {
-        self.drain_filter(f).for_each(|_| ());
+        self.extract_if(|k, v| !f(k, v)).for_each(drop);
     }
 
     /// Moves all elements from other into self, leaving other empty.
-    //
-    // # Examples
-    //
-    // ```rust,should_panic
-    // use blart::TreeMap;
-    //
-    // let mut a = TreeMap::<u128, _>::new();
-    // a.try_insert(1, "a").unwrap();
-    // a.try_insert(2, "b").unwrap();
-    // a.try_insert(3, "c").unwrap(); // Note: Key (3) also present in b.
-    //
-    // let mut b = TreeMap::<u128, _>::new();
-    // b.try_insert(3, "d").unwrap(); // Note: Key (3) also present in a.
-    // b.try_insert(4, "e").unwrap();
-    // b.try_insert(5, "f").unwrap();
-    //
-    // a.append(&mut b);
-    //
-    // assert_eq!(a.len(), 5);
-    // assert_eq!(b.len(), 0);
-    //
-    // assert_eq!(a[&1], "a");
-    // assert_eq!(a[&2], "b");
-    // assert_eq!(a[&3], "d"); // Note: "c" has been overwritten.
-    // assert_eq!(a[&4], "e");
-    // assert_eq!(a[&5], "f");
-    // ```
-    #[allow(dead_code)]
-    pub(crate) fn append(&mut self, other: &mut TreeMap<K, V, PREFIX_LEN>)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut a = TreeMap::<u128, _>::new();
+    /// a.try_insert(1, "a").unwrap();
+    /// a.try_insert(2, "b").unwrap();
+    /// a.try_insert(3, "c").unwrap(); // Note: Key (3) also present in b.
+    ///
+    /// let mut b = TreeMap::<u128, _>::new();
+    /// b.try_insert(3, "d").unwrap(); // Note: Key (3) also present in a.
+    /// b.try_insert(4, "e").unwrap();
+    /// b.try_insert(5, "f").unwrap();
+    ///
+    /// a.append(&mut b);
+    ///
+    /// assert_eq!(a.len(), 5);
+    /// assert_eq!(b.len(), 0);
+    ///
+    /// assert_eq!(a[&1], "a");
+    /// assert_eq!(a[&2], "b");
+    /// assert_eq!(a[&3], "d"); // Note: "c" has been overwritten.
+    /// assert_eq!(a[&4], "e");
+    /// assert_eq!(a[&5], "f");
+    /// ```
+    pub fn append(&mut self, other: &mut Self)
     where
         K: NoPrefixesBytes,
     {
-        self.extend(other.drain_filter(|_, _| true))
+        if other.is_empty() {
+            return;
+        }
+
+        if self.is_empty() {
+            mem::swap(self, other);
+            return;
+        }
+
+        self.extend(other.extract_if(|_, _| true))
     }
-    */
 
     /// Constructs a double-ended iterator over a sub-range of elements in the
     /// map.
@@ -1324,44 +1341,47 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         )
     }
 
-    /*
     /// Splits the collection into two at the given key. Returns everything
     /// after the given key, including the key.
-    //
-    // # Examples
-    //
-    // ```rust,should_panic
-    // use blart::TreeMap;
-    //
-    // let mut a = TreeMap::new();
-    // a.try_insert(Box::from([1]), "a").unwrap();
-    // a.try_insert(Box::from([2]), "b").unwrap();
-    // a.try_insert(Box::from([3]), "c").unwrap();
-    // a.try_insert(Box::from([17]), "d").unwrap();
-    // a.try_insert(Box::from([41]), "e").unwrap();
-    //
-    // let b = a.split_off([3].as_ref());
-    //
-    // assert_eq!(a.len(), 2);
-    // assert_eq!(b.len(), 3);
-    //
-    // assert_eq!(a[[1].as_ref()], "a");
-    // assert_eq!(a[[2].as_ref()], "b");
-    //
-    // assert_eq!(b[[3].as_ref()], "c");
-    // assert_eq!(b[[17].as_ref()], "d");
-    // assert_eq!(b[[41].as_ref()], "e");
-    // ```
-    #[allow(dead_code)]
-    pub(crate) fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, PREFIX_LEN, A>
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut a = TreeMap::new();
+    /// a.try_insert(1, "a").unwrap();
+    /// a.try_insert(2, "b").unwrap();
+    /// a.try_insert(3, "c").unwrap();
+    /// a.try_insert(17, "d").unwrap();
+    /// a.try_insert(41, "e").unwrap();
+    ///
+    /// let b = a.split_off(&3);
+    ///
+    /// assert_eq!(a.len(), 2);
+    /// assert_eq!(b.len(), 3);
+    ///
+    /// assert_eq!(a[&1], "a");
+    /// assert_eq!(a[&2], "b");
+    ///
+    /// assert_eq!(b[&3], "c");
+    /// assert_eq!(b[&17], "d");
+    /// assert_eq!(b[&41], "e");
+    /// ```
+    pub fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, PREFIX_LEN, A>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
+        A: Clone,
     {
-        let mut new_tree = TreeMap::new();
+        // TODO(opt): Optimize this by doing a tree search to find split point and then
+        // cutting the tree. This should save time versus reconstructing a whole new
+        // tree
+
+        let mut new_tree = TreeMap::with_prefix_len_in(self.alloc.clone());
 
         for (key, value) in
-            self.drain_filter(|key, _| split_key.as_bytes() <= key.borrow().as_bytes())
+            self.extract_if(|key, _| split_key.as_bytes() <= key.borrow().as_bytes())
         {
             // PANIC SAFETY: This will not panic because the property of any existing tree
             // containing no keys that are prefixes of any other key holds when the tree is
@@ -1374,43 +1394,38 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
 
     /// Creates an iterator that visits all elements (key-value pairs) in
     /// ascending key order and uses a closure to determine if an element should
-    /// be removed.
-    ///
-    /// If the closure returns true, the element is removed from the map and
-    /// yielded. If the closure returns false, or panics, the element
-    /// remains in the map and will not be yielded.
+    /// be removed. If the closure returns `true`, the element is removed from
+    /// the map and yielded. If the closure returns `false`, or panics, the
+    /// element remains in the map and will not be yielded.
     ///
     /// The iterator also lets you mutate the value of each element in the
     /// closure, regardless of whether you choose to keep or remove it.
     ///
-    /// If the iterator is only partially consumed or not consumed at all, each
-    /// of the remaining elements is still subjected to the closure, which may
-    /// change its value and, by returning true, have the element removed and
-    /// dropped.
+    /// If the returned `ExtractIf` is not exhausted, e.g. because it is dropped
+    /// without iterating or the iteration short-circuits, then the
+    /// remaining elements will be retained. Use [`retain`] with a negated
+    /// predicate if you do not need the returned iterator.
     ///
-    /// It is unspecified how many more elements will be subjected to the
-    /// closure if a panic occurs in the closure, or a panic occurs while
-    /// dropping an element, or if the [`DrainFilter`] value is leaked.
-    //
-    // # Examples
-    //
-    // ```rust,should_panic
-    // use blart::TreeMap;
-    //
-    // let mut map: TreeMap<u8, u8> = (0..8).map(|x| (x, x)).collect();
-    // let evens: TreeMap<_, _> = map.drain_filter(|k, _v| k % 2 == 0).collect();
-    // let odds = map;
-    // assert_eq!(evens.keys().copied().collect::<Vec<_>>(), [0, 2, 4, 6]);
-    // assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
-    // ```
-    #[allow(dead_code)]
-    pub fn extract_if<'a, F>(&'a mut self, pred: F) -> ExtractIf<'a, K, V, F>
+    /// [`retain`]: TreeMap::retain
+    ///
+    /// # Examples
+    ///
+    /// Splitting a map into even and odd keys, reusing the original map:
+    ///
+    /// ```
+    /// use blart::TreeMap;
+    /// let mut map: TreeMap<u8, u8> = (0..8).map(|x| (x, x)).collect();
+    /// let evens: TreeMap<_, _> = map.extract_if(|k, _v| k % 2 == 0).collect();
+    /// let odds = map;
+    /// assert_eq!(evens.keys().copied().collect::<Vec<_>>(), [0, 2, 4, 6]);
+    /// assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
+    /// ```
+    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, K, V, F, PREFIX_LEN, A>
     where
         F: FnMut(&K, &mut V) -> bool,
     {
         ExtractIf::new(self, pred)
     }
-    */
 
     /// Creates a consuming iterator visiting all the keys, in sorted order. The
     /// map cannot be used after calling this. The iterator element type is `K`.
@@ -1954,7 +1969,7 @@ mod tests {
 
     use crate::{
         tests_common::{
-            generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
+            generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
             PrefixExpansion,
         },
         TreeMap,
@@ -2571,6 +2586,164 @@ mod tests {
         map.try_insert(Box::new([1, 2, 6]), 'b').unwrap();
         map.force_insert(Box::new([1, 2, 7]), 'b');
         assert!(map.len() == 5);
+    }
+
+    #[test]
+    fn tree_map_retain_partial() {
+        let mut map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        assert_eq!(map.len(), 64);
+        map.retain(|k, _| k[1] % 3 == 1);
+        assert_eq!(map.len(), 16);
+    }
+
+    #[test]
+    fn tree_map_retain_interrupted() {
+        let map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        assert_eq!(map.len(), 64);
+        let map = std::sync::Mutex::new(map);
+        let res = std::panic::catch_unwind(|| {
+            let mut map = map.lock().unwrap();
+            map.retain(|_, v| if *v == 32 { panic!("stop") } else { false })
+        });
+        assert!(res.is_err());
+        assert!(map.is_poisoned());
+        // We know in this case that the map should be fine after the panic
+        map.clear_poison();
+        let map = map.into_inner().unwrap();
+        assert!(map.into_values().eq(32..64));
+    }
+
+    #[test]
+    fn regression_e8d5a0b988d1f1e0b49f8d6e22354d49539bcf6a() {
+        // [
+        //     TryInsertMany(
+        //         [],
+        //         159,
+        //     ),
+        //     Retain(
+        //         All,
+        //     ),
+        // ]
+
+        let mut tree = TreeMap::new();
+
+        for suffix in 0..=159 {
+            tree.insert([suffix], suffix);
+        }
+
+        tree.retain(|_, _| true);
+
+        assert_eq!(tree.len(), 160);
+
+        let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
+    }
+
+    #[test]
+    fn tree_map_append_no_overlap() {
+        let mut map1 = TreeMap::<[u8; 4], i32>::from_iter([([0; 4], 1), ([1; 4], 2)]);
+        let mut map2 = TreeMap::<[u8; 4], i32>::from_iter([([2; 4], 3), ([3; 4], 4)]);
+
+        map1.append(&mut map2);
+        assert_eq!(
+            map1.into_iter().collect::<Vec<_>>(),
+            vec![([0; 4], 1), ([1; 4], 2), ([2; 4], 3), ([3; 4], 4)]
+        );
+        assert!(map2.is_empty());
+    }
+
+    #[test]
+    fn tree_map_append_overlap() {
+        let mut map1 = TreeMap::<[u8; 4], i32>::from_iter([([0; 4], 1), ([1; 4], 2)]);
+        let mut map2 = TreeMap::<[u8; 4], i32>::from_iter([([1; 4], 20), ([2; 4], 3)]);
+
+        map1.append(&mut map2);
+        assert_eq!(
+            map1.into_iter().collect::<Vec<_>>(),
+            vec![([0; 4], 1), ([1; 4], 20), ([2; 4], 3)]
+        );
+        assert!(map2.is_empty());
+    }
+
+    #[test]
+    fn tree_map_append_empty_cases() {
+        let mut non_empty_map = TreeMap::<[u8; 4], i32>::from_iter([([0; 4], 1), ([1; 4], 2)]);
+        let mut empty_map = TreeMap::new();
+
+        assert!(empty_map.is_empty());
+        assert_eq!(non_empty_map.len(), 2);
+
+        non_empty_map.append(&mut empty_map);
+
+        assert!(empty_map.is_empty());
+        assert_eq!(non_empty_map.len(), 2);
+
+        empty_map.append(&mut non_empty_map);
+
+        assert_eq!(empty_map.len(), 2);
+        assert!(non_empty_map.is_empty());
+    }
+
+    #[test]
+    fn tree_map_split_off_existing_key() {
+        let mut map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        let after = map.split_off(&[8, 0]);
+
+        assert_eq!(map.len(), 32);
+        assert_eq!(after.len(), 32);
+
+        assert!(map.into_values().eq(0..32));
+        assert!(after.into_values().eq(32..64));
+    }
+
+    #[test]
+    fn tree_map_split_off_nonexisting_key() {
+        let mut map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+        assert_eq!(map.remove(&[8, 0]).unwrap(), 32);
+
+        let after = map.split_off(&[8, 0]);
+
+        assert_eq!(map.len(), 32);
+        assert_eq!(after.len(), 31);
+
+        assert!(map.into_values().eq(0..32));
+        assert!(after.into_values().eq(33..64));
+    }
+
+    #[test]
+    fn tree_map_split_off_edges() {
+        let mut map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        // First key
+        let mut split_all = map.split_off(&[0, 0]);
+
+        assert!(map.is_empty());
+        assert_eq!(split_all.len(), 64);
+        assert!(split_all.values().copied().eq(0..64));
+
+        // One after the last key
+        let split_none = split_all.split_off(&[15, 4]);
+
+        assert_eq!(split_all.len(), 64);
+        assert!(split_none.is_empty());
+        assert!(split_all.values().copied().eq(0..64));
     }
 }
 
