@@ -19,6 +19,7 @@ use std::{
     hash::Hash,
     mem::ManuallyDrop,
     ops::{Index, RangeBounds},
+    panic::UnwindSafe,
     ptr,
 };
 
@@ -45,6 +46,16 @@ pub(crate) struct NonEmptyTree<K, V, const PREFIX_LEN: usize> {
     pub(crate) root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     min_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     max_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+}
+
+// Need to implement this manually because `NonEmptyTree` contains `NonNull`
+// pointers which are used to mutate the tree.
+//
+// It is safe in this case since we always maintain a mutable reference to the
+// tree as a whole when we do mutations.
+impl<K: UnwindSafe, V: UnwindSafe, const PREFIX_LEN: usize> UnwindSafe
+    for NonEmptyTree<K, V, PREFIX_LEN>
+{
 }
 
 impl<K, V> TreeMap<K, V> {
@@ -1736,9 +1747,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn map_is_send_sync() {
+    fn tree_map_is_send_sync_unwind_safe() {
         fn is_send<T: Send>() {}
         fn is_sync<T: Sync>() {}
+        fn is_unwind_safe<T: UnwindSafe>() {}
 
         fn map_is_send<K: Send, V: Send>() {
             is_send::<TreeMap<K, V>>();
@@ -1748,8 +1760,13 @@ mod tests {
             is_sync::<TreeMap<K, V>>();
         }
 
+        fn map_is_unwind_safe<K: UnwindSafe, V: UnwindSafe>() {
+            is_unwind_safe::<TreeMap<K, V>>();
+        }
+
         map_is_send::<[u8; 3], usize>();
         map_is_sync::<[u8; 3], usize>();
+        map_is_unwind_safe::<[u8; 3], usize>();
     }
 
     #[test]
@@ -2220,14 +2237,14 @@ mod tests {
     }
 
     #[test]
-    fn test_contains_key_false() {
+    fn tree_map_contains_key_false() {
         let mut map: TreeMap<Box<[u8]>, i32> = TreeMap::new();
         map.try_insert(Box::from(*b"foo"), 1).unwrap();
         assert!(!map.contains_key(b"bar" as &[u8]));
     }
 
     #[test]
-    fn test_extend_and_from() {
+    fn tree_map_extend_and_from() {
         let mut map = TreeMap::<[u8; 4], i32>::new();
         let data = vec![([0; 4], 1), ([1; 4], 2)];
 
@@ -2250,7 +2267,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_ne() {
+    fn tree_map_hash_ne() {
         use std::collections::HashSet;
 
         let map1 = TreeMap::<[u8; 4], i32>::from_iter(vec![([0; 4], 1)]);
@@ -2264,7 +2281,7 @@ mod tests {
     }
 
     #[test]
-    fn test_partial_eq_different_values() {
+    fn tree_map_partial_eq_different_values() {
         let map1 = TreeMap::<[u8; 4], i32>::from_iter(vec![([0; 4], 1), ([1; 4], 2)]);
         let map2 = TreeMap::<[u8; 4], i32>::from_iter(vec![([0; 4], 3), ([1; 4], 4)]);
         assert_ne!(map1, map2);

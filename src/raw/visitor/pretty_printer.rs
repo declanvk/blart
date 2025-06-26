@@ -237,7 +237,7 @@ struct OverrideDisplay<'a, T> {
 
 impl<'a, T> fmt::Display for OverrideDisplay<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        (self.fmt_fn)(&self.value, f)
+        (self.fmt_fn)(self.value, f)
     }
 }
 
