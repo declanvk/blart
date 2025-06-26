@@ -437,4 +437,43 @@ mod tests {
             vec![(1, 2), (3, 6), (5, 10), (7, 14), (9, 18)]
         );
     }
+
+    #[test]
+    fn extract_if_size_hint_none_removed() {
+        let mut map: TreeMap<i32, i32> = (0..10).map(|i| (i, i)).collect();
+        let initial_len = map.len();
+        let mut iter = map.extract_if(|_k, _v| false); // Predicate removes none
+
+        assert_eq!(iter.size_hint(), (0, Some(10)));
+        // A single iterator step will empty it, since it doesn't remove any elements
+        assert!(iter.next().is_none());
+        assert_eq!(iter.size_hint(), (0, Some(0)));
+        assert_eq!(map.len(), initial_len);
+    }
+
+    #[test]
+    fn extract_if_size_hint_mixed_removed() {
+        let mut map: TreeMap<i32, i32> = (0..10).map(|i| (i, i)).collect();
+        let initial_len = map.len();
+        let mut iter = map.extract_if(|k, _v| k % 2 == 0); // Predicate removes evens
+        let mut processed_count = 1;
+
+        for _ in 0..(initial_len / 2) {
+            assert!(iter.next().is_some());
+            assert_eq!(iter.size_hint(), (0, Some(initial_len - processed_count)));
+            processed_count += 2;
+        }
+        // This behavior seemed a bit odd to me at first, since I would expect that
+        // `Some(1)` means that there is one more element in the iterator. But it
+        // actually indicates that there is **at most** one more element in the
+        // iterator. And in this case it turns out there are no more elements in the
+        // iterator.
+        assert_eq!(iter.size_hint(), (0, Some(1)));
+        assert!(iter.next().is_none()); // clear out last odd value
+        assert_eq!(iter.size_hint(), (0, Some(0)));
+
+        // After the iterator is dropped, we can check the final map length
+        let expected_remaining = initial_len - (initial_len / 2); // 10 - 5 = 5
+        assert_eq!(map.len(), expected_remaining);
+    }
 }
