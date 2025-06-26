@@ -344,4 +344,75 @@ n0:c3 -> n16:h0
 "
         );
     }
+
+    #[test]
+    fn debug_display_fmt_works() {
+        struct TestFmt;
+
+        impl fmt::Debug for TestFmt {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "This is the Debug impl!")
+            }
+        }
+
+        let output = format!(
+            "{}",
+            OverrideDisplay {
+                value: &TestFmt,
+                fmt_fn: debug_as_display_fmt,
+            }
+        );
+        assert_eq!(output, "This is the Debug impl!");
+    }
+
+    #[test]
+    fn null_display_fmt_works() {
+        let output = format!(
+            "{}",
+            OverrideDisplay {
+                value: &(),
+                fmt_fn: null_display_fmt,
+            }
+        );
+        assert_eq!(output, "[null]");
+    }
+
+    #[test]
+    fn bytes_display_fmt_works() {
+        #[derive(Copy, Clone)]
+        struct MyBytes(&'static [u8]);
+
+        impl AsBytes for MyBytes {
+            fn as_bytes(&self) -> &[u8] {
+                self.0
+            }
+        }
+
+        let value = MyBytes(&[0x01, 0x02, 0x03, 0x04]);
+        let output = format!(
+            "{}",
+            OverrideDisplay {
+                value: &value,
+                fmt_fn: bytes_display_fmt
+            }
+        );
+        assert_eq!(output, "[1, 2, 3, 4]");
+    }
+
+    #[test]
+    fn print_empty_tree_returns_none() {
+        let tree: TreeMap<u8, u8> = TreeMap::new();
+        let mut buffer = Vec::new();
+
+        let result = DotPrinter::print_with_fmt(
+            &mut buffer,
+            &tree,
+            DotPrinterSettings::default(),
+            debug_as_display_fmt,
+            debug_as_display_fmt,
+        );
+
+        assert!(result.is_none());
+        assert!(buffer.is_empty());
+    }
 }
