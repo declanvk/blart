@@ -17,7 +17,7 @@ use std::{
     borrow::Borrow,
     fmt::Debug,
     hash::Hash,
-    mem::ManuallyDrop,
+    mem::{self, ManuallyDrop},
     ops::{Index, RangeBounds},
     panic::UnwindSafe,
     ptr,
@@ -1031,10 +1031,19 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// assert_eq!(a[&4], "e");
     /// assert_eq!(a[&5], "f");
     /// ```
-    pub fn append(&mut self, other: &mut TreeMap<K, V, PREFIX_LEN>)
+    pub fn append(&mut self, other: &mut Self)
     where
         K: NoPrefixesBytes,
     {
+        if other.is_empty() {
+            return;
+        }
+
+        if self.is_empty() {
+            mem::swap(self, other);
+            return;
+        }
+
         self.extend(other.extract_if(|_, _| true))
     }
 
@@ -1135,23 +1144,23 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// use blart::TreeMap;
     ///
     /// let mut a = TreeMap::new();
-    /// a.try_insert(Box::from([1]), "a").unwrap();
-    /// a.try_insert(Box::from([2]), "b").unwrap();
-    /// a.try_insert(Box::from([3]), "c").unwrap();
-    /// a.try_insert(Box::from([17]), "d").unwrap();
-    /// a.try_insert(Box::from([41]), "e").unwrap();
+    /// a.try_insert(1, "a").unwrap();
+    /// a.try_insert(2, "b").unwrap();
+    /// a.try_insert(3, "c").unwrap();
+    /// a.try_insert(17, "d").unwrap();
+    /// a.try_insert(41, "e").unwrap();
     ///
-    /// let b = a.split_off([3].as_ref());
+    /// let b = a.split_off(&3);
     ///
     /// assert_eq!(a.len(), 2);
     /// assert_eq!(b.len(), 3);
     ///
-    /// assert_eq!(a[[1].as_ref()], "a");
-    /// assert_eq!(a[[2].as_ref()], "b");
+    /// assert_eq!(a[&1], "a");
+    /// assert_eq!(a[&2], "b");
     ///
-    /// assert_eq!(b[[3].as_ref()], "c");
-    /// assert_eq!(b[[17].as_ref()], "d");
-    /// assert_eq!(b[[41].as_ref()], "e");
+    /// assert_eq!(b[&3], "c");
+    /// assert_eq!(b[&17], "d");
+    /// assert_eq!(b[&41], "e");
     /// ```
     pub fn split_off<Q>(&mut self, split_key: &Q) -> TreeMap<K, V, PREFIX_LEN, A>
     where
@@ -1754,7 +1763,7 @@ mod tests {
 
     use crate::{
         tests_common::{
-            generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
+            generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
             PrefixExpansion,
         },
         TreeMap,
@@ -2301,6 +2310,139 @@ mod tests {
         let map1 = TreeMap::<[u8; 4], i32>::from_iter(vec![([0; 4], 1), ([1; 4], 2)]);
         let map2 = TreeMap::<[u8; 4], i32>::from_iter(vec![([0; 4], 3), ([1; 4], 4)]);
         assert_ne!(map1, map2);
+    }
+
+    #[test]
+    fn tree_map_retain_partial() {
+        let mut map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        assert_eq!(map.len(), 64);
+        map.retain(|k, _| k[1] % 3 == 1);
+        assert_eq!(map.len(), 48);
+    }
+
+    #[test]
+    fn tree_map_retain_interrupted() {
+        let map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        assert_eq!(map.len(), 64);
+        let map = std::sync::Mutex::new(map);
+        let res = std::panic::catch_unwind(|| {
+            let mut map = map.lock().unwrap();
+            map.retain(|_, v| if *v == 32 { panic!("stop") } else { true })
+        });
+        assert!(res.is_err());
+        assert!(map.is_poisoned());
+        // We know in this case that the map should be fine after the panic
+        map.clear_poison();
+        let map = map.into_inner().unwrap();
+        assert!(map.into_values().eq(32..64));
+    }
+
+    #[test]
+    fn tree_map_append_no_overlap() {
+        let mut map1 = TreeMap::<[u8; 4], i32>::from_iter([([0; 4], 1), ([1; 4], 2)]);
+        let mut map2 = TreeMap::<[u8; 4], i32>::from_iter([([2; 4], 3), ([3; 4], 4)]);
+
+        map1.append(&mut map2);
+        assert_eq!(
+            map1.into_iter().collect::<Vec<_>>(),
+            vec![([0; 4], 1), ([1; 4], 2), ([2; 4], 3), ([3; 4], 4)]
+        );
+        assert!(map2.is_empty());
+    }
+
+    #[test]
+    fn tree_map_append_overlap() {
+        let mut map1 = TreeMap::<[u8; 4], i32>::from_iter([([0; 4], 1), ([1; 4], 2)]);
+        let mut map2 = TreeMap::<[u8; 4], i32>::from_iter([([1; 4], 20), ([2; 4], 3)]);
+
+        map1.append(&mut map2);
+        assert_eq!(
+            map1.into_iter().collect::<Vec<_>>(),
+            vec![([0; 4], 1), ([1; 4], 20), ([2; 4], 3)]
+        );
+        assert!(map2.is_empty());
+    }
+
+    #[test]
+    fn tree_map_append_empty_cases() {
+        let mut non_empty_map = TreeMap::<[u8; 4], i32>::from_iter([([0; 4], 1), ([1; 4], 2)]);
+        let mut empty_map = TreeMap::new();
+
+        assert!(empty_map.is_empty());
+        assert_eq!(non_empty_map.len(), 2);
+
+        non_empty_map.append(&mut empty_map);
+
+        assert!(empty_map.is_empty());
+        assert_eq!(non_empty_map.len(), 2);
+
+        empty_map.append(&mut non_empty_map);
+
+        assert_eq!(empty_map.len(), 2);
+        assert!(non_empty_map.is_empty());
+    }
+
+    #[test]
+    fn tree_map_split_off_existing_key() {
+        let mut map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        let after = map.split_off(&[8, 0]);
+
+        assert_eq!(map.len(), 32);
+        assert_eq!(after.len(), 32);
+
+        assert!(map.into_values().eq(0..32));
+        assert!(after.into_values().eq(32..64));
+    }
+
+    #[test]
+    fn tree_map_split_off_nonexisting_key() {
+        let mut map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+        assert_eq!(map.remove(&[8, 0]).unwrap(), 32);
+
+        let after = map.split_off(&[8, 0]);
+
+        assert_eq!(map.len(), 32);
+        assert_eq!(after.len(), 31);
+
+        assert!(map.into_values().eq(0..32));
+        assert!(after.into_values().eq(33..64));
+    }
+
+    #[test]
+    fn tree_map_split_off_edges() {
+        let mut map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        // First key
+        let mut split_all = map.split_off(&[0, 0]);
+
+        assert!(map.is_empty());
+        assert_eq!(split_all.len(), 64);
+        assert!(split_all.values().copied().eq(0..64));
+
+        // One after the last key
+        let split_none = split_all.split_off(&[15, 4]);
+
+        assert_eq!(split_all.len(), 64);
+        assert!(split_none.is_empty());
+        assert!(split_all.values().copied().eq(0..64));
     }
 }
 

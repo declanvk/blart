@@ -476,4 +476,29 @@ mod tests {
         let expected_remaining = initial_len - (initial_len / 2); // 10 - 5 = 5
         assert_eq!(map.len(), expected_remaining);
     }
+
+    #[test]
+    fn tree_map_extract_if_interrupted() {
+        // Exactly the same as `retain`, on panic the iteration should stop.
+
+        let map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        assert_eq!(map.len(), 64);
+        let map = std::sync::Mutex::new(map);
+        let res = std::panic::catch_unwind(|| {
+            let mut map = map.lock().unwrap();
+            let _: Vec<_> = map
+                .extract_if(|_, v| if *v == 32 { panic!("stop") } else { true })
+                .collect();
+        });
+        assert!(res.is_err());
+        assert!(map.is_poisoned());
+        // We know in this case that the map should be fine after the panic
+        map.clear_poison();
+        let map = map.into_inner().unwrap();
+        assert!(map.into_values().eq(32..64));
+    }
 }
