@@ -1,27 +1,34 @@
 #![no_main]
 
-use blart::TreeMap;
+use blart::{visitor::WellFormedChecker, TreeMap};
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
-use std::{
-    collections::hash_map::RandomState,
-    hash::{BuildHasher, Hash, Hasher},
-    mem,
-};
+use std::{collections::hash_map::RandomState, hash::BuildHasher, mem};
 
 #[derive(Arbitrary, Debug)]
 enum EntryAction {
-    AndModify,
-    InsertEntry,
-    Key,
+    AndModify(Option<Box<EntryAction>>),
+    InsertEntry(Option<OccupiedEntryAction>),
     OrDefault,
+    OrDefaultEntry,
     OrInsert,
     OrInsertWith,
     OrInsertWithKey,
-    RemoveEntry,
+}
+
+#[derive(Arbitrary, Debug)]
+enum OccupiedEntryAction {
+    Insert,
+    Remove,
+}
+
+#[derive(Arbitrary, Debug)]
+enum VacantEntryAction {
+    InsertEntry(Option<OccupiedEntryAction>),
 }
 
 #[derive(Arbitrary, Debug)]
 enum Action {
+    WellFormedCheck,
     Clear,
     ContainsKey(Box<[u8]>),
     GetMinimum,
@@ -37,7 +44,6 @@ enum Action {
     Clone,
     Hash,
     Entry(EntryAction, Box<[u8]>),
-    EntryRef(EntryAction, Box<[u8]>),
     Fuzzy(Box<[u8]>),
     Prefix(Box<[u8]>),
     IntoIter { take_front: usize, take_back: usize },
@@ -45,12 +51,17 @@ enum Action {
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
     let mut tree = TreeMap::<_, u32>::new();
+    let mut oracle = BTreeMap::<_, u32>::new();
     let mut next_value = 0;
 
     for action in actions {
         match action {
+            Action::WellFormedCheck => {
+                let _ = WellFormedChecker::check(&tree).expect("tree should be well-formed");
+            },
             Action::Clear => {
                 tree.clear();
+                oracle.clear();
             },
             Action::ContainsKey(key) => {
                 let _ = tree.contains_key(key.as_ref());
@@ -146,9 +157,6 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                         EntryAction::InsertEntry => {
                             entry.insert_entry(value);
                         },
-                        EntryAction::Key => {
-                            entry.key();
-                        },
                         EntryAction::OrDefault => {
                             entry.or_default();
                         },
@@ -167,43 +175,6 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                                     e.remove_entry();
                                 },
                                 blart::map::Entry::Vacant(_) => {},
-                            };
-                        },
-                    };
-                }
-            },
-            Action::EntryRef(ea, key) => {
-                if let Ok(entry) = tree.try_entry_ref(&key) {
-                    let value = next_value;
-                    next_value += 1;
-                    match ea {
-                        EntryAction::AndModify => {
-                            entry.and_modify(|v| *v = v.saturating_sub(1));
-                        },
-                        EntryAction::InsertEntry => {
-                            entry.insert_entry(value);
-                        },
-                        EntryAction::Key => {
-                            entry.key();
-                        },
-                        EntryAction::OrDefault => {
-                            entry.or_default();
-                        },
-                        EntryAction::OrInsert => {
-                            entry.or_insert(value);
-                        },
-                        EntryAction::OrInsertWith => {
-                            entry.or_insert_with(|| value);
-                        },
-                        EntryAction::OrInsertWithKey => {
-                            entry.or_insert_with_key(|_| value);
-                        },
-                        EntryAction::RemoveEntry => {
-                            match entry {
-                                blart::map::EntryRef::Occupied(e) => {
-                                    e.remove_entry();
-                                },
-                                blart::map::EntryRef::Vacant(_) => {},
                             };
                         },
                     };
@@ -236,5 +207,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert!(back_count <= take_back);
             },
         }
+
+        assert_eq!(tree.iter().eq(oracle.iter()));
     }
 });
