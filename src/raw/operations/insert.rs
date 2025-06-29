@@ -1,8 +1,9 @@
 use crate::{
     alloc::Allocator,
     raw::{
-        maximum_unchecked, minimum_unchecked, ConcreteNodePtr, ExplicitMismatch, InnerNode,
-        InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, TreePath, TreePathSearch,
+        deallocate_tree, maximum_unchecked, minimum_unchecked, ConcreteNodePtr, ExplicitMismatch,
+        InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, TreePath,
+        TreePathSearch,
     },
     rust_nightly_apis::{assume, likely, unlikely},
     AsBytes,
@@ -119,6 +120,47 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertPoint<K, V, PREFIX_LEN>
             .field("key_bytes_used", &self.key_bytes_used)
             .field("root", &self.root)
             .finish()
+    }
+}
+
+/// Write a new child node to an inner node at the specified key byte.
+///
+/// # Panics
+/// Panics if the node pointer given is not an inner node.
+///
+/// # Safety
+///
+///  - This function must not be called concurrently with and other read or
+///    modification of the trie.
+unsafe fn parent_write_child<K: AsBytes, V, const PREFIX_LEN: usize>(
+    parent_inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    key_byte: u8,
+    new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+) {
+    fn write_inner_node<K: AsBytes, V, N, const PREFIX_LEN: usize>(
+        parent_inner_node: NodePtr<PREFIX_LEN, N>,
+        key_byte: u8,
+        new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) where
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
+    {
+        // SAFETY: The lifetime produced from this is bounded to this scope and does not
+        // escape. Further, no other code mutates the node referenced, which is further
+        // enforced the "no concurrent reads or writes" requirement on the
+        // `maximum_unchecked` function.
+        let parent_node = unsafe { parent_inner_node.as_mut() };
+
+        parent_node.write_child(key_byte, new_child);
+    }
+
+    match parent_inner_node.to_node_ptr() {
+        ConcreteNodePtr::Node4(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
+        ConcreteNodePtr::Node16(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
+        ConcreteNodePtr::Node48(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
+        ConcreteNodePtr::Node256(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
+        ConcreteNodePtr::LeafNode(_) => {
+            unreachable!("A leaf pointer cannot be the parent of another node");
+        },
     }
 }
 
@@ -296,47 +338,6 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
             }
         }
 
-        /// Write a new child node to an inner node at the specified key byte.
-        fn parent_write_child<K: AsBytes, V, const PREFIX_LEN: usize>(
-            parent_inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
-            key_byte: u8,
-            new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-        ) {
-            fn write_inner_node<K: AsBytes, V, N, const PREFIX_LEN: usize>(
-                parent_inner_node: NodePtr<PREFIX_LEN, N>,
-                key_byte: u8,
-                new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-            ) where
-                N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-            {
-                // SAFETY: The lifetime produced from this is bounded to this scope and does not
-                // escape. Further, no other code mutates the node referenced, which is further
-                // enforced the "no concurrent reads or writes" requirement on the
-                // `maximum_unchecked` function.
-                let parent_node = unsafe { parent_inner_node.as_mut() };
-
-                parent_node.write_child(key_byte, new_child);
-            }
-
-            match parent_inner_node.to_node_ptr() {
-                ConcreteNodePtr::Node4(inner_ptr) => {
-                    write_inner_node(inner_ptr, key_byte, new_child)
-                },
-                ConcreteNodePtr::Node16(inner_ptr) => {
-                    write_inner_node(inner_ptr, key_byte, new_child)
-                },
-                ConcreteNodePtr::Node48(inner_ptr) => {
-                    write_inner_node(inner_ptr, key_byte, new_child)
-                },
-                ConcreteNodePtr::Node256(inner_ptr) => {
-                    write_inner_node(inner_ptr, key_byte, new_child)
-                },
-                ConcreteNodePtr::LeafNode(_) => {
-                    unreachable!("A leaf pointer cannot be the parent of another node");
-                },
-            }
-        }
-
         let InsertPoint {
             path,
             insert_kind: insert_type,
@@ -398,7 +399,6 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                         let previous_leaf_ptr = maximum_unchecked(mismatched_inner_node_ptr);
 
                         // SAFETY: There is no concurrent modification of the new leaf node, the
-                        // existing leaf node, or its siblings because of the safety requirements of
                         // the `apply` function.
                         LeafNode::insert_after(new_leaf_pointer, previous_leaf_ptr);
                     } else {
@@ -456,7 +456,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 // SAFETY: There is no concurrent modification of the new leaf node, old leaf
                 // node, or its siblings because of the safety requirements of the `apply`
                 // function
-                unsafe { LeafNode::replace(leaf_node_ptr, &mut old_leaf_node) };
+                unsafe { LeafNode::replace(leaf_node_ptr, &mut old_leaf_node, false) };
 
                 return InsertResult {
                     leaf_node_ptr,
@@ -575,7 +575,9 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 // TODO(#14) Change this write back to parent to only happen when a new inner
                 // node is created (MismatchPrefix & SplitLeaf (when it is not an overwrite of
                 // the existing leaf))
-                parent_write_child(parent, child_key_byte, new_inner_node);
+                unsafe {
+                    parent_write_child(parent, child_key_byte, new_inner_node);
+                }
 
                 // If there was a parent either:
                 //   1. Root was the parent, in which case it was unchanged
@@ -671,6 +673,304 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertKind<K, V, PREFIX_LEN> 
                 .debug_struct("IntoExisting")
                 .field("inner_node_ptr", inner_node_ptr)
                 .finish(),
+        }
+    }
+}
+
+/// This enum contains the results from searching for an forced insert point for
+/// a new node in the trie.
+///
+/// It contains all the relevant information needed to perform the insert
+/// and update the tree.
+///
+/// A forced insert is either a normal insert, or a node that must be completely
+/// overwritten.
+pub enum ForceInsertPoint<K, V, const PREFIX_LEN: usize> {
+    InsertPoint(InsertPoint<K, V, PREFIX_LEN>),
+    OverwritePoint(OverwritePoint<K, V, PREFIX_LEN>),
+}
+
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ForceInsertPoint<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InsertPoint(insert_point) => f
+                .debug_tuple("ForceInsertPoint::InsertPoint")
+                .field(insert_point)
+                .finish(),
+            Self::OverwritePoint(overwrite_point) => f
+                .debug_tuple("ForceInsertPoint::OverwritePoint")
+                .field(overwrite_point)
+                .finish(),
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> ForceInsertPoint<K, V, PREFIX_LEN> {
+    /// This function will use [`ForceInsertPoint`] information to insert the
+    /// given key-value pair into the trie.
+    ///
+    /// # Safety
+    ///
+    ///  - This function must not be called concurrently with and other read or
+    ///    modification of the trie.
+    ///  - The given allocator must be the same one that was used to allocate
+    ///    the nodes of this trie.
+    pub unsafe fn apply<'a, A>(
+        self,
+        key: K,
+        value: V,
+        alloc: &A,
+    ) -> ForceInsertResult<'a, K, V, PREFIX_LEN>
+    where
+        K: AsBytes + 'a,
+        V: 'a,
+        A: Allocator,
+    {
+        match self {
+            Self::InsertPoint(insert_point) => ForceInsertResult {
+                // Safety: covered by function doc comment.
+                insert_result: unsafe { insert_point.apply(key, value, alloc) },
+                leafs_removed: 0,
+            },
+            Self::OverwritePoint(overwrite_point) =>
+            // Safety: covered by function doc comment.
+            unsafe { overwrite_point.apply(key, value, alloc) },
+        }
+    }
+}
+
+/// Contains all the information needed to overwrite a certain node.
+pub struct OverwritePoint<K, V, const PREFIX_LEN: usize> {
+    /// The path to point where the new leaf will be inserted.
+    pub path: TreePath<K, V, PREFIX_LEN>,
+    /// The pointer to the node that will be overwritten.
+    pub overwrite_point: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    /// The number of bytes that were read from the key to find the insert
+    /// point.
+    pub key_bytes_used: usize,
+    /// Current root of the tree, used in the apply
+    pub root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+}
+
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for OverwritePoint<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OverwritePoint")
+            .field("path", &self.path)
+            .field("overwrite_point", &self.overwrite_point)
+            .field("key_bytes_used", &self.key_bytes_used)
+            .field("root", &self.root)
+            .finish()
+    }
+}
+
+/// The results of a successful force insert.
+#[derive(Debug)]
+pub struct ForceInsertResult<'a, K, V, const PREFIX_LEN: usize> {
+    pub insert_result: InsertResult<'a, K, V, PREFIX_LEN>,
+    pub leafs_removed: usize,
+}
+
+impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
+    /// This function will use [`OverwritePoint`] information to remove a set of
+    /// node and insert the given key-value pair into the correct spot of
+    /// the trie.
+    ///
+    /// # Safety
+    ///
+    ///  - This function must not be called concurrently with and other read or
+    ///    modification of the trie.
+    ///  - The given allocator must be the same one that was used to allocate
+    ///    the nodes of this trie.
+    pub unsafe fn apply<'a, A>(
+        self,
+        key: K,
+        value: V,
+        alloc: &A,
+    ) -> ForceInsertResult<'a, K, V, PREFIX_LEN>
+    where
+        K: AsBytes + 'a,
+        V: 'a,
+        A: Allocator,
+    {
+        fn set_leaf_siblings<K: AsBytes, V, const PREFIX_LEN: usize>(
+            parent_inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
+            overwrite_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+        ) {
+            /// Write a new child node to an inner node at the specified key
+            /// byte.
+            fn set_single_leaf_siblings<K: AsBytes, V, const PREFIX_LEN: usize>(
+                parent_inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
+                overwrite_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+                previous: bool,
+            ) {
+                match parent_inner_node.to_node_ptr() {
+                    ConcreteNodePtr::Node4(inner_ptr) => {
+                        // Safety: covered by parents parent function doc comment.
+                        let inner_ref = unsafe { inner_ptr.as_ref() };
+                        let next_node = if previous {
+                            inner_ref.min().1
+                        } else {
+                            inner_ref.max().1
+                        };
+                        set_single_leaf_siblings(next_node, overwrite_leaf, previous);
+                    },
+                    ConcreteNodePtr::Node16(inner_ptr) => {
+                        // Safety: covered by parents parent function doc comment.
+                        let inner_ref = unsafe { inner_ptr.as_ref() };
+                        let next_node = if previous {
+                            inner_ref.min().1
+                        } else {
+                            inner_ref.max().1
+                        };
+                        set_single_leaf_siblings(next_node, overwrite_leaf, previous);
+                    },
+                    ConcreteNodePtr::Node48(inner_ptr) => {
+                        // Safety: covered by parents parent function doc comment.
+                        let inner_ref = unsafe { inner_ptr.as_ref() };
+                        let next_node = if previous {
+                            inner_ref.min().1
+                        } else {
+                            inner_ref.max().1
+                        };
+                        set_single_leaf_siblings(next_node, overwrite_leaf, previous);
+                    },
+                    ConcreteNodePtr::Node256(inner_ptr) => {
+                        // Safety: covered by parents parent function doc comment.
+                        let inner_ref = unsafe { inner_ptr.as_ref() };
+                        let next_node = if previous {
+                            inner_ref.min().1
+                        } else {
+                            inner_ref.max().1
+                        };
+                        set_single_leaf_siblings(next_node, overwrite_leaf, previous);
+                    },
+                    ConcreteNodePtr::LeafNode(leaf) => {
+                        if previous {
+                            // Safety: covered by parents parent function doc comment.
+                            let previous_node = unsafe { leaf.as_mut() }.previous;
+                            if let Some(previous_node) = previous_node {
+                                // Safety: covered by parents parent function doc comment.
+                                unsafe { previous_node.as_mut() }.next = Some(overwrite_leaf);
+                            }
+                            // Safety: covered by parents parent function doc comment.
+                            unsafe { overwrite_leaf.as_mut() }.previous = previous_node;
+                        } else {
+                            // Safety: covered by parents parent function doc comment.
+                            let next_node = unsafe { leaf.as_mut() }.next;
+                            if let Some(previous_node) = next_node {
+                                // Safety: covered by parents parent function doc comment.
+                                unsafe { previous_node.as_mut() }.previous = Some(overwrite_leaf);
+                            }
+                            // Safety: covered by parents parent function doc comment.
+                            unsafe { overwrite_leaf.as_mut() }.next = next_node;
+                        }
+                    },
+                }
+            }
+            set_single_leaf_siblings(parent_inner_node, overwrite_leaf, true);
+            set_single_leaf_siblings(parent_inner_node, overwrite_leaf, false);
+        }
+        let OverwritePoint {
+            path,
+            overwrite_point,
+            root,
+            ..
+        } = self;
+        let overwrite_leaf = LeafNode::with_no_siblings(key, value);
+
+        let (overwrite_ptr, leafs_removed) = match overwrite_point.to_node_ptr() {
+            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+                // SAFETY: Covered by safety doc of this function
+                let mut old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, overwrite_leaf) };
+
+                // SAFETY: Covered by safety doc of this function
+                unsafe { LeafNode::replace(leaf_node_ptr, &mut old_leaf_node, true) };
+                return ForceInsertResult {
+                    insert_result: InsertResult {
+                        leaf_node_ptr,
+                        existing_leaf: Some(old_leaf_node),
+                        // Because we replaced the leaf instead of creating a new leaf, we don't
+                        // have to write back to the parent. In this case,
+                        // the root is guaranteed to be unchanged, even if
+                        // the old leaf was the root.
+                        new_root: root,
+                        parent_node_change: InsertParentNodeChange::NoChange,
+                        marker: PhantomData,
+                    },
+                    leafs_removed: 0,
+                };
+            },
+            ConcreteNodePtr::Node4(old_inner) => {
+                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
+                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
+                // SAFETY: We never use `old_inner` after this call again.
+                // The rest is covered by the doc comment.
+                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
+                (overwrite_ptr, removed)
+            },
+            ConcreteNodePtr::Node16(old_inner) => {
+                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
+                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
+                // SAFETY: We never use `old_inner` after this call again.
+                // The rest is covered by the doc comment.
+                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
+                (overwrite_ptr, removed)
+            },
+            ConcreteNodePtr::Node48(old_inner) => {
+                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
+                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
+                // SAFETY: We never use `old_inner` after this call again.
+                // The rest is covered by the doc comment.
+                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
+                (overwrite_ptr, removed)
+            },
+            ConcreteNodePtr::Node256(old_inner) => {
+                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
+                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
+                // SAFETY: We never use `old_inner` after this call again.
+                // The rest is covered by the doc comment.
+                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
+                (overwrite_ptr, removed)
+            },
+        };
+        match path {
+            TreePath::Root => {
+                // If there was no parent, we overwrote the root leaf.
+                ForceInsertResult {
+                    insert_result: InsertResult {
+                        leaf_node_ptr: overwrite_ptr,
+                        existing_leaf: None,
+                        new_root: overwrite_ptr.to_opaque(),
+                        parent_node_change: InsertParentNodeChange::NoChange,
+                        marker: PhantomData,
+                    },
+                    leafs_removed,
+                }
+            },
+            TreePath::ChildOfRoot {
+                parent,
+                child_key_byte,
+            }
+            | TreePath::Normal {
+                parent,
+                child_key_byte,
+                ..
+            } => {
+                unsafe { parent_write_child(parent, child_key_byte, overwrite_ptr.to_opaque()) };
+
+                // If there was a parent we will have written a different pointer to the
+                // `child_key_byte`, but the parent never changed.
+                ForceInsertResult {
+                    insert_result: InsertResult {
+                        leaf_node_ptr: overwrite_ptr,
+                        existing_leaf: None,
+                        new_root: root,
+                        parent_node_change: InsertParentNodeChange::NoChange,
+                        marker: PhantomData,
+                    },
+                    leafs_removed,
+                }
+            },
         }
     }
 }
@@ -858,6 +1158,217 @@ where
                 }
 
                 return Ok(InsertPoint {
+                    key_bytes_used: current_depth,
+                    insert_kind: InsertKind::MismatchPrefix {
+                        mismatch,
+                        mismatched_inner_node_ptr: current_node,
+                    },
+                    path: path.finish(),
+                    root,
+                });
+            },
+        };
+    }
+}
+
+/// Perform an iterative search for the insert point for the given key,
+/// starting at the given root node.
+///
+/// # Safety
+///  - This function cannot be called concurrently to any writes of the `root`
+///    node or any child node of `root`. This function will arbitrarily read to
+///    any child in the given tree.
+///
+/// # Errors
+///  - If the given `key` is a prefix of an existing key, this function will
+///    return an error.
+pub unsafe fn search_for_force_insert_point<K, V, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    key_bytes: &[u8],
+) -> ForceInsertPoint<K, V, PREFIX_LEN>
+where
+    K: AsBytes,
+{
+    #[inline]
+    fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
+        inner_ptr: NodePtr<PREFIX_LEN, N>,
+        key: &[u8],
+        current_depth: &mut usize,
+    ) -> Result<
+        ControlFlow<ExplicitMismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>,
+        OpaqueNodePtr<K, V, PREFIX_LEN>,
+    >
+    where
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
+        K: AsBytes,
+    {
+        // SAFETY: The lifetime produced from this is bounded to this scope and does not
+        // escape. Further, no other code mutates the node referenced, which is further
+        // enforced the "no concurrent reads or writes" requirement on the
+        // `search_unchecked` function.
+        let inner_node = unsafe { inner_ptr.as_ref() };
+        let match_prefix = inner_node.match_full_prefix(key, *current_depth);
+        match match_prefix {
+            Err(mismatch) => Ok(ControlFlow::Break(mismatch)),
+            Ok(PrefixMatch { matched_bytes }) => {
+                // Since the prefix matched, advance the depth by the size of the prefix
+                *current_depth += matched_bytes;
+
+                if *current_depth < key.len() {
+                    let next_key_fragment = key[*current_depth];
+                    Ok(ControlFlow::Continue(
+                        inner_node.lookup_child(next_key_fragment),
+                    ))
+                } else {
+                    // *current_depth -= matched_bytes;
+                    // then the key has insufficient bytes to be unique. It must be
+                    // a prefix of an existing key
+                    Err(inner_ptr.to_opaque())
+                }
+            },
+        }
+    }
+
+    // We keep track of the grandparent because when dealing with
+    // entry api we want to be able to remove the entry if it's
+    // occupied, since the entry api works by searching the insertion
+    // point we do similar work to the delete process by keeping track
+    // of the grandparent. Of course this is not as efficient as deleting
+    // directly since we are doing a ton of extra work. But this will
+    // only be used during the remove in the entry api. It's also not a
+    // lot of extra work to keep track of the grandparent since it's just
+    // a copy of a ptr and u8
+    let mut path = TreePathSearch::default();
+    let mut current_node = root;
+    let mut current_depth = 0;
+
+    loop {
+        let lookup_result = match current_node.to_node_ptr() {
+            ConcreteNodePtr::Node4(inner_ptr) => {
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
+            },
+            ConcreteNodePtr::Node16(inner_ptr) => {
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
+            },
+            ConcreteNodePtr::Node48(inner_ptr) => {
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
+            },
+            ConcreteNodePtr::Node256(inner_ptr) => {
+                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
+            },
+            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+                let leaf_node = leaf_node_ptr.read();
+
+                if leaf_node.matches_full_key(key_bytes) {
+                    return ForceInsertPoint::InsertPoint(InsertPoint {
+                        key_bytes_used: current_depth,
+                        path: path.finish(),
+                        insert_kind: InsertKind::Exact { leaf_node_ptr },
+                        root,
+                    });
+                }
+
+                let leaf_bytes = leaf_node.key_ref().as_bytes();
+
+                #[allow(unused_unsafe)]
+                unsafe {
+                    // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
+                    // which would lead to this not holding, but since it already checked we know
+                    // that current_depth < len of the key and the key in the leaf. But there is an
+                    // edge case, if the root of the tree is a leaf than the depth can be = len
+                    assume!(current_depth <= leaf_bytes.len());
+                    assume!(current_depth <= key_bytes.len());
+                }
+
+                let prefix_size = leaf_bytes[current_depth..]
+                    .iter()
+                    .zip(key_bytes[current_depth..].iter())
+                    .take_while(|(k1, k2)| k1 == k2)
+                    .count();
+
+                let new_key_bytes_used = current_depth + prefix_size;
+
+                if new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len() {
+                    // then the key has insufficient bytes to be unique. It must be
+                    // a prefix of an existing key OR an existing key is a prefix of it
+                    return ForceInsertPoint::OverwritePoint(OverwritePoint {
+                        key_bytes_used: current_depth,
+                        path: path.finish(),
+                        overwrite_point: leaf_node_ptr.to_opaque(),
+                        root,
+                    });
+                }
+
+                return ForceInsertPoint::InsertPoint(InsertPoint {
+                    key_bytes_used: current_depth,
+                    path: path.finish(),
+                    insert_kind: InsertKind::SplitLeaf {
+                        leaf_node_ptr,
+                        new_key_bytes_used,
+                    },
+                    root,
+                });
+            },
+        };
+
+        let lookup_result = match lookup_result {
+            Ok(value) => value,
+            Err(inner_node_ptr) => {
+                return ForceInsertPoint::OverwritePoint(OverwritePoint {
+                    key_bytes_used: current_depth.saturating_sub(1),
+                    path: path.finish(),
+                    overwrite_point: inner_node_ptr,
+                    root,
+                });
+            },
+        };
+
+        match lookup_result {
+            ControlFlow::Continue(next_child_node) => {
+                #[allow(unused_unsafe)]
+                unsafe {
+                    // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
+                    // which would lead to this not holding, but since it already checked we know
+                    // that current_depth < len of the key and the key in the leaf. And also the
+                    // only edge case can occur in the Leaf node, but if we reach a leaf not the
+                    // function returns early, so it's impossible to be <=
+                    assume!(current_depth < key_bytes.len());
+                }
+
+                match next_child_node {
+                    Some(next_child_node) => {
+                        let byte = key_bytes[current_depth];
+                        path.visit_inner_node(current_node, byte);
+                        current_node = next_child_node;
+                        // Increment by a single byte
+                        current_depth += 1;
+                    },
+                    None => {
+                        return ForceInsertPoint::InsertPoint(InsertPoint {
+                            key_bytes_used: current_depth,
+                            insert_kind: InsertKind::IntoExisting {
+                                inner_node_ptr: current_node,
+                            },
+                            path: path.finish(),
+                            root,
+                        })
+                    },
+                }
+            },
+            ControlFlow::Break(mismatch) => {
+                if (current_depth + mismatch.matched_bytes) >= key_bytes.len() {
+                    // then the key has insufficient bytes to be unique. It must be
+                    // a prefix of an existing key
+
+                    return ForceInsertPoint::OverwritePoint(OverwritePoint {
+                        key_bytes_used: current_depth,
+                        path: path.finish(),
+                        overwrite_point: current_node,
+                        root,
+                    });
+                }
+
+                return ForceInsertPoint::InsertPoint(InsertPoint {
                     key_bytes_used: current_depth,
                     insert_kind: InsertKind::MismatchPrefix {
                         mismatch,

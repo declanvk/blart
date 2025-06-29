@@ -34,12 +34,14 @@ enum Action {
     GetMaximum,
     PopMaximum,
     GetKey(Box<[u8]>),
+    GetPrefixKey(Box<[u8]>),
     CheckLen,
     CheckIter,
     Remove(Box<[u8]>),
     RemovePrefix(Box<[u8]>),
     TryInsert(Box<[u8]>),
     TryInsertMany(Box<[u8]>, u8),
+    ForceInsert(Box<[u8]>),
     Clone,
     Hash,
     Entry(EntryAction, Box<[u8]>),
@@ -104,6 +106,10 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     assert_eq!(value, oracle_value);
                 }
             },
+            Action::GetPrefixKey(key) => {
+                // No easy way to replicate this using BTreeMap.
+                let _ = tree.get_prefix_mut(key.as_ref());
+            },
             Action::CheckLen => {
                 assert!((tree.is_empty() && tree.len() == 0) || tree.len() > 0);
             },
@@ -155,6 +161,16 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     let oracle_prev = oracle.insert(key.clone(), value);
                     assert_eq!(prev, oracle_prev);
                 }
+            },
+            Action::ForceInsert(key) => {
+                let value = next_value;
+                next_value += 1;
+
+                let _ = tree.force_insert(key.clone(), value);
+                oracle.retain(|f, _| {
+                    !f.starts_with(&key) && !key.starts_with(f)
+                });
+                oracle.insert(key, value);
             },
             Action::TryInsertMany(prefix, count) => {
                 let mut key = Vec::from(prefix);
