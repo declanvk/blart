@@ -4,7 +4,7 @@ use blart::TreeMap;
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 use std::{
     collections::hash_map::RandomState,
-    hash::{BuildHasher, Hash, Hasher},
+    hash::BuildHasher,
     mem,
 };
 
@@ -37,7 +37,6 @@ enum Action {
     Clone,
     Hash,
     Entry(EntryAction, Box<[u8]>),
-    EntryRef(EntryAction, Box<[u8]>),
     Fuzzy(Box<[u8]>),
     Prefix(Box<[u8]>),
     IntoIter { take_front: usize, take_back: usize },
@@ -167,43 +166,6 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                                     e.remove_entry();
                                 },
                                 blart::map::Entry::Vacant(_) => {},
-                            };
-                        },
-                    };
-                }
-            },
-            Action::EntryRef(ea, key) => {
-                if let Ok(entry) = tree.try_entry_ref(&key) {
-                    let value = next_value;
-                    next_value += 1;
-                    match ea {
-                        EntryAction::AndModify => {
-                            entry.and_modify(|v| *v = v.saturating_sub(1));
-                        },
-                        EntryAction::InsertEntry => {
-                            entry.insert_entry(value);
-                        },
-                        EntryAction::Key => {
-                            entry.key();
-                        },
-                        EntryAction::OrDefault => {
-                            entry.or_default();
-                        },
-                        EntryAction::OrInsert => {
-                            entry.or_insert(value);
-                        },
-                        EntryAction::OrInsertWith => {
-                            entry.or_insert_with(|| value);
-                        },
-                        EntryAction::OrInsertWithKey => {
-                            entry.or_insert_with_key(|_| value);
-                        },
-                        EntryAction::RemoveEntry => {
-                            match entry {
-                                blart::map::EntryRef::Occupied(e) => {
-                                    e.remove_entry();
-                                },
-                                blart::map::EntryRef::Vacant(_) => {},
                             };
                         },
                     };
