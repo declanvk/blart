@@ -105,7 +105,9 @@ fn insert_prefix_key_errors() {
         }
     );
 
-    unsafe { deallocate_tree(tree, &Global) }
+    unsafe {
+        deallocate_tree(tree, &Global);
+    }
 }
 
 #[test]
@@ -125,7 +127,9 @@ fn insert_prefix_key_with_existing_prefix_errors() {
         }
     );
 
-    unsafe { deallocate_tree(tree, &Global) }
+    unsafe {
+        deallocate_tree(tree, &Global);
+    }
 }
 
 #[test]
@@ -179,7 +183,9 @@ fn insert_key_with_long_prefix_then_split() {
         &2
     );
 
-    unsafe { deallocate_tree(tree, &Global) }
+    unsafe {
+        deallocate_tree(tree, &Global);
+    }
 }
 
 #[test]
@@ -373,5 +379,7 @@ fn insert_existing_key_overwrite() {
         'W'
     );
 
-    unsafe { deallocate_tree(current_root, &Global) }
+    unsafe {
+        deallocate_tree(current_root, &Global);
+    }
 }

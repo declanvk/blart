@@ -1142,7 +1142,7 @@ where
     /// This function requires that no other operation is concurrently modifying
     /// or reading the `this_ptr` leaf node and the sibling leaf nodes of the
     /// `old_leaf`.
-    pub unsafe fn replace(this_ptr: NodePtr<PREFIX_LEN, Self>, old_leaf: &mut Self) {
+    pub unsafe fn replace(this_ptr: NodePtr<PREFIX_LEN, Self>, old_leaf: &mut Self, force: bool) {
         // SAFETY: Covered by safety doc of this function
         let this = unsafe { this_ptr.as_mut() };
 
@@ -1155,11 +1155,13 @@ where
                 this.next.is_none(),
                 "next ptr should be None on insert into linked list"
             );
-            debug_assert_eq!(
-                this.key.as_bytes(),
-                old_leaf.key.as_bytes(),
-                "To replace a node, the key must be exactly the same"
-            );
+            if !force {
+                debug_assert_eq!(
+                    this.key.as_bytes(),
+                    old_leaf.key.as_bytes(),
+                    "To replace a node, the key must be exactly the same"
+                );
+            }
         }
 
         this.next = old_leaf.next;
@@ -1231,6 +1233,14 @@ impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
         K: AsBytes,
     {
         self.key.as_bytes().eq(possible_key)
+    }
+
+    /// Check that the key starts with the given slice.
+    pub fn starts_with(&self, key: &[u8]) -> bool
+    where
+        K: AsBytes,
+    {
+        self.key.as_bytes().starts_with(key)
     }
 
     /// This function removes this leaf node from its linked list.
