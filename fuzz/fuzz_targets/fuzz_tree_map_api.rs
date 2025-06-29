@@ -29,10 +29,12 @@ enum Action {
     GetMaximum,
     PopMaximum,
     GetKey(Box<[u8]>),
+    GetPrefixKey(Box<[u8]>),
     CheckLen,
     CheckIter,
     Remove(Box<[u8]>),
     TryInsert(Box<[u8]>),
+    ForceInsert(Box<[u8]>),
     Extend(Vec<Box<[u8]>>),
     Clone,
     Hash,
@@ -84,6 +86,12 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     *value = value.saturating_sub(1);
                 }
             },
+            Action::GetPrefixKey(key) => {
+                let entry = tree.get_prefix_mut(key.as_ref());
+                if let Some(value) = entry {
+                    *value = value.saturating_sub(1);
+                }
+            },
             Action::CheckLen => {
                 assert!((tree.is_empty() && tree.len() == 0) || tree.len() > 0);
             },
@@ -111,6 +119,12 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 next_value += 1;
 
                 let _ = tree.try_insert(key, value);
+            },
+            Action::ForceInsert(key) => {
+                let value = next_value;
+                next_value += 1;
+
+                let _ = tree.force_insert(key, value);
             },
             Action::Extend(new_keys) => {
                 for key in new_keys {
