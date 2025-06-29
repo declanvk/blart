@@ -1172,6 +1172,49 @@ where
         old_leaf.next = None;
         old_leaf.previous = None;
     }
+
+    /// Insert the leaf node pointed to by `this_ptr` into the linked list
+    /// position that `old_leaf` currently occupies, and then remove `old_leaf`
+    /// from the linked list.
+    ///
+    /// # Safety
+    ///
+    /// This function requires that no other operation is concurrently modifying
+    /// or reading the `this_ptr` leaf node and the sibling leaf nodes of the
+    /// `old_leaf`.
+    pub unsafe fn force_replace(this_ptr: NodePtr<PREFIX_LEN, Self>, old_leaf: &mut Self) {
+        // SAFETY: Covered by safety doc of this function
+        let this = unsafe { this_ptr.as_mut() };
+
+        if cfg!(debug_assertions) {
+            debug_assert!(
+                this.previous.is_none(),
+                "previous ptr should be None on insert into linked list"
+            );
+            debug_assert!(
+                this.next.is_none(),
+                "next ptr should be None on insert into linked list"
+            );
+        }
+
+        this.next = old_leaf.next;
+        this.previous = old_leaf.previous;
+
+        if let Some(prev_leaf_ptr) = this.previous {
+            // SAFETY: Covered by safety doc of this function
+            let prev_leaf = unsafe { prev_leaf_ptr.as_mut() };
+            prev_leaf.next = Some(this_ptr);
+        }
+
+        if let Some(next_leaf_ptr) = this.next {
+            // SAFETY: Covered by safety doc of this function
+            let next_leaf = unsafe { next_leaf_ptr.as_mut() };
+            next_leaf.previous = Some(this_ptr);
+        }
+
+        old_leaf.next = None;
+        old_leaf.previous = None;
+    }
 }
 
 impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
@@ -1223,6 +1266,14 @@ impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
         K: AsBytes,
     {
         self.key.as_bytes().eq(possible_key)
+    }
+
+    /// Check that the key starts with the given slice.
+    pub fn starts_with(&self, key: &[u8]) -> bool
+    where
+        K: AsBytes,
+    {
+        self.key.as_bytes().starts_with(key)
     }
 
     /// This function removes this leaf node from its linked list.
