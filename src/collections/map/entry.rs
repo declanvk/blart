@@ -97,7 +97,10 @@ where
             leaf_node_ptr: self.leaf_node_ptr,
         };
 
-        let delete_result = self.map.apply_delete_point(delete_point);
+        // SAFETY: This function call may invalidate the `leaf_node_ptr` and/or
+        // `parent_ptr`, but since we take this by value there is no way to access those
+        // values afterwards.
+        let delete_result = unsafe { self.map.apply_delete_point(delete_point) };
         delete_result.deleted_leaf.into_entry()
     }
 

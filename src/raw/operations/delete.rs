@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     alloc::Allocator,
     raw::{operations::lookup, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr},
@@ -27,16 +29,37 @@ unsafe fn remove_child_from_inner_node_and_compress<
 >(
     inner_node_ptr: NodePtr<PREFIX_LEN, N>,
     key_fragment: u8,
+    expected_leaf_node: NodePtr<PREFIX_LEN, LeafNode<N::Key, N::Value, PREFIX_LEN>>,
     alloc: &A,
-) -> Option<OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>> {
+) -> (
+    Option<OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>>,
+    ParentNodeChange<N::Key, N::Value, PREFIX_LEN>,
+) {
     // SAFETY: The `inner_node` reference is scoped to this function and dropped
     // before cases where the inner node is deallocated. It is a unique reference,
     // by the safety requirements of the containing function.
     let inner_node = unsafe { inner_node_ptr.as_mut() };
 
-    inner_node
-        .remove_child(key_fragment)
-        .expect("child should be present");
+    let removed = inner_node.remove_child(key_fragment);
+
+    #[cfg(debug_assertions)]
+    {
+        debug_assert!(
+            removed.is_some(),
+            "child must be present at [{key_fragment}] in inner node [{inner_node:?}]"
+        );
+        let removed = removed.unwrap();
+        debug_assert!(
+            removed.is::<LeafNode<N::Key, N::Value, PREFIX_LEN>>(),
+            "child at [{key_fragment}] in inner node [{inner_node:?}] must be a leaf node"
+        );
+        debug_assert_eq!(
+            removed,
+            expected_leaf_node.to_opaque(),
+            "child at [{key_fragment}] in inner node [{inner_node:?}] should be [{:?}]",
+            expected_leaf_node.to_opaque()
+        );
+    }
 
     if inner_node.header().num_children() == 1 {
         // need to compress node into child
@@ -86,7 +109,10 @@ unsafe fn remove_child_from_inner_node_and_compress<
             drop(NodePtr::deallocate_node_ptr(inner_node_ptr, alloc));
         }
 
-        Some(child_node_ptr)
+        (
+            Some(child_node_ptr),
+            ParentNodeChange::SingletonCompressed { child_node_ptr },
+        )
     } else if N::TYPE.should_shrink_inner_node(inner_node.header().num_children()) {
         let new_inner_node = inner_node.shrink();
 
@@ -98,9 +124,14 @@ unsafe fn remove_child_from_inner_node_and_compress<
             drop(NodePtr::deallocate_node_ptr(inner_node_ptr, alloc));
         }
 
-        Some(new_inner_node_ptr)
+        (
+            Some(new_inner_node_ptr),
+            ParentNodeChange::Shrunk {
+                new_parent_node: new_inner_node_ptr,
+            },
+        )
     } else {
-        None
+        (None, ParentNodeChange::NoChange)
     }
 }
 
@@ -119,27 +150,47 @@ unsafe fn remove_child_from_inner_node_and_compress<
 ///    the trie.
 unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allocator>(
     leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
-    (parent_node_ptr, parent_key_byte): (OpaqueNodePtr<K, V, PREFIX_LEN>, u8),
+    (parent_node_ptr, child_key_byte): (OpaqueNodePtr<K, V, PREFIX_LEN>, u8),
     grandparent_node_ptr: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
     original_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     alloc: &A,
 ) -> DeleteResult<K, V, PREFIX_LEN> {
-    let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
+    let (new_parent_node_ptr, inner_node_modification) = match parent_node_ptr.to_node_ptr() {
         ConcreteNodePtr::Node4(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
+            remove_child_from_inner_node_and_compress(
+                parent_node_ptr,
+                child_key_byte,
+                leaf_node_ptr,
+                alloc,
+            )
         },
         ConcreteNodePtr::Node16(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
+            remove_child_from_inner_node_and_compress(
+                parent_node_ptr,
+                child_key_byte,
+                leaf_node_ptr,
+                alloc,
+            )
         },
         ConcreteNodePtr::Node48(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
+            remove_child_from_inner_node_and_compress(
+                parent_node_ptr,
+                child_key_byte,
+                leaf_node_ptr,
+                alloc,
+            )
         },
         ConcreteNodePtr::Node256(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(parent_node_ptr, parent_key_byte, alloc)
+            remove_child_from_inner_node_and_compress(
+                parent_node_ptr,
+                child_key_byte,
+                leaf_node_ptr,
+                alloc,
+            )
         },
         ConcreteNodePtr::LeafNode(_) => unreachable!("Cannot have delete from leaf node"),
     };
@@ -147,35 +198,35 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
     // If the parent node was changed to something else, we have to write the new
     // value to the grandparent
     if let Some(new_parent_node_ptr) = new_parent_node_ptr {
-        if let Some((grandparent_node_ptr, grandparent_key_byte)) = grandparent_node_ptr {
+        if let Some((grandparent_node_ptr, parent_key_byte)) = grandparent_node_ptr {
             match grandparent_node_ptr.to_node_ptr() {
                 ConcreteNodePtr::Node4(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
+                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::Node16(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
+                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::Node48(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
+                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::Node256(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(grandparent_key_byte, new_parent_node_ptr);
+                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
                 ConcreteNodePtr::LeafNode(_) => {
                     unreachable!("Cannot modify children of a leaf node")
@@ -199,6 +250,7 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
 
     DeleteResult {
         new_root: Some(new_root),
+        parent_node_change: Some(inner_node_modification),
         deleted_leaf: leaf_node,
     }
 }
@@ -211,8 +263,54 @@ pub struct DeleteResult<K, V, const PREFIX_LEN: usize> {
     /// If `None`, that means the tree is now empty.
     pub new_root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
 
+    /// This field details what kind of changes happened to the parent node.
+    ///
+    /// If `None`, that means the tree is now empty and there is no relevant
+    /// parent node.
+    pub parent_node_change: Option<ParentNodeChange<K, V, PREFIX_LEN>>,
+
     /// The leaf node that was successfully deleted.
     pub deleted_leaf: LeafNode<K, V, PREFIX_LEN>,
+}
+
+pub enum ParentNodeChange<K, V, const PREFIX_LEN: usize> {
+    /// This variant indicates that after the delete the parent node didn't have
+    /// enough children for its node type, and needed to be shrunk to the
+    /// next smaller type.
+    Shrunk {
+        /// A pointer to the newly allocated (and smaller!) parent node.
+        new_parent_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    },
+    /// This variant indicates that after the delete there was only a single
+    /// child in the inner node, so the inner node needed to be removed and
+    /// compressed into the grandparent node (or become the root).
+    ///
+    /// In this case, the new parent is the original grandparent of the deleted
+    /// node.
+    SingletonCompressed {
+        /// Pointer to the child node which was pulled up to be a child of the
+        /// grandparent.
+        child_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    },
+    /// This variant indicates that there was no deallocation or replacement of
+    /// the parent node during the delete.
+    NoChange,
+}
+
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ParentNodeChange<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Shrunk { new_parent_node } => f
+                .debug_struct("Shrunk")
+                .field("new_parent_node", new_parent_node)
+                .finish(),
+            Self::SingletonCompressed { child_node_ptr } => f
+                .debug_struct("SingletonCompressed")
+                .field("child_node_ptr", child_node_ptr)
+                .finish(),
+            Self::NoChange => write!(f, "NoChange"),
+        }
+    }
 }
 
 /// This struct represents a location in the trie that can be deleted.
@@ -234,15 +332,18 @@ pub struct DeletePoint<K, V, const PREFIX_LEN: usize> {
     pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
 }
 
-impl<K, V, const PREFIX_LEN: usize> std::fmt::Debug for DeletePoint<K, V, PREFIX_LEN> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DeleteSearchResult")
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for DeletePoint<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DeletePoint")
             .field(
-                "grandparent_node",
+                "grandparent_ptr_and_parent_key_byte",
                 &self.grandparent_ptr_and_parent_key_byte,
             )
-            .field("parent_node", &self.parent_ptr_and_child_key_byte)
-            .field("leaf_node", &self.leaf_node_ptr)
+            .field(
+                "parent_ptr_and_child_key_byte",
+                &self.parent_ptr_and_child_key_byte,
+            )
+            .field("leaf_node_ptr", &self.leaf_node_ptr)
             .finish()
     }
 }
@@ -259,6 +360,10 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
     ///    arbitrarily read or write to any child in the given tree.
     ///  - `alloc` must be the same allocator that was used to allocate the
     ///    nodes of the trie.
+    ///  - This function may invalidate existing pointers into the trie when
+    ///    leaves are deleted and when inner nodes are deleted or shrunk.
+    ///    Callers must ensure that they delete invalidated pointers, the new
+    ///    pointers are returned in [`DeleteResult`].
     pub unsafe fn apply<A: Allocator>(
         self,
         root: OpaqueNodePtr<K, V, PREFIX_LEN>,
@@ -282,6 +387,7 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
 
                 DeleteResult {
                     new_root: None,
+                    parent_node_change: None,
                     deleted_leaf: leaf_node,
                 }
             },

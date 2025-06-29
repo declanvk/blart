@@ -2,7 +2,11 @@ use std::ffi::CString;
 
 use blart::TreeMap;
 use criterion::{criterion_group, Criterion};
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use rand::{
+    rngs::StdRng,
+    seq::{IndexedRandom, SliceRandom},
+    SeedableRng,
+};
 
 fn insert(words: Vec<CString>) -> TreeMap<CString, usize> {
     let mut art = TreeMap::new();
