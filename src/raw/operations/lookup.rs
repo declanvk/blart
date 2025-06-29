@@ -168,6 +168,36 @@ impl PrefixMatchBehavior {
             PrefixMatchBehavior::Optimistic => leaf.matches_full_key(key_bytes),
         }
     }
+
+    /// This function will test given leaf key is a prefix of the key bytes.
+    ///
+    /// Specifically:
+    ///  - If the current behavior is "optimistic", then the entire leaf key
+    ///    will be matched against the given key bytes
+    ///  - If the current behavior is "pessimistic", then only the key bytes
+    ///    that were not used during the lookup process will be tested against
+    ///    the corresponding leaf key bytes.
+    pub fn leaf_key_is_prefix<K: AsBytes, V, const PREFIX_LEN: usize>(
+        self,
+        leaf: &LeafNode<K, V, PREFIX_LEN>,
+        key_bytes: &[u8],
+        current_depth: usize,
+    ) -> bool {
+        match self {
+            PrefixMatchBehavior::Pessimistic => {
+                let leaf_key_bytes = leaf.key_ref().as_bytes();
+                let current_depth = current_depth.min(leaf_key_bytes.len()).min(key_bytes.len());
+                // PANIC SAFETY: Since we limit `current_depth` to be the minimum of the lengths
+                // and the current depth we will at most get an empty slice, it
+                // should panic. I ran a small test to make sure that `&[1][1..] == &[][..]` and
+                // does not panic.
+                let leaf_key_bytes = &leaf_key_bytes[current_depth..];
+                let key_bytes = &key_bytes[current_depth..];
+                key_bytes.starts_with(leaf_key_bytes)
+            },
+            PrefixMatchBehavior::Optimistic => key_bytes.starts_with(leaf.key_ref().as_bytes()),
+        }
+    }
 }
 
 /// Search in the given tree for the value stored with the given key.
@@ -235,6 +265,81 @@ where
                 let leaf = unsafe { leaf_node_ptr.as_ref() };
 
                 if prefix_match_behavior.matches_leaf_key(leaf, key_bytes, current_depth) {
+                    return Some(leaf_node_ptr);
+                } else {
+                    return None;
+                }
+            },
+        }?;
+    }
+}
+
+/// Search in the given tree for the value stored with the key that prefixes the
+/// `key_bytes`
+///
+/// # Safety
+///  - This function cannot be called concurrently with any mutating operation
+///    on `root` or any child node of `root`. This function will arbitrarily
+///    read to any child in the given tree.
+pub unsafe fn prefix_search_unchecked<K, V, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    key_bytes: &[u8],
+) -> OptionalLeafPtr<K, V, PREFIX_LEN>
+where
+    K: AsBytes,
+{
+    let mut current_node = root;
+    let mut current_depth = 0;
+    let mut prefix_match_behavior = PrefixMatchBehavior::default();
+
+    loop {
+        current_node = match current_node.to_node_ptr() {
+            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+                // SAFETY: The safety requirement is covered by the safety requirement on the
+                // containing function
+                check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_behavior,
+                )
+            },
+            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
+                // SAFETY: The safety requirement is covered by the safety requirement on the
+                // containing function
+                check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_behavior,
+                )
+            },
+            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
+                // SAFETY: The safety requirement is covered by the safety requirement on the
+                // containing function
+                check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_behavior,
+                )
+            },
+            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
+                // SAFETY: The safety requirement is covered by the safety requirement on the
+                // containing function
+                check_prefix_lookup_child(
+                    inner_ptr,
+                    key_bytes,
+                    &mut current_depth,
+                    &mut prefix_match_behavior,
+                )
+            },
+            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+                // SAFETY: The shared reference is bounded to this block and there are no
+                // concurrent modifications, by the safety conditions of this function.
+                let leaf = unsafe { leaf_node_ptr.as_ref() };
+
+                if prefix_match_behavior.leaf_key_is_prefix(leaf, key_bytes, current_depth) {
                     return Some(leaf_node_ptr);
                 } else {
                     return None;

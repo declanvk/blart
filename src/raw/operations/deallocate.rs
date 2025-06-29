@@ -79,6 +79,7 @@ pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize, A: Alloc
 /// Deallocate the given node and all children of the given node.
 ///
 /// This will also deallocate the leaf nodes with their value type data.
+/// This function returns the amount of leaf nodes deallocated.
 ///
 /// # Safety
 ///  - This function must only be called once for this root node and all
@@ -90,11 +91,12 @@ pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize, A: Alloc
 pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize, A: Allocator>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     alloc: &A,
-) {
+) -> usize {
     fn accept_all<K, V, const PREFIX_LEN: usize>(_: &OpaqueNodePtr<K, V, PREFIX_LEN>) -> bool {
         true
     }
 
+    let mut count = 0;
     let mut stack = Vec::new();
 
     stack.push(root);
@@ -120,10 +122,12 @@ pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize, A: Allocator>(
             ConcreteNodePtr::LeafNode(inner) => {
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
-                drop(unsafe { NodePtr::deallocate_node_ptr(inner, alloc) })
+                drop(unsafe { NodePtr::deallocate_node_ptr(inner, alloc) });
+                count += 1;
             },
         }
     }
+    count
 }
 
 /// This function will read an [`InnerNode`] and place all children that

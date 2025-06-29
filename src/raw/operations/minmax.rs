@@ -73,7 +73,9 @@ mod tests {
 
         assert_eq!(min_leaf, max_leaf);
 
-        unsafe { deallocate_tree(root, &Global) }
+        unsafe {
+            deallocate_tree(root, &Global);
+        }
     }
 
     #[test]
@@ -108,7 +110,9 @@ mod tests {
             assert_eq!(max_leaf.key_ref().as_ref(), &[5, 5, 5]);
         }
 
-        unsafe { deallocate_tree(root, &Global) }
+        unsafe {
+            deallocate_tree(root, &Global);
+        }
     }
 
     #[test]
@@ -151,6 +155,8 @@ mod tests {
         );
         assert_eq!(max_leaf.key_ref().as_ref(), &[u8::MAX]);
 
-        unsafe { deallocate_tree(root, &Global) }
+        unsafe {
+            deallocate_tree(root, &Global);
+        }
     }
 }
