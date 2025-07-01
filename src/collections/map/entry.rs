@@ -88,8 +88,7 @@ where
         unsafe { self.leaf_node_ptr.as_key_ref() }
     }
 
-    /// Take the ownership of the key and value from the map. Keeps the
-    /// allocated memory for reuse.
+    /// Takes the entry out of the map and returns it.
     pub fn remove_entry(self) -> (K, V) {
         let delete_point = DeletePoint {
             grandparent_ptr_and_parent_key_byte: self.grandparent_ptr_and_parent_key_byte,
@@ -101,10 +100,9 @@ where
         delete_result.deleted_leaf.into_entry()
     }
 
-    /// Takes the value out of the entry, and returns it. Keeps the allocated
-    /// memory for reuse.
-    pub fn remove(self) -> K {
-        self.remove_entry().0
+    /// Takes the value of the entry out of the map, and returns it.
+    pub fn remove(self) -> V {
+        self.remove_entry().1
     }
 }
 

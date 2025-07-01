@@ -38,5 +38,6 @@ do
 
     if [ "${TOOLCHAIN}" = "nightly" ]; then
         cargo "${TOOLCHAIN_ARG}" miri test --lib --bins --examples --tests $extra_args
+        cargo "${TOOLCHAIN_ARG}" check --manifest-path fuzz/Cargo.toml
     fi
 done
