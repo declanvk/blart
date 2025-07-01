@@ -1,23 +1,28 @@
 #![no_main]
+#![feature(btree_entry_insert)]
 
-use blart::TreeMap;
+use blart::{visitor::WellFormedChecker, TreeMap};
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 use std::{
-    collections::hash_map::RandomState,
+    collections::{hash_map::RandomState, BTreeMap},
     hash::BuildHasher,
     mem,
 };
 
 #[derive(Arbitrary, Debug)]
 enum EntryAction {
-    AndModify,
-    InsertEntry,
-    Key,
+    AndModify(Option<Box<EntryAction>>),
+    InsertEntry(Option<OccupiedEntryAction>),
     OrDefault,
     OrInsert,
     OrInsertWith,
     OrInsertWithKey,
-    RemoveEntry,
+}
+
+#[derive(Arbitrary, Debug)]
+enum OccupiedEntryAction {
+    Insert,
+    Remove,
 }
 
 #[derive(Arbitrary, Debug)]
@@ -33,7 +38,6 @@ enum Action {
     CheckIter,
     Remove(Box<[u8]>),
     TryInsert(Box<[u8]>),
-    Extend(Vec<Box<[u8]>>),
     Clone,
     Hash,
     Entry(EntryAction, Box<[u8]>),
@@ -44,42 +48,52 @@ enum Action {
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
     let mut tree = TreeMap::<_, u32>::new();
+    let mut oracle = BTreeMap::<_, u32>::new();
     let mut next_value = 0;
 
     for action in actions {
         match action {
             Action::Clear => {
                 tree.clear();
+                oracle.clear();
             },
             Action::ContainsKey(key) => {
-                let _ = tree.contains_key(key.as_ref());
+                assert_eq!(
+                    tree.contains_key(key.as_ref()),
+                    oracle.contains_key(key.as_ref())
+                );
             },
             Action::GetMinimum => {
                 let min = tree.first_key_value();
+                assert_eq!(min, oracle.first_key_value());
                 if let Some((_, min_value)) = min {
                     assert!(*min_value < next_value);
                 }
             },
             Action::PopMinimum => {
                 let min = tree.pop_first();
+                assert_eq!(min, oracle.pop_first());
                 if let Some((_, min_value)) = min {
                     assert!(min_value < next_value);
                 }
             },
             Action::GetMaximum => {
                 let max = tree.last_key_value();
+                assert_eq!(max, oracle.last_key_value());
                 if let Some((_, max_value)) = max {
                     assert!(*max_value < next_value);
                 }
             },
             Action::PopMaximum => {
                 let max = tree.pop_last();
+                assert_eq!(max, oracle.pop_last());
                 if let Some((_, max_value)) = max {
                     assert!(max_value < next_value);
                 }
             },
             Action::GetKey(key) => {
                 let entry = tree.get_mut(key.as_ref());
+                assert_eq!(entry, oracle.get_mut(key.as_ref()));
                 if let Some(value) = entry {
                     *value = value.saturating_sub(1);
                 }
@@ -91,8 +105,14 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 tree.iter_mut().for_each(|(_, value)| {
                     *value = value.saturating_add(1);
                 });
+                oracle.iter_mut().for_each(|(_, value)| {
+                    *value = value.saturating_add(1);
+                });
 
                 tree.iter_mut().rev().for_each(|(_, value)| {
+                    *value = value.saturating_sub(1);
+                });
+                oracle.iter_mut().rev().for_each(|(_, value)| {
                     *value = value.saturating_sub(1);
                 });
 
@@ -102,7 +122,9 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert!(tree.iter().rev().count() == tree.len());
             },
             Action::Remove(key) => {
-                if let Some(value) = tree.remove(key.as_ref()) {
+                let value = tree.remove(key.as_ref());
+                assert_eq!(value, oracle.remove(key.as_ref()));
+                if let Some(value) = value {
                     assert!(value < next_value);
                 }
             },
@@ -110,14 +132,9 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 let value = next_value;
                 next_value += 1;
 
-                let _ = tree.try_insert(key, value);
-            },
-            Action::Extend(new_keys) => {
-                for key in new_keys {
-                    let value = next_value;
-                    next_value += 1;
-
-                    let _ = tree.try_insert(key, value);
+                let result = tree.try_insert(key.clone(), value);
+                if result.is_ok() {
+                    oracle.insert(key, value);
                 }
             },
             Action::Clone => {
@@ -135,40 +152,11 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert_eq!(original_hash, copy_hash, "{:?} != {:?}", tree, tree_copy);
             },
             Action::Entry(ea, key) => {
-                if let Ok(entry) = tree.try_entry(key) {
+                if let Ok(entry) = tree.try_entry(key.clone()) {
                     let value = next_value;
                     next_value += 1;
-                    match ea {
-                        EntryAction::AndModify => {
-                            entry.and_modify(|v| *v = v.saturating_sub(1));
-                        },
-                        EntryAction::InsertEntry => {
-                            entry.insert_entry(value);
-                        },
-                        EntryAction::Key => {
-                            entry.key();
-                        },
-                        EntryAction::OrDefault => {
-                            entry.or_default();
-                        },
-                        EntryAction::OrInsert => {
-                            entry.or_insert(value);
-                        },
-                        EntryAction::OrInsertWith => {
-                            entry.or_insert_with(|| value);
-                        },
-                        EntryAction::OrInsertWithKey => {
-                            entry.or_insert_with_key(|_| value);
-                        },
-                        EntryAction::RemoveEntry => {
-                            match entry {
-                                blart::map::Entry::Occupied(e) => {
-                                    e.remove_entry();
-                                },
-                                blart::map::Entry::Vacant(_) => {},
-                            };
-                        },
-                    };
+                    let oracle_entry = oracle.entry(key.clone());
+                    apply_entry_action(ea, entry, oracle_entry, value);
                 }
             },
             Action::Fuzzy(key) => {
@@ -184,6 +172,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 take_back,
             } => {
                 let tree = mem::replace(&mut tree, TreeMap::<_, u32>::new());
+                let _oracle = mem::replace(&mut oracle, BTreeMap::<_, u32>::new());
 
                 let original_size = tree.len();
                 let mut it = tree.into_iter();
@@ -198,5 +187,68 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert!(back_count <= take_back);
             },
         }
+
+        assert!(tree.iter().eq(oracle.iter()));
+        let _ = WellFormedChecker::check(&tree).expect("tree should be well-formed");
     }
 });
+
+fn apply_entry_action(
+    ea: EntryAction,
+    tree_entry: blart::map::Entry<'_, Box<[u8]>, u32>,
+    oracle_entry: std::collections::btree_map::Entry<'_, Box<[u8]>, u32>,
+    value: u32,
+) {
+    match ea {
+        EntryAction::AndModify(entry_action) => {
+            let tree_entry = tree_entry.and_modify(|v| *v = v.saturating_sub(1));
+            let oracle_entry = oracle_entry.and_modify(|v| *v = v.saturating_sub(1));
+
+            if let Some(entry_action) = entry_action {
+                apply_entry_action(*entry_action, tree_entry, oracle_entry, value);
+            }
+        },
+        EntryAction::InsertEntry(entry_action) => {
+            let tree_entry = tree_entry.insert_entry(value);
+            let oracle_entry = oracle_entry.insert_entry(value);
+
+            if let Some(occupied_action) = entry_action {
+                apply_occupied_entry_action(occupied_action, tree_entry, oracle_entry, value);
+            }
+        },
+        EntryAction::OrDefault => {
+            assert_eq!(tree_entry.or_default(), oracle_entry.or_default());
+        },
+        EntryAction::OrInsert => {
+            assert_eq!(tree_entry.or_insert(value), oracle_entry.or_insert(value));
+        },
+        EntryAction::OrInsertWith => {
+            assert_eq!(
+                tree_entry.or_insert_with(|| value),
+                oracle_entry.or_insert_with(|| value)
+            );
+        },
+        EntryAction::OrInsertWithKey => {
+            assert_eq!(
+                tree_entry.or_insert_with_key(|_| value),
+                oracle_entry.or_insert_with_key(|_| value)
+            );
+        },
+    };
+}
+
+fn apply_occupied_entry_action(
+    occupied_action: OccupiedEntryAction,
+    mut tree_entry: blart::map::OccupiedEntry<'_, Box<[u8]>, u32>,
+    mut oracle_entry: std::collections::btree_map::OccupiedEntry<'_, Box<[u8]>, u32>,
+    value: u32,
+) {
+    match occupied_action {
+        OccupiedEntryAction::Insert => {
+            assert_eq!(tree_entry.insert(value), oracle_entry.insert(value));
+        },
+        OccupiedEntryAction::Remove => {
+            assert_eq!(tree_entry.remove(), oracle_entry.remove());
+        },
+    }
+}
