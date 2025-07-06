@@ -2,7 +2,7 @@ use crate::{
     alloc::Allocator,
     raw::{
         maximum_unchecked, minimum_unchecked, ConcreteNodePtr, ExplicitMismatch, InnerNode,
-        InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch,
+        InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, TreePath, TreePathSearch,
     },
     rust_nightly_apis::{assume, likely, unlikely},
     AsBytes,
@@ -19,12 +19,50 @@ use std::{
 pub struct InsertResult<'a, K, V, const PREFIX_LEN: usize> {
     /// Pointer to the leaf
     pub leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+
     /// The existing leaf referenced by the insert key, if present
     pub existing_leaf: Option<LeafNode<K, V, PREFIX_LEN>>,
+
     /// The new tree root after the successful insert
     pub new_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 
+    /// This field details what kind of changes happened to the parent node.
+    pub parent_node_change: InsertParentNodeChange<K, V, PREFIX_LEN>,
+
     marker: PhantomData<(&'a mut K, &'a V)>,
+}
+
+pub enum InsertParentNodeChange<K, V, const PREFIX_LEN: usize> {
+    /// This variant indicates that a new parent node was allocated, either
+    /// because:
+    ///  - The old parent node was too small
+    ///  - The old parent node had a mismatch with the key
+    ///  - The [`InsertKind`] was [`InsertKind::SplitLeaf`]
+    NewParent {
+        /// A pointer to the newly allocated parent node.
+        new_parent_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
+        /// The key byte used to select the newly inserted leaf node
+        leaf_node_key_byte: u8,
+    },
+    /// This variant indicates that there was no replacement of
+    /// the parent node during the inert.
+    NoChange,
+}
+
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertParentNodeChange<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NewParent {
+                new_parent_node,
+                leaf_node_key_byte,
+            } => f
+                .debug_struct("NewParent")
+                .field("new_parent_node", new_parent_node)
+                .field("leaf_node_key_byte", leaf_node_key_byte)
+                .finish(),
+            Self::NoChange => write!(f, "NoChange"),
+        }
+    }
 }
 
 /// Attempted to insert a key which was a prefix of an existing key in
@@ -54,25 +92,10 @@ impl Error for InsertPrefixError {}
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
 pub struct InsertPoint<K, V, const PREFIX_LEN: usize> {
-    /// The grandparent node pointer and key byte that points to the parent node
-    /// insert point.
-    ///
-    /// In the case that the root node is the main insert point, this will
-    /// have a `None` value.
-    ///
-    /// # Note
-    ///
-    /// This is only used during the removal in the entry, and it's not a lot
-    /// extra work or space to keep track
-    pub grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
-    /// The parent node pointer and key byte that points to the main node
-    /// insert point.
-    ///
-    /// In the case that the root node is the main insert point, this will
-    /// have a `None` value.
-    pub parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
-    /// The type of operation that needs to be performed to insert the key
-    pub insert_type: InsertSearchResultType<K, V, PREFIX_LEN>,
+    /// The path to point where the new leaf will be inserted.
+    pub path: TreePath<K, V, PREFIX_LEN>,
+    /// The kind of operation that needs to be performed to insert the key
+    pub insert_kind: InsertKind<K, V, PREFIX_LEN>,
     /// The number of bytes that were read from the key to find the insert
     /// point.
     pub key_bytes_used: usize,
@@ -80,18 +103,19 @@ pub struct InsertPoint<K, V, const PREFIX_LEN: usize> {
     pub root: OpaqueNodePtr<K, V, PREFIX_LEN>,
 }
 
+impl<K, V, const PREFIX_LEN: usize> Copy for InsertPoint<K, V, PREFIX_LEN> {}
+
+impl<K, V, const PREFIX_LEN: usize> Clone for InsertPoint<K, V, PREFIX_LEN> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertPoint<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InsertPoint")
-            .field(
-                "grandparent_ptr_and_parent_key_byte",
-                &self.grandparent_ptr_and_parent_key_byte,
-            )
-            .field(
-                "parent_ptr_and_child_key_byte",
-                &self.parent_ptr_and_child_key_byte,
-            )
-            .field("insert_type", &self.insert_type)
+            .field("path", &self.path)
+            .field("insert_kind", &self.insert_kind)
             .field("key_bytes_used", &self.key_bytes_used)
             .field("root", &self.root)
             .finish()
@@ -108,6 +132,10 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
     ///    modification of the trie.
     ///  - The given allocator must be the same one that was used to allocate
     ///    the nodes of this trie.
+    ///  - This function may invalidate existing pointers into the trie when
+    ///    inner nodes are grown. Callers must ensure that they delete
+    ///    invalidated pointers, the new pointers are returned in
+    ///    [`InsertResult`].
     pub unsafe fn apply<'a, A>(
         self,
         key: K,
@@ -127,6 +155,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
         ) -> (
             OpaqueNodePtr<K, V, PREFIX_LEN>,
             NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+            u8,
         )
         where
             K: AsBytes + 'a,
@@ -141,6 +170,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
             ) -> (
                 OpaqueNodePtr<K, V, PREFIX_LEN>,
                 NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+                u8,
             )
             where
                 N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
@@ -225,13 +255,13 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                         drop(NodePtr::deallocate_node_ptr(inner_node_ptr, alloc));
                     };
 
-                    (new_inner_node, new_leaf_ptr)
+                    (new_inner_node, new_leaf_ptr, new_leaf_key_byte)
                 } else {
                     inner_node.write_child(new_leaf_key_byte, new_leaf_ptr_opaque);
 
                     insert_new_leaf_in_linked_list(new_leaf_ptr, inner_node, new_leaf_key_byte);
 
-                    (inner_node_ptr.to_opaque(), new_leaf_ptr)
+                    (inner_node_ptr.to_opaque(), new_leaf_ptr, new_leaf_key_byte)
                 }
             }
 
@@ -308,15 +338,15 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
         }
 
         let InsertPoint {
-            parent_ptr_and_child_key_byte,
-            insert_type,
+            path,
+            insert_kind: insert_type,
             key_bytes_used,
             root,
             ..
         } = self;
 
-        let (new_inner_node, leaf_node_ptr) = match insert_type {
-            InsertSearchResultType::MismatchPrefix {
+        let (new_inner_node, leaf_node_ptr, leaf_node_key_byte) = match insert_type {
+            InsertKind::MismatchPrefix {
                 mismatch,
                 mismatched_inner_node_ptr,
             } => {
@@ -413,9 +443,10 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 (
                     NodePtr::allocate_node_ptr(new_n4, alloc).to_opaque(),
                     new_leaf_pointer,
+                    key_byte,
                 )
             },
-            InsertSearchResultType::Exact { leaf_node_ptr } => {
+            InsertKind::Exact { leaf_node_ptr } => {
                 let new_leaf_node = LeafNode::with_no_siblings(key, value);
 
                 // SAFETY: The leaf node will not be accessed concurrently because of the safety
@@ -435,10 +466,11 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     // the root is guaranteed to be unchanged, even if
                     // the old leaf was the root.
                     new_root: root,
+                    parent_node_change: InsertParentNodeChange::NoChange,
                     marker: PhantomData,
                 };
             },
-            InsertSearchResultType::SplitLeaf {
+            InsertKind::SplitLeaf {
                 leaf_node_ptr,
                 new_key_bytes_used,
             } => {
@@ -505,48 +537,66 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 (
                     NodePtr::allocate_node_ptr(new_n4, alloc).to_opaque(),
                     new_leaf_node_pointer,
+                    new_leaf_node_key_byte,
                 )
             },
-            InsertSearchResultType::IntoExisting { inner_node_ptr } => {
-                write_new_child_in_existing_node(
-                    inner_node_ptr,
-                    LeafNode::with_no_siblings(key, value),
-                    key_bytes_used,
-                    alloc,
-                )
-            },
+            InsertKind::IntoExisting { inner_node_ptr } => write_new_child_in_existing_node(
+                inner_node_ptr,
+                LeafNode::with_no_siblings(key, value),
+                key_bytes_used,
+                alloc,
+            ),
         };
 
-        if let Some((parent_ptr, parent_key_fragment)) = parent_ptr_and_child_key_byte {
-            // TODO(#14) Change this write back to parent to only happen when a new inner
-            // node is created (MismatchPrefix & SplitLeaf (when it is not an overwrite of
-            // the existing leaf))
-            parent_write_child(parent_ptr, parent_key_fragment, new_inner_node);
+        match path {
+            TreePath::Root => {
+                // If there was no parent, then the root node was a leaf or the inner node split
+                // occurred at the root, in which case return the new inner node as root
+                InsertResult {
+                    leaf_node_ptr,
+                    existing_leaf: None,
+                    new_root: new_inner_node,
+                    parent_node_change: InsertParentNodeChange::NewParent {
+                        new_parent_node: new_inner_node,
+                        leaf_node_key_byte,
+                    },
+                    marker: PhantomData,
+                }
+            },
+            TreePath::ChildOfRoot {
+                parent,
+                child_key_byte,
+            }
+            | TreePath::Normal {
+                parent,
+                child_key_byte,
+                ..
+            } => {
+                // TODO(#14) Change this write back to parent to only happen when a new inner
+                // node is created (MismatchPrefix & SplitLeaf (when it is not an overwrite of
+                // the existing leaf))
+                parent_write_child(parent, child_key_byte, new_inner_node);
 
-            // If there was a parent either:
-            //   1. Root was the parent, in which case it was unchanged
-            //   2. Or some parent of the parent was root, in which case it was unchanged
-            InsertResult {
-                leaf_node_ptr,
-                existing_leaf: None,
-                new_root: root,
-                marker: PhantomData,
-            }
-        } else {
-            // If there was no parent, then the root node was a leaf or the inner node split
-            // occurred at the root, in which case return the new inner node as root
-            InsertResult {
-                leaf_node_ptr,
-                existing_leaf: None,
-                new_root: new_inner_node,
-                marker: PhantomData,
-            }
+                // If there was a parent either:
+                //   1. Root was the parent, in which case it was unchanged
+                //   2. Or some parent of the parent was root, in which case it was unchanged
+                InsertResult {
+                    leaf_node_ptr,
+                    existing_leaf: None,
+                    new_root: root,
+                    parent_node_change: InsertParentNodeChange::NewParent {
+                        new_parent_node: new_inner_node,
+                        leaf_node_key_byte,
+                    },
+                    marker: PhantomData,
+                }
+            },
         }
     }
 }
 
 /// The type of insert
-pub enum InsertSearchResultType<K, V, const PREFIX_LEN: usize> {
+pub enum InsertKind<K, V, const PREFIX_LEN: usize> {
     /// An insert where an inner node had a differing prefix from the key.
     ///
     /// This insert type will create a new inner node with the portion of
@@ -586,7 +636,15 @@ pub enum InsertSearchResultType<K, V, const PREFIX_LEN: usize> {
     },
 }
 
-impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertSearchResultType<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Copy for InsertKind<K, V, PREFIX_LEN> {}
+
+impl<K, V, const PREFIX_LEN: usize> Clone for InsertKind<K, V, PREFIX_LEN> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertKind<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MismatchPrefix {
@@ -685,8 +743,7 @@ where
     // only be used during the remove in the entry api. It's also not a
     // lot of extra work to keep track of the grandparent since it's just
     // a copy of a ptr and u8
-    let mut current_grandparent = None;
-    let mut current_parent = None;
+    let mut path = TreePathSearch::default();
     let mut current_node = root;
     let mut current_depth = 0;
 
@@ -710,9 +767,8 @@ where
                 if leaf_node.matches_full_key(key_bytes) {
                     return Ok(InsertPoint {
                         key_bytes_used: current_depth,
-                        grandparent_ptr_and_parent_key_byte: current_grandparent,
-                        parent_ptr_and_child_key_byte: current_parent,
-                        insert_type: InsertSearchResultType::Exact { leaf_node_ptr },
+                        path: path.finish(),
+                        insert_kind: InsertKind::Exact { leaf_node_ptr },
                         root,
                     });
                 }
@@ -749,9 +805,8 @@ where
 
                 return Ok(InsertPoint {
                     key_bytes_used: current_depth,
-                    grandparent_ptr_and_parent_key_byte: current_grandparent,
-                    parent_ptr_and_child_key_byte: current_parent,
-                    insert_type: InsertSearchResultType::SplitLeaf {
+                    path: path.finish(),
+                    insert_kind: InsertKind::SplitLeaf {
                         leaf_node_ptr,
                         new_key_bytes_used,
                     },
@@ -774,9 +829,8 @@ where
 
                 match next_child_node {
                     Some(next_child_node) => {
-                        current_grandparent = current_parent;
                         let byte = key_bytes[current_depth];
-                        current_parent = Some((current_node, byte));
+                        path.visit_inner_node(current_node, byte);
                         current_node = next_child_node;
                         // Increment by a single byte
                         current_depth += 1;
@@ -784,11 +838,10 @@ where
                     None => {
                         return Ok(InsertPoint {
                             key_bytes_used: current_depth,
-                            insert_type: InsertSearchResultType::IntoExisting {
+                            insert_kind: InsertKind::IntoExisting {
                                 inner_node_ptr: current_node,
                             },
-                            grandparent_ptr_and_parent_key_byte: current_grandparent,
-                            parent_ptr_and_child_key_byte: current_parent,
+                            path: path.finish(),
                             root,
                         })
                     },
@@ -806,12 +859,11 @@ where
 
                 return Ok(InsertPoint {
                     key_bytes_used: current_depth,
-                    insert_type: InsertSearchResultType::MismatchPrefix {
+                    insert_kind: InsertKind::MismatchPrefix {
                         mismatch,
                         mismatched_inner_node_ptr: current_node,
                     },
-                    grandparent_ptr_and_parent_key_byte: current_grandparent,
-                    parent_ptr_and_child_key_byte: current_parent,
+                    path: path.finish(),
                     root,
                 });
             },

@@ -1284,6 +1284,127 @@ impl<const PREFIX_LEN: usize, K, V> Node<PREFIX_LEN> for LeafNode<K, V, PREFIX_L
     const TYPE: NodeType = NodeType::Leaf;
 }
 
+/// This enum represents different kinds of tree paths pointing to a leaf node.
+///
+/// Each variant contains information that is useful when inserting or deleting
+/// a leaf at the implied location.
+pub enum TreePath<K, V, const PREFIX_LEN: usize> {
+    /// This variant indicates a tree with only a single leaf node as root.
+    ///
+    /// It has no grandparent or parent node.
+    Root,
+    /// This variant indicates a tree with a non-leaf root, and the leaf node
+    /// we're pointed to is a direct child of the root.
+    ///
+    /// The leaf has no grandparent node.
+    ChildOfRoot {
+        /// A pointer to the root node of the tree.
+        parent: OpaqueNodePtr<K, V, PREFIX_LEN>,
+        /// The key byte which selects the leaf node when used as lookup in
+        /// the root parent.
+        child_key_byte: u8,
+    },
+    /// This variant covers all other tree cases, where the leaf node has both a
+    /// parent and a grandparent node.
+    Normal {
+        /// A pointer to the grandparent node.
+        grandparent: OpaqueNodePtr<K, V, PREFIX_LEN>,
+        /// The key byte which selects the parent node when used as lookup in
+        /// the grandparent.
+        parent_key_byte: u8,
+        /// A pointer to the parent node.
+        parent: OpaqueNodePtr<K, V, PREFIX_LEN>,
+        /// The key byte which selects the leaf node when used as lookup in
+        /// the parent.
+        child_key_byte: u8,
+    },
+}
+
+impl<K, V, const PREFIX_LEN: usize> Copy for TreePath<K, V, PREFIX_LEN> {}
+
+impl<K, V, const PREFIX_LEN: usize> Clone for TreePath<K, V, PREFIX_LEN> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for TreePath<K, V, PREFIX_LEN> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Root => write!(f, "Root"),
+            Self::ChildOfRoot {
+                parent,
+                child_key_byte,
+            } => f
+                .debug_struct("ChildOfRoot")
+                .field("parent", parent)
+                .field("child_key_byte", child_key_byte)
+                .finish(),
+            Self::Normal {
+                grandparent,
+                parent_key_byte,
+                parent,
+                child_key_byte,
+            } => f
+                .debug_struct("Normal")
+                .field("grandparent", grandparent)
+                .field("parent_key_byte", parent_key_byte)
+                .field("parent", parent)
+                .field("child_key_byte", child_key_byte)
+                .finish(),
+        }
+    }
+}
+
+/// This type is used to track the parent and grandparent when searching down
+/// the tree.
+#[derive(Debug)]
+pub struct TreePathSearch<K, V, const PREFIX_LEN: usize> {
+    current_grandparent: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
+    current_parent: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
+}
+
+impl<K, V, const PREFIX_LEN: usize> Default for TreePathSearch<K, V, PREFIX_LEN> {
+    fn default() -> Self {
+        Self {
+            current_grandparent: None,
+            current_parent: None,
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> TreePathSearch<K, V, PREFIX_LEN> {
+    /// Register that the search procedure passed an inner node, and update the
+    /// current parent and grandparent.
+    pub fn visit_inner_node(&mut self, inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>, key_byte: u8) {
+        self.current_grandparent = self.current_parent;
+        self.current_parent = Some((inner_node, key_byte));
+    }
+
+    /// Complete the tree search and return a [`TreePath`] which has the parent
+    /// + grandparent information.
+    pub fn finish(self) -> TreePath<K, V, PREFIX_LEN> {
+        match (self.current_grandparent, self.current_parent) {
+            (None, None) => TreePath::Root,
+            (None, Some((parent, child_key_byte))) => TreePath::ChildOfRoot {
+                parent,
+                child_key_byte,
+            },
+            (Some((grandparent, parent_key_byte)), Some((parent, child_key_byte))) => {
+                TreePath::Normal {
+                    grandparent,
+                    parent_key_byte,
+                    parent,
+                    child_key_byte,
+                }
+            },
+            (Some(_), None) => {
+                unreachable!("Impossible for grandparent to present while parent is not")
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::rust_nightly_apis::ptr::const_addr;
