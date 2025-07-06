@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(h.prefix_len(), 4);
 
         h.ltrim_by(4);
-        assert_eq!(h.read_prefix(), &[] as &[u8]);
+        assert_eq!(h.read_prefix(), &[]);
         assert_eq!(h.prefix_len(), 0);
     }
 

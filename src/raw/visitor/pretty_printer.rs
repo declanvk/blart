@@ -21,6 +21,7 @@ pub struct DotPrinterSettings {
 ///
 /// See ['DOT Language | Graphviz'](https://graphviz.org/doc/info/lang.html) for
 /// information about syntax and example of the language.
+#[derive(Debug)]
 pub struct DotPrinter<O: Write, K, V> {
     output: O,
     next_id: usize,

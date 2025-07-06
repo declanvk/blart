@@ -713,6 +713,14 @@ pub struct ExplicitMismatch<K, V, const PREFIX_LEN: usize> {
     pub leaf_ptr: OptionalLeafPtr<K, V, PREFIX_LEN>,
 }
 
+impl<K, V, const PREFIX_LEN: usize> Clone for ExplicitMismatch<K, V, PREFIX_LEN> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> Copy for ExplicitMismatch<K, V, PREFIX_LEN> {}
+
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ExplicitMismatch<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Mismatch")
