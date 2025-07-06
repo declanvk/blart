@@ -843,4 +843,21 @@ mod tests {
             },
         }
     }
+
+    #[test]
+    fn regression_f6bb5074fb3b5e5095419eb2b6f980140547a146() {
+        // [
+        //     TryInsertMany(
+        //         [],
+        //         255,
+        //     ),
+        // ]
+
+        let mut tree = TreeMap::new();
+        for suffix in 0..=255u8 {
+            tree.insert([suffix], suffix as i32);
+        }
+
+        let _ = WellFormedChecker::check(&tree).unwrap();
+    }
 }
