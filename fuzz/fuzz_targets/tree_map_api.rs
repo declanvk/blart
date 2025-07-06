@@ -93,9 +93,13 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
             Action::GetKey(key) => {
                 let entry = tree.get_mut(key.as_ref());
-                assert_eq!(entry, oracle.get_mut(key.as_ref()));
+                let oracle_entry = oracle.get_mut(key.as_ref());
+                assert_eq!(entry, oracle_entry);
                 if let Some(value) = entry {
                     *value = value.saturating_sub(1);
+                    let oracle_value = oracle_entry.unwrap();
+                    *oracle_value = oracle_value.saturating_sub(1);
+                    assert_eq!(value, oracle_value);
                 }
             },
             Action::CheckLen => {
@@ -133,8 +137,9 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 next_value += 1;
 
                 let result = tree.try_insert(key.clone(), value);
-                if result.is_ok() {
-                    oracle.insert(key, value);
+                if let Ok(prev) = result {
+                    let oracle_prev = oracle.insert(key.clone(), value);
+                    assert_eq!(prev, oracle_prev);
                 }
             },
             Action::Clone => {
@@ -188,7 +193,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
         }
 
-        assert!(tree.iter().eq(oracle.iter()));
+        assert!(tree.iter().eq(oracle.iter()), "{:?} != {:?}", tree, oracle);
         let _ = WellFormedChecker::check(&tree).expect("tree should be well-formed");
     }
 });
