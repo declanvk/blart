@@ -37,7 +37,9 @@ enum Action {
     CheckLen,
     CheckIter,
     Remove(Box<[u8]>),
+    RemovePrefix(Box<[u8]>),
     TryInsert(Box<[u8]>),
+    TryInsertMany(Box<[u8]>, u8),
     Clone,
     Hash,
     Entry(EntryAction, Box<[u8]>),
@@ -132,6 +134,18 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     assert!(value < next_value);
                 }
             },
+            Action::RemovePrefix(prefix) => {
+                let to_remove: Vec<_> = tree
+                    .prefix(prefix.as_ref())
+                    .map(|(k, _)| k)
+                    .cloned()
+                    .collect();
+
+                for key in to_remove {
+                    let value = tree.remove(&key);
+                    assert_eq!(value, oracle.remove(&key));
+                }
+            },
             Action::TryInsert(key) => {
                 let value = next_value;
                 next_value += 1;
@@ -140,6 +154,22 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 if let Ok(prev) = result {
                     let oracle_prev = oracle.insert(key.clone(), value);
                     assert_eq!(prev, oracle_prev);
+                }
+            },
+            Action::TryInsertMany(prefix, count) => {
+                let mut key = Vec::from(prefix);
+                key.push(0);
+                for suffix in 0..=count {
+                    let value = next_value;
+                    next_value += 1;
+                    *key.last_mut().unwrap() = suffix;
+                    let key = Box::<[u8]>::from(key.clone());
+
+                    let result = tree.try_insert(key.clone(), value);
+                    if let Ok(prev) = result {
+                        let oracle_prev = oracle.insert(key.clone(), value);
+                        assert_eq!(prev, oracle_prev);
+                    }
                 }
             },
             Action::Clone => {

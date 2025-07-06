@@ -90,7 +90,7 @@ impl NodeType {
             NodeType::Node48 => Range { start: 17, end: 49 },
             NodeType::Node256 => Range {
                 start: 49,
-                end: 256,
+                end: 257,
             },
             NodeType::Leaf => Range { start: 0, end: 0 },
         }
