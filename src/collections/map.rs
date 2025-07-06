@@ -6,8 +6,8 @@ use crate::{
     raw::{
         clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
         maximum_unchecked, minimum_unchecked, search_for_delete_point, search_for_insert_point,
-        search_unchecked, CloneResult, DeletePoint, DeleteResult, InsertPoint, InsertPrefixError,
-        InsertResult, InsertSearchResultType::Exact, LeafNode, NodePtr, OpaqueNodePtr,
+        search_unchecked, CloneResult, DeletePoint, DeleteResult, InsertKind::Exact, InsertPoint,
+        InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr,
     },
     rust_nightly_apis::hasher_write_length_prefix,
     visitor::{MalformedTreeError, WellFormedChecker},
@@ -241,7 +241,7 @@ assert!(matches!(map.allocator(), &System));
             //  - Since we have a mutable reference to the map, we know that there are no
             //    other mutable references to any node in the tree, meaning we can
             //    deallocate all of them.
-            //  - `self.alloc` was used to allocate all the nodes of the trie
+            //  - `self.alloc` was used to allocate all the nodes of the tree
             unsafe {
                 deallocate_tree(state.root, &self.alloc);
             }
@@ -661,7 +661,10 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
             let delete_point = unsafe { find_minimum_to_delete(state.root) };
-            let delete_result = self.apply_delete_point(delete_point);
+
+            // SAFETY: There are no outstanding pointers (besides leaf min/max which are
+            // already fixed by `apply_delete_pointer`).
+            let delete_result = unsafe { self.apply_delete_point(delete_point) };
             Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
@@ -723,7 +726,9 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
             let delete_point = unsafe { find_maximum_to_delete(state.root) };
-            let delete_result = self.apply_delete_point(delete_point);
+            // SAFETY: There are no outstanding pointers (besides leaf min/max which are
+            // already fixed by `apply_delete_pointer`).
+            let delete_result = unsafe { self.apply_delete_point(delete_point) };
             Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
@@ -743,7 +748,20 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         leaf
     }
 
-    fn apply_insert_point(
+    /// Add the given insert point to the tree, fixing up the other tree
+    /// state afterwards.
+    ///
+    /// This function will update the min/max leaf pointers, the number of nodes
+    /// in the tree, and the tree root.
+    ///
+    /// # Safety
+    ///
+    /// This function may invalidate existing pointers into the tree when inner
+    /// nodes are grown and the old inner node is deleted.
+    ///
+    /// Callers must ensure that they delete invalidated pointers, the new
+    /// pointers are returned in [`InsertResult`].
+    unsafe fn apply_insert_point(
         &mut self,
         insert_point: InsertPoint<K, V, PREFIX_LEN>,
         key: K,
@@ -793,7 +811,20 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         insert_result
     }
 
-    fn apply_delete_point(
+    /// Remove the given delete point from the tree, fixing up the other tree
+    /// state afterwards.
+    ///
+    /// This function will update the min/max leaf pointers, the number of nodes
+    /// in the tree, and the tree root.
+    ///
+    /// # Safety
+    ///
+    /// This function may invalidate existing pointers into the trie when leaves
+    /// are deleted and when inner nodes are deleted or shrunk.
+    ///
+    /// Callers must ensure that they delete invalidated pointers, the new
+    /// pointers are returned in [`DeleteResult`].
+    unsafe fn apply_delete_point(
         &mut self,
         delete_point: DeletePoint<K, V, PREFIX_LEN>,
     ) -> DeleteResult<K, V, PREFIX_LEN> {
@@ -803,7 +834,8 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         //   mutable reference to the tree, no other read or write operation can be
         //   happening concurrently.
         // - `self.alloc` is the same allocator which is used for all inserts and
-        //   deletes on this trie
+        //   deletes on this tree
+        // - Invalidated pointers covered by this caller's functions requirements
         let delete_result =
             unsafe { delete_point.apply(self.state.as_ref().unwrap_unchecked().root, &self.alloc) };
 
@@ -903,10 +935,9 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
             // that there are no other references (mutable or immutable) to this same
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
-            let insert_result = unsafe {
-                let insert_point = search_for_insert_point(state.root, key.as_bytes())?;
-                self.apply_insert_point(insert_point, key, value)
-            };
+            let insert_point = unsafe { search_for_insert_point(state.root, key.as_bytes()) }?;
+            // SAFETY: We're not holding any pointers into the tree that we intend to use
+            let insert_result = unsafe { self.apply_insert_point(insert_point, key, value) };
             Ok(insert_result.existing_leaf.map(|leaf| leaf.into_entry().1))
         } else {
             self.init_tree(key, value);
@@ -940,7 +971,9 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
             // object. Meaning that our access to the root node is unique and there are no
             // other accesses to any node in the tree.
             let delete_point = unsafe { search_for_delete_point(state.root, key.as_bytes())? };
-            let delete_result = self.apply_delete_point(delete_point);
+            // SAFETY: There are no outstanding pointers (besides leaf min/max which are
+            // already fixed by `apply_delete_pointer`).
+            let delete_result = unsafe { self.apply_delete_point(delete_point) };
             Some(delete_result.deleted_leaf.into_entry())
         } else {
             None
@@ -1468,13 +1501,13 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
                 // object. Meaning that our access to the root node is unique and there are no
                 // other accesses to any node in the tree.
                 let insert_point = unsafe { search_for_insert_point(state.root, key.as_bytes())? };
-                match insert_point.insert_type {
+                match insert_point.insert_kind {
                     Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
                         map: self,
-                        leaf_node_ptr,
-                        grandparent_ptr_and_parent_key_byte: insert_point
-                            .grandparent_ptr_and_parent_key_byte,
-                        parent_ptr_and_child_key_byte: insert_point.parent_ptr_and_child_key_byte,
+                        delete_point: DeletePoint {
+                            path: insert_point.path,
+                            leaf_node_ptr,
+                        },
                     }),
                     _ => Entry::Vacant(VacantEntry {
                         key,

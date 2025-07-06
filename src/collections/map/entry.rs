@@ -2,7 +2,7 @@ use std::mem::replace;
 
 use crate::{
     alloc::{Allocator, Global},
-    raw::{DeletePoint, InsertPoint, LeafNode, NodePtr, OpaqueNodePtr},
+    raw::{DeletePoint, InsertParentNodeChange, InsertPoint, InsertResult, TreePath},
     AsBytes, TreeMap,
 };
 
@@ -10,6 +10,7 @@ use super::DEFAULT_PREFIX_LEN;
 
 /// A view into an occupied entry in a [`TreeMap`]. It is part of the [`Entry`]
 /// enum.
+#[derive(Debug)]
 pub struct OccupiedEntry<
     'a,
     K,
@@ -17,14 +18,10 @@ pub struct OccupiedEntry<
     const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN,
     A: Allocator = Global,
 > {
-    pub(crate) leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
-
     /// Used for the removal
     pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN, A>,
-    /// Used for the removal
-    pub(crate) grandparent_ptr_and_parent_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
-    /// Used for the removal
-    pub(crate) parent_ptr_and_child_key_byte: Option<(OpaqueNodePtr<K, V, PREFIX_LEN>, u8)>,
+    /// The point in the tree that would be removed if requested.
+    pub(crate) delete_point: DeletePoint<K, V, PREFIX_LEN>,
 }
 
 // SAFETY: This struct contains a `&mut TreeMap<K, V>` which mean `K` and `V`
@@ -49,7 +46,7 @@ where
     pub fn get(&self) -> &V {
         // SAFETY: This is safe because `Self` has an mutable reference
         // so it's safe to generate a shared reference from this mutable reference
-        unsafe { self.leaf_node_ptr.as_value_ref() }
+        unsafe { self.delete_point.leaf_node_ptr.as_value_ref() }
     }
 
     /// Gets a mutable reference to the value in the entry.
@@ -59,14 +56,14 @@ where
     pub fn get_mut(&mut self) -> &mut V {
         // SAFETY: This is safe because `Self` has an mutable reference
         // so it's safe to generate a mutable reference from this mutable reference
-        unsafe { self.leaf_node_ptr.as_value_mut() }
+        unsafe { self.delete_point.leaf_node_ptr.as_value_mut() }
     }
 
     /// Sets the value of the entry, and returns the entry’s old value.
     pub fn insert(&mut self, value: V) -> V {
         // SAFETY: This is safe because `Self` has an mutable reference
         // so it's safe to generate a mutable reference from this mutable reference
-        let leaf_value = unsafe { self.leaf_node_ptr.as_value_mut() };
+        let leaf_value = unsafe { self.delete_point.leaf_node_ptr.as_value_mut() };
         replace(leaf_value, value)
     }
 
@@ -78,25 +75,22 @@ where
     pub fn into_mut(self) -> &'a mut V {
         // SAFETY: This is safe because `Self` has an mutable reference
         // so it's safe to generate a mutable reference from this mutable reference
-        unsafe { self.leaf_node_ptr.as_value_mut() }
+        unsafe { self.delete_point.leaf_node_ptr.as_value_mut() }
     }
 
     /// Gets a reference to the key in the entry.
     pub fn key(&self) -> &K {
         // SAFETY: This is safe because `Self` has an mutable reference
         // so it's safe to generate a shared reference from this mutable reference
-        unsafe { self.leaf_node_ptr.as_key_ref() }
+        unsafe { self.delete_point.leaf_node_ptr.as_key_ref() }
     }
 
     /// Takes the entry out of the map and returns it.
     pub fn remove_entry(self) -> (K, V) {
-        let delete_point = DeletePoint {
-            grandparent_ptr_and_parent_key_byte: self.grandparent_ptr_and_parent_key_byte,
-            parent_ptr_and_child_key_byte: self.parent_ptr_and_child_key_byte,
-            leaf_node_ptr: self.leaf_node_ptr,
-        };
-
-        let delete_result = self.map.apply_delete_point(delete_point);
+        // SAFETY: This function call may invalidate the `leaf_node_ptr` and/or
+        // `parent_ptr`, but since we take this by value there is no way to access those
+        // values afterwards.
+        let delete_result = unsafe { self.map.apply_delete_point(self.delete_point) };
         delete_result.deleted_leaf.into_entry()
     }
 
@@ -108,6 +102,7 @@ where
 
 /// A view into a vacant entry in a [`TreeMap`]. It is part of the [`Entry`]
 /// enum.
+#[derive(Debug)]
 pub struct VacantEntry<'a, K, V, const PREFIX_LEN: usize, A: Allocator> {
     pub(crate) map: &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     pub(crate) key: K,
@@ -136,31 +131,90 @@ impl<'a, K: AsBytes, V, A: Allocator, const PREFIX_LEN: usize>
     pub fn insert(self, value: V) -> &'a mut V {
         // SAFETY: This is safe because `Self` has an mutable reference
         // so it's safe to generate a mutable reference from this mutable reference
-        unsafe { self.insert_entry(value).leaf_node_ptr.as_value_mut() }
+        unsafe {
+            self.insert_entry(value)
+                .delete_point
+                .leaf_node_ptr
+                .as_value_mut()
+        }
     }
 
     /// Sets the value of the entry with the [`VacantEntry`]’s key, and returns
     /// a [`OccupiedEntry`].
     pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A> {
-        let (leaf_node_ptr, grandparent_ptr_and_parent_key_byte, parent_ptr_and_child_key_byte) =
-            match self.insert_point {
-                Some(insert_point) => {
-                    let grandparent_ptr = insert_point.grandparent_ptr_and_parent_key_byte;
-                    let parent_ptr = insert_point.parent_ptr_and_child_key_byte;
-                    let result = self.map.apply_insert_point(insert_point, self.key, value);
-                    (result.leaf_node_ptr, grandparent_ptr, parent_ptr)
-                },
-                None => {
-                    let leaf_node_ptr = self.map.init_tree(self.key, value);
-                    (leaf_node_ptr, None, None)
-                },
-            };
+        let delete_point = match self.insert_point {
+            Some(insert_point) => {
+                // SAFETY: We are holding pointers across this function that we intend to use,
+                // specifically the pointers inside the [`TreePath`]. That is why we must fixup
+                // those pointers after the call using the [`InsertResult`]
+                // contents.
+                let result = unsafe { self.map.apply_insert_point(insert_point, self.key, value) };
+
+                // Fixup happens here, it is necessary for the safety of future mutations using
+                // the entry API
+                Self::fixup_after_insert(insert_point, result)
+            },
+            None => {
+                let leaf_node_ptr: crate::raw::NodePtr<
+                    PREFIX_LEN,
+                    crate::raw::LeafNode<K, V, PREFIX_LEN>,
+                > = self.map.init_tree(self.key, value);
+
+                DeletePoint {
+                    path: TreePath::Root,
+                    leaf_node_ptr,
+                }
+            },
+        };
 
         OccupiedEntry {
             map: self.map,
-            leaf_node_ptr,
-            grandparent_ptr_and_parent_key_byte,
-            parent_ptr_and_child_key_byte,
+            delete_point,
+        }
+    }
+
+    /// This function will adjust the parent pointers in the [`InsertPoint`] to
+    /// reflect changes that were by the insert and reported in the given
+    /// [`InsertResult`].
+    fn fixup_after_insert(
+        insert_point: InsertPoint<K, V, PREFIX_LEN>,
+        result: InsertResult<K, V, PREFIX_LEN>,
+    ) -> DeletePoint<K, V, PREFIX_LEN> {
+        let path = match result.parent_node_change {
+            InsertParentNodeChange::NoChange => insert_point.path,
+            InsertParentNodeChange::NewParent {
+                new_parent_node,
+                leaf_node_key_byte,
+            } => match insert_point.path {
+                TreePath::Root => TreePath::ChildOfRoot {
+                    parent: new_parent_node,
+                    child_key_byte: leaf_node_key_byte,
+                },
+                TreePath::ChildOfRoot {
+                    parent,
+                    child_key_byte,
+                } => TreePath::Normal {
+                    grandparent: parent,
+                    parent_key_byte: child_key_byte,
+                    parent: new_parent_node,
+                    child_key_byte: leaf_node_key_byte,
+                },
+                TreePath::Normal {
+                    parent,
+                    child_key_byte,
+                    ..
+                } => TreePath::Normal {
+                    grandparent: parent,
+                    parent_key_byte: child_key_byte,
+                    parent: new_parent_node,
+                    child_key_byte: leaf_node_key_byte,
+                },
+            },
+        };
+
+        DeletePoint {
+            path,
+            leaf_node_ptr: result.leaf_node_ptr,
         }
     }
 
@@ -179,6 +233,7 @@ impl<'a, K: AsBytes, V, A: Allocator, const PREFIX_LEN: usize>
 /// A view into a single entry in a map, which may either be vacant or occupied.
 ///
 /// This enum is constructed from the [`TreeMap::entry`].
+#[derive(Debug)]
 pub enum Entry<'a, K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global> {
     /// A view into an occupied entry in a [`TreeMap`].
     Occupied(OccupiedEntry<'a, K, V, PREFIX_LEN, A>),
@@ -200,7 +255,7 @@ where
             Entry::Occupied(entry) => {
                 // SAFETY: This is safe because `Self` has an mutable reference
                 // so it's safe to generate a mutable reference from this mutable reference
-                f(unsafe { entry.leaf_node_ptr.as_value_mut() });
+                f(unsafe { entry.delete_point.leaf_node_ptr.as_value_mut() });
                 Entry::Occupied(entry)
             },
             Entry::Vacant(entry) => Entry::Vacant(entry),
@@ -459,5 +514,192 @@ mod tests {
                 assert_eq!(v, "aaa");
             },
         }
+    }
+
+    #[test]
+    fn regression_01cf3c554fd1da17307a8451972a823db68d4c04() {
+        // [
+        //     Entry(
+        //         OrInsertWith,
+        //         [
+        //             5,
+        //         ],
+        //     ),
+        //     Entry(
+        //         InsertEntry(
+        //             Some(
+        //                 Remove,
+        //             ),
+        //         ),
+        //         [
+        //             255,
+        //         ],
+        //     ),
+        // ]
+        let mut tree = TreeMap::<u8, _>::new();
+
+        assert_eq!(*tree.try_entry(5).unwrap().or_insert_with(|| 1), 1);
+        assert_eq!(tree.try_entry(255).unwrap().insert_entry(2).remove(), 2);
+        let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
+    }
+
+    #[test]
+    fn regression_a1d834472bf0d652a9ad39eab5d6e173825c80dc() {
+        // [
+        //     Entry(
+        //         OrInsertWith,
+        //         [
+        //             205,
+        //             61,
+        //             255,
+        //         ],
+        //     ),
+        //     Entry(
+        //         OrInsertWith,
+        //         [
+        //             0,
+        //         ],
+        //     ),
+        //     Entry(
+        //         InsertEntry(
+        //             Some(
+        //                 Remove,
+        //             ),
+        //         ),
+        //         [
+        //             205,
+        //             1,
+        //         ],
+        //     ),
+        // ]
+
+        let mut tree = TreeMap::<Box<[u8]>, _>::new();
+
+        assert_eq!(
+            *tree
+                .try_entry(Box::from([205, 61, 255]))
+                .unwrap()
+                .or_insert_with(|| 1),
+            1
+        );
+        assert_eq!(
+            *tree.try_entry(Box::from([0])).unwrap().or_insert_with(|| 2),
+            2
+        );
+        assert_eq!(
+            tree.try_entry(Box::from([205, 1]))
+                .unwrap()
+                .insert_entry(3)
+                .remove(),
+            3
+        );
+        let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
+    }
+
+    #[test]
+    fn regression_0a766df3f0e1c88c45e5ff54d247731a8efefe08() {
+        // [
+        //     Entry(
+        //         OrInsertWith,
+        //         [
+        //             5,
+        //             205,
+        //             205,
+        //             205,
+        //             235,
+        //             0,
+        //             205,
+        //         ],
+        //     ),
+        //     Entry(
+        //         OrInsertWith,
+        //         [
+        //             205,
+        //             210,
+        //             205,
+        //             205,
+        //             205,
+        //         ],
+        //     ),
+        //     Entry(
+        //         OrInsertWith,
+        //         [
+        //             205,
+        //             205,
+        //             5,
+        //         ],
+        //     ),
+        //     Entry(
+        //         InsertEntry(
+        //             Some(
+        //                 Remove,
+        //             ),
+        //         ),
+        //         [
+        //             205,
+        //             205,
+        //             205,
+        //             205,
+        //             36,
+        //             0,
+        //         ],
+        //     ),
+        // ]
+
+        let mut tree = TreeMap::<Box<[u8]>, _>::new();
+
+        assert_eq!(
+            *tree
+                .try_entry(Box::from([5, 205, 205, 205, 235, 0, 20]))
+                .unwrap()
+                .or_insert_with(|| 1),
+            1
+        );
+        assert_eq!(
+            *tree
+                .try_entry(Box::from([205, 210, 205, 205, 20]))
+                .unwrap()
+                .or_insert_with(|| 2),
+            2
+        );
+        assert_eq!(
+            *tree
+                .try_entry(Box::from([205, 205, 5]))
+                .unwrap()
+                .or_insert_with(|| 3),
+            3
+        );
+        assert_eq!(
+            tree.try_entry(Box::from([205, 205, 205, 205, 36, 0]))
+                .unwrap()
+                .insert_entry(4)
+                .remove(),
+            4
+        );
+
+        let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
+    }
+
+    #[test]
+    fn empty_tree_insert_remove() {
+        let mut tree = TreeMap::<[u8; 0], i32>::new();
+
+        assert_eq!(tree.entry([]).insert_entry(0).remove(), 0);
+
+        let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
+    }
+
+    #[test]
+    fn replace_existing_leaf() {
+        let mut tree = TreeMap::<[u8; 2], i32>::new();
+
+        tree.insert([0, 0], 0);
+        tree.insert([1, 0], 1);
+        tree.insert([3, 0], 3);
+
+        assert_eq!(tree.entry([2, 0]).insert_entry(2).get(), &2);
+
+        assert_eq!(tree.values().copied().collect::<Vec<_>>(), [0, 1, 2, 3]);
+        let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
     }
 }
