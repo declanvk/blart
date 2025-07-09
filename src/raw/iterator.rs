@@ -84,12 +84,12 @@ impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN> {
 
                 let next = *start;
 
-                // SAFETY: Covered by function safety doc
-                let start_leaf = unsafe { start.as_ref() };
-
                 if is_singleton {
                     self.state = None;
                 } else {
+                    // SAFETY: Covered by function safety doc
+                    let start_leaf = unsafe { start.as_ref() };
+
                     // PANIC SAFETY: We can unwrap here because `is_singleton` implies that `start`
                     // and `end` are different, which also implies that `start` does not point to
                     // the last/maximum leaf
@@ -118,12 +118,12 @@ impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN> {
 
                 let next_back = *end;
 
-                // SAFETY: Covered by function safety doc
-                let end_leaf = unsafe { end.as_ref() };
-
                 if is_singleton {
                     self.state = None;
                 } else {
+                    // SAFETY: Covered by function safety doc
+                    let end_leaf = unsafe { end.as_ref() };
+
                     // PANIC SAFETY: We can unwrap here because `is_singleton` implies that `start`
                     // and `end` are different, which also implies that `end` does not point to
                     // the last/maximum leaf. The safety requirements of `RawIterator::new` also

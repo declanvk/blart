@@ -270,7 +270,7 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
 ///
 /// Callers must guarantee that there is no concurrent mutation of the given
 /// trie for the duration of this function.
-unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN: usize>(
+pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN: usize>(
     tree: &NonEmptyTree<K, V, PREFIX_LEN>,
     bound: Bound<&[u8]>,
     is_start: bool,

@@ -232,16 +232,16 @@ fn bench_extract_if<K: AsBytes, V, const PREFIX_LEN: usize>(
     mode: &str,
 ) {
     let extracted: Vec<_> = match mode {
-        "all" => tree.extract_if(|_, _| true).collect(),
+        "all" => tree.extract_if(.., |_, _| true).collect(),
         "half" => {
             let mut i = 0;
-            tree.extract_if(|_, _| {
+            tree.extract_if(.., |_, _| {
                 i += 1;
                 i % 2 == 0
             })
             .collect()
         },
-        "none" => tree.extract_if(|_, _| false).collect(),
+        "none" => tree.extract_if(.., |_, _| false).collect(),
         _ => unreachable!(),
     };
     std::hint::black_box(extracted);
