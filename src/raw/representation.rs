@@ -2,7 +2,6 @@
 
 use crate::{
     alloc::{do_alloc, Allocator},
-    rust_nightly_apis::assume,
     tagged_pointer::TaggedPointer,
     AsBytes,
 };
@@ -950,7 +949,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
     /// # Safety
     /// `current_depth` must be less than or equal to `key.len()`
     #[inline]
-unsafe fn match_full_prefix(
+    unsafe fn match_full_prefix(
         &self,
         key: &[u8],
         current_depth: usize,
@@ -958,14 +957,14 @@ unsafe fn match_full_prefix(
     where
         Self::Key: AsBytes,
     {
-        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: Since we are iterating the key and prefixes, we
             // expect that the depth never exceeds the key len.
             // Because if this happens we ran out of bytes in the key to match
             // and the whole process should be already finished
-            assume!(current_depth <= key.len());
+            std::hint::assert_unchecked(current_depth <= key.len());
         }
+
         let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
         let key = &key[current_depth..];
 

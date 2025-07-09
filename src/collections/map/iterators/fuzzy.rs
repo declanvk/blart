@@ -5,7 +5,6 @@ use crate::{
         ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
         OpaqueNodePtr,
     },
-    rust_nightly_apis::{assume, box_new_uninit_slice},
     AsBytes, TreeMap,
 };
 use std::{iter::FusedIterator, mem::MaybeUninit};
@@ -44,12 +43,11 @@ impl StackArena {
         &mut self,
         buffer: &'a mut &'b mut [MaybeUninit<usize>],
     ) -> Option<&'a mut &'b mut [usize]> {
-        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: Every time we call `Self::push` the
             // vector is extended by `self.n`, so it's safe to
             // assume this
-            assume!(self.data.len() % self.n == 0);
+            std::hint::assert_unchecked(self.data.len() % self.n == 0);
         }
 
         if self.data.is_empty() {
@@ -63,11 +61,10 @@ impl StackArena {
         // this case `self.n`) elements in the vector
         let s = unsafe { &self.data.get_unchecked(begin..end) };
 
-        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: As said in the top level comment of the function,
             // buffer length == self.n
-            assume!(buffer.len() == s.len());
+            std::hint::assert_unchecked(buffer.len() == s.len());
         }
 
         buffer.copy_from_slice(s);
@@ -103,12 +100,11 @@ pub(crate) fn edit_dist(
     new: &mut [MaybeUninit<usize>],
     max_edit_dist: usize,
 ) -> bool {
-    #[allow(unused_unsafe)]
     unsafe {
         // SAFETY: Covered by the top level comment
-        assume!(old.len() == new.len());
-        assume!(!old.is_empty());
-        assume!(key.len() + 1 == old.len());
+        std::hint::assert_unchecked(old.len() == new.len());
+        std::hint::assert_unchecked(!old.is_empty());
+        std::hint::assert_unchecked(key.len() + 1 == old.len());
     }
 
     let first = *new[0].write(old[0] + 1);
@@ -351,8 +347,8 @@ macro_rules! gen_iter {
                         .map(|state| state.root)
                         .into_iter()
                         .collect(),
-                    old_row: box_new_uninit_slice(arena.size()),
-                    new_row: box_new_uninit_slice(arena.size()),
+                    old_row: Box::new_uninit_slice(arena.size()),
+                    new_row: Box::new_uninit_slice(arena.size()),
                     arena,
                     max_edit_dist,
                     key,

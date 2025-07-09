@@ -5,7 +5,7 @@ use crate::{
         InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, TreePath,
         TreePathSearch,
     },
-    rust_nightly_apis::{assume, likely, unlikely},
+    rust_nightly_apis::{likely, unlikely},
     AsBytes,
 };
 use std::{
@@ -357,13 +357,14 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 // `apply` caller requirements.
                 let key_bytes = key.as_bytes();
 
-                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: Since we are iterating the key and prefixes, we
                     // expect that the depth never exceeds the key len.
                     // Because if this happens we ran out of bytes in the key to match
                     // and the whole process should be already finished
-                    assume!(key_bytes_used + mismatch.matched_bytes < key_bytes.len());
+                    std::hint::assert_unchecked(
+                        key_bytes_used + mismatch.matched_bytes < key_bytes.len(),
+                    );
                 }
 
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
@@ -478,21 +479,20 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 // SAFETY: We hold a mutable reference, so creating a shared reference is safe
                 let leaf_bytes = unsafe { leaf_node_ptr.as_key_ref().as_bytes() };
 
-                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: When reaching this point in the insertion process this invariant
                     // should always be true, due to the check of [`InsertPrefixError`] which
                     // guarantees that the amount of bytes used is always < len of the key or key in
                     // the leaf if this was not true, then a
                     // [`InsertPrefixError`] would already be triggered
-                    assume!(key_bytes_used < leaf_bytes.len());
-                    assume!(key_bytes_used < key_bytes.len());
-                    assume!(new_key_bytes_used < leaf_bytes.len());
-                    assume!(new_key_bytes_used < key_bytes.len());
+                    std::hint::assert_unchecked(key_bytes_used < leaf_bytes.len());
+                    std::hint::assert_unchecked(key_bytes_used < key_bytes.len());
+                    std::hint::assert_unchecked(new_key_bytes_used < leaf_bytes.len());
+                    std::hint::assert_unchecked(new_key_bytes_used < key_bytes.len());
 
                     // SAFETY: This is safe by construction, since new_key_bytes_used =
                     // key_bytes_used + x
-                    assume!(key_bytes_used <= new_key_bytes_used);
+                    std::hint::assert_unchecked(key_bytes_used <= new_key_bytes_used);
                 }
 
                 let mut new_n4 = InnerNode4::from_prefix(
@@ -983,50 +983,50 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
 ///    node or any child node of `root`. This function will arbitrarily read to
 ///    any child in the given tree.
 ///  - `current_depth` must be less than or equal to `key.len()`
-    #[inline]
+#[inline]
 unsafe fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
-        inner_ptr: NodePtr<PREFIX_LEN, N>,
-        key: &[u8],
-        current_depth: &mut usize,
-    ) -> Result<
-        ControlFlow<ExplicitMismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>,
-        InsertPrefixError,
-    >
-    where
-        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-        K: AsBytes,
-    {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `search_unchecked` function.
-        let inner_node = unsafe { inner_ptr.as_ref() };
-// SAFETY: Covered by caller safety requirements on `current_depth` and
+    inner_ptr: NodePtr<PREFIX_LEN, N>,
+    key: &[u8],
+    current_depth: &mut usize,
+) -> Result<
+    ControlFlow<ExplicitMismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>,
+    InsertPrefixError,
+>
+where
+    N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
+    K: AsBytes,
+{
+    // SAFETY: The lifetime produced from this is bounded to this scope and does not
+    // escape. Further, no other code mutates the node referenced, which is further
+    // enforced the "no concurrent reads or writes" requirement on the
+    // `search_unchecked` function.
+    let inner_node = unsafe { inner_ptr.as_ref() };
+    // SAFETY: Covered by caller safety requirements on `current_depth` and
     // `key.len()`
-        let match_prefix = unsafe { inner_node.match_full_prefix(key, *current_depth) };
-        match match_prefix {
-            Err(mismatch) => Ok(ControlFlow::Break(mismatch)),
-            Ok(PrefixMatch { matched_bytes }) => {
-                // Since the prefix matched, advance the depth by the size of the prefix
-                *current_depth += matched_bytes;
+    let match_prefix = unsafe { inner_node.match_full_prefix(key, *current_depth) };
+    match match_prefix {
+        Err(mismatch) => Ok(ControlFlow::Break(mismatch)),
+        Ok(PrefixMatch { matched_bytes }) => {
+            // Since the prefix matched, advance the depth by the size of the prefix
+            *current_depth += matched_bytes;
 
-                if likely!(*current_depth < key.len()) {
-                    let next_key_fragment = key[*current_depth];
-                    Ok(ControlFlow::Continue(
-                        inner_node.lookup_child(next_key_fragment),
-                    ))
-                } else {
-                    // then the key has insufficient bytes to be unique. It must be
-                    // a prefix of an existing key
-                    Err(InsertPrefixError {
-                        byte_repr: key.into(),
-                    })
-                }
-            },
-        }
+            if likely!(*current_depth < key.len()) {
+                let next_key_fragment = key[*current_depth];
+                Ok(ControlFlow::Continue(
+                    inner_node.lookup_child(next_key_fragment),
+                ))
+            } else {
+                // then the key has insufficient bytes to be unique. It must be
+                // a prefix of an existing key
+                Err(InsertPrefixError {
+                    byte_repr: key.into(),
+                })
+            }
+        },
     }
+}
 
-    /// Perform an iterative search for the insert point for the given key,
+/// Perform an iterative search for the insert point for the given key,
 /// starting at the given root node.
 ///
 /// # Safety
@@ -1049,7 +1049,7 @@ where
     let mut current_depth = 0;
 
     loop {
-// SAFETY (covering all `test_prefix_identify_insert` function calls):
+        // SAFETY (covering all `test_prefix_identify_insert` function calls):
         //  1. Concurrent read/write overed by caller safety requirements
         //  2. `current_depth` can never be greater than `key_bytes.len()` because of
         //     loop invariant assertion
@@ -1057,19 +1057,19 @@ where
 
         let lookup_result = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => unsafe {
-// SAFETY: comment and assert at top of loop
+                // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-// SAFETY: comment and assert at top of loop
+                // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-// SAFETY: comment and assert at top of loop
+                // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-// SAFETY: comment and assert at top of loop
+                // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
@@ -1086,14 +1086,13 @@ where
 
                 let leaf_bytes = leaf_node.key_ref().as_bytes();
 
-                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
                     // which would lead to this not holding, but since it already checked we know
                     // that current_depth < len of the key and the key in the leaf. But there is an
                     // edge case, if the root of the tree is a leaf than the depth can be = len
-                    assume!(current_depth <= leaf_bytes.len());
-                    assume!(current_depth <= key_bytes.len());
+                    std::hint::assert_unchecked(current_depth <= leaf_bytes.len());
+                    std::hint::assert_unchecked(current_depth <= key_bytes.len());
                 }
 
                 let prefix_size = leaf_bytes[current_depth..]
@@ -1128,14 +1127,13 @@ where
 
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
-                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
                     // which would lead to this not holding, but since it already checked we know
                     // that current_depth < len of the key and the key in the leaf. And also the
                     // only edge case can occur in the Leaf node, but if we reach a leaf not the
                     // function returns early, so it's impossible to be <=
-                    assume!(current_depth < key_bytes.len());
+                    std::hint::assert_unchecked(current_depth < key_bytes.len());
                 }
 
                 match next_child_node {
@@ -1205,7 +1203,7 @@ where
     let mut current_depth = 0;
 
     loop {
-// SAFETY (covering all `test_prefix_identify_insert` function calls):
+        // SAFETY (covering all `test_prefix_identify_insert` function calls):
         //  1. Concurrent read/write overed by caller safety requirements
         //  2. `current_depth` can never be greater than `key_bytes.len()` because of
         //     loop invariant assertion
@@ -1213,19 +1211,19 @@ where
 
         let lookup_result = match current_node.to_node_ptr() {
             ConcreteNodePtr::Node4(inner_ptr) => unsafe {
-// SAFETY: comment and assert at top of loop
+                // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-// SAFETY: comment and assert at top of loop
+                // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-// SAFETY: comment and assert at top of loop
+                // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-// SAFETY: comment and assert at top of loop
+                // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
@@ -1242,14 +1240,13 @@ where
 
                 let leaf_bytes = leaf_node.key_ref().as_bytes();
 
-                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
                     // which would lead to this not holding, but since it already checked we know
                     // that current_depth < len of the key and the key in the leaf. But there is an
                     // edge case, if the root of the tree is a leaf than the depth can be = len
-                    assume!(current_depth <= leaf_bytes.len());
-                    assume!(current_depth <= key_bytes.len());
+                    std::hint::assert_unchecked(current_depth <= leaf_bytes.len());
+                    std::hint::assert_unchecked(current_depth <= key_bytes.len());
                 }
 
                 let prefix_size = leaf_bytes[current_depth..]
@@ -1297,14 +1294,13 @@ where
 
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
-                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
                     // which would lead to this not holding, but since it already checked we know
                     // that current_depth < len of the key and the key in the leaf. And also the
                     // only edge case can occur in the Leaf node, but if we reach a leaf not the
                     // function returns early, so it's impossible to be <=
-                    assume!(current_depth < key_bytes.len());
+                    std::hint::assert_unchecked(current_depth < key_bytes.len());
                 }
 
                 match next_child_node {

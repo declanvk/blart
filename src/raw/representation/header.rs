@@ -4,7 +4,7 @@ use std::fmt::Debug;
 
 use crate::{
     raw::{minimum_unchecked, InnerNode, LeafNode, NodePtr},
-    rust_nightly_apis::{assume, likely},
+    rust_nightly_apis::likely,
     AsBytes,
 };
 
@@ -90,16 +90,15 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         let begin = len;
         let end = begin + self.capped_prefix_len();
 
-        #[cfg_attr(not(feature = "nightly"), allow(unused_unsafe))]
         unsafe {
             // SAFETY: This function is called when mismatch happened and
             // we used the node to match the number of bytes,
             // by this we know that len < prefix len, but since we + 1,
             // to skip the key byte we have that len <= prefix len
-            assume!(end <= self.prefix.len());
+            std::hint::assert_unchecked(end <= self.prefix.len());
 
             // SAFETY: This is by construction end = begin + len
-            assume!(begin <= end);
+            std::hint::assert_unchecked(begin <= end);
         }
         self.prefix.copy_within(begin..end, 0);
     }
@@ -160,16 +159,15 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         let end = begin + self.capped_prefix_len();
         let len = end - begin;
 
-        #[cfg_attr(not(feature = "nightly"), allow(unused_unsafe))]
         unsafe {
             // SAFETY: This function is called a mismatch happened and
             // we used the leaf to match the number of matching bytes,
             // by this we know that len < prefix len, but since we + 1,
             // to skip the key byte we have that len <= prefix len
-            assume!(end <= leaf_key.len());
+            std::hint::assert_unchecked(end <= leaf_key.len());
 
             // SAFETY: This is by construction end = begin + len
-            assume!(begin <= end);
+            std::hint::assert_unchecked(begin <= end);
         }
 
         let leaf_key = &leaf_key[begin..end];
@@ -206,20 +204,19 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
             let leaf = unsafe { leaf_ptr.as_ref() };
             let leaf = leaf.key_ref().as_bytes();
 
-            #[cfg_attr(not(feature = "nightly"), allow(unused_unsafe))]
             unsafe {
                 // SAFETY: Since we are iterating the key and prefixes, we
                 // expect that the depth never exceeds the key len.
                 // Because if this happens we ran out of bytes in the key to match
                 // and the whole process should be already finished
-                assume!(current_depth <= leaf.len());
+                std::hint::assert_unchecked(current_depth <= leaf.len());
 
                 // SAFETY: By the construction of the prefix we know that this is inbounds
                 // since the prefix len guarantees it to us
-                assume!(current_depth + len <= leaf.len());
+                std::hint::assert_unchecked(current_depth + len <= leaf.len());
 
                 // SAFETY: This can't overflow since len comes from a u32
-                assume!(current_depth <= current_depth + len);
+                std::hint::assert_unchecked(current_depth <= current_depth + len);
             }
             let leaf = &leaf[current_depth..(current_depth + len)];
             (leaf, Some(leaf_ptr))

@@ -2,17 +2,15 @@
     feature = "nightly",
     feature(
         allocator_api,
-        core_intrinsics,
         hasher_prefixfree_extras,
         impl_trait_in_assoc_type,
+        likely_unlikely,
         maybe_uninit_array_assume_init,
         maybe_uninit_slice,
         portable_simd,
         slice_ptr_get,
     )
 )]
-#![cfg_attr(feature = "nightly", allow(incomplete_features, internal_features))]
-#![allow(clippy::type_complexity, unstable_name_collisions)]
 #![warn(clippy::dbg_macro)]
 #![deny(
     missing_docs,
