@@ -15,7 +15,7 @@ mod inner {
     #[cfg(test)]
     pub use std::alloc::AllocError;
 
-    #[allow(clippy::map_err_ignore)]
+    #[expect(clippy::map_err_ignore)]
     pub(crate) fn do_alloc<A: Allocator>(alloc: &A, layout: Layout) -> Result<NonNull<u8>, ()> {
         match alloc.allocate(layout) {
             Ok(ptr) => Ok(ptr.as_non_null_ptr()),
@@ -38,7 +38,7 @@ mod inner {
     #[cfg(test)]
     pub use allocator_api2::alloc::AllocError;
 
-    #[allow(clippy::map_err_ignore)]
+    #[expect(clippy::map_err_ignore)]
     pub(crate) fn do_alloc<A: Allocator>(alloc: &A, layout: Layout) -> Result<NonNull<u8>, ()> {
         match alloc.allocate(layout) {
             Ok(ptr) => Ok(ptr.cast()),
@@ -62,7 +62,7 @@ mod inner {
         ptr::NonNull,
     };
 
-    #[allow(clippy::missing_safety_doc)] // not exposed outside of this crate
+    #[expect(clippy::missing_safety_doc)] // not exposed outside of this crate
     pub unsafe trait Allocator {
         /// Attempts to allocate a block of memory.
         fn allocate(&self, layout: Layout) -> Result<NonNull<u8>, ()>;

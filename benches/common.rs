@@ -27,7 +27,6 @@ pub fn get_first_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     tree.first_key_value().unwrap().0
 }
 
-#[allow(dead_code)]
 pub fn get_middle_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
     forward_step_size: usize,

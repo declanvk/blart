@@ -167,9 +167,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 next_value += 1;
 
                 let _ = tree.force_insert(key.clone(), value);
-                oracle.retain(|f, _| {
-                    !f.starts_with(&key) && !key.starts_with(f)
-                });
+                oracle.retain(|f, _| !f.starts_with(&key) && !key.starts_with(f));
                 oracle.insert(key, value);
             },
             Action::TryInsertMany(prefix, count) => {
@@ -240,6 +238,7 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
         }
 
         assert!(tree.iter().eq(oracle.iter()), "{:?} != {:?}", tree, oracle);
+        assert_eq!(tree.len(), oracle.len());
         let _ = WellFormedChecker::check(&tree).expect("tree should be well-formed");
     }
 });
