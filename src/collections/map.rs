@@ -1081,12 +1081,12 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// Force inserts a key-value pair into the map.
     ///
     /// If the given key is not a prefix of any keys in the tree, this function
-    /// behaves just like [Self::try_insert].
-    /// If the given key is a prefix of some keys in the tree, or the other way
-    /// around, all these key value pairs are removed and this key value
-    /// pair is inserted in their place.
+    /// behaves just like [`Self::try_insert`]. If the given key is a prefix
+    /// of some keys in the tree, or the other way around, all these key
+    /// value pairs are removed and this key value pair is inserted in their
+    /// place.
     ///
-    /// See also: [Self::get_prefix] and friends.
+    /// See also: [`Self::get_prefix`] and friends.
     ///
     /// # Examples
     ///

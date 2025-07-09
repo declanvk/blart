@@ -40,32 +40,44 @@ fn bench(c: &mut Criterion) {
     node256_large.write_child(99, leaf_opaque);
 
     macro_rules! generate_benches {
+        (single_bench $match_func:ident $b:ident $node:ident $key:ident $($current_depth:literal)?) => {
+            $b.iter(|| std::hint::black_box(
+                #[allow(unused_unsafe, unused_comparisons)]
+                unsafe {
+                    // SAFETY: covered by assert
+                    $(
+                        assert!($current_depth <= $key.len());
+                    )?
+                    $node.$match_func($key $(, $current_depth)?)
+                }
+            ))
+        };
         ($match_func:ident $($current_depth:literal)?) => {{
             let mut old_group = c.benchmark_group(stringify!($match_func));
             old_group.bench_function("node48/small/match", |b| {
-                b.iter(|| std::hint::black_box(node48_small.$match_func(key_small_match $(, $current_depth)?)));
+                generate_benches!(single_bench $match_func b node48_small key_small_match $($current_depth)?)
             });
             old_group.bench_function("node48/small/mismatch", |b| {
-                b.iter(|| std::hint::black_box(node48_small.$match_func(key_small_mismatch $(, $current_depth)?)));
+                generate_benches!(single_bench $match_func b node48_small key_small_mismatch $($current_depth)?)
             });
             old_group.bench_function("node48/large/match", |b| {
-                b.iter(|| std::hint::black_box(node48_large.$match_func(key_large_match $(, $current_depth)?)));
+                generate_benches!(single_bench $match_func b node48_large key_large_match $($current_depth)?)
             });
             old_group.bench_function("node48/large/mismatch", |b| {
-                b.iter(|| std::hint::black_box(node48_large.$match_func(key_large_mismatch $(, $current_depth)?)));
+                generate_benches!(single_bench $match_func b node48_large key_large_mismatch $($current_depth)?)
             });
 
             old_group.bench_function("node256/small/match", |b| {
-                b.iter(|| std::hint::black_box(node256_small.$match_func(key_small_match $(, $current_depth)?)));
+                generate_benches!(single_bench $match_func b node256_small key_small_match $($current_depth)?)
             });
             old_group.bench_function("node256/small/mismatch", |b| {
-                b.iter(|| std::hint::black_box(node256_small.$match_func(key_small_mismatch $(, $current_depth)?)));
+                generate_benches!(single_bench $match_func b node256_small key_small_mismatch $($current_depth)?)
             });
             old_group.bench_function("node256/large/match", |b| {
-                b.iter(|| std::hint::black_box(node256_large.$match_func(key_large_match $(, $current_depth)?)));
+                generate_benches!(single_bench $match_func b node256_large key_large_match $($current_depth)?)
             });
             old_group.bench_function("node256/large/mismatch", |b| {
-                b.iter(|| std::hint::black_box(node256_large.$match_func(key_large_mismatch $(, $current_depth)?)));
+                generate_benches!(single_bench $match_func b node256_large key_large_mismatch $($current_depth)?)
             });
         }};
     }

@@ -975,26 +975,16 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
     }
 }
 
-/// Perform an iterative search for the insert point for the given key,
-/// starting at the given root node.
+/// Check that the given inner node's prefix matches the relevant subslice of
+/// the given key.
 ///
 /// # Safety
 ///  - This function cannot be called concurrently to any writes of the `root`
 ///    node or any child node of `root`. This function will arbitrarily read to
 ///    any child in the given tree.
-///
-/// # Errors
-///  - If the given `key` is a prefix of an existing key, this function will
-///    return an error.
-pub unsafe fn search_for_insert_point<K, V, const PREFIX_LEN: usize>(
-    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    key_bytes: &[u8],
-) -> Result<InsertPoint<K, V, PREFIX_LEN>, InsertPrefixError>
-where
-    K: AsBytes,
-{
+///  - `current_depth` must be less than or equal to `key.len()`
     #[inline]
-    fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
+unsafe fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
         inner_ptr: NodePtr<PREFIX_LEN, N>,
         key: &[u8],
         current_depth: &mut usize,
@@ -1011,7 +1001,9 @@ where
         // enforced the "no concurrent reads or writes" requirement on the
         // `search_unchecked` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
-        let match_prefix = inner_node.match_full_prefix(key, *current_depth);
+// SAFETY: Covered by caller safety requirements on `current_depth` and
+    // `key.len()`
+        let match_prefix = unsafe { inner_node.match_full_prefix(key, *current_depth) };
         match match_prefix {
             Err(mismatch) => Ok(ControlFlow::Break(mismatch)),
             Ok(PrefixMatch { matched_bytes }) => {
@@ -1034,31 +1026,50 @@ where
         }
     }
 
-    // We keep track of the grandparent because when dealing with
-    // entry api we want to be able to remove the entry if it's
-    // occupied, since the entry api works by searching the insertion
-    // point we do similar work to the delete process by keeping track
-    // of the grandparent. Of course this is not as efficient as deleting
-    // directly since we are doing a ton of extra work. But this will
-    // only be used during the remove in the entry api. It's also not a
-    // lot of extra work to keep track of the grandparent since it's just
-    // a copy of a ptr and u8
+    /// Perform an iterative search for the insert point for the given key,
+/// starting at the given root node.
+///
+/// # Safety
+///  - This function cannot be called concurrently to any writes of the `root`
+///    node or any child node of `root`. This function will arbitrarily read to
+///    any child in the given tree.
+///
+/// # Errors
+///  - If the given `key` is a prefix of an existing key, this function will
+///    return an error.
+pub unsafe fn search_for_insert_point<K, V, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    key_bytes: &[u8],
+) -> Result<InsertPoint<K, V, PREFIX_LEN>, InsertPrefixError>
+where
+    K: AsBytes,
+{
     let mut path = TreePathSearch::default();
     let mut current_node = root;
     let mut current_depth = 0;
 
     loop {
+// SAFETY (covering all `test_prefix_identify_insert` function calls):
+        //  1. Concurrent read/write overed by caller safety requirements
+        //  2. `current_depth` can never be greater than `key_bytes.len()` because of
+        //     loop invariant assertion
+        assert!(current_depth <= key_bytes.len());
+
         let lookup_result = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => {
+            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+// SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
-            ConcreteNodePtr::Node16(inner_ptr) => {
+            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
+// SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
-            ConcreteNodePtr::Node48(inner_ptr) => {
+            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
+// SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
-            ConcreteNodePtr::Node256(inner_ptr) => {
+            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
+// SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
@@ -1189,71 +1200,32 @@ pub unsafe fn search_for_force_insert_point<K, V, const PREFIX_LEN: usize>(
 where
     K: AsBytes,
 {
-    #[inline]
-    fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
-        inner_ptr: NodePtr<PREFIX_LEN, N>,
-        key: &[u8],
-        current_depth: &mut usize,
-    ) -> Result<
-        ControlFlow<ExplicitMismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>,
-        OpaqueNodePtr<K, V, PREFIX_LEN>,
-    >
-    where
-        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-        K: AsBytes,
-    {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `search_unchecked` function.
-        let inner_node = unsafe { inner_ptr.as_ref() };
-        let match_prefix = inner_node.match_full_prefix(key, *current_depth);
-        match match_prefix {
-            Err(mismatch) => Ok(ControlFlow::Break(mismatch)),
-            Ok(PrefixMatch { matched_bytes }) => {
-                // Since the prefix matched, advance the depth by the size of the prefix
-                *current_depth += matched_bytes;
-
-                if *current_depth < key.len() {
-                    let next_key_fragment = key[*current_depth];
-                    Ok(ControlFlow::Continue(
-                        inner_node.lookup_child(next_key_fragment),
-                    ))
-                } else {
-                    // *current_depth -= matched_bytes;
-                    // then the key has insufficient bytes to be unique. It must be
-                    // a prefix of an existing key
-                    Err(inner_ptr.to_opaque())
-                }
-            },
-        }
-    }
-
-    // We keep track of the grandparent because when dealing with
-    // entry api we want to be able to remove the entry if it's
-    // occupied, since the entry api works by searching the insertion
-    // point we do similar work to the delete process by keeping track
-    // of the grandparent. Of course this is not as efficient as deleting
-    // directly since we are doing a ton of extra work. But this will
-    // only be used during the remove in the entry api. It's also not a
-    // lot of extra work to keep track of the grandparent since it's just
-    // a copy of a ptr and u8
     let mut path = TreePathSearch::default();
     let mut current_node = root;
     let mut current_depth = 0;
 
     loop {
+// SAFETY (covering all `test_prefix_identify_insert` function calls):
+        //  1. Concurrent read/write overed by caller safety requirements
+        //  2. `current_depth` can never be greater than `key_bytes.len()` because of
+        //     loop invariant assertion
+        assert!(current_depth <= key_bytes.len());
+
         let lookup_result = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => {
+            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+// SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
-            ConcreteNodePtr::Node16(inner_ptr) => {
+            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
+// SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
-            ConcreteNodePtr::Node48(inner_ptr) => {
+            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
+// SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
-            ConcreteNodePtr::Node256(inner_ptr) => {
+            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
+// SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
@@ -1313,11 +1285,11 @@ where
 
         let lookup_result = match lookup_result {
             Ok(value) => value,
-            Err(inner_node_ptr) => {
+            Err(_inner_node_ptr) => {
                 return ForceInsertPoint::OverwritePoint(OverwritePoint {
                     key_bytes_used: current_depth.saturating_sub(1),
                     path: path.finish(),
-                    overwrite_point: inner_node_ptr,
+                    overwrite_point: current_node,
                     root,
                 });
             },

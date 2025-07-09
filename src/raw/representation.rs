@@ -948,9 +948,9 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
     /// needs to search a descendant leaf node to find implicit bytes.
     ///
     /// # Safety
-    ///  - `current_depth` > key len
+    /// `current_depth` must be less than or equal to `key.len()`
     #[inline]
-    fn match_full_prefix(
+unsafe fn match_full_prefix(
         &self,
         key: &[u8],
         current_depth: usize,
@@ -1003,22 +1003,20 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
 
     /// Returns the minimum child pointer from this node and it's key
     ///
-    /// # Safety
-    ///  - Since this is a [`InnerNode`] we assume that the we have at least one
-    ///    child, (more strictly we have 2, because with one child the node
-    ///    would have collapsed) so in this way we can avoid the [`Option`].
-    ///    This is safe because if we had no children this current node should
-    ///    have been deleted.
+    /// Since this is a [`InnerNode`] we assume that the we have at least one
+    /// child, (more strictly we have 2, because with one child the node would
+    /// have collapsed) so in this way we can avoid the [`Option`]. This is safe
+    /// because if we had no children this current node should have been
+    /// deleted.
     fn min(&self) -> (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>);
 
     /// Returns the maximum child pointer from this node and it's key
     ///
-    /// # Safety
-    ///  - Since this is a [`InnerNode`] we assume that the we have at least one
-    ///    child, (more strictly we have 2, because with one child the node
-    ///    would have collapsed) so in this way we can avoid the [`Option`].
-    ///    This is safe because if we had, no children this current node should
-    ///    have been deleted.
+    /// Since this is a [`InnerNode`] we assume that the we have at least one
+    /// child, (more strictly we have 2, because with one child the node would
+    /// have collapsed) so in this way we can avoid the [`Option`]. This is safe
+    /// because if we had, no children this current node should have been
+    /// deleted.
     fn max(&self) -> (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>);
 }
 
