@@ -78,7 +78,6 @@ library_benchmark_group!(name = bench_remove_group; benchmarks = bench_remove_si
 
 // INSERT
 
-#[allow(dead_code)]
 fn insert_single_setup<K: AsBytes + Clone, V: Clone, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
     key: &K,
@@ -97,7 +96,6 @@ fn bench_insert_single<K: AsBytes, V: Default, const PREFIX_LEN: usize>(
     tree.try_insert(key, V::default()).ok().flatten()
 }
 
-#[allow(dead_code)]
 fn insert_multiple_setup<K: AsBytes + Clone, V: Clone, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
     keys: Vec<&K>,

@@ -246,7 +246,7 @@ pub(crate) mod ptr {
 
     #[inline]
     #[cfg(not(feature = "nightly"))]
-    #[allow(clippy::transmutes_expressible_as_ptr_casts)]
+    #[expect(clippy::transmutes_expressible_as_ptr_casts)]
     pub fn mut_addr<T>(ptr: *mut T) -> usize {
         // FIXME(strict_provenance_magic): I am magic and should be a compiler
         // intrinsic. SAFETY: Pointer-to-integer transmutes are valid (if you

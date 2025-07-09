@@ -2,6 +2,7 @@
 
 use std::{collections::HashSet, iter};
 
+#[cfg(test)]
 use crate::{
     alloc::Global,
     raw::{InsertPrefixError, InsertResult, OpaqueNodePtr},
@@ -325,7 +326,7 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
         .map(move |key| apply_expansions_to_key(&key, &full_key_template, &sorted_expansions))
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) unsafe fn insert_unchecked<'a, K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key: K,
@@ -340,7 +341,7 @@ where
     Ok(unsafe { insert_point.apply(key, value, &Global) })
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn setup_tree_from_entries<K, V, const PREFIX_LEN: usize>(
     entries_it: impl Iterator<Item = (K, V)>,
 ) -> OpaqueNodePtr<K, V, PREFIX_LEN>
@@ -356,16 +357,15 @@ where
     TreeMap::into_raw(tree).unwrap()
 }
 
-#[cfg(test)]
+// disabled for miri because the runtime is too large, and this does not test
+// any safety-critical stuff
+#[cfg(all(test, not(miri)))]
 mod tests {
     use crate::TreeMap;
 
     use super::*;
 
     #[test]
-    // disabled for miri because the runtime is too large, and this does not test any
-    // safety-critical stuff
-    #[cfg(not(miri))]
     fn key_generator_returns_expected_number_of_entries() {
         #[track_caller]
         fn check<K: AsBytes>(it: impl IntoIterator<Item = K>, expected_num_entries: usize) {

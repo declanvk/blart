@@ -570,7 +570,7 @@ macro_rules! as_bytes_for_tuples {
                     // supports that
                     type Bytes = Box<[u8]>;
 
-                    #[allow(non_snake_case)]
+                    #[expect(non_snake_case)]
                     fn to_bytes(value: ($($ty,)+)) -> Self::Bytes {
                         let mut bytes = Vec::with_capacity(sum!(
                             $([< LEN_ $ty >],)+
@@ -589,7 +589,7 @@ macro_rules! as_bytes_for_tuples {
                         let remaining = &*bytes;
 
                         $(
-                            #[allow(non_snake_case)]
+                            #[expect(non_snake_case)]
                             let ([<bytes_ $ty>], remaining) = remaining.split_first_chunk::<[< LEN_ $ty >]>().unwrap();
                         )+
 

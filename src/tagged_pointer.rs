@@ -56,10 +56,6 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// # Panics
     ///  - Panics if the given `pointer` is not aligned according to the minimum
     ///    alignment required for the `P` type.
-    //
-    // The API can take a raw pointer here because it does not dereference the pointer in the body
-    // of the function.
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(pointer: *mut P) -> Option<TaggedPointer<P, MIN_BITS>> {
         if pointer.is_null() {
             return None;
