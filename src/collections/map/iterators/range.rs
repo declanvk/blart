@@ -259,6 +259,8 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
     }
 }
 
+type KeyByteAndChild<K, V, const PREFIX_LEN: usize> = Option<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>;
+
 /// This function searches a trie for the smallest/largest leaf node that is
 /// greater/less than the given bound.
 ///
@@ -351,8 +353,7 @@ pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN
                             inner_ptr: NodePtr<PREFIX_LEN, N>,
                             child_bounds: (Bound<u8>, Bound<u8>),
                             is_start: bool,
-                        ) -> Option<(u8, OpaqueNodePtr<N::Key, N::Value, PREFIX_LEN>)>
-                        {
+                        ) -> KeyByteAndChild<N::Key, N::Value, PREFIX_LEN> {
                             // SAFETY: Covered by function safety doc
                             let inner = unsafe { inner_ptr.as_ref() };
                             let mut child_it = inner.range(child_bounds);

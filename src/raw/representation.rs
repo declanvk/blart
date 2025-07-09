@@ -990,10 +990,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
     fn read_full_prefix(
         &self,
         current_depth: usize,
-    ) -> (
-        &[u8],
-        Option<NodePtr<PREFIX_LEN, LeafNode<Self::Key, Self::Value, PREFIX_LEN>>>,
-    )
+    ) -> NodePrefix<'_, Self::Key, Self::Value, PREFIX_LEN>
     where
         Self::Key: AsBytes,
     {
