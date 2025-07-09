@@ -180,10 +180,7 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         &'a self,
         node: &'a N,
         current_depth: usize,
-    ) -> (
-        &'a [u8],
-        Option<NodePtr<PREFIX_LEN, LeafNode<N::Key, N::Value, PREFIX_LEN>>>,
-    )
+    ) -> NodePrefix<'a, N::Key, N::Value, PREFIX_LEN>
     where
         N::Key: AsBytes,
     {
@@ -223,6 +220,16 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         }
     }
 }
+
+/// This type represents the contents of an [`InnerNode`] prefix, either read
+/// directly from the prefix or fetched from a leaf node descendant.
+///
+/// The second value is the tuple will be `Some(_)` if the value was fetched
+/// from a leaf node.
+pub type NodePrefix<'a, K, V, const PREFIX_LEN: usize> = (
+    &'a [u8],
+    Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>,
+);
 
 impl<const PREFIX_LEN: usize> Debug for Header<PREFIX_LEN> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

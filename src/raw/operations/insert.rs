@@ -975,6 +975,9 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
     }
 }
 
+type SearchControlFlow<K, V, const PREFIX_LEN: usize> =
+    ControlFlow<ExplicitMismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>;
+
 /// Check that the given inner node's prefix matches the relevant subslice of
 /// the given key.
 ///
@@ -988,10 +991,7 @@ unsafe fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
     inner_ptr: NodePtr<PREFIX_LEN, N>,
     key: &[u8],
     current_depth: &mut usize,
-) -> Result<
-    ControlFlow<ExplicitMismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>,
-    InsertPrefixError,
->
+) -> Result<SearchControlFlow<K, V, PREFIX_LEN>, InsertPrefixError>
 where
     N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
     K: AsBytes,
