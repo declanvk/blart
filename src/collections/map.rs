@@ -2361,42 +2361,43 @@ mod tests {
         assert_eq!(tree.remove(&Box::from([])), None);
     }
 
-    #[cfg(not(miri))]
     #[test]
     fn clone_tree_skewed() {
         let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
-        for (v, k) in generate_keys_skewed(u8::MAX as usize).enumerate() {
+        for (v, k) in
+            generate_keys_skewed(if cfg!(miri) { 64 } else { u8::MAX as usize }).enumerate()
+        {
             tree.try_insert(k, v).unwrap();
         }
         let new_tree = tree.clone();
         assert!(tree == new_tree);
     }
 
-    #[cfg(not(miri))]
     #[test]
     fn clone_tree_fixed_length() {
+        const KEY_DEPTH: usize = if cfg!(miri) { 4 } else { 8 };
         let mut tree: TreeMap<_, usize> = TreeMap::new();
-        for (v, k) in generate_key_fixed_length([2; 8]).enumerate() {
+        for (v, k) in generate_key_fixed_length([2; KEY_DEPTH]).enumerate() {
             tree.try_insert(k, v).unwrap();
         }
         let new_tree = tree.clone();
         assert!(tree == new_tree);
     }
 
-    #[cfg(not(miri))]
     #[test]
     fn clone_tree_with_prefix() {
+        const KEY_DEPTH: usize = if cfg!(miri) { 4 } else { 8 };
         let mut tree: TreeMap<Box<[u8]>, usize> = TreeMap::new();
         for (v, k) in generate_key_with_prefix(
-            [2; 8],
+            [2; KEY_DEPTH],
             [
                 PrefixExpansion {
                     base_index: 1,
-                    expanded_length: 12,
+                    expanded_length: if cfg!(miri) { 3 } else { 12 },
                 },
                 PrefixExpansion {
-                    base_index: 5,
-                    expanded_length: 8,
+                    base_index: 3,
+                    expanded_length: if cfg!(miri) { 2 } else { 8 },
                 },
             ],
         )

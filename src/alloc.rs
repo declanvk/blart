@@ -15,7 +15,6 @@ mod inner {
     #[cfg(test)]
     pub use std::alloc::AllocError;
 
-    #[expect(clippy::map_err_ignore)]
     pub(crate) fn do_alloc<A: Allocator>(alloc: &A, layout: Layout) -> Result<NonNull<u8>, ()> {
         match alloc.allocate(layout) {
             Ok(ptr) => Ok(ptr.as_non_null_ptr()),

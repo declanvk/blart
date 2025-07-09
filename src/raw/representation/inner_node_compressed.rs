@@ -1,6 +1,6 @@
 use crate::{
     raw::{Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex},
-    rust_nightly_apis::{assume, maybe_uninit_slice_assume_init_ref},
+    rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
 use std::{
     fmt,
@@ -92,7 +92,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
         // be initialized
         unsafe {
             let num_children = self.header.num_children();
-            assume!(num_children <= self.keys.len());
+            std::hint::assert_unchecked(num_children <= self.keys.len());
+
             (
                 maybe_uninit_slice_assume_init_ref(self.keys.get_unchecked(0..num_children)),
                 maybe_uninit_slice_assume_init_ref(
@@ -111,7 +112,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
         unsafe {
             // SAFETY: If `idx` is out of bounds the node should already have grown
             // so it's safe to assume that `idx` is in bounds
-            assume!(idx < self.child_pointers.len());
+            std::hint::assert_unchecked(idx < self.child_pointers.len());
 
             // SAFETY: The value at `child_index` is guaranteed to be initialized because
             // the `lookup_child_index` function will only search in the initialized portion
@@ -147,20 +148,16 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
                 child_index
             },
             WritePoint::Shift(child_index) => {
-                #[allow(unused_unsafe)]
                 unsafe {
                     // SAFETY: This is by construction, since the number of children
                     // is always <= maximum number of keys (children) that we can hold
-                    assume!(num_children <= self.keys.len());
+                    std::hint::assert_unchecked(num_children <= self.keys.len());
 
                     // SAFETY: When we are shifting children, because a new minimum one
                     // is being inserted this guarantees to us that the index of insertion
                     // is < current number of children (because if it was >= we wouldn't
                     // need to shift the data)
-                    assume!(child_index < num_children);
-
-                    // assume!(child_index + 1 + (num_children - child_index) <=
-                    // self.keys.len());
+                    std::hint::assert_unchecked(child_index < num_children);
                 }
                 self.keys
                     .copy_within(child_index..num_children, child_index + 1);
@@ -207,7 +204,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
         unsafe {
             // SAFETY: The `assert_unchecked` and `get_unchecked*` are both covered by the
             // safety requirements of the caller.
-            assume!(idx < self.keys.len());
+            std::hint::assert_unchecked(idx < self.keys.len());
             self.keys.get_unchecked_mut(idx).write(key_fragment);
             self.child_pointers
                 .get_unchecked_mut(idx)
@@ -254,22 +251,21 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
         let mut child_pointers = [MaybeUninit::uninit(); NEW_SIZE];
         let num_children = header.num_children();
 
-        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: By construction the number of children in the header
             // is kept in sync with the number of children written in the node
             // and if this number exceeds the maximum len the node should have
             // already grown. So we know for a fact that that num_children <= node len
-            assume!(num_children <= self.keys.len());
-            assume!(num_children <= self.child_pointers.len());
+            std::hint::assert_unchecked(num_children <= self.keys.len());
+            std::hint::assert_unchecked(num_children <= self.child_pointers.len());
 
             // SAFETY: When calling this function the NEW_SIZE, should fit the nodes.
             // We only need to be careful when shrinking the node, since when growing
             // NEW_SIZE >= SIZE.
             // This function is only called in a shrink case when a node is removed from
             // a node and the new current size fits in the NEW_SIZE
-            assume!(num_children <= keys.len());
-            assume!(num_children <= child_pointers.len());
+            std::hint::assert_unchecked(num_children <= keys.len());
+            std::hint::assert_unchecked(num_children <= child_pointers.len());
         }
 
         keys[..num_children].copy_from_slice(&self.keys[..num_children]);
@@ -305,16 +301,15 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
 
         let num_children = header.num_children();
 
-        #[allow(unused_unsafe)]
         unsafe {
             // SAFETY: By construction the number of children in the header
             // is kept in sync with the number of children written in the node
             // and if this number exceeds the maximum len the node should have
             // already grown. So we know for a fact that that num_children <= node len
-            assume!(num_children <= self.child_pointers.len());
+            std::hint::assert_unchecked(num_children <= self.child_pointers.len());
 
             // SAFETY: We know that the new size is >= old size, so this is safe
-            assume!(num_children <= child_pointers.len());
+            std::hint::assert_unchecked(num_children <= child_pointers.len());
         }
 
         child_pointers[..num_children].copy_from_slice(&self.child_pointers[..num_children]);

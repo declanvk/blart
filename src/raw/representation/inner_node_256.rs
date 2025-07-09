@@ -190,8 +190,6 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        use crate::rust_nightly_apis::assume;
-
         // SAFETY: Due to niche optimization Option<NonNull> has the same
         // size as NonNull and NonNull has the same size as usize
         // so it's safe to transmute
@@ -223,7 +221,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
         unsafe {
             // SAFETY: key can be at up to 256, but we know that we have
             // at least one inner child, it's guarantee to be in bounds
-            assume!(key < self.child_pointers.len());
+            std::hint::assert_unchecked(key < self.child_pointers.len());
         }
 
         // SAFETY: Covered by the containing function
@@ -246,8 +244,6 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        use crate::rust_nightly_apis::assume;
-
         // SAFETY: Due to niche optimization Option<NonNull> has the same
         // size as NonNull and NonNull has the same size as usize
         // so it's safe to transmute
@@ -281,7 +277,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
 
         unsafe {
             // SAFETY: idx can be at up to 255, so it's in bounds
-            assume!(key < self.child_pointers.len());
+            std::hint::assert_unchecked(key < self.child_pointers.len());
         }
 
         // SAFETY: covered by the containing function

@@ -3,9 +3,7 @@ use crate::{
         Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodeType,
         OpaqueNodePtr,
     },
-    rust_nightly_apis::{
-        assume, maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref,
-    },
+    rust_nightly_apis::{maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref},
 };
 use std::{
     cmp::Ordering,
@@ -145,7 +143,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode48<K, V, PREFIX_LEN> {
         unsafe {
             // SAFETY: The array prefix with length `header.num_children` is guaranteed to
             // be initialized
-            assume!(self.header.num_children() <= self.child_pointers.len());
+            std::hint::assert_unchecked(self.header.num_children() <= self.child_pointers.len());
             maybe_uninit_slice_assume_init_ref(&self.child_pointers[..self.header.num_children()])
         }
     }
@@ -196,12 +194,11 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
         if !index.is_empty() {
             let idx = usize::from(*index);
 
-            #[allow(unused_unsafe)]
             unsafe {
                 // SAFETY: If `idx` is out of bounds we have more than
                 // 48 children in this node, so it should have already
                 // grown. So it's safe to assume that it's in bounds
-                assume!(idx < child_pointers.len());
+                std::hint::assert_unchecked(idx < child_pointers.len());
             }
             Some(child_pointers[idx])
         } else {
@@ -235,11 +232,13 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
         };
 
         // SAFETY: This index can be up to <= 47 as described above
-        #[allow(unused_unsafe)]
+
         unsafe {
-            assume!(child_index < self.child_pointers.len());
+            std::hint::assert_unchecked(child_index < self.child_pointers.len());
+            self.child_pointers
+                .get_unchecked_mut(child_index)
+                .write(child_pointer);
         }
-        self.child_pointers[child_index].write(child_pointer);
     }
 
     fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
@@ -295,12 +294,11 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
 
             let idx = usize::from(*idx);
 
-            #[allow(unused_unsafe)]
             unsafe {
                 // SAFETY: When growing initialized_child_pointers should be full
                 // i.e initialized_child_pointers len == 48. And idx <= 47, since
                 // we can't insert in a full, node
-                assume!(idx < initialized_child_pointers.len());
+                std::hint::assert_unchecked(idx < initialized_child_pointers.len());
             }
             let child_pointer = initialized_child_pointers[idx];
             child_pointers[key_fragment] = Some(child_pointer);
@@ -464,7 +462,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
             // this means that this node has at least 1 child (it's even more
             // strict since, if we have 1 child the node would collapse), so we
             // know that exists at least one idx where != 48
-            assume!(key < self.child_indices.len());
+            std::hint::assert_unchecked(key < self.child_indices.len());
         }
 
         let idx = usize::from(self.child_indices[key]);
@@ -475,7 +473,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
             // constructed if it >= 48 and also it has to be < num children, since
             // it's constructed from the num children before being incremented during
             // insertion process
-            assume!(idx < child_pointers.len());
+            std::hint::assert_unchecked(idx < child_pointers.len());
         }
 
         (key as u8, child_pointers[idx])
@@ -528,7 +526,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
 
         unsafe {
             // SAFETY: idx can be at up to 255 so it's in bounds
-            assume!(key < self.child_indices.len());
+            std::hint::assert_unchecked(key < self.child_indices.len());
         }
 
         let idx = usize::from(self.child_indices[key]);
@@ -539,7 +537,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
             // constructed if it >= 48 and also it has to be < num children, since
             // it's constructed from the num children before being incremented during
             // insertion process
-            assume!(idx < child_pointers.len());
+            std::hint::assert_unchecked(idx < child_pointers.len());
         }
 
         (key as u8, child_pointers[idx])

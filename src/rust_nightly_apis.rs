@@ -113,78 +113,31 @@ pub fn hasher_write_length_prefix<H: std::hash::Hasher>(state: &mut H, num_entri
     }
 }
 
-/// Constructs a new boxed slice with uninitialized contents.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#63291][issue-63291]**
-///
-/// [issue-63291]: https://github.com/rust-lang/rust/issues/63291
-#[inline]
-pub fn box_new_uninit_slice<T>(len: usize) -> Box<[std::mem::MaybeUninit<T>]> {
-    #[cfg(feature = "nightly")]
-    {
-        Box::new_uninit_slice(len)
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        Vec::from_iter((0..len).map(|_| std::mem::MaybeUninit::uninit())).into_boxed_slice()
-    }
-}
-
-/// Informs the optimizer that a condition is always true.
-/// If the condition is false, the behavior is undefined.
-///
-/// No code is generated for this intrinsic, but the optimizer will try
-/// to preserve it (and its condition) between passes, which may interfere
-/// with optimization of surrounding code and reduce performance. It should
-/// not be used if the invariant can be discovered by the optimizer on its
-/// own, or if it does not enable any significant optimizations.
-///
-/// This intrinsic does not have a stable counterpart.
-///
-/// **This is a unstable API copied from the Rust standard library**
-macro_rules! assume {
-    ($b:expr) => {
-        debug_assert!($b);
-        #[cfg(feature = "nightly")]
-        std::intrinsics::assume($b)
-    };
-}
-
-pub(crate) use assume;
-
-/// Hints to the compiler that branch condition is likely to be true.
+/// Hints to the compiler that a branch condition is unlikely to be true.
 /// Returns the value passed to it.
 ///
-/// Any use other than with `if` statements will probably not have an effect.
+/// It can be used with `if` or boolean `match` expressions.
 ///
-/// Note that, unlike most intrinsics, this is safe to call;
-/// it does not require an `unsafe` block.
-/// Therefore, implementations must not require the user to uphold
-/// any safety invariants.
-///
-/// This intrinsic does not have a stable counterpart.
+/// When used outside of a branch condition, it may still influence a nearby
+/// branch, but
+/// probably will not have any effect.
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(feature = "nightly")]
 macro_rules! likely {
     ($b:expr) => {
-        std::intrinsics::likely($b)
+        std::hint::likely($b)
     };
 }
 
-/// Hints to the compiler that branch condition is likely to be true.
+/// Hints to the compiler that a branch condition is unlikely to be true.
 /// Returns the value passed to it.
 ///
-/// Any use other than with `if` statements will probably not have an effect.
+/// It can be used with `if` or boolean `match` expressions.
 ///
-/// Note that, unlike most intrinsics, this is safe to call;
-/// it does not require an `unsafe` block.
-/// Therefore, implementations must not require the user to uphold
-/// any safety invariants.
-///
-/// This intrinsic does not have a stable counterpart.
+/// When used outside of a branch condition, it may still influence a nearby
+/// branch, but
+/// probably will not have any effect.
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(not(feature = "nightly"))]
@@ -196,37 +149,33 @@ macro_rules! likely {
 
 pub(crate) use likely;
 
-/// Hints to the compiler that branch condition is likely to be false.
-/// Returns the value passed to it.
+/// Hints to the compiler that given path is cold, i.e., unlikely to be taken.
+/// The compiler may choose to optimize paths that are not cold at the expense
+/// of paths that are cold.
 ///
 /// Any use other than with `if` statements will probably not have an effect.
 ///
 /// Note that, unlike most intrinsics, this is safe to call;
-/// it does not require an `unsafe` block.
-/// Therefore, implementations must not require the user to uphold
-/// any safety invariants.
-///
-/// This intrinsic does not have a stable counterpart.
+/// it does not require an `unsafe` block. Therefore, implementations must not
+/// require the user to uphold any safety invariants.
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(feature = "nightly")]
 macro_rules! unlikely {
     ($b:expr) => {
-        std::intrinsics::unlikely($b)
+        std::hint::unlikely($b)
     };
 }
 
-/// Hints to the compiler that branch condition is likely to be false.
-/// Returns the value passed to it.
+/// Hints to the compiler that given path is cold, i.e., unlikely to be taken.
+/// The compiler may choose to optimize paths that are not cold at the expense
+/// of paths that are cold.
 ///
 /// Any use other than with `if` statements will probably not have an effect.
 ///
 /// Note that, unlike most intrinsics, this is safe to call;
-/// it does not require an `unsafe` block.
-/// Therefore, implementations must not require the user to uphold
-/// any safety invariants.
-///
-/// This intrinsic does not have a stable counterpart.
+/// it does not require an `unsafe` block. Therefore, implementations must not
+/// require the user to uphold any safety invariants.
 ///
 /// **This is a unstable API copied from the Rust standard library**
 #[cfg(not(feature = "nightly"))]
@@ -269,13 +218,6 @@ pub(crate) mod ptr {
         let offset = dest_addr.wrapping_sub(self_addr);
 
         ptr.wrapping_byte_offset(offset)
-    }
-
-    #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
-    #[inline]
-    #[cfg(feature = "nightly")]
-    pub fn mut_with_addr<T>(ptr: *mut T, addr: usize) -> *mut T {
-        ptr.with_addr(addr)
     }
 
     #[cfg(test)]
