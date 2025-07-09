@@ -123,9 +123,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     /// Writes a child to the node by check the order of insertion
     ///
     /// # Panics
-    ///  - This functions assumes that the write is gonna be inbound (i.e the
-    ///    check for a full node is done previously to the call of this
-    ///    function)
+    /// This function will panic if the node is full.
     fn write_child_inner(
         &mut self,
         key_fragment: u8,
@@ -134,7 +132,15 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
         Self: SearchInnerNodeCompressed,
     {
         let num_children = self.header.num_children();
-        let idx = match self.find_write_point(key_fragment) {
+        let write_point = self.find_write_point(key_fragment);
+        if !matches!(write_point, WritePoint::Existing(_)) {
+            assert!(
+                num_children < SIZE,
+                "The number of children [{num_children}] must be smaller that [{SIZE}] so that \
+                 there is at least one slot to insert the new child"
+            );
+        }
+        let idx = match write_point {
             WritePoint::Existing(child_index) => child_index,
             WritePoint::Last(child_index) => {
                 self.header.inc_num_children();
@@ -164,10 +170,11 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
                 child_index
             },
         };
+
         unsafe {
-            // SAFETY: The check for a full node is done previously to the call
-            // of this function, so it's safe to assume that the new child index is
-            // in bounds
+            // SAFETY: The guarantee that this node is not full is not part of the caller
+            // requirements, so we need the assert above to check
+
             self.write_child_at(idx, key_fragment, child_pointer);
         }
     }
@@ -190,9 +197,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     /// Writes a child to the node without bounds check or order
     ///
     /// # Safety
-    ///  - This functions assumes that the write is gonna be inbound (i.e the
-    ///    check for a full node is done previously to the call of this
-    ///    function)
+    /// `idx` must be less than `SIZE` so that array accesses are in-bounds
     unsafe fn write_child_at(
         &mut self,
         idx: usize,
@@ -200,6 +205,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
         child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>,
     ) {
         unsafe {
+            // SAFETY: The `assert_unchecked` and `get_unchecked*` are both covered by the
+            // safety requirements of the caller.
             assume!(idx < self.keys.len());
             self.keys.get_unchecked_mut(idx).write(key_fragment);
             self.child_pointers
