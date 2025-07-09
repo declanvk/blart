@@ -10,7 +10,8 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 keywords = ["tree", "map", "collection", "radix-tree"]
 categories = ["data-structures"]
-rust-version = "1.78"
+# MSRV
+rust-version = "1.82"
 
 exclude = [
     "fuzz/",
