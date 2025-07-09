@@ -1205,8 +1205,9 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     pub fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&K, &mut V) -> bool,
+        K: AsBytes,
     {
-        self.extract_if(|k, v| !f(k, v)).for_each(drop);
+        self.extract_if(.., |k, v| !f(k, v)).for_each(drop);
     }
 
     /// Moves all elements from other into self, leaving other empty.
@@ -1250,7 +1251,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
             return;
         }
 
-        self.extend(other.extract_if(|_, _| true))
+        self.extend(other.extract_if(.., |_, _| true))
     }
 
     /// Constructs a double-ended iterator over a sub-range of elements in the
@@ -1381,7 +1382,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         let mut new_tree = TreeMap::with_prefix_len_in(self.alloc.clone());
 
         for (key, value) in
-            self.extract_if(|key, _| split_key.as_bytes() <= key.borrow().as_bytes())
+            self.extract_if(.., |key, _| split_key.as_bytes() <= key.borrow().as_bytes())
         {
             // PANIC SAFETY: This will not panic because the property of any existing tree
             // containing no keys that are prefixes of any other key holds when the tree is
@@ -1392,11 +1393,13 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         new_tree
     }
 
-    /// Creates an iterator that visits all elements (key-value pairs) in
-    /// ascending key order and uses a closure to determine if an element should
-    /// be removed. If the closure returns `true`, the element is removed from
-    /// the map and yielded. If the closure returns `false`, or panics, the
-    /// element remains in the map and will not be yielded.
+    /// Creates an iterator that visits elements (key-value pairs) in the
+    /// specified range in ascending key order and uses a closure to
+    /// determine if an element should be removed.
+    ///
+    /// If the closure returns `true`, the element is removed from the map and
+    /// yielded. If the closure returns `false`, or panics, the element remains
+    /// in the map and will not be yielded.
     ///
     /// The iterator also lets you mutate the value of each element in the
     /// closure, regardless of whether you choose to keep or remove it.
@@ -1410,21 +1413,35 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     ///
     /// # Examples
     ///
-    /// Splitting a map into even and odd keys, reusing the original map:
-    ///
     /// ```
     /// use blart::TreeMap;
+    ///
+    /// // Splitting a map into even and odd keys, reusing the original map:
     /// let mut map: TreeMap<u8, u8> = (0..8).map(|x| (x, x)).collect();
-    /// let evens: TreeMap<_, _> = map.extract_if(|k, _v| k % 2 == 0).collect();
+    /// let evens: TreeMap<_, _> = map.extract_if(.., |k, _v| k % 2 == 0).collect();
     /// let odds = map;
     /// assert_eq!(evens.keys().copied().collect::<Vec<_>>(), [0, 2, 4, 6]);
     /// assert_eq!(odds.keys().copied().collect::<Vec<_>>(), [1, 3, 5, 7]);
+    ///
+    /// // Splitting a map into low and high halves, reusing the original map:
+    /// let mut map: TreeMap<u8, u8> = (0..8).map(|x| (x, x)).collect();
+    /// let low: TreeMap<_, _> = map.extract_if(0..4, |_k, _v| true).collect();
+    /// let high = map;
+    /// assert_eq!(low.keys().copied().collect::<Vec<_>>(), [0, 1, 2, 3]);
+    /// assert_eq!(high.keys().copied().collect::<Vec<_>>(), [4, 5, 6, 7]);
     /// ```
-    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, K, V, F, PREFIX_LEN, A>
+    pub fn extract_if<R, F>(&mut self, range: R, pred: F) -> ExtractIf<'_, K, V, F, PREFIX_LEN, A>
     where
+        K: AsBytes,
+        R: RangeBounds<K>,
         F: FnMut(&K, &mut V) -> bool,
     {
-        ExtractIf::new(self, pred)
+        ExtractIf::new(
+            self,
+            range.start_bound().map(AsBytes::as_bytes),
+            range.end_bound().map(AsBytes::as_bytes),
+            pred,
+        )
     }
 
     /// Creates a consuming iterator visiting all the keys, in sorted order. The
