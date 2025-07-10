@@ -1,7 +1,7 @@
 use crate::{
     alloc::Allocator,
     collections::map::TreeMap,
-    map::find_leaf_pointer_for_bound,
+    map::{find_leaf_pointer_for_bound, validate_range_bounds},
     raw::{search_for_delete_point, LeafNode, NodePtr, RawIterator},
     AsBytes,
 };
@@ -45,20 +45,10 @@ where
             };
         };
 
-        {
-            match (start_bound, end_bound) {
-                (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
-                    panic!("range start and end are equal and excluded: ({s:?})")
-                },
-                (
-                    Bound::Included(s) | Bound::Excluded(s),
-                    Bound::Included(e) | Bound::Excluded(e),
-                ) if s > e => {
-                    panic!("range start ({s:?}) is greater than range end ({e:?})")
-                },
-                _ => {},
-            }
-        }
+        // Validation happens after the empty check so we can avoid panicking for
+        // invalid range when the tree is empty. I believe this matches BTreeMap
+        // behavior.
+        validate_range_bounds(&start_bound, &end_bound);
 
         // SAFETY: Since we have a (shared or mutable) reference to the original
         // TreeMap, we know there will be no concurrent mutation
@@ -166,8 +156,8 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            // SAFETY: This iterator has a reference (either shared or mutable) to the
-            // original `TreeMap` it is iterating over, preventing any other modification.
+            // SAFETY: This iterator has a mutable reference to the original `TreeMap` it is
+            // iterating over, preventing any other modification.
             let leaf_ptr = unsafe { self.inner.next()? };
 
             match self.test_and_remove_leaf(leaf_ptr) {
@@ -189,8 +179,8 @@ where
 {
     fn next_back(&mut self) -> Option<Self::Item> {
         loop {
-            // SAFETY: This iterator has a reference (either shared or mutable) to the
-            // original `TreeMap` it is iterating over, preventing any other modification.
+            // SAFETY: This iterator has a mutable reference to the original `TreeMap` it is
+            // iterating over, preventing any other modification.
             let leaf_ptr = unsafe { self.inner.next_back()? };
 
             match self.test_and_remove_leaf(leaf_ptr) {
@@ -328,18 +318,26 @@ mod tests {
 
         // Case 1: The first child in the parent node will be kept and singleton
         // compressed
-        tree.clone()
-            .extract_if(.., |k, _| if k[0] == 1 { k[1] != 0 } else { false })
+        let mut t1 = tree.clone();
+        t1.extract_if(.., |k, _| if k[0] == 1 { k[1] != 0 } else { false })
             .for_each(drop);
+        assert_eq!(
+            t1.into_keys().collect::<Vec<_>>(),
+            vec![[1, 0], [2, 0], [3, 0], [4, 0]]
+        );
 
         // Case 2: The last child in the parent node will be kept and singleton
         // compressed
         tree.extract_if(.., |k, _| if k[0] == 1 { k[1] != 3 } else { false })
             .for_each(drop);
+        assert_eq!(
+            tree.into_keys().collect::<Vec<_>>(),
+            vec![[1, 3], [2, 0], [3, 0], [4, 0]]
+        );
     }
 
     #[test]
-    fn double_ended_partial() {
+    fn double_ended_partial_consume_partial() {
         let mut map: TreeMap<i32, i32> = (0..10).map(|i| (i, i)).collect();
         let mut iter = map.extract_if(.., |k, _v| *k % 2 == 0);
 
@@ -359,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn double_ended_all() {
+    fn double_ended_all_consume_partial() {
         let mut map: TreeMap<i32, i32> = (0..10).map(|i| (i, i)).collect();
         let mut iter = map.extract_if(.., |_, _| true);
 
@@ -376,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn double_ended_none() {
+    fn double_ended_none_consume_any() {
         let mut map: TreeMap<i32, i32> = (0..10).map(|i| (i, i)).collect();
         let mut iter = map.extract_if(.., |_, _| false);
 
@@ -526,10 +524,11 @@ mod tests {
 
         assert_eq!(map.len(), 16);
 
-        let mut expected = (0..20).collect::<Vec<_>>();
-        expected.retain(|&i| !(2..18).contains(&i) || (i > 4 && i < 14) || i % 2 != 0);
-        let remaining: Vec<_> = map.into_iter().map(|(k, _)| k).collect();
-        assert_eq!(remaining, expected);
+        let remaining: Vec<_> = map.into_keys().collect();
+        assert_eq!(
+            remaining,
+            vec![0, 1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17, 18, 19]
+        );
     }
 
     #[test]

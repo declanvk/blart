@@ -259,6 +259,22 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
     }
 }
 
+/// Panic if the given range bounds
+#[track_caller]
+pub(crate) fn validate_range_bounds(start_bound: &Bound<&[u8]>, end_bound: &Bound<&[u8]>) {
+    match (*start_bound, *end_bound) {
+        (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
+            panic!("range start and end are equal and excluded: ({s:?})")
+        },
+        (Bound::Included(s) | Bound::Excluded(s), Bound::Included(e) | Bound::Excluded(e))
+            if s > e =>
+        {
+            panic!("range start ({s:?}) is greater than range end ({e:?})")
+        },
+        _ => {},
+    }
+}
+
 type KeyByteAndChild<K, V, const PREFIX_LEN: usize> = Option<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>;
 
 /// This function searches a trie for the smallest/largest leaf node that is
@@ -444,20 +460,9 @@ macro_rules! implement_range_iter {
                     };
                 };
 
-                {
-                    match (start_bound, end_bound) {
-                        (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
-                            panic!("range start and end are equal and excluded: ({s:?})")
-                        },
-                        (
-                            Bound::Included(s) | Bound::Excluded(s),
-                            Bound::Included(e) | Bound::Excluded(e),
-                        ) if s > e => {
-                            panic!("range start ({s:?}) is greater than range end ({e:?})")
-                        },
-                        _ => {},
-                    }
-                }
+                // Validation happens after the empty check so we can avoid panicking for invalid range
+                // when the tree is empty. I believe this matches BTreeMap behavior.
+                validate_range_bounds(&start_bound, &end_bound);
 
                 // SAFETY: Since we have a (shared or mutable) reference to the original TreeMap, we know
                 // there will be no concurrent mutation
