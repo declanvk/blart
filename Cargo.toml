@@ -2,7 +2,7 @@
 
 [package]
 name = "blart"
-version = "0.3.0"
+version = "0.4.0"
 description = "An implementation of an adaptive radix tree packaged as a BTreeMap replacement"
 repository = "https://github.com/declanvk/blart"
 readme = "README.md"
