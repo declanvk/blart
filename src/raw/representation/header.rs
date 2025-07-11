@@ -1,6 +1,6 @@
 //! Different header type
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use crate::{
     raw::{minimum_unchecked, InnerNode, LeafNode, NodePtr},
@@ -95,10 +95,10 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
             // we used the node to match the number of bytes,
             // by this we know that len < prefix len, but since we + 1,
             // to skip the key byte we have that len <= prefix len
-            std::hint::assert_unchecked(end <= self.prefix.len());
+            core::hint::assert_unchecked(end <= self.prefix.len());
 
             // SAFETY: This is by construction end = begin + len
-            std::hint::assert_unchecked(begin <= end);
+            core::hint::assert_unchecked(begin <= end);
         }
         self.prefix.copy_within(begin..end, 0);
     }
@@ -164,10 +164,10 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
             // we used the leaf to match the number of matching bytes,
             // by this we know that len < prefix len, but since we + 1,
             // to skip the key byte we have that len <= prefix len
-            std::hint::assert_unchecked(end <= leaf_key.len());
+            core::hint::assert_unchecked(end <= leaf_key.len());
 
             // SAFETY: This is by construction end = begin + len
-            std::hint::assert_unchecked(begin <= end);
+            core::hint::assert_unchecked(begin <= end);
         }
 
         let leaf_key = &leaf_key[begin..end];
@@ -206,14 +206,14 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
                 // expect that the depth never exceeds the key len.
                 // Because if this happens we ran out of bytes in the key to match
                 // and the whole process should be already finished
-                std::hint::assert_unchecked(current_depth <= leaf.len());
+                core::hint::assert_unchecked(current_depth <= leaf.len());
 
                 // SAFETY: By the construction of the prefix we know that this is inbounds
                 // since the prefix len guarantees it to us
-                std::hint::assert_unchecked(current_depth + len <= leaf.len());
+                core::hint::assert_unchecked(current_depth + len <= leaf.len());
 
                 // SAFETY: This can't overflow since len comes from a u32
-                std::hint::assert_unchecked(current_depth <= current_depth + len);
+                core::hint::assert_unchecked(current_depth <= current_depth + len);
             }
             let leaf = &leaf[current_depth..(current_depth + len)];
             (leaf, Some(leaf_ptr))
@@ -232,7 +232,7 @@ pub type NodePrefix<'a, K, V, const PREFIX_LEN: usize> = (
 );
 
 impl<const PREFIX_LEN: usize> Debug for Header<PREFIX_LEN> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Header")
             .field("num_children", &self.num_children)
             .field("prefix_len", &self.prefix_len)

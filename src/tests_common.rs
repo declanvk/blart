@@ -1,10 +1,11 @@
 //! Helper function for writing tests
 
-use std::{collections::HashSet, iter};
+use alloc::boxed::Box;
+use core::iter;
 
 #[cfg(test)]
 use crate::{
-    alloc::Global,
+    allocator::Global,
     raw::{InsertPrefixError, InsertResult, OpaqueNodePtr},
     AsBytes, TreeMap,
 };
@@ -302,8 +303,9 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
             .all(|expand| { expand.expanded_length > 0 }),
         "the prefix expansion length must be greater than 0."
     );
+    #[cfg(feature = "std")]
     {
-        let mut uniq_indices = HashSet::new();
+        let mut uniq_indices = std::collections::HashSet::new();
         assert!(
             expansions
                 .iter()

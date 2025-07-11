@@ -1,5 +1,5 @@
 use crate::{
-    alloc::Allocator,
+    allocator::Allocator,
     raw::{InnerNode, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
     AsBytes, TreeMap,
@@ -271,6 +271,7 @@ pub fn bytes_display_fmt(value: &impl AsBytes, f: &mut fmt::Formatter) -> fmt::R
 #[cfg(test)]
 mod tests {
     use crate::tests_common::swap;
+    use alloc::{string::String, vec::Vec};
 
     use super::*;
 

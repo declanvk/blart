@@ -1,5 +1,5 @@
 use crate::{
-    alloc::Allocator,
+    allocator::Allocator,
     raw::{
         deallocate_tree, maximum_unchecked, minimum_unchecked, ConcreteNodePtr, ExplicitMismatch,
         InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, TreePath,
@@ -8,7 +8,8 @@ use crate::{
     rust_nightly_apis::{likely, unlikely},
     AsBytes,
 };
-use std::{
+use alloc::boxed::Box;
+use core::{
     error::Error,
     fmt,
     marker::PhantomData,
@@ -362,7 +363,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     // expect that the depth never exceeds the key len.
                     // Because if this happens we ran out of bytes in the key to match
                     // and the whole process should be already finished
-                    std::hint::assert_unchecked(
+                    core::hint::assert_unchecked(
                         key_bytes_used + mismatch.matched_bytes < key_bytes.len(),
                     );
                 }
@@ -485,14 +486,14 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     // guarantees that the amount of bytes used is always < len of the key or key in
                     // the leaf if this was not true, then a
                     // [`InsertPrefixError`] would already be triggered
-                    std::hint::assert_unchecked(key_bytes_used < leaf_bytes.len());
-                    std::hint::assert_unchecked(key_bytes_used < key_bytes.len());
-                    std::hint::assert_unchecked(new_key_bytes_used < leaf_bytes.len());
-                    std::hint::assert_unchecked(new_key_bytes_used < key_bytes.len());
+                    core::hint::assert_unchecked(key_bytes_used < leaf_bytes.len());
+                    core::hint::assert_unchecked(key_bytes_used < key_bytes.len());
+                    core::hint::assert_unchecked(new_key_bytes_used < leaf_bytes.len());
+                    core::hint::assert_unchecked(new_key_bytes_used < key_bytes.len());
 
                     // SAFETY: This is safe by construction, since new_key_bytes_used =
                     // key_bytes_used + x
-                    std::hint::assert_unchecked(key_bytes_used <= new_key_bytes_used);
+                    core::hint::assert_unchecked(key_bytes_used <= new_key_bytes_used);
                 }
 
                 let mut new_n4 = InnerNode4::from_prefix(
@@ -1091,8 +1092,8 @@ where
                     // which would lead to this not holding, but since it already checked we know
                     // that current_depth < len of the key and the key in the leaf. But there is an
                     // edge case, if the root of the tree is a leaf than the depth can be = len
-                    std::hint::assert_unchecked(current_depth <= leaf_bytes.len());
-                    std::hint::assert_unchecked(current_depth <= key_bytes.len());
+                    core::hint::assert_unchecked(current_depth <= leaf_bytes.len());
+                    core::hint::assert_unchecked(current_depth <= key_bytes.len());
                 }
 
                 let prefix_size = leaf_bytes[current_depth..]
@@ -1133,7 +1134,7 @@ where
                     // that current_depth < len of the key and the key in the leaf. And also the
                     // only edge case can occur in the Leaf node, but if we reach a leaf not the
                     // function returns early, so it's impossible to be <=
-                    std::hint::assert_unchecked(current_depth < key_bytes.len());
+                    core::hint::assert_unchecked(current_depth < key_bytes.len());
                 }
 
                 match next_child_node {
@@ -1245,8 +1246,8 @@ where
                     // which would lead to this not holding, but since it already checked we know
                     // that current_depth < len of the key and the key in the leaf. But there is an
                     // edge case, if the root of the tree is a leaf than the depth can be = len
-                    std::hint::assert_unchecked(current_depth <= leaf_bytes.len());
-                    std::hint::assert_unchecked(current_depth <= key_bytes.len());
+                    core::hint::assert_unchecked(current_depth <= leaf_bytes.len());
+                    core::hint::assert_unchecked(current_depth <= key_bytes.len());
                 }
 
                 let prefix_size = leaf_bytes[current_depth..]
@@ -1300,7 +1301,7 @@ where
                     // that current_depth < len of the key and the key in the leaf. And also the
                     // only edge case can occur in the Leaf node, but if we reach a leaf not the
                     // function returns early, so it's impossible to be <=
-                    std::hint::assert_unchecked(current_depth < key_bytes.len());
+                    core::hint::assert_unchecked(current_depth < key_bytes.len());
                 }
 
                 match next_child_node {

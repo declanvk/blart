@@ -8,7 +8,7 @@
 //! pointed-to type, so that it can store several bits of information. For a
 //! type with alignment `A`, the number of available bits is `log_2(A)`.
 
-use std::{fmt, mem::align_of, num::NonZeroUsize, ptr::NonNull};
+use core::{fmt, mem::align_of, num::NonZeroUsize, ptr::NonNull};
 
 use crate::rust_nightly_apis::ptr;
 
@@ -184,20 +184,20 @@ impl<P, const MIN_BITS: u32> From<&mut P> for TaggedPointer<P, MIN_BITS> {
     }
 }
 
-impl<P, const MIN_BITS: u32> std::hash::Hash for TaggedPointer<P, MIN_BITS> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl<P, const MIN_BITS: u32> core::hash::Hash for TaggedPointer<P, MIN_BITS> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
 
 impl<P, const MIN_BITS: u32> Ord for TaggedPointer<P, MIN_BITS> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.0.cmp(&other.0)
     }
 }
 
 impl<P, const MIN_BITS: u32> PartialOrd for TaggedPointer<P, MIN_BITS> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
@@ -236,6 +236,7 @@ impl<P, const MIN_BITS: u32> fmt::Pointer for TaggedPointer<P, MIN_BITS> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::boxed::Box;
 
     #[test]
     fn successful_tag() {
@@ -429,13 +430,17 @@ mod tests {
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
         );
 
+        #[cfg(feature = "std")]
+        let arch = std::env::consts::ARCH;
+        #[cfg(not(feature = "std"))]
+        let arch = "no_std";
+
         // Something weird about the representation of u128 on intel architectures:
         // https://github.com/rust-lang/rust/issues/54341 - This was fixed in 1.77
         assert_eq!(
             TaggedPointer::<u128, 5>::ALIGNMENT,
             16,
-            "Target architecture [{}]",
-            std::env::consts::ARCH
+            "Target architecture [{arch}]",
         );
         assert_eq!(TaggedPointer::<u128, 3>::NUM_BITS, 4);
 

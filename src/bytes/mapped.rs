@@ -1,5 +1,6 @@
 use crate::{AsBytes, NoPrefixesBytes, OrderedBytes};
-use std::{
+use alloc::{boxed::Box, vec::Vec};
+use core::{
     fmt::Debug,
     hash::Hash,
     marker::PhantomData,
@@ -117,7 +118,7 @@ where
     D: Debug,
     B::Bytes: Clone,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Mapped")
             .field("repr", &self.repr.as_bytes())
             .field("original_value", &B::from_bytes(self.repr.clone()))
@@ -160,7 +161,7 @@ impl<B, D> Hash for Mapped<B, D>
 where
     B: BytesMapping<D>,
 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.repr.as_bytes().hash(state);
     }
 }
@@ -177,13 +178,13 @@ where
 macro_rules! impl_ord_for_mapped {
     ($(const $const_ident:ident: $const_ty:ty => )? $mapping:ty, $data:ty) => {
         impl<$(const $const_ident: $const_ty)?> PartialOrd for Mapped<$mapping, $data> {
-            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
                 Some(self.cmp(other))
             }
         }
 
         impl<$(const $const_ident: $const_ty)?> Ord for Mapped<$mapping, $data> {
-            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            fn cmp(&self, other: &Self) -> core::cmp::Ordering {
                 self.repr.cmp(&other.repr)
             }
         }
@@ -210,7 +211,7 @@ macro_rules! impl_ordered_bytes_ints {
     ($([$unsigned:ty, $signed:ty]),*) => {
         $(
             impl BytesMapping<$unsigned> for ToUBE {
-                type Bytes = [u8; std::mem::size_of::<$unsigned>()];
+                type Bytes = [u8; core::mem::size_of::<$unsigned>()];
 
                 fn to_bytes(value: $unsigned) -> Self::Bytes {
                     value.to_be_bytes()
@@ -232,7 +233,7 @@ macro_rules! impl_ordered_bytes_ints {
             unsafe impl OrderedBytes for Mapped<ToUBE, $unsigned> {}
 
             impl BytesMapping<$signed> for ToIBE {
-                type Bytes = [u8; std::mem::size_of::<$unsigned>()];
+                type Bytes = [u8; core::mem::size_of::<$unsigned>()];
 
                 fn to_bytes(value: $signed) -> Self::Bytes {
                     (bytemuck::cast::<_, $unsigned>(value) ^ (1 << (<$unsigned>::BITS - 1))).to_be_bytes()
@@ -298,11 +299,11 @@ macro_rules! impl_ordered_bytes_ints_arrays {
     ($mapping:ty;$elem:ty;array) => {
         impl<const N: usize> BytesMapping<[$elem; N]> for $mapping {
             // TODO: When we can multiply in const generics, we could make this
-            // type Bytes = [u8; const { N * std::mem::size_of::<$elem>() }];
+            // type Bytes = [u8; const { N * core::mem::size_of::<$elem>() }];
             type Bytes = Box<[u8]>;
 
             fn to_bytes(values: [$elem; N]) -> Self::Bytes {
-                let mut bytes = Vec::with_capacity(N * std::mem::size_of::<$elem>());
+                let mut bytes = Vec::with_capacity(N * core::mem::size_of::<$elem>());
 
                 for value in values {
                     bytes.extend(<Self as BytesMapping<$elem>>::to_bytes(value));
@@ -312,10 +313,10 @@ macro_rules! impl_ordered_bytes_ints_arrays {
             }
 
             fn from_bytes(bytes: Self::Bytes) -> [$elem; N] {
-                std::array::from_fn(|index| {
-                    let value_bytes_slice = &bytes[(index * std::mem::size_of::<$elem>())
-                        ..((index + 1) * std::mem::size_of::<$elem>())];
-                    let value_bytes_array: [u8; std::mem::size_of::<$elem>()] = value_bytes_slice.try_into().unwrap();
+                core::array::from_fn(|index| {
+                    let value_bytes_slice = &bytes[(index * core::mem::size_of::<$elem>())
+                        ..((index + 1) * core::mem::size_of::<$elem>())];
+                    let value_bytes_array: [u8; core::mem::size_of::<$elem>()] = value_bytes_slice.try_into().unwrap();
 
                     <Self as BytesMapping<$elem>>::from_bytes(
                         value_bytes_array
@@ -339,7 +340,7 @@ macro_rules! impl_ordered_bytes_ints_arrays {
             type Bytes = Box<[u8]>;
 
             fn to_bytes(values: $domain) -> Self::Bytes {
-                let mut bytes = Vec::with_capacity(values.len() * std::mem::size_of::<$elem>());
+                let mut bytes = Vec::with_capacity(values.len() * core::mem::size_of::<$elem>());
 
                 for value in Vec::from(values) {
                     bytes.extend(<Self as BytesMapping<$elem>>::to_bytes(value));
@@ -349,11 +350,11 @@ macro_rules! impl_ordered_bytes_ints_arrays {
             }
 
             fn from_bytes(bytes: Self::Bytes) -> $domain {
-                let num_elements = bytes.len() / std::mem::size_of::<$elem>();
+                let num_elements = bytes.len() / core::mem::size_of::<$elem>();
                 (0..num_elements).map(|index| {
-                    let value_bytes_slice = &bytes[(index * std::mem::size_of::<$elem>())
-                        ..((index + 1) * std::mem::size_of::<$elem>())];
-                    let value_bytes_array: [u8; std::mem::size_of::<$elem>()] = value_bytes_slice.try_into().unwrap();
+                    let value_bytes_slice = &bytes[(index * core::mem::size_of::<$elem>())
+                        ..((index + 1) * core::mem::size_of::<$elem>())];
+                    let value_bytes_array: [u8; core::mem::size_of::<$elem>()] = value_bytes_slice.try_into().unwrap();
 
                     <Self as BytesMapping<$elem>>::from_bytes(
                         value_bytes_array
@@ -380,7 +381,7 @@ macro_rules! impl_ordered_bytes_nonzero_ints {
     ($([$nonzero_unsigned:ty; $unsigned:ty, $nonzero_signed:ty; $signed:ty]),*) => {
         $(
             impl BytesMapping<$nonzero_unsigned> for ToUBE {
-                type Bytes = [u8; std::mem::size_of::<$unsigned>()];
+                type Bytes = [u8; core::mem::size_of::<$unsigned>()];
 
                 fn to_bytes(value: $nonzero_unsigned) -> Self::Bytes {
                     value.get().to_be_bytes()
@@ -403,7 +404,7 @@ macro_rules! impl_ordered_bytes_nonzero_ints {
             unsafe impl OrderedBytes for Mapped<ToUBE, $nonzero_unsigned> {}
 
             impl BytesMapping<$nonzero_signed> for ToIBE {
-                type Bytes = [u8; std::mem::size_of::<$unsigned>()];
+                type Bytes = [u8; core::mem::size_of::<$unsigned>()];
 
                 fn to_bytes(value: $nonzero_signed) -> Self::Bytes {
                     (bytemuck::cast::<_, $unsigned>(value.get()) ^ (1 << (<$unsigned>::BITS - 1))).to_be_bytes()
@@ -643,7 +644,7 @@ macro_rules! as_bytes_for_tuples {
                     // The mapped bytes type of the Concat mapping type must have an order
                     <ConcatTuple<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {
-                    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
                         Some(self.cmp(other))
                     }
                 }
@@ -672,7 +673,7 @@ macro_rules! as_bytes_for_tuples {
                     // The mapped bytes type of the Concat mapping type must have an order
                     <ConcatTuple<($([< M $ty >], )+)> as BytesMapping<($($ty,)+)>>::Bytes: Ord,
                 {
-                    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
                         self.repr.cmp(&other.repr)
                     }
                 }
@@ -725,7 +726,7 @@ as_bytes_for_tuples!(
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
-    use std::{cmp::Ordering, fmt::Debug};
+    use core::{cmp::Ordering, fmt::Debug};
 
     fn check_is_ordered_bytes<T: OrderedBytes>() {}
 

@@ -1,11 +1,11 @@
-use std::{
+use core::{
     iter::FusedIterator,
     mem::{self, ManuallyDrop},
     ptr,
 };
 
 use crate::{
-    alloc::{Allocator, Global},
+    allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{deallocate_leaves, deallocate_tree_non_leaves, NodePtr, RawIterator},
     TreeMap,
@@ -238,10 +238,8 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> ExactSizeIterator
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    };
+    use alloc::sync::Arc;
+    use core::sync::atomic::{AtomicUsize, Ordering};
 
     use crate::{tests_common::swap, AsBytes, NoPrefixesBytes, OrderedBytes};
 
@@ -303,13 +301,13 @@ mod tests {
     }
 
     impl<T: Ord> Ord for DropCounter<T> {
-        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        fn cmp(&self, other: &Self) -> core::cmp::Ordering {
             self.1.cmp(&other.1)
         }
     }
 
     impl<T: PartialOrd> PartialOrd for DropCounter<T> {
-        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
             self.1.partial_cmp(&other.1)
         }
     }

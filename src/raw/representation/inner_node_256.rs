@@ -1,7 +1,7 @@
 use crate::raw::{
     Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
-use std::{
+use core::{
     fmt,
     iter::{Enumerate, FusedIterator},
     mem::MaybeUninit,
@@ -10,7 +10,7 @@ use std::{
 };
 
 #[cfg(feature = "nightly")]
-use std::{
+use core::{
     iter::FilterMap,
     simd::{cmp::SimdPartialEq, usizex64},
 };
@@ -153,7 +153,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
 
     fn range(
         &self,
-        bound: impl std::ops::RangeBounds<u8>,
+        bound: impl core::ops::RangeBounds<u8>,
     ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + FusedIterator {
         {
@@ -173,9 +173,9 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
 
         let start = bound.start_bound().map(|val| usize::from(*val));
         let key_offset = match bound.start_bound() {
-            std::ops::Bound::Included(val) => *val,
-            std::ops::Bound::Excluded(val) => val.saturating_add(1),
-            std::ops::Bound::Unbounded => 0,
+            core::ops::Bound::Included(val) => *val,
+            core::ops::Bound::Excluded(val) => val.saturating_add(1),
+            core::ops::Bound::Unbounded => 0,
         };
         let end = bound.end_bound().map(|val| usize::from(*val));
 
@@ -193,7 +193,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
         // SAFETY: Due to niche optimization Option<NonNull> has the same
         // size as NonNull and NonNull has the same size as usize
         // so it's safe to transmute
-        let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
+        let child_pointers: &[usize; 256] = unsafe { core::mem::transmute(&self.child_pointers) };
         let empty = usizex64::splat(0);
         let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
             .simd_eq(empty)
@@ -221,7 +221,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
         unsafe {
             // SAFETY: key can be at up to 256, but we know that we have
             // at least one inner child, it's guarantee to be in bounds
-            std::hint::assert_unchecked(key < self.child_pointers.len());
+            core::hint::assert_unchecked(key < self.child_pointers.len());
         }
 
         // SAFETY: Covered by the containing function
@@ -247,7 +247,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
         // SAFETY: Due to niche optimization Option<NonNull> has the same
         // size as NonNull and NonNull has the same size as usize
         // so it's safe to transmute
-        let child_pointers: &[usize; 256] = unsafe { std::mem::transmute(&self.child_pointers) };
+        let child_pointers: &[usize; 256] = unsafe { core::mem::transmute(&self.child_pointers) };
         let empty = usizex64::splat(0);
         let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
             .simd_eq(empty)
@@ -277,7 +277,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V,
 
         unsafe {
             // SAFETY: idx can be at up to 255, so it's in bounds
-            std::hint::assert_unchecked(key < self.child_pointers.len());
+            core::hint::assert_unchecked(key < self.child_pointers.len());
         }
 
         // SAFETY: covered by the containing function
@@ -337,7 +337,8 @@ impl<K, V, const PREFIX_LEN: usize> FusedIterator for Node256Iter<'_, K, V, PREF
 
 #[cfg(test)]
 mod tests {
-    use std::ops::{Bound, RangeBounds};
+    use alloc::{boxed::Box, vec::Vec};
+    use core::ops::{Bound, RangeBounds};
 
     use crate::raw::{
         representation::tests::{

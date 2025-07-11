@@ -6,6 +6,7 @@ use crate::{
     tests_common::{generate_key_with_prefix, swap, PrefixExpansion},
     TreeMap,
 };
+use alloc::{boxed::Box, string::String};
 
 #[test]
 fn lookup_on_non_copy_leaf() {

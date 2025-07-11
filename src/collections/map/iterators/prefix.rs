@@ -1,10 +1,10 @@
 use crate::{
-    alloc::{Allocator, Global},
+    allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{maximum_unchecked, minimum_unchecked, RawIterator},
     AsBytes, TreeMap,
 };
-use std::iter::FusedIterator;
+use core::iter::FusedIterator;
 
 use super::{
     find_terminating_node, InnerNodeSearchResult, InnerNodeSearchResultReason,
@@ -188,6 +188,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{tests_common::swap, TreeMap};
+    use alloc::vec::Vec;
 
     use super::*;
 

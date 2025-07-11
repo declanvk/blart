@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - ReleaseDate
 
+- no_std support with `std` feature flag that is enabled by default.
+
 ## [0.4.0] - 2025-07-10
 
 ### Added

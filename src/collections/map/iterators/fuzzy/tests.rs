@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use alloc::ffi::CString;
 
 use crate::{
     raw::visitor::{TreeStats, TreeStatsCollector},

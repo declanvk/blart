@@ -1,7 +1,7 @@
-use std::fmt;
+use core::fmt;
 
 use crate::{
-    alloc::Allocator,
+    allocator::Allocator,
     raw::{
         operations::lookup, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, TreePath,
         TreePathSearch,

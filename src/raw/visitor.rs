@@ -1,7 +1,9 @@
 //! Utilities for inspecting the trie structure.
 
+#[cfg(feature = "std")]
 mod pretty_printer;
 mod tree_stats;
+#[cfg(feature = "std")]
 mod well_formed;
 
 use super::{
@@ -9,8 +11,10 @@ use super::{
     NodePtr, OpaqueNodePtr,
 };
 
+#[cfg(feature = "std")]
 pub use pretty_printer::*;
 pub use tree_stats::*;
+#[cfg(feature = "std")]
 pub use well_formed::*;
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the

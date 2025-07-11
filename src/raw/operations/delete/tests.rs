@@ -1,9 +1,13 @@
 use super::*;
 use crate::{
-    alloc::Global,
+    allocator::Global,
     raw::{deallocate_tree, search_unchecked, NodeType},
     tests_common::{generate_key_with_prefix, setup_tree_from_entries, swap, PrefixExpansion},
     TreeMap,
+};
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
 };
 
 #[test]

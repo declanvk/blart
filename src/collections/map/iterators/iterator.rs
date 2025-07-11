@@ -1,7 +1,7 @@
-use std::iter::FusedIterator;
+use core::iter::FusedIterator;
 
 use crate::{
-    alloc::{Allocator, Global},
+    allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::RawIterator,
     TreeMap,
@@ -249,9 +249,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{tests_common::generate_key_fixed_length, TreeMap};
-
     use super::*;
+    use crate::{tests_common::generate_key_fixed_length, TreeMap};
+    use alloc::{boxed::Box, vec::Vec};
 
     #[test]
     fn iterators_are_send_sync() {
