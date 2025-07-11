@@ -17,3 +17,6 @@ pub(crate) use deallocate::*;
 
 mod clone;
 pub(crate) use clone::*;
+
+mod bulk_insert;
+pub(crate) use bulk_insert::*;

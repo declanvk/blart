@@ -56,6 +56,7 @@ enum Action {
     Prefix(Box<[u8]>),
     IntoIter { take_front: usize, take_back: usize },
     Retain(RetainKind),
+    SplitOff(Box<[u8]>),
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
@@ -264,6 +265,17 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                         i % 2 == 0
                     });
                 },
+            },
+            Action::SplitOff(split_key) => {
+                let tree_removed = tree.split_off(&split_key);
+                let oracle_removed = oracle.split_off(&split_key);
+
+                assert!(
+                    tree_removed.iter().eq(oracle_removed.iter()),
+                    "{:?} != {:?}",
+                    tree,
+                    oracle
+                );
             },
         }
 
