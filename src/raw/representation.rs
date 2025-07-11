@@ -1,11 +1,11 @@
 //! Trie node representation
 
 use crate::{
-    alloc::{do_alloc, Allocator},
+    allocator::{do_alloc, Allocator},
     tagged_pointer::TaggedPointer,
     AsBytes,
 };
-use std::{
+use core::{
     alloc::Layout,
     fmt,
     hash::Hash,
@@ -63,7 +63,7 @@ impl NodeType {
     ///  - `src` must be a valid variant from the enum
     pub const unsafe fn from_u8(src: u8) -> NodeType {
         // SAFETY: `NodeType` is repr(u8)
-        unsafe { std::mem::transmute::<u8, NodeType>(src) }
+        unsafe { core::mem::transmute::<u8, NodeType>(src) }
     }
 
     /// Return true if an [`InnerNode`] with the given [`NodeType`] and
@@ -142,7 +142,7 @@ impl<K, V, const PREFIX_LEN: usize> PartialEq for OpaqueNodePtr<K, V, PREFIX_LEN
 }
 
 impl<K, V, const PREFIX_LEN: usize> Hash for OpaqueNodePtr<K, V, PREFIX_LEN> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
@@ -407,7 +407,7 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
         unsafe { NodePtr(NonNull::new_unchecked(ptr)) }
     }
 
-    /// Allocate the given [`Node`] on the [`std::alloc::Global`] heap and
+    /// Allocate the given [`Node`] on the [`alloc::alloc::Global`] heap and
     /// return a [`NodePtr`] that wrap the raw pointer.
     pub fn allocate_node_ptr(node: N, alloc: &impl Allocator) -> Self {
         let layout = Layout::new::<mem::MaybeUninit<N>>();
@@ -962,7 +962,7 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
             // expect that the depth never exceeds the key len.
             // Because if this happens we ran out of bytes in the key to match
             // and the whole process should be already finished
-            std::hint::assert_unchecked(current_depth <= key.len());
+            core::hint::assert_unchecked(current_depth <= key.len());
         }
 
         let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
@@ -1414,7 +1414,8 @@ mod tests {
     use crate::rust_nightly_apis::ptr::const_addr;
 
     use super::*;
-    use std::mem;
+    use alloc::{boxed::Box, vec::Vec};
+    use core::mem;
 
     // This test is important because it verifies that we can transform a tagged
     // pointer to a type with large and small alignment and back without issues.

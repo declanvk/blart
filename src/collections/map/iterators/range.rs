@@ -1,7 +1,7 @@
 //! This module contains types and functions relating to iterating over a
 //! range of the [`TreeMap`].
 
-use std::{
+use core::{
     cmp::Ordering,
     fmt,
     iter::FusedIterator,
@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    alloc::{Allocator, Global},
+    allocator::{Allocator, Global},
     map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
     raw::{
         maximum_unchecked, minimum_unchecked, AttemptOptimisticPrefixMatch, ConcreteNodePtr,
@@ -615,6 +615,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::tests_common::{generate_key_with_prefix, swap, PrefixExpansion};
+    use alloc::{boxed::Box, vec::Vec};
 
     use super::*;
 

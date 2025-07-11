@@ -1,7 +1,7 @@
-use std::mem::replace;
+use core::mem::replace;
 
 use crate::{
-    alloc::{Allocator, Global},
+    allocator::{Allocator, Global},
     raw::{DeletePoint, InsertParentNodeChange, InsertPoint, InsertResult, TreePath},
     AsBytes, TreeMap,
 };
@@ -382,7 +382,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::CString;
+    #[cfg(feature = "std")]
+    use alloc::{boxed::Box, vec::Vec};
+    use alloc::{ffi::CString, string::String};
 
     use crate::TreeMap;
 
@@ -516,6 +518,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn regression_01cf3c554fd1da17307a8451972a823db68d4c04() {
         // [
@@ -543,6 +546,7 @@ mod tests {
         let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn regression_a1d834472bf0d652a9ad39eab5d6e173825c80dc() {
         // [
@@ -596,6 +600,7 @@ mod tests {
         let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn regression_0a766df3f0e1c88c45e5ff54d247731a8efefe08() {
         // [
@@ -680,6 +685,7 @@ mod tests {
         let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn empty_tree_insert_remove() {
         let mut tree = TreeMap::<[u8; 0], i32>::new();
@@ -689,6 +695,7 @@ mod tests {
         let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn replace_existing_leaf() {
         let mut tree = TreeMap::<[u8; 2], i32>::new();

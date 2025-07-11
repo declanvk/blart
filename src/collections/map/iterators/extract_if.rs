@@ -1,11 +1,11 @@
 use crate::{
-    alloc::Allocator,
+    allocator::Allocator,
     collections::map::TreeMap,
     map::{find_leaf_pointer_for_bound, validate_range_bounds},
     raw::{search_for_delete_point, LeafNode, NodePtr, RawIterator},
     AsBytes,
 };
-use std::{iter::FusedIterator, ops::Bound};
+use core::{iter::FusedIterator, ops::Bound};
 
 /// An iterator which uses a closure to determine if an element should be
 /// removed.
@@ -207,6 +207,7 @@ mod tests {
         tests_common::{generate_key_fixed_length, swap},
         TreeMap,
     };
+    use alloc::vec::Vec;
 
     #[test]
     fn extract_if_simple() {
@@ -268,6 +269,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn tree_map_extract_if_interrupted() {
         // Exactly the same as `retain`, on panic the iteration should stop.
 
