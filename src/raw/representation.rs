@@ -781,9 +781,8 @@ pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::De
         Self::from_header(Header::empty())
     }
 
-    /// Create a new [`InnerNode`] using
-    /// `prefix` as the node prefix and
-    /// `prefix_len` as the node prefix length and
+    /// Create a new [`InnerNode`] using `prefix` as the node prefix and
+    /// `prefix_len` as the node prefix length.
     ///
     /// This is done because when a prefix mismatch happens
     /// the length of the mismatch can be grater or equal to
