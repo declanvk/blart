@@ -6,11 +6,12 @@ use crate::visitor::{MalformedTreeError, WellFormedChecker};
 use crate::{
     allocator::{Allocator, Global},
     raw::{
-        clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
-        maximum_unchecked, minimum_unchecked, prefix_search_unchecked, search_for_delete_point,
-        search_for_force_insert_point, search_for_insert_point, search_unchecked, CloneResult,
-        DeletePoint, DeleteResult, ForceInsertPoint, InsertKind::Exact, InsertPoint,
-        InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, RawIterator,
+        bulk_insert, bulk_insert_unchecked, clone_unchecked, deallocate_tree,
+        find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked, minimum_unchecked,
+        prefix_search_unchecked, search_for_delete_point, search_for_force_insert_point,
+        search_for_insert_point, search_unchecked, BulkInsertOutput, CloneResult, DeletePoint,
+        DeleteResult, ForceInsertPoint, InsertKind::Exact, InsertPoint, InsertPrefixError,
+        InsertResult, LeafNode, NodePtr, OpaqueNodePtr, RawIterator,
     },
     rust_nightly_apis::hasher_write_length_prefix,
     AsBytes, NoPrefixesBytes,
@@ -1467,19 +1468,40 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         // TODO(opt): Optimize this by doing a tree search to find split point and then
         // cutting the tree. This should save time versus reconstructing a whole new
         // tree
+        let alloc = self.alloc.clone();
 
-        let mut new_tree = TreeMap::with_prefix_len_in(self.alloc.clone());
+        let mut entries = self
+            .extract_if(.., |key, _| split_key.as_bytes() <= key.borrow().as_bytes())
+            .peekable();
 
-        for (key, value) in
-            self.extract_if(.., |key, _| split_key.as_bytes() <= key.borrow().as_bytes())
-        {
-            // PANIC SAFETY: This will not panic because the property of any existing tree
-            // containing no keys that are prefixes of any other key holds when the tree is
-            // split into any portion.
-            let _ = new_tree.try_insert(key, value).unwrap();
+        let (state, num_entries) = if entries.peek().is_none() {
+            (None, 0)
+        } else {
+            // It is alright to use the `_unchecked` version here because we know that the
+            // input will be sorted and there will be no prefixes because the keys come in
+            // order from the leaves of an existing radix tree.
+            let BulkInsertOutput {
+                root,
+                min_leaf,
+                max_leaf,
+                num_entries,
+            } = bulk_insert_unchecked(entries, &alloc);
+
+            (
+                Some(NonEmptyTree {
+                    root,
+                    min_leaf,
+                    max_leaf,
+                }),
+                num_entries,
+            )
+        };
+
+        TreeMap {
+            num_entries,
+            state,
+            alloc,
         }
-
-        new_tree
     }
 
     /// Creates an iterator that visits elements (key-value pairs) in the
@@ -1922,16 +1944,50 @@ where
     }
 }
 
+#[inline]
+fn from_container_no_prefix_bytes<K, V, const PREFIX_LEN: usize>(
+    mut entries: impl AsMut<[(K, V)]> + IntoIterator<Item = (K, V)>,
+) -> TreeMap<K, V, PREFIX_LEN>
+where
+    K: NoPrefixesBytes,
+{
+    let num_entries = entries.as_mut().len();
+    let alloc = Global;
+    let state = if entries.as_mut().is_empty() {
+        None
+    } else {
+        let BulkInsertOutput {
+            root,
+            min_leaf,
+            max_leaf,
+            ..
+        } = bulk_insert(entries, &alloc)
+            .expect("with NoPrefixesBytes bound we can assume there will be no prefixes");
+
+        Some(NonEmptyTree {
+            root,
+            min_leaf,
+            max_leaf,
+        })
+    };
+
+    TreeMap {
+        state,
+        num_entries,
+        alloc,
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize, const N: usize> From<[(K, V); N]> for TreeMap<K, V, PREFIX_LEN>
 where
     K: NoPrefixesBytes,
 {
     fn from(arr: [(K, V); N]) -> Self {
-        let mut map = TreeMap::with_prefix_len();
-        for (key, value) in arr {
-            let _ = map.insert(key, value);
+        if arr.is_empty() {
+            return TreeMap::with_prefix_len();
         }
-        map
+
+        from_container_no_prefix_bytes(arr)
     }
 }
 
@@ -1940,11 +1996,11 @@ where
     K: NoPrefixesBytes,
 {
     fn from(arr: Vec<(K, V)>) -> Self {
-        let mut map = TreeMap::with_prefix_len();
-        for (key, value) in arr {
-            let _ = map.insert(key, value);
+        if arr.is_empty() {
+            return TreeMap::with_prefix_len();
         }
-        map
+
+        from_container_no_prefix_bytes(arr)
     }
 }
 
