@@ -423,9 +423,10 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     // Scope header mutation so that the mutable reference is held for the minimum
                     // time required
 
-                    // SAFETY: We hold a mutable reference, so creating a mutable reference is safe.
-                    // We also know for certain that this is an inner node pointer, because of the
-                    // insert case we're in
+                    // SAFETY: We hold a mutable reference to the tree, so creating a mutable
+                    // reference to a header within the tree is safe. We also know for certain that
+                    // this is an inner node pointer, because mismatch prefix can only apply to an
+                    // inner node.
                     let header = unsafe { mismatched_inner_node_ptr.header_mut_unchecked() };
 
                     // In this case we trim the current prefix, by skipping the matched bytes + 1
@@ -434,7 +435,11 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     let shrink_len = mismatch.matched_bytes + 1;
                     match mismatch.leaf_ptr {
                         Some(leaf_ptr) => {
-                            header.ltrim_by_with_leaf(shrink_len, key_bytes_used, leaf_ptr)
+                            // SAFETY: This function is not called concurrently with any other read
+                            // of modify because we hold a mutable reference to the overall tree.
+                            unsafe {
+                                header.ltrim_by_with_leaf(shrink_len, key_bytes_used, leaf_ptr)
+                            }
                         },
                         None => {
                             header.ltrim_by(shrink_len);

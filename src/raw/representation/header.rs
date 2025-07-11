@@ -142,8 +142,15 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         self.num_children = 0;
     }
 
+    /// Remove the `len` length starting portion of this header's prefix and
+    /// refill the prefix value with contents from the given leaf.
+    ///
+    /// # Safety
+    ///
+    /// This function must not be called concurrently with any other read or
+    /// modification of the given leaf or header.
     #[inline]
-    pub fn ltrim_by_with_leaf<K: AsBytes, V>(
+    pub unsafe fn ltrim_by_with_leaf<K: AsBytes, V>(
         &mut self,
         len: usize,
         depth: usize,

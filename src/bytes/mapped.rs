@@ -298,7 +298,7 @@ macro_rules! impl_ordered_bytes_ints_arrays {
     };
     ($mapping:ty;$elem:ty;array) => {
         impl<const N: usize> BytesMapping<[$elem; N]> for $mapping {
-            // TODO: When we can multiply in const generics, we could make this
+            // TODO(opt): When we can multiply in const generics, we could make this
             // type Bytes = [u8; const { N * core::mem::size_of::<$elem>() }];
             type Bytes = Box<[u8]>;
 
@@ -567,7 +567,7 @@ macro_rules! as_bytes_for_tuples {
                     [< M $ty >]: BytesMapping<$ty, Bytes = [u8; [< LEN_ $ty >]]>,
                 )+
                 {
-                    // TODO: Convert this to use an array of `[u8; sum!($([< LEN_ $ty >],)+)]` once const generics
+                    // TODO(opt): Convert this to use an array of `[u8; sum!($([< LEN_ $ty >],)+)]` once const generics
                     // supports that
                     type Bytes = Box<[u8]>;
 
