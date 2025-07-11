@@ -32,9 +32,11 @@ bytemuck = { version = "1.16.1", features = ["min_const_generics"] }
 paste = "1.0.15"
 
 [features]
+default = ["std"]
 nightly = []
 bench-perf-events = []
 allocator-api2 = ["dep:allocator-api2"]
+std = []
 
 [dev-dependencies]
 argh = "0.1.12"
@@ -57,3 +59,19 @@ harness = false
 
 [profile.bench]
 debug = true
+
+[[example]]
+name = "tree_viz"
+required-features = ["std"]
+
+[[test]]
+name = "memory_usage_fixed_length_dense"
+required-features = ["std"]
+
+[[test]]
+name = "memory_usage_large_prefixes"
+required-features = ["std"]
+
+[[test]]
+name = "memory_usage_skewed"
+required-features = ["std"]

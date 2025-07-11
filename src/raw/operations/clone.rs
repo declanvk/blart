@@ -1,12 +1,13 @@
 //! This module contains the implementation of `clone()` for the trie.
 
 use crate::{
-    alloc::Allocator,
+    allocator::Allocator,
     raw::{
         ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, LeafNode, Node, NodePtr, OpaqueNodePtr,
     },
     AsBytes,
 };
+use alloc::vec::Vec;
 
 /// The result of cloning a trie
 #[derive(Debug)]
@@ -276,9 +277,10 @@ pub unsafe fn clone_unchecked<
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
-    use std::fmt;
+    use alloc::boxed::Box;
+    use core::fmt;
 
     use crate::{
         tests_common::{

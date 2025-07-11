@@ -10,7 +10,7 @@
 /// Calling this when the content is not yet fully initialized causes
 /// undefined behavior.
 ///
-/// See [`assume_init_ref`][std::mem::MaybeUninit::assume_init_ref] for more
+/// See [`assume_init_ref`][core::mem::MaybeUninit::assume_init_ref] for more
 /// details and examples.
 ///
 /// **This is a unstable API copied from the Rust standard library, tracking
@@ -19,7 +19,7 @@
 /// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
 #[inline]
 pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
-    slice: &[std::mem::MaybeUninit<T>],
+    slice: &[core::mem::MaybeUninit<T>],
 ) -> &[T] {
     #[cfg(feature = "nightly")]
     {
@@ -34,7 +34,7 @@ pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
         // layout as `T`. The pointer obtained is valid since it refers to memory owned
         // by `slice` which is a reference and thus guaranteed to be valid for
         // reads.
-        unsafe { &*(slice as *const [std::mem::MaybeUninit<T>] as *const [T]) }
+        unsafe { &*(slice as *const [core::mem::MaybeUninit<T>] as *const [T]) }
     }
 }
 
@@ -47,7 +47,7 @@ pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
 /// Calling this when the content is not yet fully initialized causes
 /// undefined behavior.
 ///
-/// See [`assume_init_mut`][std::mem::MaybeUninit::assume_init_mut] for more
+/// See [`assume_init_mut`][core::mem::MaybeUninit::assume_init_mut] for more
 /// details and examples.
 ///
 /// **This is a unstable API copied from the Rust standard library, tracking
@@ -56,7 +56,7 @@ pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
 /// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
 #[inline]
 pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
-    slice: &mut [std::mem::MaybeUninit<T>],
+    slice: &mut [core::mem::MaybeUninit<T>],
 ) -> &mut [T] {
     #[cfg(feature = "nightly")]
     {
@@ -69,7 +69,7 @@ pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
         // SAFETY: similar to safety notes for `maybe_uninit_slice_assume_init_ref`, but
         // we have a mutable reference which is also guaranteed to be valid for
         // writes.
-        unsafe { &mut *(slice as *mut [std::mem::MaybeUninit<T>] as *mut [T]) }
+        unsafe { &mut *(slice as *mut [core::mem::MaybeUninit<T>] as *mut [T]) }
     }
 }
 
@@ -87,7 +87,7 @@ pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
 ///
 /// This method is only for providing domain separation.  If you want to
 /// hash a `usize` that represents part of the *data*, then it's important
-/// that you pass it to [`Hasher::write_usize`][std::hash::Hasher::write_usize]
+/// that you pass it to [`Hasher::write_usize`][core::hash::Hasher::write_usize]
 /// instead of to this method.
 ///
 /// # Note to Implementers
@@ -101,10 +101,10 @@ pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
 ///
 /// [issue-96762]: https://github.com/rust-lang/rust/issues/96762
 #[inline]
-pub fn hasher_write_length_prefix<H: std::hash::Hasher>(state: &mut H, num_entries: usize) {
+pub fn hasher_write_length_prefix<H: core::hash::Hasher>(state: &mut H, num_entries: usize) {
     #[cfg(feature = "nightly")]
     {
-        <H as std::hash::Hasher>::write_length_prefix(state, num_entries);
+        <H as core::hash::Hasher>::write_length_prefix(state, num_entries);
     }
 
     #[cfg(not(feature = "nightly"))]
@@ -126,7 +126,7 @@ pub fn hasher_write_length_prefix<H: std::hash::Hasher>(state: &mut H, num_entri
 #[cfg(feature = "nightly")]
 macro_rules! likely {
     ($b:expr) => {
-        std::hint::likely($b)
+        core::hint::likely($b)
     };
 }
 
@@ -163,7 +163,7 @@ pub(crate) use likely;
 #[cfg(feature = "nightly")]
 macro_rules! unlikely {
     ($b:expr) => {
-        std::hint::unlikely($b)
+        core::hint::unlikely($b)
     };
 }
 
@@ -191,7 +191,7 @@ pub(crate) mod ptr {
     //! This module contains shim functions for strict-provenance stuff related
     //! to pointers
 
-    use std::{num::NonZeroUsize, ptr::NonNull};
+    use core::{num::NonZeroUsize, ptr::NonNull};
 
     #[inline]
     #[cfg(not(feature = "nightly"))]
@@ -200,7 +200,7 @@ pub(crate) mod ptr {
         // FIXME(strict_provenance_magic): I am magic and should be a compiler
         // intrinsic. SAFETY: Pointer-to-integer transmutes are valid (if you
         // are okay with losing the provenance).
-        unsafe { std::mem::transmute(ptr.cast::<()>()) }
+        unsafe { core::mem::transmute(ptr.cast::<()>()) }
     }
 
     #[inline]

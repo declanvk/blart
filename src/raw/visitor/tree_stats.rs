@@ -1,8 +1,8 @@
-use std::ops::Add;
+use core::ops::Add;
 
 use crate::{
-    alloc::Allocator,
-    raw::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode},
+    allocator::Allocator,
+    raw::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
     AsBytes, TreeMap,
 };
@@ -15,22 +15,34 @@ pub struct TreeStatsCollector {
 }
 
 impl TreeStatsCollector {
-    /// Run the tree stats collection on the given root node, then return the
+    /// Run the tree stats collection on the given tree, then return the
     /// accumulated stats.
     pub fn collect<K: AsBytes, V, A: Allocator, const PREFIX_LEN: usize>(
         tree: &TreeMap<K, V, PREFIX_LEN, A>,
     ) -> Option<TreeStats> {
-        if let Some(state) = &tree.state {
-            let mut collector = TreeStatsCollector {
-                current: TreeStats::default(),
-            };
+        tree.state
+            .as_ref()
+            .map(|state| unsafe { Self::collect_ptr(&state.root) })
+    }
 
-            state.root.visit_with(&mut collector);
+    /// Run the tree stats collection on the given root node, then return the
+    /// accumulated stats.
+    ///
+    /// # Safety
+    ///  - `root` must be a pointer to a well formed tree.
+    ///  - This function cannot be called concurrently with any mutating
+    ///    operation on `root` or any child node of `root`. This function will
+    ///    read to all children in the given tree.
+    pub unsafe fn collect_ptr<K: AsBytes, V, const PREFIX_LEN: usize>(
+        root: &OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> TreeStats {
+        let mut collector = TreeStatsCollector {
+            current: TreeStats::default(),
+        };
 
-            Some(collector.current)
-        } else {
-            None
-        }
+        root.visit_with(&mut collector);
+
+        collector.current
     }
 }
 
@@ -77,7 +89,7 @@ impl InnerNodeStats {
         self.sum_capped_prefix_len_bytes += t.header().capped_prefix_len();
         self.max_prefix_len_bytes = self.max_prefix_len_bytes.max(t.header().prefix_len());
 
-        self.mem_usage += std::mem::size_of_val(t);
+        self.mem_usage += core::mem::size_of_val(t);
     }
 
     /// How many free slots
@@ -237,13 +249,13 @@ where
     fn visit_leaf(&mut self, t: &LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
         self.current.leaf.count += 1;
         self.current.leaf.sum_key_bytes += t.key_ref().as_bytes().len();
-        self.current.leaf.mem_usage += std::mem::size_of_val(t);
+        self.current.leaf.mem_usage += core::mem::size_of_val(t);
     }
 }
 
-impl std::fmt::Display for TreeStats {
+impl core::fmt::Display for TreeStats {
     #[rustfmt::skip]
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let TreeStats {
             node4,
             node16,
@@ -275,6 +287,7 @@ impl std::fmt::Display for TreeStats {
 mod tests {
     use super::*;
     use crate::{tests_common::generate_key_fixed_length, TreeMap};
+    use alloc::vec::Vec;
 
     #[test]
     fn mostly_empty_tree_stats_fixed_length_tree() {

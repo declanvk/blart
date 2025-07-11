@@ -32,6 +32,7 @@ do
     # We test benchmarks in release, otherwise they are too slow
     cargo "${TOOLCHAIN_ARG}" test   $extra_args --benches --release
     cargo "${TOOLCHAIN_ARG}" test   $extra_args --doc
+    cargo "${TOOLCHAIN_ARG}" test  $extra_args --lib --bins --examples --tests --no-default-features
 
     cargo "${TOOLCHAIN_ARG}" clippy $extra_args --all-targets
     cargo "${TOOLCHAIN_ARG}" doc    $extra_args --no-deps --document-private-items

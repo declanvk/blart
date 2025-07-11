@@ -1,5 +1,5 @@
 use crate::{
-    alloc::{Allocator, Global},
+    allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{
         ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
@@ -7,7 +7,8 @@ use crate::{
     },
     AsBytes, TreeMap,
 };
-use std::{iter::FusedIterator, mem::MaybeUninit};
+use alloc::{boxed::Box, vec::Vec};
+use core::{iter::FusedIterator, mem::MaybeUninit};
 
 pub(crate) struct StackArena {
     data: Vec<MaybeUninit<usize>>,
@@ -47,7 +48,7 @@ impl StackArena {
             // SAFETY: Every time we call `Self::push` the
             // vector is extended by `self.n`, so it's safe to
             // assume this
-            std::hint::assert_unchecked(self.data.len() % self.n == 0);
+            core::hint::assert_unchecked(self.data.len() % self.n == 0);
         }
 
         if self.data.is_empty() {
@@ -64,7 +65,7 @@ impl StackArena {
         unsafe {
             // SAFETY: As said in the top level comment of the function,
             // buffer length == self.n
-            std::hint::assert_unchecked(buffer.len() == s.len());
+            core::hint::assert_unchecked(buffer.len() == s.len());
         }
 
         buffer.copy_from_slice(s);
@@ -75,7 +76,7 @@ impl StackArena {
         // expect after the `Self::push` call that the returned buffer is
         // filled with initialized data, them is safe to transmute here
         Some(unsafe {
-            std::mem::transmute::<&mut &mut [std::mem::MaybeUninit<usize>], &mut &mut [usize]>(
+            core::mem::transmute::<&mut &mut [core::mem::MaybeUninit<usize>], &mut &mut [usize]>(
                 buffer,
             )
         })
@@ -102,9 +103,9 @@ pub(crate) fn edit_dist(
 ) -> bool {
     unsafe {
         // SAFETY: Covered by the top level comment
-        std::hint::assert_unchecked(old.len() == new.len());
-        std::hint::assert_unchecked(!old.is_empty());
-        std::hint::assert_unchecked(key.len() + 1 == old.len());
+        core::hint::assert_unchecked(old.len() == new.len());
+        core::hint::assert_unchecked(!old.is_empty());
+        core::hint::assert_unchecked(key.len() + 1 == old.len());
     }
 
     let first = *new[0].write(old[0] + 1);
@@ -146,9 +147,11 @@ pub(crate) fn edit_dist(
 unsafe fn swap(old_row: &mut &mut [usize], new_row: &mut &mut [MaybeUninit<usize>]) {
     // SAFETY: It's safe to transmute initialized data to uninitialized
     let temp = unsafe {
-        std::mem::transmute::<&mut &mut [usize], &mut &mut [std::mem::MaybeUninit<usize>]>(old_row)
+        core::mem::transmute::<&mut &mut [usize], &mut &mut [core::mem::MaybeUninit<usize>]>(
+            old_row,
+        )
     };
-    std::mem::swap(temp, new_row);
+    core::mem::swap(temp, new_row);
 }
 
 trait FuzzySearch<K: AsBytes, V, const PREFIX_LEN: usize> {

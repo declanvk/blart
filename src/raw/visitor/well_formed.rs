@@ -1,18 +1,19 @@
 use crate::{
-    alloc::Allocator,
+    allocator::Allocator,
     raw::{
         visitor::{Visitable, Visitor},
         InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr, OptionalLeafPtr,
     },
     AsBytes, TreeMap,
 };
-use std::{
+use alloc::{boxed::Box, vec::Vec};
+use core::{
     cmp::Ordering,
-    collections::{hash_map::Entry, HashMap},
     error::Error,
     fmt,
     ops::{Add, AddAssign},
 };
+use std::collections::{hash_map::Entry, HashMap};
 
 /// A portion of an entire key that should uniquely identify each node in
 /// the tree.
@@ -624,11 +625,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::CString;
+    use alloc::ffi::CString;
 
     use super::*;
     use crate::{
-        alloc::Global,
+        allocator::Global,
         raw::{InnerNode16, InnerNode4, LeafNode, NodePtr},
         tests_common::{generate_key_fixed_length, setup_tree_from_entries},
         TreeMap,

@@ -1,3 +1,4 @@
+#![no_std]
 #![cfg_attr(
     feature = "nightly",
     feature(
@@ -37,7 +38,13 @@
 //!
 //! [ART paper]: http://web.archive.org/web/20240508000744/https://db.in.tum.de/~leis/papers/ART.pdf
 
-mod alloc;
+#[macro_use]
+extern crate alloc;
+
+#[cfg(feature = "std")]
+extern crate std;
+
+mod allocator;
 mod bytes;
 mod collections;
 mod rust_nightly_apis;

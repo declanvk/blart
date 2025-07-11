@@ -1,15 +1,25 @@
-use std::{
-    borrow::Cow,
-    ffi::{CStr, CString, OsStr, OsString},
-    io::{IoSlice, IoSliceMut},
+use alloc::{
+    borrow::{Cow, ToOwned},
+    boxed::Box,
+    ffi::CString,
+    rc::Rc,
+    string::String,
+    sync::Arc,
+    vec::Vec,
+};
+use core::{
+    ffi::CStr,
     mem::ManuallyDrop,
     num::{
         NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
         NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
     },
+};
+#[cfg(feature = "std")]
+use std::{
+    ffi::{OsStr, OsString},
+    io::{IoSlice, IoSliceMut},
     path::{Path, PathBuf},
-    rc::Rc,
-    sync::Arc,
 };
 
 mod mapped;
@@ -182,6 +192,7 @@ unsafe impl NoPrefixesBytes for CString {}
 unsafe impl OrderedBytes for CString {}
 
 #[cfg(unix)]
+#[cfg(feature = "std")]
 impl AsBytes for OsStr {
     fn as_bytes(&self) -> &[u8] {
         use std::os::unix::prelude::OsStrExt;
@@ -191,6 +202,7 @@ impl AsBytes for OsStr {
 }
 
 #[cfg(unix)]
+#[cfg(feature = "std")]
 impl AsBytes for OsString {
     fn as_bytes(&self) -> &[u8] {
         use std::os::unix::prelude::OsStrExt;
@@ -199,6 +211,7 @@ impl AsBytes for OsString {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(target_os = "wasi")]
 impl AsBytes for OsStr {
     fn as_bytes(&self) -> &[u8] {
@@ -208,6 +221,7 @@ impl AsBytes for OsStr {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(target_os = "wasi")]
 impl AsBytes for OsString {
     fn as_bytes(&self) -> &[u8] {
@@ -220,14 +234,17 @@ impl AsBytes for OsString {
 // SAFETY: This trait is safe to implement because the lexicographic
 // ordering of bytes and `Ord` implementation are the same
 #[cfg(any(unix, target_os = "wasi"))]
+#[cfg(feature = "std")]
 unsafe impl OrderedBytes for OsStr {}
 
 // SAFETY: This trait is safe to implement because the lexicographic
 // ordering of bytes and `Ord` implementation are the same
 #[cfg(any(unix, target_os = "wasi"))]
+#[cfg(feature = "std")]
 unsafe impl OrderedBytes for OsString {}
 
 #[cfg(any(unix, target_os = "wasi"))]
+#[cfg(feature = "std")]
 impl AsBytes for Path {
     fn as_bytes(&self) -> &[u8] {
         <OsStr as AsBytes>::as_bytes(self.as_os_str())
@@ -237,9 +254,11 @@ impl AsBytes for Path {
 // SAFETY: This trait is safe to implement because the lexicographic
 // ordering of bytes and `Ord` implementation are the same
 #[cfg(any(unix, target_os = "wasi"))]
+#[cfg(feature = "std")]
 unsafe impl OrderedBytes for Path {}
 
 #[cfg(any(unix, target_os = "wasi"))]
+#[cfg(feature = "std")]
 impl AsBytes for PathBuf {
     fn as_bytes(&self) -> &[u8] {
         <OsStr as AsBytes>::as_bytes(self.as_os_str())
@@ -249,6 +268,7 @@ impl AsBytes for PathBuf {
 // SAFETY: This trait is safe to implement because the lexicographic
 // ordering of bytes and `Ord` implementation are the same
 #[cfg(any(unix, target_os = "wasi"))]
+#[cfg(feature = "std")]
 unsafe impl OrderedBytes for PathBuf {}
 
 impl<B> AsBytes for Cow<'_, B>
@@ -394,12 +414,14 @@ unsafe impl<T> OrderedBytes for ManuallyDrop<T> where T: OrderedBytes + ?Sized {
 // change that property
 unsafe impl<T> NoPrefixesBytes for ManuallyDrop<T> where T: NoPrefixesBytes + ?Sized {}
 
+#[cfg(feature = "std")]
 impl AsBytes for IoSlice<'_> {
     fn as_bytes(&self) -> &[u8] {
         self
     }
 }
 
+#[cfg(feature = "std")]
 impl AsBytes for IoSliceMut<'_> {
     fn as_bytes(&self) -> &[u8] {
         self
@@ -482,6 +504,7 @@ mod tests {
             <CString as AsBytes>::as_bytes(&c"hello world".into()),
             b"hello world\0"
         );
+        #[cfg(feature = "std")]
         #[cfg(any(unix, target_os = "wasi"))]
         {
             assert_eq!(
@@ -493,6 +516,7 @@ mod tests {
                 b"hello world"
             );
         }
+        #[cfg(feature = "std")]
         #[cfg(any(unix, target_os = "wasi"))]
         {
             assert_eq!(
@@ -536,14 +560,17 @@ mod tests {
             <ManuallyDrop<&[u8]> as AsBytes>::as_bytes(&ManuallyDrop::new(b"hello world")),
             b"hello world"
         );
-        assert_eq!(
-            <IoSlice as AsBytes>::as_bytes(&IoSlice::new(b"hello world")),
-            b"hello world"
-        );
-        let mut buffer = [104u8, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100];
-        assert_eq!(
-            <IoSliceMut as AsBytes>::as_bytes(&IoSliceMut::new(&mut buffer)),
-            b"hello world"
-        )
+        #[cfg(feature = "std")]
+        {
+            assert_eq!(
+                <IoSlice as AsBytes>::as_bytes(&IoSlice::new(b"hello world")),
+                b"hello world"
+            );
+            let mut buffer = [104u8, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100];
+            assert_eq!(
+                <IoSliceMut as AsBytes>::as_bytes(&IoSliceMut::new(&mut buffer)),
+                b"hello world"
+            )
+        }
     }
 }

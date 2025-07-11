@@ -1,20 +1,21 @@
 //! Module containing implementations of the `TreeMap` and associated
 //! iterators/etc.
 
+#[cfg(feature = "std")]
+use crate::visitor::{MalformedTreeError, WellFormedChecker};
 use crate::{
-    alloc::{Allocator, Global},
+    allocator::{Allocator, Global},
     raw::{
         clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
         maximum_unchecked, minimum_unchecked, prefix_search_unchecked, search_for_delete_point,
         search_for_force_insert_point, search_for_insert_point, search_unchecked, CloneResult,
         DeletePoint, DeleteResult, ForceInsertPoint, InsertKind::Exact, InsertPoint,
-        InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr,
+        InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, RawIterator,
     },
     rust_nightly_apis::hasher_write_length_prefix,
-    visitor::{MalformedTreeError, WellFormedChecker},
     AsBytes, NoPrefixesBytes,
 };
-use std::{
+use core::{
     borrow::Borrow,
     fmt::Debug,
     hash::Hash,
@@ -128,6 +129,44 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
         }
     }
 
+    /// Constructs a [`TreeMap`] from a raw node pointer.
+    ///
+    /// # Safety
+    ///
+    ///  - The raw pointer must have been previously returned by a call to
+    ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`].
+    ///     - The allocator of the previous tree must have been the "default"
+    ///       allocator named `Global`.
+    ///  - The given `root` pointer must be unique and there are no other
+    ///    pointers into the tree.
+    ///  - `root` must be a pointer to a well formed tree.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    ///
+    /// let root = TreeMap::into_raw(map);
+    /// assert!(root.is_some());
+    ///
+    /// // SAFETY: The root pointer came directly from the `into_raw` result.
+    /// let _map = unsafe { TreeMap::from_raw_unchecked(root) };
+    /// ```
+    pub unsafe fn from_raw_unchecked(root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>) -> Self
+    where
+        K: AsBytes,
+    {
+        // SAFETY: The safety requirement of `from_raw_in` are a superset of the ones on
+        // `from_raw`.
+        unsafe { Self::from_raw_in_unchecked(root, Global) }
+    }
+
+    #[cfg(feature = "std")]
     /// Constructs a [`TreeMap`] from a raw node pointer.
     ///
     /// # Safety
@@ -270,7 +309,7 @@ assert!(matches!(map.allocator(), &System));
     /// assert!(root.is_some());
     ///
     /// // SAFETY: The root pointer came directly from the `into_raw` result.
-    /// let _map = unsafe { TreeMap::from_raw(root) }.unwrap();
+    /// let _map = unsafe { TreeMap::from_raw_unchecked(root) };
     /// ```
     pub fn into_raw(tree: Self) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
         Self::into_raw_with_allocator(tree).0
@@ -295,7 +334,7 @@ assert!(matches!(map.allocator(), &System));
     /// assert!(root.is_some());
     ///
     /// // SAFETY: The root pointer came directly from the `into_raw` result.
-    /// let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
+    /// let _map = unsafe { TreeMap::from_raw_in_unchecked(root, alloc) };
     /// ```
     pub fn into_raw_with_allocator(tree: Self) -> (Option<OpaqueNodePtr<K, V, PREFIX_LEN>>, A) {
         // We need this `ManuallyDrop` so that the `TreeMap::drop` is not called.
@@ -314,6 +353,55 @@ assert!(matches!(map.allocator(), &System));
         (root, alloc)
     }
 
+    /// Constructs a [`TreeMap`] from a raw node pointer and the given
+    /// allocator.
+    ///
+    /// # Safety
+    ///
+    ///  - The raw pointer must have been previously returned by a call to
+    ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`] with a
+    ///    known allocator.
+    ///  - The given `root` pointer must be unique and there are no other
+    ///    pointers into the tree.
+    ///  - The given `alloc` must have been used to allocate all of the nodes
+    ///    referenced by the given `root` pointer.
+    ///  - `root` must be a pointer to a well formed tree.
+    pub unsafe fn from_raw_in_unchecked(
+        root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
+        alloc: A,
+    ) -> Self
+    where
+        K: AsBytes,
+    {
+        match root {
+            Some(root) => {
+                let (min_leaf, max_leaf) =
+                    // SAFETY: The safety doc of this function guarantees the uniqueness of the
+                    // `root` pointer, which means we won't have any other mutations
+                    unsafe { (minimum_unchecked(root), maximum_unchecked(root)) };
+                // SAFETY: satisfied by minimum_unchecked and maximum unchecked.
+                let mut raw_iter = unsafe { RawIterator::new(min_leaf, max_leaf) };
+                let mut num_entries = 0;
+                // SAFETY: The safety doc of this function guarantees no concurrent access.
+                while unsafe { raw_iter.next() }.is_some() {
+                    num_entries += 1;
+                }
+
+                Self {
+                    state: Some(NonEmptyTree {
+                        root,
+                        min_leaf,
+                        max_leaf,
+                    }),
+                    num_entries,
+                    alloc,
+                }
+            },
+            None => Self::with_prefix_len_in(alloc),
+        }
+    }
+
+    #[cfg(feature = "std")]
     /// Constructs a [`TreeMap`] from a raw node pointer and the given
     /// allocator.
     ///
@@ -1797,7 +1885,7 @@ where
     V: Debug,
     A: Allocator,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
@@ -1865,7 +1953,7 @@ where
     V: Hash,
     A: Allocator,
 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         hasher_write_length_prefix(state, self.num_entries);
         for elt in self {
             elt.hash(state);
@@ -1923,7 +2011,7 @@ where
     V: Ord,
     A: Allocator,
 {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.iter().cmp(other.iter())
     }
 }
@@ -1934,7 +2022,7 @@ where
     V: PartialOrd,
     A: Allocator,
 {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         self.iter().partial_cmp(other.iter())
     }
 }
@@ -1982,8 +2070,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{cmp::Ordering, collections::hash_map::RandomState, hash::BuildHasher};
-
     use crate::{
         tests_common::{
             generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
@@ -1991,6 +2077,8 @@ mod tests {
         },
         TreeMap,
     };
+    use alloc::{boxed::Box, string::String, vec::Vec};
+    use core::cmp::Ordering;
 
     use super::*;
 
@@ -2306,8 +2394,10 @@ mod tests {
         assert_eq!(map_d.partial_cmp(&map_d), Some(Ordering::Equal));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn tree_hash_equals() {
+        use core::hash::BuildHasher;
         let mut tree_a = TreeMap::<[u8; 0], i32>::new();
 
         let _ = tree_a.try_insert([], 0);
@@ -2315,7 +2405,7 @@ mod tests {
 
         let tree_b = tree_a.clone();
 
-        let hasher_builder = RandomState::new();
+        let hasher_builder = std::hash::RandomState::new();
 
         let hash_a = hasher_builder.hash_one(&tree_a);
         let hash_b = hasher_builder.hash_one(&tree_b);
@@ -2515,6 +2605,7 @@ mod tests {
         assert_eq!(map, map4);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn tree_map_hash_ne() {
         use std::collections::HashSet;
@@ -2617,6 +2708,7 @@ mod tests {
         assert_eq!(map.len(), 16);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn tree_map_retain_interrupted() {
         let map: TreeMap<_, _> = generate_key_fixed_length([15, 3])
@@ -2638,6 +2730,7 @@ mod tests {
         assert!(map.into_values().eq(32..64));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn regression_e8d5a0b988d1f1e0b49f8d6e22354d49539bcf6a() {
         // [
@@ -2770,11 +2863,12 @@ mod custom_allocator_tests {
     use super::*;
 
     use crate::{
-        alloc::AllocError,
+        allocator::AllocError,
         rust_nightly_apis::ptr::{nonnull_addr, nonnull_with_addr},
     };
+    use alloc::boxed::Box;
 
-    use std::{
+    use core::{
         alloc::Layout,
         cell::{Cell, UnsafeCell},
         marker::PhantomPinned,
@@ -2887,14 +2981,14 @@ mod custom_allocator_tests {
     fn small_tree() {
         let allocator = BumpAllocator::<
             {
-                std::mem::size_of::<
+                core::mem::size_of::<
                     crate::raw::InnerNode4<
-                        &std::ffi::CStr,
+                        &core::ffi::CStr,
                         i32,
                         { crate::map::DEFAULT_PREFIX_LEN },
                     >,
-                >() + (2 * std::mem::size_of::<
-                    crate::raw::LeafNode<&std::ffi::CStr, i32, { crate::map::DEFAULT_PREFIX_LEN }>,
+                >() + (2 * core::mem::size_of::<
+                    crate::raw::LeafNode<&core::ffi::CStr, i32, { crate::map::DEFAULT_PREFIX_LEN }>,
                 >())
             },
         >::new();
