@@ -15,3 +15,6 @@ pub use range::*;
 
 mod extract_if;
 pub use extract_if::*;
+
+mod subtree_iter;
+pub use subtree_iter::*;
