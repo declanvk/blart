@@ -15,6 +15,7 @@ use crate::{
     rust_nightly_apis::hasher_write_length_prefix,
     AsBytes, NoPrefixesBytes,
 };
+use alloc::vec::Vec;
 use core::{
     borrow::Borrow,
     fmt::Debug,
@@ -1926,6 +1927,19 @@ where
     K: NoPrefixesBytes,
 {
     fn from(arr: [(K, V); N]) -> Self {
+        let mut map = TreeMap::with_prefix_len();
+        for (key, value) in arr {
+            let _ = map.insert(key, value);
+        }
+        map
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> From<Vec<(K, V)>> for TreeMap<K, V, PREFIX_LEN>
+where
+    K: NoPrefixesBytes,
+{
+    fn from(arr: Vec<(K, V)>) -> Self {
         let mut map = TreeMap::with_prefix_len();
         for (key, value) in arr {
             let _ = map.insert(key, value);
