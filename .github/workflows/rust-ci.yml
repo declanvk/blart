@@ -46,6 +46,7 @@ jobs:
             tr -d '"'
           )
           cargo binstall --no-confirm iai-callgrind-runner --version $version
+          sudo apt update -y
           sudo apt install -y valgrind
 
 
