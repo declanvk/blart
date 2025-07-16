@@ -98,7 +98,7 @@ pub fn remove_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
 pub fn skewed_tree() -> &'static TreeMap<Box<[u8]>, usize> {
     static TREE: OnceLock<TreeMap<Box<[u8]>, usize>> = OnceLock::new();
 
-    TREE.get_or_init(|| tree_from_keys(generate_keys_skewed(256 * 128)))
+    TREE.get_or_init(|| tree_from_keys(generate_keys_skewed(256 * 32)))
 }
 
 #[allow(dead_code)]
