@@ -59,8 +59,8 @@ library_benchmark_group!(name = bench_lookup_group; benchmarks = bench_lookup_si
 fn bench_remove_single<K: AsBytes, V, const PREFIX_LEN: usize>(
     mut tree: TreeMap<K, V, PREFIX_LEN>,
     key: &K,
-) -> Option<V> {
-    tree.remove(key)
+) -> (Option<V>, TreeMap<K, V, PREFIX_LEN>) {
+    (tree.remove(key), tree)
 }
 
 #[library_benchmark]
@@ -68,10 +68,11 @@ fn bench_remove_single<K: AsBytes, V, const PREFIX_LEN: usize>(
 fn bench_remove_multiple<K: AsBytes, V, const PREFIX_LEN: usize>(
     mut tree: TreeMap<K, V, PREFIX_LEN>,
     keys: Vec<&K>,
-) {
+) -> TreeMap<K, V, PREFIX_LEN> {
     for key in keys {
         let _ = std::hint::black_box(tree.remove(key));
     }
+    tree
 }
 
 library_benchmark_group!(name = bench_remove_group; benchmarks = bench_remove_single, bench_remove_multiple);
@@ -92,8 +93,8 @@ fn insert_single_setup<K: AsBytes + Clone, V: Clone, const PREFIX_LEN: usize>(
 #[bench::last_key(insert_single_setup(dictionary_tree(), get_last_key(dictionary_tree())))]
 fn bench_insert_single<K: AsBytes, V: Default, const PREFIX_LEN: usize>(
     (mut tree, key): (TreeMap<K, V, PREFIX_LEN>, K),
-) -> Option<V> {
-    tree.try_insert(key, V::default()).ok().flatten()
+) -> (Option<V>, TreeMap<K, V, PREFIX_LEN>) {
+    (tree.try_insert(key, V::default()).ok().flatten(), tree)
 }
 
 fn insert_multiple_setup<K: AsBytes + Clone, V: Clone, const PREFIX_LEN: usize>(
@@ -116,10 +117,11 @@ fn insert_multiple_setup<K: AsBytes + Clone, V: Clone, const PREFIX_LEN: usize>(
 ))]
 fn bench_insert_multiple<K: AsBytes, V: Default, const PREFIX_LEN: usize>(
     (mut tree, keys): (TreeMap<K, V, PREFIX_LEN>, Vec<K>),
-) {
+) -> TreeMap<K, V, PREFIX_LEN> {
     for key in keys {
         let _ = std::hint::black_box(tree.try_insert(key, V::default()).ok().flatten());
     }
+    tree
 }
 
 // This seems like a tricky and possibly unsafe thing to do. We can statically
@@ -240,7 +242,7 @@ library_benchmark_group!(name = bench_iterator_group; benchmarks = bench_full_it
 fn bench_retain<K: AsBytes, V, const PREFIX_LEN: usize>(
     mut tree: TreeMap<K, V, PREFIX_LEN>,
     mode: &str,
-) {
+) -> TreeMap<K, V, PREFIX_LEN> {
     match mode {
         "all" => tree.retain(|_, _| true),
         "half" => {
@@ -253,7 +255,7 @@ fn bench_retain<K: AsBytes, V, const PREFIX_LEN: usize>(
         "none" => tree.retain(|_, _| false),
         _ => unreachable!(),
     }
-    std::hint::black_box(tree);
+    tree
 }
 
 fn u128_tree(range: std::ops::Range<u128>) -> TreeMap<u128, usize> {
@@ -263,9 +265,12 @@ fn u128_tree(range: std::ops::Range<u128>) -> TreeMap<u128, usize> {
 #[library_benchmark]
 #[bench::no_overlap(u128_tree(0..1024), u128_tree(1024..2048))]
 #[bench::overlap(u128_tree(0..1024), u128_tree(512..1536))]
-fn bench_append(mut tree1: TreeMap<u128, usize>, mut tree2: TreeMap<u128, usize>) {
+fn bench_append(
+    mut tree1: TreeMap<u128, usize>,
+    mut tree2: TreeMap<u128, usize>,
+) -> (TreeMap<u128, usize>, TreeMap<u128, usize>) {
     tree1.append(&mut tree2);
-    std::hint::black_box(tree1);
+    (tree1, tree2)
 }
 
 // We have a lot of benchmarks on split_off because its one of the only ways to
@@ -285,12 +290,14 @@ fn bench_append(mut tree1: TreeMap<u128, usize>, mut tree2: TreeMap<u128, usize>
 fn bench_split_off<K, V, const PREFIX_LEN: usize>(
     mut tree: TreeMap<K, V, PREFIX_LEN>,
     key: &K,
-) -> TreeMap<K, V, PREFIX_LEN>
+) -> (TreeMap<K, V, PREFIX_LEN>, TreeMap<K, V, PREFIX_LEN>)
 where
     K: AsBytes + Borrow<K> + Clone,
     V: Clone,
 {
-    tree.split_off(key)
+    let new_tree = tree.split_off(key);
+
+    (tree, new_tree)
 }
 
 #[library_benchmark]
@@ -300,7 +307,7 @@ where
 fn bench_extract_if<K: AsBytes, V, const PREFIX_LEN: usize>(
     mut tree: TreeMap<K, V, PREFIX_LEN>,
     mode: &str,
-) {
+) -> (Vec<(K, V)>, TreeMap<K, V, PREFIX_LEN>) {
     let extracted: Vec<_> = match mode {
         "all" => tree.extract_if(.., |_, _| true).collect(),
         "half" => {
@@ -314,8 +321,7 @@ fn bench_extract_if<K: AsBytes, V, const PREFIX_LEN: usize>(
         "none" => tree.extract_if(.., |_, _| false).collect(),
         _ => unreachable!(),
     };
-    std::hint::black_box(extracted);
-    std::hint::black_box(tree);
+    (extracted, tree)
 }
 
 library_benchmark_group!(
