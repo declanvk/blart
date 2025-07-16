@@ -1,10 +1,10 @@
 use std::{borrow::Borrow, ops::RangeBounds};
 
 use crate::common::{
-    dictionary_tree, get_first_key, get_last_key, get_middle_key, select_zipfian_keys,
-    with_prefixes_tree,
+    dense_fixed_length_key_tree, dictionary_tree, get_first_key, get_last_key, get_middle_key,
+    select_zipfian_keys, skewed_tree, sparse_fixed_length_key_tree, with_prefixes_tree,
 };
-use blart::{AsBytes, TreeMap};
+use blart::{AsBytes, NoPrefixesBytes, TreeMap};
 use iai_callgrind::{
     library_benchmark, library_benchmark_group, main, Callgrind, FlamegraphConfig,
     LibraryBenchmarkConfig, OutputFormat,
@@ -122,7 +122,65 @@ fn bench_insert_multiple<K: AsBytes, V: Default, const PREFIX_LEN: usize>(
     }
 }
 
-library_benchmark_group!(name = bench_insert_group; benchmarks = bench_insert_single, bench_insert_multiple);
+// This seems like a tricky and possibly unsafe thing to do. We can statically
+// guarantee that there are no prefixes amongst the keys that are currently in
+// `tree`, since they all succeeded their insert operations.
+//
+// However, we can only guarantee that `TreeMap<TransparentNoPrefixesBytes<K>,
+// V>` is safe so long as no other code can construct a
+// `TransparentNoPrefixesBytes<K>` outside the set of keys we returned from this
+// function.
+//
+// The reason we want this is so we can benchmark bulk insert for types that are
+// not directly implementing `NoPrefixesBytes`.
+fn bulk_insert_setup<K: AsBytes + Clone, V: Clone, const PREFIX_LEN: usize>(
+    tree: &TreeMap<K, V, PREFIX_LEN>,
+) -> Vec<(impl NoPrefixesBytes, V)> {
+    #[repr(transparent)]
+    struct TransparentNoPrefixesBytes<T>(T);
+
+    impl<T> AsBytes for TransparentNoPrefixesBytes<T>
+    where
+        T: AsBytes,
+    {
+        fn as_bytes(&self) -> &[u8] {
+            self.0.as_bytes()
+        }
+    }
+    unsafe impl<T> NoPrefixesBytes for TransparentNoPrefixesBytes<T> where T: AsBytes {}
+
+    let entries: Vec<(K, V)> = tree.clone().into_iter().collect();
+
+    for (a, b) in entries.iter().zip(entries.iter().skip(1)) {
+        if a.0.as_bytes().starts_with(b.0.as_bytes()) {
+            panic!("found prefix {:?} {:?}", a.0.as_bytes(), b.0.as_bytes());
+        }
+    }
+
+    unsafe { core::mem::transmute::<_, Vec<(TransparentNoPrefixesBytes<K>, V)>>(entries) }
+}
+
+#[library_benchmark]
+#[bench::dictionary(bulk_insert_setup(dictionary_tree()))]
+#[bench::dense_fixed_length(bulk_insert_setup(dense_fixed_length_key_tree()))]
+#[bench::sparse_fixed_length(bulk_insert_setup(sparse_fixed_length_key_tree()))]
+#[bench::skewed(bulk_insert_setup(skewed_tree()))]
+#[bench::with_prefixes(bulk_insert_setup(with_prefixes_tree()))]
+fn bench_from_iter<K: NoPrefixesBytes, V>(keys: Vec<(K, V)>) -> TreeMap<K, V> {
+    TreeMap::from_iter(keys)
+}
+
+#[library_benchmark]
+#[bench::dictionary(bulk_insert_setup(dictionary_tree()))]
+#[bench::dense_fixed_length(bulk_insert_setup(dense_fixed_length_key_tree()))]
+#[bench::sparse_fixed_length(bulk_insert_setup(sparse_fixed_length_key_tree()))]
+#[bench::skewed(bulk_insert_setup(skewed_tree()))]
+#[bench::with_prefixes(bulk_insert_setup(with_prefixes_tree()))]
+fn bench_bulk_insert<K: NoPrefixesBytes, V>(keys: Vec<(K, V)>) -> TreeMap<K, V> {
+    TreeMap::from(keys)
+}
+
+library_benchmark_group!(name = bench_insert_group; benchmarks = bench_insert_single, bench_insert_multiple, bench_bulk_insert, bench_from_iter);
 
 // ITERATORS
 
@@ -210,8 +268,20 @@ fn bench_append(mut tree1: TreeMap<u128, usize>, mut tree2: TreeMap<u128, usize>
     std::hint::black_box(tree1);
 }
 
+// We have a lot of benchmarks on split_off because its one of the only ways to
+// test the bulk load operation
 #[library_benchmark]
 #[bench::dictionary(dictionary_tree().clone(), get_middle_key(dictionary_tree(), 1, 1))]
+#[bench::dense_fixed_length(
+    dense_fixed_length_key_tree().clone(),
+    get_middle_key(dense_fixed_length_key_tree(), 1, 1)
+)]
+#[bench::sparse_fixed_length(
+    sparse_fixed_length_key_tree().clone(),
+    get_middle_key(sparse_fixed_length_key_tree(), 1, 1)
+)]
+#[bench::skewed(skewed_tree().clone(), get_middle_key(skewed_tree(), 1, 1))]
+#[bench::with_prefixes(with_prefixes_tree().clone(), get_middle_key(with_prefixes_tree(), 1, 1))]
 fn bench_split_off<K, V, const PREFIX_LEN: usize>(
     mut tree: TreeMap<K, V, PREFIX_LEN>,
     key: &K,

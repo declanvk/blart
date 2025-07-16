@@ -112,9 +112,12 @@ pub fn dense_fixed_length_key_tree() -> &'static TreeMap<[u8; 2], usize> {
 //     tree_from_keys(generate_key_fixed_length([63; 3]))
 // }
 
-// pub fn sparse_fixed_length_key_tree() -> TreeMap<[u8; 16], usize> {
-//     tree_from_keys(generate_key_fixed_length([1; 16]))
-// }
+#[allow(dead_code)]
+pub fn sparse_fixed_length_key_tree() -> &'static TreeMap<[u8; 16], usize> {
+    static TREE: OnceLock<TreeMap<[u8; 16], usize>> = OnceLock::new();
+
+    TREE.get_or_init(|| tree_from_keys(generate_key_fixed_length([1; 16])))
+}
 
 pub fn with_prefixes_tree() -> &'static TreeMap<Box<[u8]>, usize> {
     static TREE: OnceLock<TreeMap<Box<[u8]>, usize>> = OnceLock::new();
