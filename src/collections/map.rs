@@ -2252,6 +2252,14 @@ mod tests {
     }
 
     #[test]
+    fn default_tree_map_is_empty() {
+        let default = TreeMap::<(), usize, 16>::default();
+
+        assert!(default.is_empty());
+        assert_eq!(default.len(), 0);
+    }
+
+    #[test]
     fn tree_map_get_non_existent_entry_different_keys_types() {
         let map = TreeMap::<Box<[u8]>, ()>::new();
 
@@ -2723,10 +2731,12 @@ mod tests {
     #[test]
     fn tree_map_extend_and_from() {
         let mut map = TreeMap::<[u8; 4], i32>::new();
-        let data = vec![([0; 4], 1), ([1; 4], 2)];
+        let data = vec![([0; 4], 1i32), ([1; 4], 2)];
 
         // Test extending from an iterator of references
-        map.extend(data.iter().copied());
+        // The `.map(...)` call looks like identity, but its actually taking `&([u8; 4],
+        // i32)` and turning it into `(&[u8; 4], &i32)`
+        map.extend(data.iter().map(|(k, v)| (k, v)));
         assert_eq!(map.len(), 2);
 
         // Test `FromIterator`
@@ -2992,6 +3002,22 @@ mod tests {
         assert_eq!(split_all.len(), 64);
         assert!(split_none.is_empty());
         assert!(split_all.values().copied().eq(0..64));
+    }
+
+    #[test]
+    fn tree_map_from_vec() {
+        let entries: Vec<_> = [c"abc", c"hello", c"", c"my name is"]
+            .into_iter()
+            .enumerate()
+            .map(swap)
+            .collect();
+
+        let map = TreeMap::<_, _, 16>::from(entries);
+
+        assert_eq!(*map.get(c"abc").unwrap(), 0);
+        assert_eq!(*map.get(c"hello").unwrap(), 1);
+        assert_eq!(*map.get(c"").unwrap(), 2);
+        assert_eq!(*map.get(c"my name is").unwrap(), 3);
     }
 }
 

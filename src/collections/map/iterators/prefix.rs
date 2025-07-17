@@ -296,4 +296,24 @@ mod tests {
 
         assert_eq!(tree.prefix(&[128]).count(), 0);
     }
+
+    #[test]
+    fn prefix_mut() {
+        let mut t = TreeMap::new();
+        t.insert(c"abcde", 0);
+        t.insert(c"abcx", 0);
+        t.insert(c"abcdx", 0);
+        t.insert(c"bx", 0);
+
+        for (key, value) in t.prefix_mut(c"abc".to_bytes()) {
+            if key.to_bytes().ends_with(b"x") {
+                *value = 100;
+            }
+        }
+
+        assert_eq!(
+            t.into_iter().collect::<Vec<_>>(),
+            vec![(c"abcde", 0), (c"abcdx", 100), (c"abcx", 100), (c"bx", 0)]
+        )
+    }
 }

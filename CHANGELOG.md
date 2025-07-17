@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
  - `#![no_std]` support with `std` feature flag that is enabled by default.
  - `impl From<Vec<(K, V)>> for TreeMap<K, V>`
-- `TreeMap::{prefix_get, prefix_get_key_value, prefix_get_key_value_mut, prefix_get_mut, prefix_insert, prefix_entry}` APIs were added, adding new methods for querying and manipulating trees with keys that prefix or are prefixes of keys in a tree.
+ - `TreeMap::{prefix_get_key_value_mut, prefix_entry}` APIs were added, adding new methods for querying and manipulating trees with keys that prefix or are prefixes of keys in a tree.
+
+### Changed
+
+ - `TreeMap::{get_prefix, get_prefix_key_value, get_prefix_mut, force_insert}` were renamed to `TreeMap::{prefix_get, prefix_get_key_value, prefix_get_mut, prefix_insert}`. This makes it clear that they're all centered around the theme of manipulating or querying key prefixes.
 
 ## [0.4.0] - 2025-07-10
 
