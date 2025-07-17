@@ -11,7 +11,7 @@ use core::{
     hash::Hash,
     iter::FusedIterator,
     marker::PhantomData,
-    mem::{self, ManuallyDrop},
+    mem::{self, ManuallyDrop, MaybeUninit},
     ops::{Range, RangeBounds},
     ptr::{self, NonNull},
 };
@@ -92,6 +92,35 @@ impl NodeType {
                 end: 257,
             },
             NodeType::Leaf => Range { start: 0, end: 0 },
+        }
+    }
+
+    /// Return the [`NodeType`] corresponding to the given number of children of
+    /// an inner node.
+    ///
+    /// This function will never return [`NodeType::Leaf`].
+    ///
+    /// # Panics
+    ///  - If the number of children is less than 2
+    ///  - If the number of children is greater than 256
+    pub const fn type_for_num_children(num_children: usize) -> Self {
+        assert!(
+            num_children >= 2,
+            "Less than 2 children makes no sense in the context of this radix tree"
+        );
+        assert!(
+            num_children <= 256,
+            "More than 256 children makes no sense in the context of a byte-oriented radix tree"
+        );
+
+        if num_children <= NodeType::Node4.upper_capacity() {
+            NodeType::Node4
+        } else if num_children <= NodeType::Node16.upper_capacity() {
+            NodeType::Node16
+        } else if num_children <= NodeType::Node48.upper_capacity() {
+            NodeType::Node48
+        } else {
+            NodeType::Node256
         }
     }
 }
@@ -1277,6 +1306,24 @@ impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
             previous: None,
             next: None,
         }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> LeafNode<MaybeUninit<K>, MaybeUninit<V>, PREFIX_LEN> {
+    /// Create a new leaf node with uninitialized key and value and no siblings.
+    pub fn uninit_no_siblings() -> Self {
+        LeafNode {
+            value: MaybeUninit::uninit(),
+            key: MaybeUninit::uninit(),
+            previous: None,
+            next: None,
+        }
+    }
+
+    /// Set the value of the possibly-uninitialized key and value.
+    pub fn write(&mut self, key: K, value: V) {
+        self.key.write(key);
+        self.value.write(value);
     }
 }
 
