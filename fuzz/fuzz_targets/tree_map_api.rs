@@ -1,7 +1,11 @@
 #![no_main]
 #![feature(btree_entry_insert)]
 
-use blart::{visitor::WellFormedChecker, TreeMap};
+use blart::{
+    map::{PrefixEntry, PrefixOccupied},
+    visitor::WellFormedChecker,
+    TreeMap,
+};
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
 use std::{
     collections::{hash_map::RandomState, BTreeMap},
@@ -12,6 +16,15 @@ use std::{
 #[derive(Arbitrary, Debug)]
 enum EntryAction {
     AndModify(Option<Box<EntryAction>>),
+    InsertEntry(Option<OccupiedEntryAction>),
+    OrDefault,
+    OrInsert,
+    OrInsertWith,
+    OrInsertWithKey,
+}
+
+#[derive(Arbitrary, Debug)]
+enum PrefixEntryAction {
     InsertEntry(Option<OccupiedEntryAction>),
     OrDefault,
     OrInsert,
@@ -48,10 +61,11 @@ enum Action {
     RemovePrefix(Box<[u8]>),
     TryInsert(Box<[u8]>),
     TryInsertMany(Box<[u8]>, u8),
-    ForceInsert(Box<[u8]>),
+    PrefixInsert(Box<[u8]>),
     Clone,
     Hash,
     Entry(EntryAction, Box<[u8]>),
+    PrefixEntry(PrefixEntryAction, Box<[u8]>),
     Fuzzy(Box<[u8]>),
     Prefix(Box<[u8]>),
     IntoIter { take_front: usize, take_back: usize },
@@ -60,8 +74,8 @@ enum Action {
 }
 
 libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
-    let mut tree = TreeMap::<_, u32>::new();
-    let mut oracle = BTreeMap::<_, u32>::new();
+    let mut tree = TreeMap::<Box<[u8]>, u32>::new();
+    let mut oracle = BTreeMap::<Box<[u8]>, u32>::new();
     let mut next_value = 0;
 
     for action in actions {
@@ -116,8 +130,14 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 }
             },
             Action::GetPrefixKey(key) => {
-                // No easy way to replicate this using BTreeMap.
-                let _ = tree.get_prefix_mut(key.as_ref());
+                let entry = tree.prefix_get_mut(key.as_ref());
+                let oracle_entry = oracle.iter_mut().find(|f| key.as_ref().starts_with(f.0));
+                if let Some(value) = entry {
+                    *value = value.saturating_sub(1);
+                    let oracle_value = oracle_entry.unwrap().1;
+                    *oracle_value = oracle_value.saturating_sub(1);
+                    assert_eq!(value, oracle_value);
+                }
             },
             Action::CheckLen => {
                 assert!((tree.is_empty() && tree.len() == 0) || tree.len() > 0);
@@ -171,11 +191,11 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     assert_eq!(prev, oracle_prev);
                 }
             },
-            Action::ForceInsert(key) => {
+            Action::PrefixInsert(key) => {
                 let value = next_value;
                 next_value += 1;
 
-                let _ = tree.force_insert(key.clone(), value);
+                let _ = tree.prefix_insert(key.clone(), value);
                 oracle.retain(|f, _| !f.starts_with(&key) && !key.starts_with(f));
                 oracle.insert(key, value);
             },
@@ -216,6 +236,26 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     let oracle_entry = oracle.entry(key.clone());
                     apply_entry_action(ea, entry, oracle_entry, value);
                 }
+            },
+            Action::PrefixEntry(ea, key) => {
+                let entry = tree.prefix_entry(key.clone());
+                match &entry {
+                    PrefixEntry::Occupied(PrefixOccupied::Inner(entry)) => {
+                        let oracle_iter = oracle
+                            .iter()
+                            .filter(|f| f.0.starts_with(&key) || key.starts_with(f.0));
+                        assert!(entry.iter().eq(oracle_iter));
+                    },
+                    _ => {},
+                }
+                let value = next_value;
+                next_value += 1;
+                let oracle_entry = oracle.entry(key.clone());
+                apply_prefix_entry_action(ea, entry, oracle_entry, value);
+                oracle.retain(|f, _| {
+                    // Remove everything that prefixes or is prefixed except for what we just added
+                    (!f.starts_with(&key) && !key.starts_with(f)) || f == &key
+                });
             },
             Action::Fuzzy(key) => {
                 let v: Vec<_> = tree.fuzzy(&key, 3).collect();
@@ -284,6 +324,42 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
         let _ = WellFormedChecker::check(&tree).expect("tree should be well-formed");
     }
 });
+
+fn apply_prefix_entry_action(
+    ea: PrefixEntryAction,
+    tree_entry: blart::map::PrefixEntry<'_, Box<[u8]>, u32>,
+    oracle_entry: std::collections::btree_map::Entry<'_, Box<[u8]>, u32>,
+    value: u32,
+) {
+    match ea {
+        PrefixEntryAction::InsertEntry(entry_action) => {
+            let tree_entry = tree_entry.insert_entry(value);
+            let oracle_entry = oracle_entry.insert_entry(value);
+
+            if let Some(occupied_action) = entry_action {
+                apply_occupied_entry_action(occupied_action, tree_entry, oracle_entry, value);
+            }
+        },
+        PrefixEntryAction::OrDefault => {
+            assert_eq!(tree_entry.or_default(), oracle_entry.or_default());
+        },
+        PrefixEntryAction::OrInsert => {
+            assert_eq!(tree_entry.or_insert(value), oracle_entry.or_insert(value));
+        },
+        PrefixEntryAction::OrInsertWith => {
+            assert_eq!(
+                tree_entry.or_insert_with(|| value),
+                oracle_entry.or_insert_with(|| value)
+            );
+        },
+        PrefixEntryAction::OrInsertWithKey => {
+            assert_eq!(
+                tree_entry.or_insert_with_key(|_| value),
+                oracle_entry.or_insert_with_key(|_| value)
+            );
+        },
+    };
+}
 
 fn apply_entry_action(
     ea: EntryAction,

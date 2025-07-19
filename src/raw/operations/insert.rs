@@ -683,36 +683,36 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertKind<K, V, PREFIX_LEN> 
     }
 }
 
-/// This enum contains the results from searching for an forced insert point for
-/// a new node in the trie.
+/// This enum contains the results from searching for a prefixed insert point
+/// for a new node in the trie.
 ///
 /// It contains all the relevant information needed to perform the insert
 /// and update the tree.
 ///
-/// A forced insert is either a normal insert, or a node that must be completely
-/// overwritten.
-pub enum ForceInsertPoint<K, V, const PREFIX_LEN: usize> {
+/// A prefixed insert is either a normal insert, or a node that must be
+/// completely overwritten.
+pub enum PrefixInsertPoint<K, V, const PREFIX_LEN: usize> {
     InsertPoint(InsertPoint<K, V, PREFIX_LEN>),
     OverwritePoint(OverwritePoint<K, V, PREFIX_LEN>),
 }
 
-impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ForceInsertPoint<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for PrefixInsertPoint<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InsertPoint(insert_point) => f
-                .debug_tuple("ForceInsertPoint::InsertPoint")
+                .debug_tuple("PrefixInsertPoint::InsertPoint")
                 .field(insert_point)
                 .finish(),
             Self::OverwritePoint(overwrite_point) => f
-                .debug_tuple("ForceInsertPoint::OverwritePoint")
+                .debug_tuple("PrefixInsertPoint::OverwritePoint")
                 .field(overwrite_point)
                 .finish(),
         }
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> ForceInsertPoint<K, V, PREFIX_LEN> {
-    /// This function will use [`ForceInsertPoint`] information to insert the
+impl<K, V, const PREFIX_LEN: usize> PrefixInsertPoint<K, V, PREFIX_LEN> {
+    /// This function will use [`PrefixInsertPoint`] information to insert the
     /// given key-value pair into the trie.
     ///
     /// # Safety
@@ -726,14 +726,14 @@ impl<K, V, const PREFIX_LEN: usize> ForceInsertPoint<K, V, PREFIX_LEN> {
         key: K,
         value: V,
         alloc: &A,
-    ) -> ForceInsertResult<'a, K, V, PREFIX_LEN>
+    ) -> PrefixInsertResult<'a, K, V, PREFIX_LEN>
     where
         K: AsBytes + 'a,
         V: 'a,
         A: Allocator,
     {
         match self {
-            Self::InsertPoint(insert_point) => ForceInsertResult {
+            Self::InsertPoint(insert_point) => PrefixInsertResult {
                 // Safety: covered by function doc comment.
                 insert_result: unsafe { insert_point.apply(key, value, alloc) },
                 leafs_removed: 0,
@@ -769,9 +769,9 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for OverwritePoint<K, V, PREFIX_L
     }
 }
 
-/// The results of a successful force insert.
+/// The results of a successful prefix insert.
 #[derive(Debug)]
-pub struct ForceInsertResult<'a, K, V, const PREFIX_LEN: usize> {
+pub struct PrefixInsertResult<'a, K, V, const PREFIX_LEN: usize> {
     pub insert_result: InsertResult<'a, K, V, PREFIX_LEN>,
     pub leafs_removed: usize,
 }
@@ -792,7 +792,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
         key: K,
         value: V,
         alloc: &A,
-    ) -> ForceInsertResult<'a, K, V, PREFIX_LEN>
+    ) -> PrefixInsertResult<'a, K, V, PREFIX_LEN>
     where
         K: AsBytes + 'a,
         V: 'a,
@@ -891,7 +891,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
 
                 // SAFETY: Covered by safety doc of this function
                 unsafe { LeafNode::replace(leaf_node_ptr, &mut old_leaf_node, true) };
-                return ForceInsertResult {
+                return PrefixInsertResult {
                     insert_result: InsertResult {
                         leaf_node_ptr,
                         existing_leaf: Some(old_leaf_node),
@@ -942,7 +942,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
         match path {
             TreePath::Root => {
                 // If there was no parent, we overwrote the root leaf.
-                ForceInsertResult {
+                PrefixInsertResult {
                     insert_result: InsertResult {
                         leaf_node_ptr: overwrite_ptr,
                         existing_leaf: None,
@@ -966,7 +966,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
 
                 // If there was a parent we will have written a different pointer to the
                 // `child_key_byte`, but the parent never changed.
-                ForceInsertResult {
+                PrefixInsertResult {
                     insert_result: InsertResult {
                         leaf_node_ptr: overwrite_ptr,
                         existing_leaf: None,
@@ -1197,10 +1197,10 @@ where
 /// # Errors
 ///  - If the given `key` is a prefix of an existing key, this function will
 ///    return an error.
-pub unsafe fn search_for_force_insert_point<K, V, const PREFIX_LEN: usize>(
+pub unsafe fn search_for_prefix_insert_point<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
-) -> ForceInsertPoint<K, V, PREFIX_LEN>
+) -> PrefixInsertPoint<K, V, PREFIX_LEN>
 where
     K: AsBytes,
 {
@@ -1236,7 +1236,7 @@ where
                 let leaf_node = leaf_node_ptr.read();
 
                 if leaf_node.matches_full_key(key_bytes) {
-                    return ForceInsertPoint::InsertPoint(InsertPoint {
+                    return PrefixInsertPoint::InsertPoint(InsertPoint {
                         key_bytes_used: current_depth,
                         path: path.finish(),
                         insert_kind: InsertKind::Exact { leaf_node_ptr },
@@ -1266,7 +1266,7 @@ where
                 if new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len() {
                     // then the key has insufficient bytes to be unique. It must be
                     // a prefix of an existing key OR an existing key is a prefix of it
-                    return ForceInsertPoint::OverwritePoint(OverwritePoint {
+                    return PrefixInsertPoint::OverwritePoint(OverwritePoint {
                         key_bytes_used: current_depth,
                         path: path.finish(),
                         overwrite_point: leaf_node_ptr.to_opaque(),
@@ -1274,7 +1274,7 @@ where
                     });
                 }
 
-                return ForceInsertPoint::InsertPoint(InsertPoint {
+                return PrefixInsertPoint::InsertPoint(InsertPoint {
                     key_bytes_used: current_depth,
                     path: path.finish(),
                     insert_kind: InsertKind::SplitLeaf {
@@ -1289,7 +1289,7 @@ where
         let lookup_result = match lookup_result {
             Ok(value) => value,
             Err(_inner_node_ptr) => {
-                return ForceInsertPoint::OverwritePoint(OverwritePoint {
+                return PrefixInsertPoint::OverwritePoint(OverwritePoint {
                     key_bytes_used: current_depth.saturating_sub(1),
                     path: path.finish(),
                     overwrite_point: current_node,
@@ -1318,7 +1318,7 @@ where
                         current_depth += 1;
                     },
                     None => {
-                        return ForceInsertPoint::InsertPoint(InsertPoint {
+                        return PrefixInsertPoint::InsertPoint(InsertPoint {
                             key_bytes_used: current_depth,
                             insert_kind: InsertKind::IntoExisting {
                                 inner_node_ptr: current_node,
@@ -1334,7 +1334,7 @@ where
                     // then the key has insufficient bytes to be unique. It must be
                     // a prefix of an existing key
 
-                    return ForceInsertPoint::OverwritePoint(OverwritePoint {
+                    return PrefixInsertPoint::OverwritePoint(OverwritePoint {
                         key_bytes_used: current_depth,
                         path: path.finish(),
                         overwrite_point: current_node,
@@ -1342,7 +1342,7 @@ where
                     });
                 }
 
-                return ForceInsertPoint::InsertPoint(InsertPoint {
+                return PrefixInsertPoint::InsertPoint(InsertPoint {
                     key_bytes_used: current_depth,
                     insert_kind: InsertKind::MismatchPrefix {
                         mismatch,

@@ -8,9 +8,9 @@ use crate::{
     raw::{
         clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
         maximum_unchecked, minimum_unchecked, prefix_search_unchecked, search_for_delete_point,
-        search_for_force_insert_point, search_for_insert_point, search_unchecked, CloneResult,
-        DeletePoint, DeleteResult, ForceInsertPoint, InsertKind::Exact, InsertPoint,
-        InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, RawIterator,
+        search_for_insert_point, search_for_prefix_insert_point, search_unchecked, CloneResult,
+        DeletePoint, DeleteResult, InsertKind, InsertPoint, InsertPrefixError, InsertResult,
+        LeafNode, NodePtr, OpaqueNodePtr, PrefixInsertPoint, RawIterator,
     },
     rust_nightly_apis::hasher_write_length_prefix,
     AsBytes, NoPrefixesBytes,
@@ -28,8 +28,10 @@ use core::{
 
 mod entry;
 mod iterators;
+mod prefix_entry;
 pub use entry::*;
 pub use iterators::*;
+pub use prefix_entry::*;
 
 /// This is the default number of bytes that are used in each inner node for
 /// storing key prefixes.
@@ -622,14 +624,14 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// let mut map = TreeMap::<Box<[u8]>, char>::new();
     ///
     /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-    /// assert_eq!(*map.get_prefix([1, 2, 3, 4, 5].as_ref()).unwrap(), 'a');
+    /// assert_eq!(*map.prefix_get([1, 2, 3, 4, 5].as_ref()).unwrap(), 'a');
     /// ```
-    pub fn get_prefix<Q>(&self, key: &Q) -> Option<&V>
+    pub fn prefix_get<Q>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
     {
-        Some(self.get_prefix_key_value(key)?.1)
+        Some(self.prefix_get_key_value(key)?.1)
     }
 
     /// Returns the key-value pair corresponding to the value of the leaf that
@@ -644,11 +646,11 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     ///
     /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
     /// assert_eq!(
-    ///     map.get_prefix_key_value([1, 2, 3, 4, 5].as_ref()).map(|(k, v)| (k.as_ref(), v)),
+    ///     map.prefix_get_key_value([1, 2, 3, 4, 5].as_ref()).map(|(k, v)| (k.as_ref(), v)),
     ///     Some(([1, 2, 3].as_ref(), &'a'))
     /// );
     /// ```
-    pub fn get_prefix_key_value<Q>(&self, key: &Q) -> Option<(&K, &V)>
+    pub fn prefix_get_key_value<Q>(&self, key: &Q) -> Option<(&K, &V)>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -671,6 +673,46 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         }
     }
 
+    /// Returns the key-value pair, with the value as a mutable reference,
+    /// corresponding to the value of the leaf that prefixes the given key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// let value = map.prefix_get_key_value_mut([1, 2, 3, 4, 5].as_ref()).unwrap();
+    /// if value.0.last() == Some(&3) {
+    ///     *value.1 = 'b';
+    /// }
+    /// assert_eq!(map.get([1, 2, 3].as_ref()), Some(&'b'));
+    /// ```
+    pub fn prefix_get_key_value_mut<Q>(&mut self, key: &Q) -> Option<(&K, &mut V)>
+    where
+        K: Borrow<Q> + AsBytes,
+        Q: AsBytes + ?Sized,
+    {
+        if let Some(state) = &self.state {
+            // SAFETY: Since we have an immutable reference to the `TreeMap` object, that
+            // means there can only exist other immutable references aside from this one,
+            // and no mutable references. That means that no mutating operations can occur
+            // on the root node or any child of the root node.
+            let search_result = unsafe { prefix_search_unchecked(state.root, key.as_bytes())? };
+
+            // SAFETY: The lifetime chosen the value reference is bounded by the lifetime of
+            // the immutable reference to the `TreeMap`. The memory of the value will not be
+            // mutated since it is only owned by the `TreeMap` and there can only be other
+            // immutable references at this time (no mutable references to the `TreeMap`).
+            let (key, value) = unsafe { search_result.as_key_ref_value_mut() };
+            Some((key, value))
+        } else {
+            None
+        }
+    }
+
     /// Returns a mutable reference to the value corresponding to the leaf that
     /// prefixes the given key.
     ///
@@ -683,10 +725,10 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     ///
     /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
     ///
-    /// *map.get_prefix_mut([1, 2, 3, 4].as_ref()).unwrap() = 'b';
+    /// *map.prefix_get_mut([1, 2, 3, 4].as_ref()).unwrap() = 'b';
     /// assert_eq!(map[[1, 2, 3].as_ref()], 'b');
     /// ```
-    pub fn get_prefix_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
+    pub fn prefix_get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
     where
         K: Borrow<Q> + AsBytes,
         Q: AsBytes + ?Sized,
@@ -969,9 +1011,9 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         insert_result
     }
 
-    fn apply_force_insert_point(
+    fn apply_prefix_insert_point(
         &mut self,
-        insert_point: ForceInsertPoint<K, V, PREFIX_LEN>,
+        insert_point: PrefixInsertPoint<K, V, PREFIX_LEN>,
         key: K,
         value: V,
     ) -> InsertResult<'_, K, V, PREFIX_LEN>
@@ -1175,7 +1217,7 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// value pairs are removed and this key value pair is inserted in their
     /// place.
     ///
-    /// See also: [`Self::get_prefix`] and friends.
+    /// See also: [`Self::prefix_get`] and friends.
     ///
     /// # Examples
     ///
@@ -1184,21 +1226,21 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     ///
     /// let mut map = TreeMap::<Box<[u8]>, char>::new();
     ///
-    /// map.force_insert(Box::new([1, 2, 3]), 'a');
-    /// map.force_insert(Box::new([2, 3, 4, 5]), 'b');
-    /// map.force_insert(Box::new([2, 3, 4, 6]), 'b');
+    /// map.prefix_insert(Box::new([1, 2, 3]), 'a');
+    /// map.prefix_insert(Box::new([2, 3, 4, 5]), 'b');
+    /// map.prefix_insert(Box::new([2, 3, 4, 6]), 'b');
     /// // [2, 3, 4, 5] and [2, 3, 4, 6] are removed and ([2, 3, 4], 'c') is inserted.
-    /// map.force_insert(Box::new([2, 3, 4]), 'c');
+    /// map.prefix_insert(Box::new([2, 3, 4]), 'c');
     /// assert!(map.get([2, 3, 4, 5].as_ref()).is_none());
     /// assert!(map.get([2, 3, 4, 6].as_ref()).is_none());
     /// // ([1, 2, 3], 'a') is replaced by ([1, 2], 'd')
-    /// map.force_insert(Box::new([1, 2]), 'd');
+    /// map.prefix_insert(Box::new([1, 2]), 'd');
     /// assert!(map.get([1, 2, 3].as_ref()).is_none());
     /// assert_eq!(map.get([1, 2].as_ref()), Some(&'d'));
     ///
     /// assert_eq!(map.len(), 2);
     /// ```
-    pub fn force_insert(&mut self, key: K, value: V)
+    pub fn prefix_insert(&mut self, key: K, value: V)
     where
         K: AsBytes,
     {
@@ -1209,8 +1251,8 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
             // other accesses to any node in the tree.
             // The same allocator is used for all inserts and deletes
             let _ = unsafe {
-                let insert_point = search_for_force_insert_point(state.root, key.as_bytes());
-                self.apply_force_insert_point(insert_point, key, value)
+                let insert_point = search_for_prefix_insert_point(state.root, key.as_bytes());
+                self.apply_prefix_insert_point(insert_point, key, value)
             };
         } else {
             self.init_tree(key, value);
@@ -1806,7 +1848,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
                 // other accesses to any node in the tree.
                 let insert_point = unsafe { search_for_insert_point(state.root, key.as_bytes())? };
                 match insert_point.insert_kind {
-                    Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
+                    InsertKind::Exact { leaf_node_ptr } => Entry::Occupied(OccupiedEntry {
                         map: self,
                         delete_point: DeletePoint {
                             path: insert_point.path,
@@ -1827,6 +1869,88 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
             }),
         };
         Ok(entry)
+    }
+
+    /// Tries to get the given key’s corresponding prefix entry in the map for
+    /// in-place manipulation.
+    ///
+    /// This entry represents an unfinished [prefix_insert](Self::prefix_insert)
+    /// operation. Compared to [Entry], it has one extra occupied state
+    /// called [InnerOccupiedEntry]. This entry represents the
+    /// `prefix_insert` case were the exact key was not found, but a prefix
+    /// of the given key or vice versa was found.
+    ///
+    /// See also: [Self::try_entry].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use blart::{TreeMap, map::{PrefixEntry, PrefixOccupied}};
+    /// let mut tree = TreeMap::new();
+    /// tree.try_insert("Hello from Germany", 1).unwrap();
+    /// tree.try_insert("Hello from France", 1).unwrap();
+    /// tree.try_insert("Hello from Belgium", 1).unwrap();
+    /// tree.try_insert("Anyone on Mars?", 3).unwrap();
+    /// let PrefixEntry::Occupied(PrefixOccupied::Inner(inner)) =
+    ///     tree.prefix_entry("Hello from")
+    /// else {
+    ///     unreachable!()
+    /// };
+    /// // We can iterate over all keys that would be overwritten if we inserted into this entry.
+    /// let mut inner_iter = inner.iter();
+    /// assert_eq!(inner_iter.next(), Some((&"Hello from Belgium", &1)));
+    /// assert_eq!(inner_iter.next(), Some((&"Hello from France", &1)));
+    /// assert_eq!(inner_iter.next(), Some((&"Hello from Germany", &1)));
+    /// assert_eq!(inner_iter.next(), None);
+    /// inner.insert(2);
+    /// assert_eq!(tree.len(), 2);
+    /// ```
+    pub fn prefix_entry(&mut self, key: K) -> PrefixEntry<'_, K, V, PREFIX_LEN, A>
+    where
+        K: AsBytes,
+    {
+        match &self.state {
+            Some(state) => {
+                // SAFETY: Since we have a mutable reference to the `TreeMap`, we are guaranteed
+                // that there are no other references (mutable or immutable) to this same
+                // object. Meaning that our access to the root node is unique and there are no
+                // other accesses to any node in the tree.
+                let insert_point =
+                    unsafe { search_for_prefix_insert_point(state.root, key.as_bytes()) };
+                match insert_point {
+                    PrefixInsertPoint::OverwritePoint(overwrite_point) => {
+                        PrefixEntry::Occupied(PrefixOccupied::Inner(InnerOccupiedEntry {
+                            map: self,
+                            key,
+                            overwrite_point,
+                        }))
+                    },
+                    PrefixInsertPoint::InsertPoint(insert_point) => {
+                        match insert_point.insert_kind {
+                            InsertKind::Exact { leaf_node_ptr } => {
+                                PrefixEntry::Occupied(PrefixOccupied::Leaf(OccupiedEntry {
+                                    map: self,
+                                    delete_point: DeletePoint {
+                                        path: insert_point.path,
+                                        leaf_node_ptr,
+                                    },
+                                }))
+                            },
+                            _ => PrefixEntry::Vacant(VacantEntry {
+                                key,
+                                insert_point: Some(insert_point),
+                                map: self,
+                            }),
+                        }
+                    },
+                }
+            },
+            None => PrefixEntry::Vacant(VacantEntry {
+                key,
+                insert_point: None,
+                map: self,
+            }),
+        }
     }
 
     /// Gets the given key’s corresponding entry in the map for in-place
@@ -2646,7 +2770,7 @@ mod tests {
         let mut map = TreeMap::<Box<[u8]>, char>::new();
 
         map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-        assert_eq!(*map.get_prefix([1, 2, 3, 4, 5].as_ref()).unwrap(), 'a');
+        assert_eq!(*map.prefix_get([1, 2, 3, 4, 5].as_ref()).unwrap(), 'a');
     }
 
     #[test]
@@ -2655,7 +2779,7 @@ mod tests {
 
         map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
         assert_eq!(
-            map.get_prefix_key_value([1, 2, 3, 4, 5].as_ref())
+            map.prefix_get_key_value([1, 2, 3, 4, 5].as_ref())
                 .map(|(k, v)| (k.as_ref(), v)),
             Some(([1, 2, 3].as_ref(), &'a'))
         );
@@ -2667,21 +2791,21 @@ mod tests {
 
         map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
 
-        *map.get_prefix_mut([1, 2, 3, 4].as_ref()).unwrap() = 'b';
+        *map.prefix_get_mut([1, 2, 3, 4].as_ref()).unwrap() = 'b';
         assert_eq!(map[[1, 2, 3].as_ref()], 'b');
     }
 
     #[test]
-    fn test_force_insert() {
+    fn test_prefix_insert() {
         let mut map = TreeMap::<Box<[u8]>, char>::new();
 
-        map.force_insert(Box::new([1, 2, 3]), 'a');
-        map.force_insert(Box::new([2, 3, 4, 5]), 'b');
-        map.force_insert(Box::new([2, 3, 4, 6]), 'b');
-        map.force_insert(Box::new([2, 3, 4]), 'c');
+        map.prefix_insert(Box::new([1, 2, 3]), 'a');
+        map.prefix_insert(Box::new([2, 3, 4, 5]), 'b');
+        map.prefix_insert(Box::new([2, 3, 4, 6]), 'b');
+        map.prefix_insert(Box::new([2, 3, 4]), 'c');
         assert!(map.get([2, 3, 4, 5].as_ref()).is_none());
         assert!(map.get([2, 3, 4, 6].as_ref()).is_none());
-        map.force_insert(Box::new([1, 2]), 'd');
+        map.prefix_insert(Box::new([1, 2]), 'd');
         assert!(map.get([1, 2, 3].as_ref()).is_none());
         assert_eq!(map.get([1, 2].as_ref()), Some(&'d'));
 
@@ -2695,18 +2819,18 @@ mod tests {
         map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
         map.try_insert(Box::new([2, 3, 4, 5]), 'b').unwrap();
         map.try_insert(Box::new([2, 3, 4, 6]), 'b').unwrap();
-        assert!(map.get_prefix([].as_ref()).is_none());
+        assert!(map.prefix_get([].as_ref()).is_none());
     }
 
     #[test]
-    fn test_force_insert_resize_inner() {
+    fn test_prefix_insert_resize_inner() {
         let mut map = TreeMap::<Box<[u8]>, char>::new();
 
         map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
         map.try_insert(Box::new([1, 2, 4]), 'b').unwrap();
         map.try_insert(Box::new([1, 2, 5]), 'b').unwrap();
         map.try_insert(Box::new([1, 2, 6]), 'b').unwrap();
-        map.force_insert(Box::new([1, 2, 7]), 'b');
+        map.prefix_insert(Box::new([1, 2, 7]), 'b');
         assert!(map.len() == 5);
     }
 
