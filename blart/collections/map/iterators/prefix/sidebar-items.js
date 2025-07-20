@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["implement_prefix_iter"],"struct":["Prefix","PrefixMut"]};
