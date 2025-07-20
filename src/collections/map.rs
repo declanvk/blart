@@ -1,6 +1,17 @@
 //! Module containing implementations of the `TreeMap` and associated
 //! iterators/etc.
 
+use alloc::vec::Vec;
+use core::{
+    borrow::Borrow,
+    fmt::Debug,
+    hash::Hash,
+    mem::{self, ManuallyDrop},
+    ops::{Index, RangeBounds},
+    panic::UnwindSafe,
+    ptr,
+};
+
 #[cfg(feature = "std")]
 use crate::visitor::{MalformedTreeError, WellFormedChecker};
 use crate::{
@@ -14,16 +25,6 @@ use crate::{
     },
     rust_nightly_apis::hasher_write_length_prefix,
     AsBytes, NoPrefixesBytes,
-};
-use alloc::vec::Vec;
-use core::{
-    borrow::Borrow,
-    fmt::Debug,
-    hash::Hash,
-    mem::{self, ManuallyDrop},
-    ops::{Index, RangeBounds},
-    panic::UnwindSafe,
-    ptr,
 };
 
 mod entry;
@@ -2208,6 +2209,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use alloc::{boxed::Box, string::String, vec::Vec};
+    use core::cmp::Ordering;
+
+    use super::*;
     use crate::{
         tests_common::{
             generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
@@ -2215,10 +2220,6 @@ mod tests {
         },
         TreeMap,
     };
-    use alloc::{boxed::Box, string::String, vec::Vec};
-    use core::cmp::Ordering;
-
-    use super::*;
 
     #[test]
     fn tree_map_is_send_sync_unwind_safe() {
@@ -3024,14 +3025,7 @@ mod tests {
 #[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
 #[cfg_attr(test, mutants::skip)]
 mod custom_allocator_tests {
-    use super::*;
-
-    use crate::{
-        allocator::AllocError,
-        rust_nightly_apis::ptr::{nonnull_addr, nonnull_with_addr},
-    };
     use alloc::boxed::Box;
-
     use core::{
         alloc::Layout,
         cell::{Cell, UnsafeCell},
@@ -3040,6 +3034,12 @@ mod custom_allocator_tests {
         num::NonZeroUsize,
         pin::Pin,
         ptr::{addr_of_mut, NonNull},
+    };
+
+    use super::*;
+    use crate::{
+        allocator::AllocError,
+        rust_nightly_apis::ptr::{nonnull_addr, nonnull_with_addr},
     };
 
     struct BumpAllocator<const N: usize> {

@@ -614,10 +614,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::tests_common::{generate_key_with_prefix, swap, PrefixExpansion};
     use alloc::{boxed::Box, vec::Vec};
 
     use super::*;
+    use crate::tests_common::{generate_key_with_prefix, swap, PrefixExpansion};
 
     #[test]
     fn iterators_are_send_sync() {

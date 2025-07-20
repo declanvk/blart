@@ -241,9 +241,8 @@ mod tests {
     use alloc::sync::Arc;
     use core::sync::atomic::{AtomicUsize, Ordering};
 
-    use crate::{tests_common::swap, AsBytes, NoPrefixesBytes, OrderedBytes};
-
     use super::*;
+    use crate::{tests_common::swap, AsBytes, NoPrefixesBytes, OrderedBytes};
 
     #[test]
     fn iterators_are_send_sync() {

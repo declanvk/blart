@@ -1,7 +1,6 @@
-pub(crate) use self::inner::{do_alloc, Allocator, Global};
-
 #[cfg(all(test, any(feature = "nightly", feature = "allocator-api2")))]
 pub(crate) use self::inner::AllocError;
+pub(crate) use self::inner::{do_alloc, Allocator, Global};
 
 // Nightly-case.
 // Use unstable `allocator_api` feature.
@@ -9,12 +8,11 @@ pub(crate) use self::inner::AllocError;
 // This is used when building for `std`.
 #[cfg(feature = "nightly")]
 mod inner {
+    #[cfg(test)]
+    pub use alloc::alloc::AllocError;
     use alloc::alloc::Layout;
     pub use alloc::alloc::{Allocator, Global};
     use core::ptr::NonNull;
-
-    #[cfg(test)]
-    pub use alloc::alloc::AllocError;
 
     pub(crate) fn do_alloc<A: Allocator>(alloc: &A, layout: Layout) -> Result<NonNull<u8>, ()> {
         match alloc.allocate(layout) {
@@ -33,11 +31,11 @@ mod inner {
 #[cfg(all(not(feature = "nightly"), feature = "allocator-api2"))]
 mod inner {
     use alloc::alloc::Layout;
-    pub use allocator_api2::alloc::{Allocator, Global};
     use core::ptr::NonNull;
 
     #[cfg(test)]
     pub use allocator_api2::alloc::AllocError;
+    pub use allocator_api2::alloc::{Allocator, Global};
 
     #[expect(clippy::map_err_ignore)]
     pub(crate) fn do_alloc<A: Allocator>(alloc: &A, layout: Layout) -> Result<NonNull<u8>, ()> {

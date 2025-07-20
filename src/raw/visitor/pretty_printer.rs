@@ -1,12 +1,13 @@
+use std::{
+    fmt::{self},
+    io::{self, Write},
+};
+
 use crate::{
     allocator::Allocator,
     raw::{InnerNode, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
     AsBytes, TreeMap,
-};
-use std::{
-    fmt::{self},
-    io::{self, Write},
 };
 
 /// Settings which customize the output of the [`DotPrinter`] visitor.
@@ -270,10 +271,10 @@ pub fn bytes_display_fmt(value: &impl AsBytes, f: &mut fmt::Formatter) -> fmt::R
 
 #[cfg(test)]
 mod tests {
-    use crate::tests_common::swap;
     use alloc::{string::String, vec::Vec};
 
     use super::*;
+    use crate::tests_common::swap;
 
     #[test]
     fn simple_tree_output_to_dot() {

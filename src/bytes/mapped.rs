@@ -1,4 +1,3 @@
-use crate::{AsBytes, NoPrefixesBytes, OrderedBytes};
 use alloc::{boxed::Box, vec::Vec};
 use core::{
     fmt::Debug,
@@ -10,6 +9,8 @@ use core::{
         NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
     },
 };
+
+use crate::{AsBytes, NoPrefixesBytes, OrderedBytes};
 
 /// Trait representing a reversible conversion from a type to some sort of byte
 /// string.
@@ -725,8 +726,9 @@ as_bytes_for_tuples!(
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::*;
     use core::{cmp::Ordering, fmt::Debug};
+
+    use super::*;
 
     fn check_is_ordered_bytes<T: OrderedBytes>() {}
 

@@ -1,5 +1,3 @@
-use argh::FromArgs;
-use blart::{visitor::TreeStatsCollector, TreeMap};
 use std::{
     error::Error,
     ffi::CString,
@@ -8,6 +6,9 @@ use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
 };
+
+use argh::FromArgs;
+use blart::{visitor::TreeStatsCollector, TreeMap};
 
 #[derive(FromArgs)]
 /// TREES

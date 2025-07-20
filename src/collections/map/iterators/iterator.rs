@@ -249,9 +249,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use alloc::{boxed::Box, vec::Vec};
+
     use super::*;
     use crate::{tests_common::generate_key_fixed_length, TreeMap};
-    use alloc::{boxed::Box, vec::Vec};
 
     #[test]
     fn iterators_are_send_sync() {

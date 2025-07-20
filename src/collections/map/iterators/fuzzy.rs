@@ -1,3 +1,6 @@
+use alloc::{boxed::Box, vec::Vec};
+use core::{iter::FusedIterator, mem::MaybeUninit};
+
 use crate::{
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
@@ -7,8 +10,6 @@ use crate::{
     },
     AsBytes, TreeMap,
 };
-use alloc::{boxed::Box, vec::Vec};
-use core::{iter::FusedIterator, mem::MaybeUninit};
 
 pub(crate) struct StackArena {
     data: Vec<MaybeUninit<usize>>,

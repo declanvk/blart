@@ -1,6 +1,3 @@
-use crate::raw::{
-    Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
-};
 use core::{
     fmt,
     iter::{Enumerate, FusedIterator},
@@ -8,11 +5,14 @@ use core::{
     ops::Bound,
     slice::Iter,
 };
-
 #[cfg(feature = "nightly")]
 use core::{
     iter::FilterMap,
     simd::{cmp::SimdPartialEq, usizex64},
+};
+
+use crate::raw::{
+    Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
 
 /// Node that references between 49 and 256 children
@@ -340,6 +340,7 @@ mod tests {
     use alloc::{boxed::Box, vec::Vec};
     use core::ops::{Bound, RangeBounds};
 
+    use super::*;
     use crate::raw::{
         representation::tests::{
             inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
@@ -347,8 +348,6 @@ mod tests {
         },
         LeafNode, NodePtr,
     };
-
-    use super::*;
 
     #[test]
     fn lookup() {

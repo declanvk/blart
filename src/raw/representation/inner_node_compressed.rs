@@ -1,6 +1,7 @@
-use crate::{
-    raw::{Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex},
-    rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
+#[cfg(feature = "nightly")]
+use core::simd::{
+    cmp::{SimdPartialEq, SimdPartialOrd},
+    u8x16,
 };
 use core::{
     fmt,
@@ -10,10 +11,9 @@ use core::{
     slice::Iter,
 };
 
-#[cfg(feature = "nightly")]
-use core::simd::{
-    cmp::{SimdPartialEq, SimdPartialOrd},
-    u8x16,
+use crate::{
+    raw::{Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex},
+    rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
 
 /// Where a write should happen inside the node
@@ -683,6 +683,9 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, 
 
 #[cfg(test)]
 mod tests {
+    use alloc::{boxed::Box, vec::Vec};
+
+    use super::*;
     use crate::raw::{
         representation::tests::{
             inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
@@ -690,9 +693,6 @@ mod tests {
         },
         LeafNode, NodePtr,
     };
-    use alloc::{boxed::Box, vec::Vec};
-
-    use super::*;
 
     #[test]
     fn node4_lookup() {

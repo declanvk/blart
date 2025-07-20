@@ -1,3 +1,5 @@
+use alloc::{boxed::Box, string::String};
+
 use crate::{
     raw::{
         search_unchecked, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode,
@@ -6,7 +8,6 @@ use crate::{
     tests_common::{generate_key_with_prefix, swap, PrefixExpansion},
     TreeMap,
 };
-use alloc::{boxed::Box, string::String};
 
 #[test]
 fn lookup_on_non_copy_leaf() {

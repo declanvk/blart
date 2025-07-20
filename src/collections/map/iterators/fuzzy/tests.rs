@@ -1,11 +1,10 @@
 use alloc::ffi::CString;
 
+use super::*;
 use crate::{
     raw::visitor::{TreeStats, TreeStatsCollector},
     AsBytes, TreeMap,
 };
-
-use super::*;
 
 #[test]
 fn iterators_are_send_sync() {

@@ -235,8 +235,9 @@ impl<P, const MIN_BITS: u32> fmt::Pointer for TaggedPointer<P, MIN_BITS> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloc::boxed::Box;
+
+    use super::*;
 
     #[test]
     fn successful_tag() {

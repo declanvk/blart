@@ -1,5 +1,6 @@
 use core::fmt;
 
+use super::PrefixMatchBehavior;
 use crate::{
     allocator::Allocator,
     raw::{
@@ -8,8 +9,6 @@ use crate::{
     },
     AsBytes,
 };
-
-use super::PrefixMatchBehavior;
 
 /// Remove a child node from the given inner node, return the child node
 /// pointer if it was compressed.

@@ -363,9 +363,8 @@ where
 // any safety-critical stuff
 #[cfg(all(test, not(miri)))]
 mod tests {
-    use crate::TreeMap;
-
     use super::*;
+    use crate::TreeMap;
 
     #[test]
     fn key_generator_returns_expected_number_of_entries() {

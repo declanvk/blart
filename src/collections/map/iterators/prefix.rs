@@ -1,14 +1,14 @@
-use crate::{
-    allocator::{Allocator, Global},
-    map::DEFAULT_PREFIX_LEN,
-    raw::{maximum_unchecked, minimum_unchecked, RawIterator},
-    AsBytes, TreeMap,
-};
 use core::iter::FusedIterator;
 
 use super::{
     find_terminating_node, InnerNodeSearchResult, InnerNodeSearchResultReason,
     TerminatingNodeSearchResult,
+};
+use crate::{
+    allocator::{Allocator, Global},
+    map::DEFAULT_PREFIX_LEN,
+    raw::{maximum_unchecked, minimum_unchecked, RawIterator},
+    AsBytes, TreeMap,
 };
 
 macro_rules! implement_prefix_iter {
@@ -187,10 +187,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{tests_common::swap, TreeMap};
     use alloc::vec::Vec;
 
     use super::*;
+    use crate::{tests_common::swap, TreeMap};
 
     #[test]
     fn iterators_are_send_sync() {

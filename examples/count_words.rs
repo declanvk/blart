@@ -1,8 +1,9 @@
-use argh::FromArgs;
-use blart::TreeMap;
 use std::{
     collections::BTreeMap, error::Error, ffi::CString, fs::OpenOptions, io::Read, path::PathBuf,
 };
+
+use argh::FromArgs;
+use blart::TreeMap;
 
 /// Count words in file
 #[derive(FromArgs)]

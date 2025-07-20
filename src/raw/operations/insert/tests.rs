@@ -1,3 +1,8 @@
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+};
+
 use crate::{
     allocator::Global,
     raw::{
@@ -5,10 +10,6 @@ use crate::{
         InsertPrefixError, LeafNode, NodePtr, NodeType, OpaqueNodePtr,
     },
     tests_common::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
-};
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
 };
 
 #[test]

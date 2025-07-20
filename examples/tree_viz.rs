@@ -1,8 +1,3 @@
-use argh::FromArgs;
-use blart::{
-    visitor::{DotPrinter, DotPrinterSettings},
-    AsBytes, NoPrefixesBytes, TreeMap,
-};
 use std::{
     error::Error,
     ffi::CString,
@@ -10,6 +5,12 @@ use std::{
     fs::OpenOptions,
     io::{self, BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
+};
+
+use argh::FromArgs;
+use blart::{
+    visitor::{DotPrinter, DotPrinterSettings},
+    AsBytes, NoPrefixesBytes, TreeMap,
 };
 
 #[derive(FromArgs)]

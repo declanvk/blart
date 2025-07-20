@@ -6,16 +6,16 @@ mod tree_stats;
 #[cfg(feature = "std")]
 mod well_formed;
 
-use super::{
-    ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, Node,
-    NodePtr, OpaqueNodePtr,
-};
-
 #[cfg(feature = "std")]
 pub use pretty_printer::*;
 pub use tree_stats::*;
 #[cfg(feature = "std")]
 pub use well_formed::*;
+
+use super::{
+    ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, Node,
+    NodePtr, OpaqueNodePtr,
+};
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.

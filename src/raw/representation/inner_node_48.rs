@@ -1,10 +1,3 @@
-use crate::{
-    raw::{
-        Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodeType,
-        OpaqueNodePtr,
-    },
-    rust_nightly_apis::{maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref},
-};
 use core::{
     cmp::Ordering,
     error::Error,
@@ -14,11 +7,18 @@ use core::{
     ops::Bound,
     slice::Iter,
 };
-
 #[cfg(feature = "nightly")]
 use core::{
     iter::{FilterMap, Map},
     simd::{cmp::SimdPartialEq, u8x64},
+};
+
+use crate::{
+    raw::{
+        Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodeType,
+        OpaqueNodePtr,
+    },
+    rust_nightly_apis::{maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref},
 };
 
 /// A restricted index only valid from 0 to LIMIT - 1.
@@ -607,6 +607,7 @@ mod tests {
     use alloc::{boxed::Box, vec::Vec};
     use core::ops::{Bound, RangeBounds};
 
+    use super::*;
     use crate::raw::{
         representation::tests::{
             inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
@@ -614,8 +615,6 @@ mod tests {
         },
         LeafNode, NodePtr,
     };
-
-    use super::*;
 
     #[test]
     fn lookup() {

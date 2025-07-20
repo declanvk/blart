@@ -1,10 +1,5 @@
 //! Trie node representation
 
-use crate::{
-    allocator::{do_alloc, Allocator},
-    tagged_pointer::TaggedPointer,
-    AsBytes,
-};
 use core::{
     alloc::Layout,
     fmt,
@@ -14,6 +9,12 @@ use core::{
     mem::{self, ManuallyDrop},
     ops::{Range, RangeBounds},
     ptr::{self, NonNull},
+};
+
+use crate::{
+    allocator::{do_alloc, Allocator},
+    tagged_pointer::TaggedPointer,
+    AsBytes,
 };
 
 mod header;
@@ -1410,11 +1411,11 @@ impl<K, V, const PREFIX_LEN: usize> TreePathSearch<K, V, PREFIX_LEN> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rust_nightly_apis::ptr::const_addr;
-
-    use super::*;
     use alloc::{boxed::Box, vec::Vec};
     use core::mem;
+
+    use super::*;
+    use crate::rust_nightly_apis::ptr::const_addr;
 
     // This test is important because it verifies that we can transform a tagged
     // pointer to a type with large and small alignment and back without issues.

@@ -1,12 +1,11 @@
 use core::mem::replace;
 
+use super::DEFAULT_PREFIX_LEN;
 use crate::{
     allocator::{Allocator, Global},
     raw::{DeletePoint, InsertParentNodeChange, InsertPoint, InsertResult, TreePath},
     AsBytes, TreeMap,
 };
-
-use super::DEFAULT_PREFIX_LEN;
 
 /// A view into an occupied entry in a [`TreeMap`]. It is part of the [`Entry`]
 /// enum.
@@ -386,9 +385,8 @@ mod tests {
     use alloc::{boxed::Box, vec::Vec};
     use alloc::{ffi::CString, string::String};
 
-    use crate::TreeMap;
-
     use super::*;
+    use crate::TreeMap;
 
     #[test]
     fn iterators_are_send_sync() {

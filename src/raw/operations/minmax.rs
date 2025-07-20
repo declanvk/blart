@@ -52,16 +52,17 @@ pub unsafe fn maximum_unchecked<K, V, const PREFIX_LEN: usize>(
 
 #[cfg(test)]
 mod tests {
+    use alloc::{
+        boxed::Box,
+        string::{String, ToString},
+    };
+
     use crate::{
         allocator::Global,
         raw::{
             deallocate_tree, maximum_unchecked, minimum_unchecked, LeafNode, NodePtr, OpaqueNodePtr,
         },
         tests_common::{generate_key_fixed_length, generate_keys_skewed, insert_unchecked},
-    };
-    use alloc::{
-        boxed::Box,
-        string::{String, ToString},
     };
 
     #[test]

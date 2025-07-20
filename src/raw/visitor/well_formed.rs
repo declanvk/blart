@@ -1,11 +1,3 @@
-use crate::{
-    allocator::Allocator,
-    raw::{
-        visitor::{Visitable, Visitor},
-        InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr, OptionalLeafPtr,
-    },
-    AsBytes, TreeMap,
-};
 use alloc::{boxed::Box, vec::Vec};
 use core::{
     cmp::Ordering,
@@ -14,6 +6,15 @@ use core::{
     ops::{Add, AddAssign},
 };
 use std::collections::{hash_map::Entry, HashMap};
+
+use crate::{
+    allocator::Allocator,
+    raw::{
+        visitor::{Visitable, Visitor},
+        InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr, OptionalLeafPtr,
+    },
+    AsBytes, TreeMap,
+};
 
 /// A portion of an entire key that should uniquely identify each node in
 /// the tree.

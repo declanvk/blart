@@ -1,13 +1,14 @@
 use std::{borrow::Borrow, ops::RangeBounds};
 
-use crate::common::{
-    dense_fixed_length_key_tree, dictionary_tree, get_first_key, get_last_key, get_middle_key,
-    select_zipfian_keys, skewed_tree, sparse_fixed_length_key_tree, with_prefixes_tree,
-};
 use blart::{AsBytes, NoPrefixesBytes, TreeMap};
 use iai_callgrind::{
     library_benchmark, library_benchmark_group, main, Callgrind, FlamegraphConfig,
     LibraryBenchmarkConfig, OutputFormat,
+};
+
+use crate::common::{
+    dense_fixed_length_key_tree, dictionary_tree, get_first_key, get_last_key, get_middle_key,
+    select_zipfian_keys, skewed_tree, sparse_fixed_length_key_tree, with_prefixes_tree,
 };
 
 #[macro_use]

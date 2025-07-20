@@ -1,10 +1,9 @@
+use super::{OccupiedEntry, SubtreeIter, SubtreeIterMut, TreeMap, VacantEntry, DEFAULT_PREFIX_LEN};
 use crate::{
     allocator::{Allocator, Global},
     raw::{ConcreteNodePtr, DeletePoint, LeafNode, NodePtr, OverwritePoint, PrefixInsertPoint},
     AsBytes,
 };
-
-use super::{OccupiedEntry, SubtreeIter, SubtreeIterMut, TreeMap, VacantEntry, DEFAULT_PREFIX_LEN};
 
 /// A view into an occupied subtree in a [`TreeMap`].
 ///
@@ -370,8 +369,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloc::{ffi::CString, string::String};
+
+    use super::*;
 
     #[test]
     fn prefix_entry_is_send_sync() {

@@ -1,5 +1,6 @@
-use crate::common::{dictionary_tree, skewed_tree, with_prefixes_tree};
 use criterion::{criterion_group, Criterion};
+
+use crate::common::{dictionary_tree, skewed_tree, with_prefixes_tree};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("clone");

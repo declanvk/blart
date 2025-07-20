@@ -1,5 +1,7 @@
 //! This module contains the implementation of `clone()` for the trie.
 
+use alloc::vec::Vec;
+
 use crate::{
     allocator::Allocator,
     raw::{
@@ -7,7 +9,6 @@ use crate::{
     },
     AsBytes,
 };
-use alloc::vec::Vec;
 
 /// The result of cloning a trie
 #[derive(Debug)]
@@ -282,6 +283,7 @@ mod tests {
     use alloc::boxed::Box;
     use core::fmt;
 
+    use super::*;
     use crate::{
         tests_common::{
             generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
@@ -290,8 +292,6 @@ mod tests {
         visitor::WellFormedChecker,
         TreeMap,
     };
-
-    use super::*;
 
     #[track_caller]
     fn check<K: AsBytes + Clone + PartialEq + fmt::Debug>(keys: impl IntoIterator<Item = K>) {

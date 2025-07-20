@@ -1,3 +1,5 @@
+use core::{iter::FusedIterator, ops::Bound};
+
 use crate::{
     allocator::Allocator,
     collections::map::TreeMap,
@@ -5,7 +7,6 @@ use crate::{
     raw::{search_for_delete_point, LeafNode, NodePtr, RawIterator},
     AsBytes,
 };
-use core::{iter::FusedIterator, ops::Bound};
 
 /// An iterator which uses a closure to determine if an element should be
 /// removed.
@@ -203,11 +204,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use crate::{
         tests_common::{generate_key_fixed_length, swap},
         TreeMap,
     };
-    use alloc::vec::Vec;
 
     #[test]
     fn extract_if_simple() {

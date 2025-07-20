@@ -1,3 +1,11 @@
+use alloc::boxed::Box;
+use core::{
+    error::Error,
+    fmt,
+    marker::PhantomData,
+    ops::{Bound, ControlFlow},
+};
+
 use crate::{
     allocator::Allocator,
     raw::{
@@ -7,13 +15,6 @@ use crate::{
     },
     rust_nightly_apis::{likely, unlikely},
     AsBytes,
-};
-use alloc::boxed::Box;
-use core::{
-    error::Error,
-    fmt,
-    marker::PhantomData,
-    ops::{Bound, ControlFlow},
 };
 
 /// The results of a successful tree insert
