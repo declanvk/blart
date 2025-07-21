@@ -288,7 +288,7 @@ mod tests {
     use alloc::vec::Vec;
 
     use super::*;
-    use crate::{tests_common::generate_key_fixed_length, TreeMap};
+    use crate::{testing::generate_key_fixed_length, TreeMap};
 
     #[test]
     fn mostly_empty_tree_stats_fixed_length_tree() {

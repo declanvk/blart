@@ -15,7 +15,7 @@ use crate::{
 /// # Examples
 ///
 /// ```
-/// use blart::tests_common::swap;
+/// use blart::testing::swap;
 ///
 /// assert_eq!(swap((1, 2)), (2, 1));
 /// ```
@@ -34,7 +34,7 @@ pub fn swap<A, B>((a, b): (A, B)) -> (B, A) {
 /// # Examples
 ///
 /// ```
-/// # use blart::tests_common::generate_keys_skewed;
+/// # use blart::testing::generate_keys_skewed;
 /// let keys = generate_keys_skewed(10).collect::<Vec<_>>();
 /// assert_eq!(keys.len(), 10);
 /// assert_eq!(keys[0].as_ref(), &[255]);
@@ -88,7 +88,7 @@ pub fn generate_keys_skewed(max_len: usize) -> impl Iterator<Item = Box<[u8]>> {
 /// # Examples
 ///
 /// ```
-/// # use blart::tests_common::generate_key_fixed_length;
+/// # use blart::testing::generate_key_fixed_length;
 /// let keys = generate_key_fixed_length([3, 2, 1]).collect::<Vec<_>>();
 /// assert_eq!(keys.len(), 24);
 /// assert_eq!(keys[0].as_ref(), &[0, 0, 0]);
@@ -209,7 +209,7 @@ pub struct PrefixExpansion {
 /// # Examples
 ///
 /// ```
-/// # use blart::tests_common::{generate_key_with_prefix, PrefixExpansion};
+/// # use blart::testing::{generate_key_with_prefix, PrefixExpansion};
 /// let keys = generate_key_with_prefix([2; 3], [PrefixExpansion { base_index: 0, expanded_length: 3 }]).collect::<Vec<_>>();
 /// assert_eq!(keys.len(), 27);
 /// assert_eq!(keys[0].as_ref(), &[0, 0, 0, 0, 0]);

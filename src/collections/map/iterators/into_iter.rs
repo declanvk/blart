@@ -242,7 +242,7 @@ mod tests {
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
-    use crate::{tests_common::swap, AsBytes, NoPrefixesBytes, OrderedBytes};
+    use crate::{testing::swap, AsBytes, NoPrefixesBytes, OrderedBytes};
 
     #[test]
     fn iterators_are_send_sync() {

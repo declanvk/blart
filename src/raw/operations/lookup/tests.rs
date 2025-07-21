@@ -5,7 +5,7 @@ use crate::{
         search_unchecked, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode,
         NodePtr, OpaqueNodePtr,
     },
-    tests_common::{generate_key_with_prefix, swap, PrefixExpansion},
+    testing::{generate_key_with_prefix, swap, PrefixExpansion},
     TreeMap,
 };
 

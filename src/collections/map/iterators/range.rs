@@ -617,7 +617,7 @@ mod tests {
     use alloc::{boxed::Box, vec::Vec};
 
     use super::*;
-    use crate::tests_common::{generate_key_with_prefix, swap, PrefixExpansion};
+    use crate::testing::{generate_key_with_prefix, swap, PrefixExpansion};
 
     #[test]
     fn iterators_are_send_sync() {

@@ -3,7 +3,7 @@ mod common;
 #[test]
 #[cfg(not(miri))]
 fn test_memory_usage() {
-    use blart::{tests_common, tests_common::PrefixExpansion, TreeMap};
+    use blart::{testing, testing::PrefixExpansion, TreeMap};
     use common::{get_profiler, test_heap};
 
     const KEY_LEVEL_WIDTH: [u8; 3] = [6, 6, 5];
@@ -19,7 +19,7 @@ fn test_memory_usage() {
     ];
 
     let keys: Vec<_> =
-        tests_common::generate_key_with_prefix(KEY_LEVEL_WIDTH, PREFIX_EXPANSIONS).collect();
+        testing::generate_key_with_prefix(KEY_LEVEL_WIDTH, PREFIX_EXPANSIONS).collect();
     let prof = get_profiler(file!());
 
     test_heap(&prof, |stats| {
@@ -36,7 +36,7 @@ fn test_memory_usage() {
         }
 
         for (value, key) in
-            tests_common::generate_key_with_prefix(KEY_LEVEL_WIDTH, PREFIX_EXPANSIONS).enumerate()
+            testing::generate_key_with_prefix(KEY_LEVEL_WIDTH, PREFIX_EXPANSIONS).enumerate()
         {
             let result = tree.get(&key).unwrap();
             assert_eq!(result, &value);
