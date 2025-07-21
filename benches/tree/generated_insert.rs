@@ -1,5 +1,5 @@
 use blart::{
-    tests_common::{
+    testing::{
         generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
     },
     TreeMap,

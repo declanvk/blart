@@ -632,7 +632,7 @@ mod tests {
     use crate::{
         allocator::Global,
         raw::{InnerNode16, InnerNode4, LeafNode, NodePtr},
-        tests_common::{generate_key_fixed_length, setup_tree_from_entries},
+        testing::{generate_key_fixed_length, setup_tree_from_entries},
         TreeMap,
     };
 

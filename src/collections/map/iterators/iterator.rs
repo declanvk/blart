@@ -252,7 +252,7 @@ mod tests {
     use alloc::{boxed::Box, vec::Vec};
 
     use super::*;
-    use crate::{tests_common::generate_key_fixed_length, TreeMap};
+    use crate::{testing::generate_key_fixed_length, TreeMap};
 
     #[test]
     fn iterators_are_send_sync() {

@@ -190,7 +190,7 @@ mod tests {
     use alloc::vec::Vec;
 
     use super::*;
-    use crate::{tests_common::swap, TreeMap};
+    use crate::{testing::swap, TreeMap};
 
     #[test]
     fn iterators_are_send_sync() {

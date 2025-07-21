@@ -274,11 +274,11 @@ mod tests {
     use alloc::{string::String, vec::Vec};
 
     use super::*;
-    use crate::tests_common::swap;
+    use crate::testing::swap;
 
     #[test]
     fn simple_tree_output_to_dot() {
-        let tree: TreeMap<_, _> = crate::tests_common::generate_key_fixed_length([3, 3])
+        let tree: TreeMap<_, _> = crate::testing::generate_key_fixed_length([3, 3])
             .enumerate()
             .map(swap)
             .collect();

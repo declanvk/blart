@@ -207,7 +207,7 @@ mod tests {
     use alloc::vec::Vec;
 
     use crate::{
-        tests_common::{generate_key_fixed_length, swap},
+        testing::{generate_key_fixed_length, swap},
         TreeMap,
     };
 

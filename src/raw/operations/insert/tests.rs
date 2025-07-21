@@ -9,7 +9,7 @@ use crate::{
         deallocate_tree, search_unchecked, InnerNode, InnerNode4, InnerNodeCompressed,
         InsertPrefixError, LeafNode, NodePtr, NodeType, OpaqueNodePtr,
     },
-    tests_common::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
+    testing::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
 };
 
 #[test]

@@ -51,8 +51,8 @@ mod rust_nightly_apis;
 mod tagged_pointer;
 
 pub mod raw;
-#[doc(hidden)]
-pub mod tests_common;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 pub use bytes::*;
 pub use collections::*;

@@ -2214,7 +2214,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        tests_common::{
+        testing::{
             generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
             PrefixExpansion,
         },
