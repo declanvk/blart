@@ -54,7 +54,7 @@ macro_rules! as_bytes_for_integer_like_types {
         $(
             impl AsBytes for $type {
                 fn as_bytes(&self) -> &[u8] {
-                    bytemuck::bytes_of(self)
+                    <$type as zerocopy::IntoBytes>::as_bytes(self)
                 }
             }
 
@@ -65,13 +65,13 @@ macro_rules! as_bytes_for_integer_like_types {
 
             impl AsBytes for [$type] {
                 fn as_bytes(&self) -> &[u8] {
-                    bytemuck::cast_slice(self)
+                    <[$type] as zerocopy::IntoBytes>::as_bytes(self)
                 }
             }
 
             impl AsBytes for Vec<$type> {
                 fn as_bytes(&self) -> &[u8] {
-                    bytemuck::cast_slice(self)
+                    <[$type] as zerocopy::IntoBytes>::as_bytes(self.as_slice())
                 }
             }
         )*
@@ -116,7 +116,7 @@ macro_rules! as_bytes_for_integer_arrays {
         $(
             impl<const N: usize> AsBytes for [$type; N] {
                 fn as_bytes(&self) -> &[u8] {
-                    bytemuck::bytes_of(self)
+                    <[$type; N] as zerocopy::IntoBytes>::as_bytes(self)
                 }
             }
 

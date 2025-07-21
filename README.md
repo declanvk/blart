@@ -123,13 +123,13 @@ TARGET_TRIPLE="$(rustc --print host-tuple)"
 To run the benchmarks, install [`cargo-criterion`][cargo-criterion], then run:
 
 ```bash
-cargo +nightly criterion --history-id "$(git rev-parse --short HEAD)-0" --features bench-perf-events
+cargo +nightly criterion --history-id "$(git rev-parse --short HEAD)-0"
 ```
 
 or
 
 ```bash
-cargo bench --bench <bench_name> --features bench-perf-events
+cargo bench --bench <bench_name>
 ```
 
 If you get a "Permission denied" error, update perf_event_paranoid:

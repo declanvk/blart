@@ -237,11 +237,13 @@ macro_rules! impl_ordered_bytes_ints {
                 type Bytes = [u8; core::mem::size_of::<$unsigned>()];
 
                 fn to_bytes(value: $signed) -> Self::Bytes {
-                    (bytemuck::cast::<_, $unsigned>(value) ^ (1 << (<$unsigned>::BITS - 1))).to_be_bytes()
+                    let unsigned_value: $unsigned = zerocopy::transmute!(value);
+                    (unsigned_value ^ (1 << (<$unsigned>::BITS - 1))).to_be_bytes()
                 }
 
                 fn from_bytes(bytes: Self::Bytes) -> $signed {
-                    bytemuck::cast::<_, $signed>(<$unsigned>::from_be_bytes(bytes) ^ (1 << (<$unsigned>::BITS - 1)))
+                    let flipped_sign = <$unsigned>::from_be_bytes(bytes) ^ (1 << (<$unsigned>::BITS - 1));
+                    zerocopy::transmute!(flipped_sign)
                 }
             }
 
@@ -408,14 +410,15 @@ macro_rules! impl_ordered_bytes_nonzero_ints {
                 type Bytes = [u8; core::mem::size_of::<$unsigned>()];
 
                 fn to_bytes(value: $nonzero_signed) -> Self::Bytes {
-                    (bytemuck::cast::<_, $unsigned>(value.get()) ^ (1 << (<$unsigned>::BITS - 1))).to_be_bytes()
+                    let unsigned_value: $unsigned = zerocopy::transmute!(value);
+                    (unsigned_value ^ (1 << (<$unsigned>::BITS - 1))).to_be_bytes()
                 }
 
                 fn from_bytes(bytes: Self::Bytes) -> $nonzero_signed {
-                    let signed = bytemuck::cast::<_, $signed>(
-                        <$unsigned>::from_be_bytes(bytes) ^ (1 << (<$unsigned>::BITS - 1)));
+                    let flipped_sign = <$unsigned>::from_be_bytes(bytes) ^ (1 << (<$unsigned>::BITS - 1));
+                    let signed_value: $signed = zerocopy::transmute!(flipped_sign);
 
-                    <$nonzero_signed>::new(signed).expect("input bytes should not produce a zero value")
+                    <$nonzero_signed>::new(signed_value).expect("input bytes should not produce a zero value")
                 }
             }
 

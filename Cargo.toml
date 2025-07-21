@@ -26,13 +26,12 @@ autobenches = false
 
 [dependencies]
 allocator-api2 = { version = "0.2.20", optional = true }
-bytemuck = { version = "1.16.1", features = ["min_const_generics"] }
 paste = "1.0.15"
+zerocopy = "0.8.26"
 
 [features]
 default = ["std"]
 nightly = []
-bench-perf-events = []
 allocator-api2 = ["dep:allocator-api2"]
 std = []
 testing = []
