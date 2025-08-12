@@ -49,7 +49,10 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode256<K, V, PREF
     const TYPE: NodeType = NodeType::Node256;
 }
 
-impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode256<K, V, PREFIX_LEN> {
+// SAFETY: `InnerNode256` is `repr(C)` and has a `Header` as the first field
+unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
+    for InnerNode256<K, V, PREFIX_LEN>
+{
     type GrownNode = Self;
     #[cfg(not(feature = "nightly"))]
     type Iter<'a>

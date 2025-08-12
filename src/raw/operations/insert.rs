@@ -1080,7 +1080,8 @@ where
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                let leaf_node = leaf_node_ptr.read();
+                // SAFETY: function safety comment covers
+                let leaf_node = unsafe { leaf_node_ptr.as_ref() };
 
                 if leaf_node.matches_full_key(key_bytes) {
                     return Ok(InsertPoint {
@@ -1234,7 +1235,8 @@ where
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
             ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                let leaf_node = leaf_node_ptr.read();
+                // SAFETY: function safety comment covers
+                let leaf_node = unsafe { leaf_node_ptr.as_ref() };
 
                 if leaf_node.matches_full_key(key_bytes) {
                     return PrefixInsertPoint::InsertPoint(InsertPoint {
