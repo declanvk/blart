@@ -242,7 +242,7 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     /// is to an inner node.
     ///
     /// # Safety
-    ///  - The pointer must be to an inner node
+    ///  - The pointer must be to a type which implements [`InnerNode`].
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'h is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -256,7 +256,7 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     /// is to an inner node.
     ///
     /// # Safety
-    ///  - The pointer must be to an inner node
+    ///  - The pointer must be to a type which implements [`InnerNode`].
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'h is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -501,7 +501,7 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     pub unsafe fn as_ref<'a>(self) -> &'a N {
         // SAFETY: The pointer is properly aligned and points to a initialized instance
         // of N that is dereferenceable. The lifetime safety requirements are passed up
-        // to the invoked of this function.
+        // to the invoker of this function.
         unsafe { self.0.as_ref() }
     }
 
@@ -516,7 +516,7 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     pub unsafe fn as_mut<'a>(mut self) -> &'a mut N {
         // SAFETY: The pointer is properly aligned and points to a initialized instance
         // of N that is dereferenceable. The lifetime safety requirements are passed up
-        // to the invoked of this function.
+        // to the invoker of this function.
         unsafe { self.0.as_mut() }
     }
 
@@ -762,7 +762,14 @@ pub struct OptimisticMismatch {
 }
 
 /// Common methods implemented by all inner node.
-pub trait InnerNode<const PREFIX_LEN: usize>: Node<PREFIX_LEN> + Sized + fmt::Debug {
+///
+/// # Safety
+///
+/// All structures that implement this trait must be `repr(C)` and have a
+/// [`Header`] as the first field of the struct.
+pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
+    Node<PREFIX_LEN> + Sized + fmt::Debug
+{
     /// The type of the next larger node type.
     type GrownNode: InnerNode<PREFIX_LEN, Key = Self::Key, Value = Self::Value>;
 

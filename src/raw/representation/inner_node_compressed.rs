@@ -443,7 +443,8 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode4<K, V, PREFIX
     const TYPE: NodeType = NodeType::Node4;
 }
 
-impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
+// SAFETY: `InnerNode4` is `repr(C)` and has a `Header` as the first field
+unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode16<K, V, PREFIX_LEN>;
     type Iter<'a>
         = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN>
@@ -606,7 +607,8 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFI
     const TYPE: NodeType = NodeType::Node16;
 }
 
-impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
+// SAFETY: `InnerNode16` is `repr(C)` and has a `Header` as the first field
+unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode48<K, V, PREFIX_LEN>;
     type Iter<'a>
         = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN>

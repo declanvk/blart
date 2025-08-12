@@ -100,7 +100,7 @@ impl fmt::Display for TryFromByteError {
 
 impl Error for TryFromByteError {}
 
-/// Node that references between 17 and 49 children
+/// Node that references between 17 and 49 children.
 #[repr(C, align(8))]
 pub struct InnerNode48<K, V, const PREFIX_LEN: usize> {
     /// The common node fields.
@@ -156,7 +156,8 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFI
     const TYPE: NodeType = NodeType::Node48;
 }
 
-impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
+// SAFETY: `InnerNode48` is `repr(C)` and has a `Header` as the first field
+unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode256<K, V, PREFIX_LEN>;
     #[cfg(not(feature = "nightly"))]
     type Iter<'a>
