@@ -1,0 +1,11 @@
+[package]
+name = "blart-analysis"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+argh = { version = "0.1.13", default-features = false }
+blart = { path = "..", features = ["testing"] }
+memmap2 = "0.9.8"
+rayon = "1.11.0"
+zerocopy = "0.8.26"
