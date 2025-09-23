@@ -13,6 +13,8 @@ use core::{
 
 use crate::{
     allocator::{do_alloc, Allocator},
+    raw::minimum_unchecked,
+    rust_nightly_apis::likely,
     tagged_pointer::TaggedPointer,
     AsBytes,
 };
@@ -992,7 +994,41 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
     where
         Self::Key: AsBytes,
     {
-        self.header().inner_read_full_prefix(self, current_depth)
+        let header = &self.header();
+        let len = header.prefix_len();
+        if likely!(len <= PREFIX_LEN) {
+            (header.read_prefix(), None)
+        } else {
+            // SAFETY: By construction a InnerNode, must have >= 1 children, this
+            // is even more strict since in the case of 1 child the node can be
+            // collapsed, so a InnerNode must have >= 2 children, so it's safe
+            // to search for the minium. And the same applies to the `minimum_unchecked`
+            // function
+            let (_, min_child) = self.min();
+            let leaf_ptr = unsafe { minimum_unchecked(min_child) };
+
+            // SAFETY: Since have a shared reference
+            // is safe to create a shared reference from it
+            let leaf = unsafe { leaf_ptr.as_ref() };
+            let leaf = leaf.key_ref().as_bytes();
+
+            unsafe {
+                // SAFETY: Since we are iterating the key and prefixes, we
+                // expect that the depth never exceeds the key len.
+                // Because if this happens we ran out of bytes in the key to match
+                // and the whole process should be already finished
+                core::hint::assert_unchecked(current_depth <= leaf.len());
+
+                // SAFETY: By the construction of the prefix we know that this is inbounds
+                // since the prefix len guarantees it to us
+                core::hint::assert_unchecked(current_depth + len <= leaf.len());
+
+                // SAFETY: This can't overflow since len comes from a u32
+                core::hint::assert_unchecked(current_depth <= current_depth + len);
+            }
+            let leaf = &leaf[current_depth..(current_depth + len)];
+            (leaf, Some(leaf_ptr))
+        }
     }
 
     /// Returns the minimum child pointer from this node and it's key
@@ -1013,6 +1049,16 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
     /// deleted.
     fn max(&self) -> (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>);
 }
+
+/// This type represents the contents of an [`InnerNode`] prefix, either read
+/// directly from the prefix or fetched from a leaf node descendant.
+///
+/// The second value is the tuple will be `Some(_)` if the value was fetched
+/// from a leaf node.
+pub type NodePrefix<'a, K, V, const PREFIX_LEN: usize> = (
+    &'a [u8],
+    Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>,
+);
 
 /// This enum represents different kinds of tree paths pointing to a leaf node.
 ///
