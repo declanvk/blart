@@ -1,6 +1,6 @@
 use std::{ffi::CString, ptr::NonNull};
 
-use blart::raw::{InnerNode, InnerNode256, InnerNode48, NodePtr};
+use blart::raw::{InnerNode, InnerNode48, InnerNodeDirect, NodePtr};
 use criterion::{criterion_group, Criterion};
 
 fn bench(c: &mut Criterion) {
@@ -20,7 +20,7 @@ fn bench(c: &mut Criterion) {
     let nodes256: Vec<_> = (0..count)
         .map(|i| {
             let idx = i * skip;
-            let mut node = InnerNode256::<CString, usize, 16>::empty();
+            let mut node = InnerNodeDirect::<CString, usize, 16>::empty();
             node.write_child(idx, dangling_opaque);
             (idx, node)
         })

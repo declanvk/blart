@@ -15,7 +15,7 @@ use core::{
 
 use crate::{
     raw::{
-        Header, InnerNode, InnerNode16, InnerNode256, InnerNodeCompressed, Node, NodeType,
+        Header, InnerNode, InnerNode16, InnerNodeDirect, InnerNodeSorted, Node, NodeType,
         OpaqueNodePtr,
     },
     rust_nightly_apis::{maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref},
@@ -24,12 +24,18 @@ use crate::{
 /// A restricted index only valid from 0 to LIMIT - 1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct RestrictedNodeIndex<const LIMIT: u8>(u8);
+pub struct RestrictedNodeIndex<const LIMIT: usize>(u8);
 
-impl<const LIMIT: u8> RestrictedNodeIndex<LIMIT> {
+impl<const LIMIT: usize> RestrictedNodeIndex<LIMIT> {
     /// A placeholder index value that indicates that the index is not
     /// occupied
-    pub const EMPTY: Self = RestrictedNodeIndex(LIMIT);
+    pub const EMPTY: Self = RestrictedNodeIndex(LIMIT as u8);
+    /// This constant is used to check the range of values passed via the
+    /// `LIMIT` generic and trigger a compile error if its out of range.
+    const _RANGE_RESTRICTION: () = assert!(
+        LIMIT <= (u8::MAX as usize),
+        "The restricted node index LIMIT must be within the range of a u8 value"
+    );
 
     /// Return true if the given index is the empty sentinel value
     pub fn is_empty(self) -> bool {
@@ -37,45 +43,45 @@ impl<const LIMIT: u8> RestrictedNodeIndex<LIMIT> {
     }
 }
 
-impl<const LIMIT: u8> From<RestrictedNodeIndex<LIMIT>> for u8 {
+impl<const LIMIT: usize> From<RestrictedNodeIndex<LIMIT>> for u8 {
     fn from(src: RestrictedNodeIndex<LIMIT>) -> Self {
         src.0
     }
 }
 
-impl<const LIMIT: u8> From<RestrictedNodeIndex<LIMIT>> for usize {
+impl<const LIMIT: usize> From<RestrictedNodeIndex<LIMIT>> for usize {
     fn from(src: RestrictedNodeIndex<LIMIT>) -> Self {
         usize::from(src.0)
     }
 }
 
-impl<const LIMIT: u8> TryFrom<usize> for RestrictedNodeIndex<LIMIT> {
+impl<const LIMIT: usize> TryFrom<usize> for RestrictedNodeIndex<LIMIT> {
     type Error = TryFromByteError;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        if value < usize::from(LIMIT) {
+        if value < LIMIT {
             Ok(RestrictedNodeIndex(value as u8))
         } else {
-            Err(TryFromByteError(LIMIT, value))
+            Err(TryFromByteError(LIMIT as u8, value))
         }
     }
 }
 
-impl<const LIMIT: u8> TryFrom<u8> for RestrictedNodeIndex<LIMIT> {
+impl<const LIMIT: usize> TryFrom<u8> for RestrictedNodeIndex<LIMIT> {
     type Error = TryFromByteError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value < LIMIT {
+        if value < LIMIT as u8 {
             Ok(RestrictedNodeIndex(value))
         } else {
-            Err(TryFromByteError(LIMIT, usize::from(value)))
+            Err(TryFromByteError(LIMIT as u8, usize::from(value)))
         }
     }
 }
 
-impl<const LIMIT: u8> PartialOrd for RestrictedNodeIndex<LIMIT> {
+impl<const LIMIT: usize> PartialOrd for RestrictedNodeIndex<LIMIT> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.0 == LIMIT || other.0 == LIMIT {
+        if self.0 == LIMIT as u8 || other.0 == LIMIT as u8 {
             None
         } else {
             Some(self.0.cmp(&other.0))
@@ -100,24 +106,30 @@ impl fmt::Display for TryFromByteError {
 
 impl Error for TryFromByteError {}
 
-/// Node that references between 17 and 49 children.
+/// Inner node type that uses a direct lookup for the key byte and uses the
+/// resulting value to lookup the child pointer.
+///
+/// It is "indirect" in the sense that we use the value of the key byte to get
+/// an index that lets us finally look up the child pointer.
 #[repr(C, align(8))]
-pub struct InnerNode48<K, V, const PREFIX_LEN: usize> {
+pub struct InnerNodeIndirect<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     /// The common node fields.
     pub header: Header<PREFIX_LEN>,
+    /// For each element in this array, it is assumed to be initialized if
+    /// there is a index in the `child_indices` array that points to
+    /// it
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
     /// An array that maps key bytes (as the index) to the index value in
     /// the `child_pointers` array.
     ///
     /// All the `child_indices` values are guaranteed to be
     /// `PartialNodeIndex<48>::EMPTY` when the node is constructed.
-    pub child_indices: [RestrictedNodeIndex<48>; 256],
-    /// For each element in this array, it is assumed to be initialized if
-    /// there is a index in the `child_indices` array that points to
-    /// it
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; 48],
+    pub child_indices: [RestrictedNodeIndex<SIZE>; 256],
 }
 
-impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode48<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> fmt::Debug
+    for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNode48")
             .field("header", &self.header)
@@ -127,7 +139,9 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode48<K, V, PREFIX_LEN>
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Clone for InnerNode48<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Clone
+    for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
+{
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -137,7 +151,7 @@ impl<K, V, const PREFIX_LEN: usize> Clone for InnerNode48<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> InnerNode48<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeIndirect<K, V, PREFIX_LEN, SIZE> {
     /// Return the initialized portions of the child pointer array.
     pub fn initialized_child_pointers(&self) -> &[OpaqueNodePtr<K, V, PREFIX_LEN>] {
         unsafe {
@@ -149,6 +163,9 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode48<K, V, PREFIX_LEN> {
     }
 }
 
+/// Node that references between 17 and 49 children.
+pub type InnerNode48<K, V, const PREFIX_LEN: usize> = InnerNodeIndirect<K, V, PREFIX_LEN, 48>;
+
 impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
@@ -158,7 +175,7 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFI
 
 // SAFETY: `InnerNode48` is `repr(C)` and has a `Header` as the first field
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
-    type GrownNode = InnerNode256<K, V, PREFIX_LEN>;
+    type GrownNode = InnerNodeDirect<K, V, PREFIX_LEN>;
     #[cfg(not(feature = "nightly"))]
     type Iter<'a>
         = Node48Iter<'a, K, V, PREFIX_LEN>
@@ -305,7 +322,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
             child_pointers[key_fragment] = Some(child_pointer);
         }
 
-        InnerNode256 {
+        InnerNodeDirect {
             header,
             child_pointers,
         }
@@ -348,7 +365,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
             child_pointers[idx].write(child_ptr);
         }
 
-        InnerNodeCompressed {
+        InnerNodeSorted {
             header,
             keys,
             child_pointers,

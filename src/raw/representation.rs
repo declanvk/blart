@@ -7,7 +7,7 @@ use core::{
     iter::FusedIterator,
     marker::PhantomData,
     mem::{self, ManuallyDrop},
-    ops::{Range, RangeBounds},
+    ops::{RangeBounds, RangeInclusive},
     ptr::{self, NonNull},
 };
 
@@ -18,16 +18,16 @@ use crate::{
 };
 
 mod header;
-pub(crate) use header::*;
+pub use header::*;
 
-mod inner_node_256;
-pub use inner_node_256::*;
+mod inner_node_direct;
+pub use inner_node_direct::*;
 
-mod inner_node_48;
-pub use inner_node_48::*;
+mod inner_node_indirect;
+pub use inner_node_indirect::*;
 
-mod inner_node_compressed;
-pub use inner_node_compressed::*;
+mod inner_node_sorted;
+pub use inner_node_sorted::*;
 
 mod leaf_node;
 pub use leaf_node::*;
@@ -49,23 +49,11 @@ pub enum NodeType {
 }
 
 impl NodeType {
-    /// The upper bound on the number of child nodes that this
-    /// NodeType can have.
-    pub const fn upper_capacity(self) -> usize {
-        match self {
-            NodeType::Node4 => 4,
-            NodeType::Node16 => 16,
-            NodeType::Node48 => 48,
-            NodeType::Node256 => 256,
-            NodeType::Leaf => 0,
-        }
-    }
-
     /// Converts a u8 value to a [`NodeType`]
     ///
     /// # Safety
     ///  - `src` must be a valid variant from the enum
-    pub const unsafe fn from_u8(src: u8) -> NodeType {
+    const unsafe fn from_u8(src: u8) -> NodeType {
         // SAFETY: `NodeType` is repr(u8)
         unsafe { core::mem::transmute::<u8, NodeType>(src) }
     }
@@ -78,24 +66,19 @@ impl NodeType {
     pub fn should_shrink_inner_node(self, num_children: usize) -> bool {
         match self {
             NodeType::Node4 => false,
-            NodeType::Node16 => num_children <= 4,
-            NodeType::Node48 => num_children <= 16,
-            NodeType::Node256 => num_children <= 48,
             NodeType::Leaf => panic!("cannot shrink leaf"),
+            _ => num_children < *self.capacity_range().start(),
         }
     }
 
     /// Return the range of number of children that each node type accepts.
-    pub const fn capacity_range(self) -> Range<usize> {
+    pub const fn capacity_range(self) -> RangeInclusive<usize> {
         match self {
-            NodeType::Node4 => Range { start: 1, end: 5 },
-            NodeType::Node16 => Range { start: 5, end: 17 },
-            NodeType::Node48 => Range { start: 17, end: 49 },
-            NodeType::Node256 => Range {
-                start: 49,
-                end: 257,
-            },
-            NodeType::Leaf => Range { start: 0, end: 0 },
+            NodeType::Node4 => 2..=4,
+            NodeType::Node16 => 5..=16,
+            NodeType::Node48 => 17..=48,
+            NodeType::Node256 => 49..=256,
+            NodeType::Leaf => 0..=0,
         }
     }
 }
@@ -198,7 +181,7 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
                 self.0.to_ptr().cast::<InnerNode48<K, V, PREFIX_LEN>>(),
             )),
             NodeType::Node256 => ConcreteNodePtr::Node256(NodePtr(
-                self.0.to_ptr().cast::<InnerNode256<K, V, PREFIX_LEN>>(),
+                self.0.to_ptr().cast::<InnerNodeDirect<K, V, PREFIX_LEN>>(),
             )),
             NodeType::Leaf => {
                 ConcreteNodePtr::LeafNode(NodePtr(
@@ -279,7 +262,7 @@ pub enum ConcreteNodePtr<K, V, const PREFIX_LEN: usize> {
     /// Node that references between 17 and 49 children
     Node48(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>),
     /// Node that references between 49 and 256 children
-    Node256(NodePtr<PREFIX_LEN, InnerNode256<K, V, PREFIX_LEN>>),
+    Node256(NodePtr<PREFIX_LEN, InnerNodeDirect<K, V, PREFIX_LEN>>),
     /// Node that contains a single value
     LeafNode(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>),
 }
@@ -331,7 +314,7 @@ macro_rules! concrete_node_ptr_from {
 concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>, Node4);
 concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>, Node16);
 concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>, Node48);
-concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode256<K, V, PREFIX_LEN>>, Node256);
+concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNodeDirect<K, V, PREFIX_LEN>>, Node256);
 concrete_node_ptr_from!(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>, LeafNode);
 
 /// An enum that encapsulates pointers to every type of [`InnerNode`]
@@ -343,7 +326,7 @@ pub enum ConcreteInnerNodePtr<K, V, const PREFIX_LEN: usize> {
     /// Node that references between 17 and 49 children
     Node48(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>),
     /// Node that references between 49 and 256 children
-    Node256(NodePtr<PREFIX_LEN, InnerNode256<K, V, PREFIX_LEN>>),
+    Node256(NodePtr<PREFIX_LEN, InnerNodeDirect<K, V, PREFIX_LEN>>),
 }
 
 impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {}
@@ -380,7 +363,7 @@ macro_rules! concrete_inner_node_ptr_from {
 concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>, Node4);
 concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>, Node16);
 concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>, Node48);
-concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode256<K, V, PREFIX_LEN>>, Node256);
+concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNodeDirect<K, V, PREFIX_LEN>>, Node256);
 
 impl<K, V, const PREFIX_LEN: usize> From<ConcreteInnerNodePtr<K, V, PREFIX_LEN>>
     for ConcreteNodePtr<K, V, PREFIX_LEN>
@@ -663,10 +646,15 @@ pub(crate) mod private {
     /// implemented outside of the crate.
     pub trait Sealed {}
 
-    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode4<K, V, PREFIX_LEN> {}
-    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode16<K, V, PREFIX_LEN> {}
-    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode48<K, V, PREFIX_LEN> {}
-    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNode256<K, V, PREFIX_LEN> {}
+    impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Sealed
+        for super::InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
+    {
+    }
+    impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Sealed
+        for super::InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
+    {
+    }
+    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNodeDirect<K, V, PREFIX_LEN> {}
     impl<K, V, const PREFIX_LEN: usize> Sealed for super::LeafNode<K, V, PREFIX_LEN> {}
 }
 
@@ -853,7 +841,7 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
 
     /// Returns true if this node has no more space to store children.
     fn is_full(&self) -> bool {
-        self.header().num_children() >= Self::TYPE.upper_capacity()
+        self.header().num_children() >= *Self::TYPE.capacity_range().end()
     }
 
     /// Create an iterator over all `(key bytes, child pointers)` in this inner
@@ -1160,7 +1148,7 @@ mod tests {
         let mut n4 = InnerNode4::<Box<[u8]>, usize, 16>::empty();
         let mut n16 = InnerNode16::<Box<[u8]>, usize, 16>::empty();
         let mut n48 = InnerNode48::<Box<[u8]>, usize, 16>::empty();
-        let mut n256 = InnerNode256::<Box<[u8]>, usize, 16>::empty();
+        let mut n256 = InnerNodeDirect::<Box<[u8]>, usize, 16>::empty();
 
         let n4_ptr = NodePtr::from(&mut n4).to_opaque();
         let n16_ptr = NodePtr::from(&mut n16).to_opaque();
@@ -1170,19 +1158,18 @@ mod tests {
         assert!(n4_ptr.is::<InnerNode4<Box<[u8]>, usize, 16>>());
         assert!(n16_ptr.is::<InnerNode16<Box<[u8]>, usize, 16>>());
         assert!(n48_ptr.is::<InnerNode48<Box<[u8]>, usize, 16>>());
-        assert!(n256_ptr.is::<InnerNode256<Box<[u8]>, usize, 16>>());
+        assert!(n256_ptr.is::<InnerNodeDirect<Box<[u8]>, usize, 16>>());
     }
 
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn node_sizes() {
-        const DEFAULT_PREFIX_LEN: usize = 4;
-        const EXPECTED_HEADER_SIZE: usize = DEFAULT_PREFIX_LEN.next_multiple_of(8) + 8;
+        const DEFAULT_PREFIX_LEN: usize = 16;
+        assert_eq!(mem::size_of::<Header<DEFAULT_PREFIX_LEN>>(), 24);
 
-        assert_eq!(
-            mem::size_of::<Header<DEFAULT_PREFIX_LEN>>(),
-            EXPECTED_HEADER_SIZE
-        );
+        const EXPECTED_HEADER_SIZE: usize = DEFAULT_PREFIX_LEN.next_multiple_of(4) + 8;
+        assert_eq!(EXPECTED_HEADER_SIZE, 24);
+
         // key map: 4 * (1 byte) = 4 bytes
         // child map: 4 * (8 bytes (on 64-bit platform)) = 32
         //
@@ -1206,7 +1193,7 @@ mod tests {
         );
         // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
         assert_eq!(
-            mem::size_of::<InnerNode256<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
+            mem::size_of::<InnerNodeDirect<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
             EXPECTED_HEADER_SIZE + 2048
         );
 
@@ -1226,9 +1213,9 @@ mod tests {
         assert_eq!(mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(), 8);
-        assert_eq!(mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(), 8);
+        assert_eq!(mem::align_of::<InnerNodeDirect<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(), 8);
-        assert_eq!(mem::align_of::<Header<16>>(), 8);
+        assert_eq!(mem::align_of::<Header<16>>(), 4);
 
         assert_eq!(
             mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(),
@@ -1243,7 +1230,7 @@ mod tests {
             mem::align_of::<OpaqueValue>()
         );
         assert_eq!(
-            mem::align_of::<InnerNode256<Box<[u8]>, u8, 16>>(),
+            mem::align_of::<InnerNodeDirect<Box<[u8]>, u8, 16>>(),
             mem::align_of::<OpaqueValue>()
         );
         assert_eq!(

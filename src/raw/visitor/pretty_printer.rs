@@ -187,7 +187,7 @@ where
         self.write_inner_node(t)
     }
 
-    fn visit_node256(&mut self, t: &super::InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_node256(&mut self, t: &super::InnerNodeDirect<K, V, PREFIX_LEN>) -> Self::Output {
         self.write_inner_node(t)
     }
 

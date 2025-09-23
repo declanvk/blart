@@ -1,4 +1,4 @@
-use blart::raw::{InnerNode, InnerNode256, InnerNode48, LeafNode, NodePtr};
+use blart::raw::{InnerNode, InnerNode48, InnerNodeDirect, LeafNode, NodePtr};
 use criterion::{criterion_group, Criterion};
 
 fn bench(c: &mut Criterion) {
@@ -27,7 +27,7 @@ fn bench(c: &mut Criterion) {
 
     let p0 = &[0, 0, 0, 0, 0, 0, 0, 0];
     let mut node48_small = InnerNode48::<Box<[u8]>, usize, 16>::from_prefix(p0, p0.len());
-    let mut node256_small = InnerNode256::<Box<[u8]>, usize, 16>::from_prefix(p0, p0.len());
+    let mut node256_small = InnerNodeDirect::<Box<[u8]>, usize, 16>::from_prefix(p0, p0.len());
     node48_small.write_child(99, leaf_opaque);
     node256_small.write_child(99, leaf_opaque);
 
@@ -35,7 +35,7 @@ fn bench(c: &mut Criterion) {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
     let mut node48_large = InnerNode48::<Box<[u8]>, usize, 16>::from_prefix(p1, p1.len());
-    let mut node256_large = InnerNode256::<Box<[u8]>, usize, 16>::from_prefix(p1, p1.len());
+    let mut node256_large = InnerNodeDirect::<Box<[u8]>, usize, 16>::from_prefix(p1, p1.len());
     node48_large.write_child(99, leaf_opaque);
     node256_large.write_child(99, leaf_opaque);
 

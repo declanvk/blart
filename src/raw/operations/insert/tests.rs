@@ -6,7 +6,7 @@ use alloc::{
 use crate::{
     allocator::Global,
     raw::{
-        deallocate_tree, search_unchecked, InnerNode, InnerNode4, InnerNodeCompressed,
+        deallocate_tree, search_unchecked, InnerNode, InnerNode4, InnerNodeSorted,
         InsertPrefixError, LeafNode, NodePtr, NodeType, OpaqueNodePtr,
     },
     testing::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
@@ -28,7 +28,7 @@ fn insert_to_small_trees() {
 
     assert_eq!(tree.node_type(), NodeType::Node4);
 
-    let new_root: NodePtr<16, InnerNodeCompressed<Box<[u8]>, String, 16, 4>> =
+    let new_root: NodePtr<16, InnerNodeSorted<Box<[u8]>, String, 16, 4>> =
         tree.cast::<InnerNode4<Box<[u8]>, String, 16>>().unwrap();
 
     {

@@ -1,6 +1,6 @@
 use std::{ffi::CString, ptr::NonNull};
 
-use blart::raw::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, NodePtr};
+use blart::raw::{InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, NodePtr};
 use criterion::{criterion_group, measurement::Measurement, Criterion};
 use rand::{rngs::StdRng, seq::IndexedRandom, SeedableRng};
 
@@ -39,7 +39,7 @@ fn bench(c: &mut Criterion) {
     iter_node::<16, _, InnerNode4<CString, usize, 16>>(c, "n4", &[1, 4]);
     iter_node::<16, _, InnerNode16<CString, usize, 16>>(c, "n16", &[5, 12, 16]);
     iter_node::<16, _, InnerNode48<CString, usize, 16>>(c, "n48", &[17, 32, 48]);
-    iter_node::<16, _, InnerNode256<CString, usize, 16>>(c, "n256", &[49, 100, 152, 204, 256]);
+    iter_node::<16, _, InnerNodeDirect<CString, usize, 16>>(c, "n256", &[49, 100, 152, 204, 256]);
 
     let tree = dictionary_tree();
 
