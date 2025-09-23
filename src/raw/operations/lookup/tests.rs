@@ -2,8 +2,8 @@ use alloc::{boxed::Box, string::String};
 
 use crate::{
     raw::{
-        search_unchecked, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode,
-        NodePtr, OpaqueNodePtr,
+        search_unchecked, InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect,
+        LeafNode, NodePtr, OpaqueNodePtr,
     },
     testing::{generate_key_with_prefix, swap, PrefixExpansion},
     TreeMap,
@@ -124,7 +124,7 @@ fn lookup_on_empty_nodes() {
     let mut n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
     let mut n16 = InnerNode16::empty();
     let mut n48 = InnerNode48::empty();
-    let mut n256 = InnerNode256::empty();
+    let mut n256 = InnerNodeDirect::empty();
 
     let roots = vec![
         NodePtr::from(&mut n4).to_opaque(),
@@ -285,7 +285,7 @@ fn lookup_on_node256() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode256::from_prefix(&[1, 2], 2);
+    let mut inner_node = InnerNodeDirect::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
     inner_node.write_child(1, l1_ptr);
@@ -538,7 +538,7 @@ fn lookup_on_n256_n4_layer_tree() {
 
     let mut n4_left = InnerNode4::from_prefix(&[5, 6], 2);
     let mut n4_right = InnerNode4::from_prefix(&[7, 8], 2);
-    let mut n256 = InnerNode256::from_prefix(&[1, 2], 2);
+    let mut n256 = InnerNodeDirect::from_prefix(&[1, 2], 2);
 
     // Update inner node prefix and child slots
     n4_left.write_child(1, l1_ptr);

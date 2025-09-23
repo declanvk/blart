@@ -5,7 +5,7 @@ use crate::{
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{
-        ConcreteNodePtr, InnerNode, InnerNode256, InnerNode48, InnerNodeCompressed, LeafNode,
+        ConcreteNodePtr, InnerNode, InnerNode48, InnerNodeDirect, InnerNodeSorted, LeafNode,
         OpaqueNodePtr,
     },
     AsBytes, TreeMap,
@@ -195,7 +195,7 @@ trait FuzzySearch<K: AsBytes, V, const PREFIX_LEN: usize> {
 }
 
 impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize> FuzzySearch<K, V, PREFIX_LEN>
-    for InnerNodeCompressed<K, V, PREFIX_LEN, SIZE>
+    for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
 where
     Self: InnerNode<PREFIX_LEN, Key = K, Value = V>,
 {
@@ -253,7 +253,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
 }
 
 impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
-    for InnerNode256<K, V, PREFIX_LEN>
+    for InnerNodeDirect<K, V, PREFIX_LEN>
 {
     fn fuzzy_search(
         &self,

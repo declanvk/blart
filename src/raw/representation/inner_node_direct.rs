@@ -15,25 +15,26 @@ use crate::raw::{
     Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
 };
 
-/// Node that references between 49 and 256 children
+/// Inner node that stores up to 256 children, where lookup is performed by
+/// indexing with key byte.
 #[repr(C, align(8))]
-pub struct InnerNode256<K, V, const PREFIX_LEN: usize> {
+pub struct InnerNodeDirect<K, V, const PREFIX_LEN: usize> {
     /// The common node fields.
     pub header: Header<PREFIX_LEN>,
     /// An array that directly maps a key byte (as index) to a child node.
     pub child_pointers: [Option<OpaqueNodePtr<K, V, PREFIX_LEN>>; 256],
 }
 
-impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNode256<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNodeDirect<K, V, PREFIX_LEN> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("InnerNode256")
+        f.debug_struct("InnerNodeDirect")
             .field("header", &self.header)
             .field("child_pointers", &self.child_pointers)
             .finish()
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Clone for InnerNode256<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Clone for InnerNodeDirect<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
@@ -42,21 +43,21 @@ impl<K, V, const PREFIX_LEN: usize> Clone for InnerNode256<K, V, PREFIX_LEN> {
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode256<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNodeDirect<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
 
     const TYPE: NodeType = NodeType::Node256;
 }
 
-// SAFETY: `InnerNode256` is `repr(C)` and has a `Header` as the first field
+// SAFETY: `InnerNodeDirect` is `repr(C)` and has a `Header` as the first field
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
-    for InnerNode256<K, V, PREFIX_LEN>
+    for InnerNodeDirect<K, V, PREFIX_LEN>
 {
     type GrownNode = Self;
     #[cfg(not(feature = "nightly"))]
     type Iter<'a>
-        = Node256Iter<'a, K, V, PREFIX_LEN>
+        = NodeDirectIter<'a, K, V, PREFIX_LEN>
     where
         Self: 'a;
     #[cfg(feature = "nightly")]
@@ -76,7 +77,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     }
 
     fn from_header(header: Header<PREFIX_LEN>) -> Self {
-        InnerNode256 {
+        InnerNodeDirect {
             header,
             child_pointers: [None; 256],
         }
@@ -140,7 +141,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     fn iter(&self) -> Self::Iter<'_> {
         #[cfg(not(feature = "nightly"))]
         {
-            Node256Iter {
+            NodeDirectIter {
                 it: self.child_pointers.iter().enumerate(),
             }
         }
@@ -301,14 +302,14 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     }
 }
 
-/// This struct is an iterator over the children of a [`InnerNode256`].
+/// This struct is an iterator over the children of a [`InnerNodeDirect`].
 #[cfg(not(feature = "nightly"))]
-pub struct Node256Iter<'a, K, V, const PREFIX_LEN: usize> {
+pub struct NodeDirectIter<'a, K, V, const PREFIX_LEN: usize> {
     pub(crate) it: Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>>,
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> Iterator for Node256Iter<'_, K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Iterator for NodeDirectIter<'_, K, V, PREFIX_LEN> {
     type Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -323,7 +324,7 @@ impl<K, V, const PREFIX_LEN: usize> Iterator for Node256Iter<'_, K, V, PREFIX_LE
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node256Iter<'_, K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for NodeDirectIter<'_, K, V, PREFIX_LEN> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some((key, node)) = self.it.next_back() {
             match node {
@@ -336,7 +337,7 @@ impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node256Iter<'_, K, V
 }
 
 #[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> FusedIterator for Node256Iter<'_, K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize> FusedIterator for NodeDirectIter<'_, K, V, PREFIX_LEN> {}
 
 #[cfg(test)]
 mod tests {
@@ -354,7 +355,7 @@ mod tests {
 
     #[test]
     fn lookup() {
-        let mut n = InnerNode256::<Box<[u8]>, (), 16>::empty();
+        let mut n = InnerNodeDirect::<Box<[u8]>, (), 16>::empty();
         let mut l1 = LeafNode::with_no_siblings(Box::from([]), ());
         let mut l2 = LeafNode::with_no_siblings(Box::from([]), ());
         let mut l3 = LeafNode::with_no_siblings(Box::from([]), ());
@@ -377,41 +378,41 @@ mod tests {
 
     #[test]
     fn write_child() {
-        inner_node_write_child_test(InnerNode256::<_, _, 16>::empty(), 256)
+        inner_node_write_child_test(InnerNodeDirect::<_, _, 16>::empty(), 256)
     }
 
     #[test]
     fn remove_child() {
-        inner_node_remove_child_test(InnerNode256::<_, _, 16>::empty(), 256)
+        inner_node_remove_child_test(InnerNodeDirect::<_, _, 16>::empty(), 256)
     }
 
     #[test]
     #[should_panic = "unable to grow a Node256, something went wrong!"]
     fn grow() {
-        let n = InnerNode256::<Box<[u8]>, (), 16>::empty();
+        let n = InnerNodeDirect::<Box<[u8]>, (), 16>::empty();
 
         n.grow();
     }
 
     #[test]
     fn shrink() {
-        inner_node_shrink_test(InnerNode256::<_, _, 16>::empty(), 48);
+        inner_node_shrink_test(InnerNodeDirect::<_, _, 16>::empty(), 48);
     }
 
     #[test]
     #[should_panic = "Cannot shrink a Node256 when it has more than 48 children. Currently has \
                       [49] children."]
     fn shrink_too_many_children_panic() {
-        inner_node_shrink_test(InnerNode256::<_, _, 16>::empty(), 49);
+        inner_node_shrink_test(InnerNodeDirect::<_, _, 16>::empty(), 49);
     }
 
     #[test]
     fn min_max() {
-        inner_node_min_max_test(InnerNode256::<_, _, 16>::empty(), 256);
+        inner_node_min_max_test(InnerNodeDirect::<_, _, 16>::empty(), 256);
     }
 
-    fn fixture() -> FixtureReturn<InnerNode256<Box<[u8]>, (), 16>, 4> {
-        let mut n256 = InnerNode256::empty();
+    fn fixture() -> FixtureReturn<InnerNodeDirect<Box<[u8]>, (), 16>, 4> {
+        let mut n256 = InnerNodeDirect::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -461,7 +462,7 @@ mod tests {
 
         #[track_caller]
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
-            node: &InnerNode256<K, V, PREFIX_LEN>,
+            node: &InnerNodeDirect<K, V, PREFIX_LEN>,
             bound: impl RangeBounds<u8>,
             expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
         ) {
@@ -509,8 +510,8 @@ mod tests {
         );
     }
 
-    fn fixture_empty_edges() -> FixtureReturn<InnerNode256<Box<[u8]>, (), 16>, 4> {
-        let mut n4 = InnerNode256::empty();
+    fn fixture_empty_edges() -> FixtureReturn<InnerNodeDirect<Box<[u8]>, (), 16>, 4> {
+        let mut n4 = InnerNodeDirect::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -534,7 +535,7 @@ mod tests {
 
         #[track_caller]
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
-            node: &InnerNode256<K, V, PREFIX_LEN>,
+            node: &InnerNodeDirect<K, V, PREFIX_LEN>,
             bound: impl RangeBounds<u8>,
             expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
         ) {

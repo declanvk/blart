@@ -10,7 +10,6 @@ use crate::{
 
 /// The common header for all inner nodes
 #[derive(Clone, PartialEq, Eq)]
-#[repr(align(8))]
 pub struct Header<const PREFIX_LEN: usize> {
     /// Number of children of this inner node. This field has no meaning for
     /// a leaf node.
@@ -26,8 +25,23 @@ pub struct Header<const PREFIX_LEN: usize> {
 }
 
 impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
+    /// Create a new header with the given prefix and prefix length.
+    ///
+    /// The given prefix length must be greater than or equal to `prefix.len()`.
+    /// If it is longer, it represents the case where there are implicit bytes
+    /// in the prefix.
+    ///
+    /// There can also be implicit bytes in the prefix in the case that
+    /// `prefix.len()` > `PREFIX_LEN`, since the header will only store
+    /// `PREFIX_LEN` bytes directly.
     #[inline]
     pub fn new(prefix: &[u8], prefix_len: usize) -> Self {
+        debug_assert!(
+            prefix_len >= prefix.len(),
+            "Explicit prefix length must be greater than or equal to the length of the actual \
+             prefix passed."
+        );
+
         let mut header = Self {
             num_children: 0,
             prefix_len: prefix_len as u32,
@@ -182,6 +196,15 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         self.prefix[..len.min(PREFIX_LEN)].copy_from_slice(leaf_key)
     }
 
+    /// Read the full prefix of the given inner node, accounting for the case of
+    /// implicit prefix bytes.
+    ///
+    /// Implicit prefix bytes happen when the length of a prefix is larger than
+    /// `PREFIX_LEN`. In that case, only `PREFIX_LEN` bytes are actually
+    /// recorded in the header. To recover the implicit bytes, we read from a
+    /// leaf node descendant of the current inner node and pull out the
+    /// bytes from its stored key.
+    // TODO: Inline into caller, this doesn't really belong on the `Header` type.
     #[inline]
     pub fn inner_read_full_prefix<'a, N: InnerNode<PREFIX_LEN>>(
         &'a self,
@@ -191,6 +214,12 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
     where
         N::Key: AsBytes,
     {
+        debug_assert_eq!(
+            (self as *const _),
+            (node.header() as *const _),
+            "The given inner node must be inner node that contains this header (self)"
+        );
+
         let len = self.prefix_len();
         if likely!(len <= PREFIX_LEN) {
             (self.read_prefix(), None)

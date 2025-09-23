@@ -178,7 +178,7 @@ fn test_fuzzy_search_node48() {
 #[test]
 fn test_fuzzy_search_node256() {
     let mut tree: TreeMap<Box<[u8]>, u32> = TreeMap::new();
-    // Insert enough keys with a common prefix to create an InnerNode256
+    // Insert enough keys with a common prefix to create an InnerNodeDirect
     for i in 0u8..100 {
         let key = vec![1, 1, i];
         tree.try_insert(Box::from(key), i as u32).unwrap();

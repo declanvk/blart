@@ -13,8 +13,8 @@ pub use tree_stats::*;
 pub use well_formed::*;
 
 use super::{
-    ConcreteNodePtr, InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, Node,
-    NodePtr, OpaqueNodePtr,
+    ConcreteNodePtr, InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode,
+    Node, NodePtr, OpaqueNodePtr,
 };
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
@@ -117,7 +117,9 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode48<
     }
 }
 
-impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode256<K, T, PREFIX_LEN> {
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
+    for InnerNodeDirect<K, T, PREFIX_LEN>
+{
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }
@@ -164,8 +166,8 @@ pub trait Visitor<K, V, const PREFIX_LEN: usize>: Sized {
         t.super_visit_with(self)
     }
 
-    /// Visit a [`InnerNode256`].
-    fn visit_node256(&mut self, t: &InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
+    /// Visit a [`InnerNodeDirect`].
+    fn visit_node256(&mut self, t: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self::Output {
         t.super_visit_with(self)
     }
 

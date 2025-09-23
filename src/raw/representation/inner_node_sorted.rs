@@ -27,8 +27,8 @@ enum WritePoint {
     Shift(usize),
 }
 
-/// Common methods for searching in an [`InnerNodeCompressed`]
-trait SearchInnerNodeCompressed {
+/// Common methods for searching in an [`InnerNodeSorted`]
+trait SearchInnerNodeSorted {
     /// Get the index of the child if it exists
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize>;
 
@@ -38,25 +38,29 @@ trait SearchInnerNodeCompressed {
 
 /// Node type that has a compact representation for key bytes and children
 /// pointers.
+///
+/// The "sorted" aspect describes how the key bytes are stored. Key byte lookup
+/// is done via a linear search over an array, then using the index of a match
+/// to grab the corresponding child pointer from a separate array.
 #[repr(C, align(8))]
-pub struct InnerNodeCompressed<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
+pub struct InnerNodeSorted<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     /// The common node fields.
     pub header: Header<PREFIX_LEN>,
+    /// An array that contains the child data.
+    ///
+    /// This array will only be initialized for the first `header.num_children`
+    /// values.
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
     /// An array that contains single key bytes in the same index as the
     /// `child_pointers` array contains the matching child tree.
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
     pub keys: [MaybeUninit<u8>; SIZE],
-    /// An array that contains the child data.
-    ///
-    /// This array will only be initialized for the first `header.num_children`
-    /// values.
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
 }
 
 impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Clone
-    for InnerNodeCompressed<K, V, PREFIX_LEN, SIZE>
+    for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
 {
     fn clone(&self) -> Self {
         Self {
@@ -68,7 +72,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Clone
 }
 
 impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> fmt::Debug
-    for InnerNodeCompressed<K, V, PREFIX_LEN, SIZE>
+    for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (keys, child_pointers) = self.initialized_portion();
@@ -81,11 +85,11 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> fmt::Debug
     }
 }
 
-/// Iterator type for an [`InnerNodeCompressed`]
-pub type InnerNodeCompressedIter<'a, K, V, const PREFIX_LEN: usize> =
+/// Iterator type for an [`InnerNodeSorted`]
+pub type InnerNodeSortedIter<'a, K, V, const PREFIX_LEN: usize> =
     Zip<Copied<Iter<'a, u8>>, Copied<Iter<'a, OpaqueNodePtr<K, V, PREFIX_LEN>>>>;
 
-impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V, PREFIX_LEN, SIZE> {
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PREFIX_LEN, SIZE> {
     /// Return the initialized portions of the keys and child pointer arrays.
     pub fn initialized_portion(&self) -> (&[u8], &[OpaqueNodePtr<K, V, PREFIX_LEN>]) {
         // SAFETY: The array prefix with length `header.num_children` is guaranteed to
@@ -106,7 +110,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     /// Generalized version of [`InnerNode::lookup_child`] for compressed nodes
     fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>>
     where
-        Self: SearchInnerNodeCompressed,
+        Self: SearchInnerNodeSorted,
     {
         let idx = self.lookup_child_index(key_fragment)?;
         unsafe {
@@ -130,7 +134,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
         key_fragment: u8,
         child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>,
     ) where
-        Self: SearchInnerNodeCompressed,
+        Self: SearchInnerNodeSorted,
     {
         let num_children = self.header.num_children();
         let write_point = self.find_write_point(key_fragment);
@@ -215,7 +219,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     /// Removes child if it exists
     fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>>
     where
-        Self: SearchInnerNodeCompressed,
+        Self: SearchInnerNodeSorted,
     {
         let child_index = self.lookup_child_index(key_fragment)?;
         let child_ptr = mem::replace(&mut self.child_pointers[child_index], MaybeUninit::uninit());
@@ -235,10 +239,10 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     /// Grows or shrinks the node
     fn change_block_size<const NEW_SIZE: usize>(
         &self,
-    ) -> InnerNodeCompressed<K, V, PREFIX_LEN, NEW_SIZE> {
+    ) -> InnerNodeSorted<K, V, PREFIX_LEN, NEW_SIZE> {
         assert!(
             self.header.num_children() <= NEW_SIZE,
-            "Cannot change InnerNodeCompressed<{}> to size {} when it has more than {} children. \
+            "Cannot change InnerNodeSorted<{}> to size {} when it has more than {} children. \
              Currently has [{}] children.",
             SIZE,
             NEW_SIZE,
@@ -271,7 +275,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
         keys[..num_children].copy_from_slice(&self.keys[..num_children]);
         child_pointers[..num_children].copy_from_slice(&self.child_pointers[..num_children]);
 
-        InnerNodeCompressed {
+        InnerNodeSorted {
             header,
             keys,
             child_pointers,
@@ -322,7 +326,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     }
 
     /// Get an iterator over the keys and values of the node
-    fn inner_iter(&self) -> InnerNodeCompressedIter<'_, K, V, PREFIX_LEN> {
+    fn inner_iter(&self) -> InnerNodeSortedIter<'_, K, V, PREFIX_LEN> {
         let (keys, nodes) = self.initialized_portion();
         keys.iter().copied().zip(nodes.iter().copied())
     }
@@ -331,9 +335,9 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
     fn inner_range_iter(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> InnerNodeCompressedIter<'_, K, V, PREFIX_LEN>
+    ) -> InnerNodeSortedIter<'_, K, V, PREFIX_LEN>
     where
-        Self: SearchInnerNodeCompressed,
+        Self: SearchInnerNodeSorted,
     {
         {
             match (bound.start_bound(), bound.end_bound()) {
@@ -403,9 +407,9 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCompressed<K, V,
 }
 
 /// Node that references between 2 and 4 children
-pub type InnerNode4<K, V, const PREFIX_LEN: usize> = InnerNodeCompressed<K, V, PREFIX_LEN, 4>;
+pub type InnerNode4<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 4>;
 
-impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed for InnerNode4<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode4<K, V, PREFIX_LEN> {
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         let (keys, _) = self.initialized_portion();
         for (child_index, key) in keys.iter().enumerate() {
@@ -447,7 +451,7 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode4<K, V, PREFIX
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode16<K, V, PREFIX_LEN>;
     type Iter<'a>
-        = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN>
+        = InnerNodeSortedIter<'a, K, V, PREFIX_LEN>
     where
         Self: 'a;
     type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
@@ -522,9 +526,9 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<
 }
 
 /// Node that references between 5 and 16 children
-pub type InnerNode16<K, V, const PREFIX_LEN: usize> = InnerNodeCompressed<K, V, PREFIX_LEN, 16>;
+pub type InnerNode16<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 16>;
 
-impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeCompressed for InnerNode16<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode16<K, V, PREFIX_LEN> {
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
@@ -611,7 +615,7 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFI
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
     type GrownNode = InnerNode48<K, V, PREFIX_LEN>;
     type Iter<'a>
-        = InnerNodeCompressedIter<'a, K, V, PREFIX_LEN>
+        = InnerNodeSortedIter<'a, K, V, PREFIX_LEN>
     where
         Self: 'a;
     type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
@@ -859,7 +863,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "Cannot change InnerNodeCompressed<16> to size 4 when it has more than 4 \
+    #[should_panic = "Cannot change InnerNodeSorted<16> to size 4 when it has more than 4 \
                       children. Currently has [5] children."]
     fn node16_shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 5);
@@ -921,7 +925,7 @@ mod tests {
 
         #[track_caller]
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
-            node: &InnerNodeCompressed<K, V, PREFIX_LEN, 4>,
+            node: &InnerNodeSorted<K, V, PREFIX_LEN, 4>,
             bound: impl RangeBounds<u8>,
             expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
         ) {
@@ -989,7 +993,7 @@ mod tests {
 
         #[track_caller]
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
-            node: &InnerNodeCompressed<K, V, PREFIX_LEN, 4>,
+            node: &InnerNodeSorted<K, V, PREFIX_LEN, 4>,
             bound: impl RangeBounds<u8>,
             expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
         ) {
@@ -1114,7 +1118,7 @@ mod tests {
 
         #[track_caller]
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
-            node: &InnerNodeCompressed<K, V, PREFIX_LEN, 16>,
+            node: &InnerNodeSorted<K, V, PREFIX_LEN, 16>,
             bound: impl RangeBounds<u8>,
             expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
         ) {
@@ -1187,7 +1191,7 @@ mod tests {
 
         #[track_caller]
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
-            node: &InnerNodeCompressed<K, V, PREFIX_LEN, 16>,
+            node: &InnerNodeSorted<K, V, PREFIX_LEN, 16>,
             bound: impl RangeBounds<u8>,
             expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
         ) {

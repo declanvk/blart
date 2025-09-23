@@ -2,7 +2,9 @@ use core::ops::Add;
 
 use crate::{
     allocator::Allocator,
-    raw::{InnerNode, InnerNode16, InnerNode256, InnerNode4, InnerNode48, LeafNode, OpaqueNodePtr},
+    raw::{
+        InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, OpaqueNodePtr,
+    },
     visitor::{Visitable, Visitor},
     AsBytes, TreeMap,
 };
@@ -81,7 +83,7 @@ impl InnerNodeStats {
         N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
     {
         self.count += 1;
-        self.total_slots += N::TYPE.upper_capacity();
+        self.total_slots += *N::TYPE.capacity_range().end();
         self.sum_slots += t.header().num_children();
 
         self.total_header_bytes += PREFIX_LEN;
@@ -184,7 +186,7 @@ pub struct TreeStats {
     /// Stats for [`InnerNode48`]s
     pub node48: InnerNodeStats,
 
-    /// Stats for [`InnerNode256`]s
+    /// Stats for [`InnerNodeDirect`]s
     pub node256: InnerNodeStats,
 
     /// Stats for the whole tree
@@ -240,7 +242,7 @@ where
         self.current.tree.aggregate_data(t);
     }
 
-    fn visit_node256(&mut self, t: &InnerNode256<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_node256(&mut self, t: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self::Output {
         t.super_visit_with(self);
         self.current.node256.aggregate_data(t);
         self.current.tree.aggregate_data(t);
