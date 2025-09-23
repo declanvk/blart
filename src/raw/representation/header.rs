@@ -1,10 +1,9 @@
-//! Different header type
+//! Inner node header type
 
 use core::fmt::Debug;
 
 use crate::{
-    raw::{minimum_unchecked, InnerNode, LeafNode, NodePtr},
-    rust_nightly_apis::likely,
+    raw::{LeafNode, NodePtr},
     AsBytes,
 };
 
@@ -192,80 +191,9 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         }
 
         let leaf_key = &leaf_key[begin..end];
-        let leaf_key = &leaf_key[..leaf_key.len().min(PREFIX_LEN)];
-        self.prefix[..len.min(PREFIX_LEN)].copy_from_slice(leaf_key)
-    }
-
-    /// Read the full prefix of the given inner node, accounting for the case of
-    /// implicit prefix bytes.
-    ///
-    /// Implicit prefix bytes happen when the length of a prefix is larger than
-    /// `PREFIX_LEN`. In that case, only `PREFIX_LEN` bytes are actually
-    /// recorded in the header. To recover the implicit bytes, we read from a
-    /// leaf node descendant of the current inner node and pull out the
-    /// bytes from its stored key.
-    // TODO: Inline into caller, this doesn't really belong on the `Header` type.
-    #[inline]
-    pub fn inner_read_full_prefix<'a, N: InnerNode<PREFIX_LEN>>(
-        &'a self,
-        node: &'a N,
-        current_depth: usize,
-    ) -> NodePrefix<'a, N::Key, N::Value, PREFIX_LEN>
-    where
-        N::Key: AsBytes,
-    {
-        debug_assert_eq!(
-            (self as *const _),
-            (node.header() as *const _),
-            "The given inner node must be inner node that contains this header (self)"
-        );
-
-        let len = self.prefix_len();
-        if likely!(len <= PREFIX_LEN) {
-            (self.read_prefix(), None)
-        } else {
-            // SAFETY: By construction a InnerNode, must have >= 1 children, this
-            // is even more strict since in the case of 1 child the node can be
-            // collapsed, so a InnerNode must have >= 2 children, so it's safe
-            // to search for the minium. And the same applies to the `minimum_unchecked`
-            // function
-            let (_, min_child) = node.min();
-            let leaf_ptr = unsafe { minimum_unchecked(min_child) };
-
-            // SAFETY: Since have a shared reference
-            // is safe to create a shared reference from it
-            let leaf = unsafe { leaf_ptr.as_ref() };
-            let leaf = leaf.key_ref().as_bytes();
-
-            unsafe {
-                // SAFETY: Since we are iterating the key and prefixes, we
-                // expect that the depth never exceeds the key len.
-                // Because if this happens we ran out of bytes in the key to match
-                // and the whole process should be already finished
-                core::hint::assert_unchecked(current_depth <= leaf.len());
-
-                // SAFETY: By the construction of the prefix we know that this is inbounds
-                // since the prefix len guarantees it to us
-                core::hint::assert_unchecked(current_depth + len <= leaf.len());
-
-                // SAFETY: This can't overflow since len comes from a u32
-                core::hint::assert_unchecked(current_depth <= current_depth + len);
-            }
-            let leaf = &leaf[current_depth..(current_depth + len)];
-            (leaf, Some(leaf_ptr))
-        }
+        self.prefix[..len].copy_from_slice(leaf_key)
     }
 }
-
-/// This type represents the contents of an [`InnerNode`] prefix, either read
-/// directly from the prefix or fetched from a leaf node descendant.
-///
-/// The second value is the tuple will be `Some(_)` if the value was fetched
-/// from a leaf node.
-pub type NodePrefix<'a, K, V, const PREFIX_LEN: usize> = (
-    &'a [u8],
-    Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>,
-);
 
 impl<const PREFIX_LEN: usize> Debug for Header<PREFIX_LEN> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
