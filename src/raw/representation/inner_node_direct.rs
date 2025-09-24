@@ -1,7 +1,6 @@
 use core::{
     fmt,
     iter::{Enumerate, FusedIterator},
-    mem::MaybeUninit,
     ops::Bound,
     slice::Iter,
 };
@@ -12,7 +11,8 @@ use core::{
 };
 
 use crate::raw::{
-    Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex,
+    Header, InnerNode, InnerNode48, InnerNodeIndirect, InnerNodeSorted, Node, NodeType,
+    OpaqueNodePtr,
 };
 
 /// Inner node that stores up to 256 children, where lookup is performed by
@@ -23,6 +23,54 @@ pub struct InnerNodeDirect<K, V, const PREFIX_LEN: usize> {
     pub header: Header<PREFIX_LEN>,
     /// An array that directly maps a key byte (as index) to a child node.
     pub child_pointers: [Option<OpaqueNodePtr<K, V, PREFIX_LEN>>; 256],
+}
+
+impl<K, V, const PREFIX_LEN: usize, const OTHER_SIZE: usize>
+    From<&InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>> for InnerNodeDirect<K, V, PREFIX_LEN>
+{
+    fn from(value: &InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
+        let header = value.header.clone();
+        let mut child_pointers = [None; 256];
+        for (key_fragment, child_pointer) in value.inner_iter() {
+            child_pointers[usize::from(key_fragment)] = Some(child_pointer);
+        }
+
+        InnerNodeDirect {
+            header,
+            child_pointers,
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize, const OTHER_SIZE: usize>
+    From<&InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>> for InnerNodeDirect<K, V, PREFIX_LEN>
+{
+    fn from(value: &InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
+        let header = value.header.clone();
+        let mut child_pointers = [None; 256];
+        let initialized_child_pointers = value.initialized_child_pointers();
+        for (key_fragment, idx) in value.child_indices.iter().enumerate() {
+            let Some(idx) = idx else {
+                continue;
+            };
+
+            let idx = usize::from(*idx);
+
+            unsafe {
+                // SAFETY: When growing initialized_child_pointers should be full
+                // i.e initialized_child_pointers len == 48. And idx <= 47, since
+                // we can't insert in a full, node
+                core::hint::assert_unchecked(idx < initialized_child_pointers.len());
+            }
+            let child_pointer = initialized_child_pointers[idx];
+            child_pointers[key_fragment] = Some(child_pointer);
+        }
+
+        InnerNodeDirect {
+            header,
+            child_pointers,
+        }
+    }
 }
 
 impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNodeDirect<K, V, PREFIX_LEN> {
@@ -111,31 +159,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     }
 
     fn shrink(&self) -> Self::ShrunkNode {
-        assert!(
-            self.header.num_children() <= 48,
-            "Cannot shrink a Node256 when it has more than 48 children. Currently has [{}] \
-             children.",
-            self.header.num_children()
-        );
-
-        let header = self.header.clone();
-        let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = [MaybeUninit::uninit(); 48];
-
-        for (child_index, (key_byte, child_ptr)) in self.iter().enumerate() {
-            // PANIC SAFETY: This `try_from` will not panic because the `next_index` value
-            // is guaranteed to be 48 or less by the `assert!(num_children < 48)` at the
-            // start of the function.
-            let key_byte = usize::from(key_byte);
-            child_indices[key_byte] = RestrictedNodeIndex::try_from(child_index).unwrap();
-            child_pointers[child_index].write(child_ptr);
-        }
-
-        InnerNode48 {
-            header,
-            child_indices,
-            child_pointers,
-        }
+        self.into()
     }
 
     fn iter(&self) -> Self::Iter<'_> {
@@ -400,8 +424,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "Cannot shrink a Node256 when it has more than 48 children. Currently has \
-                      [49] children."]
+    #[should_panic = "Cannot shrink a InnerNodeDirect when it has more than 48 children. Currently \
+                      has [49] children."]
     fn shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNodeDirect::<_, _, 16>::empty(), 49);
     }

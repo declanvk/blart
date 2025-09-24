@@ -99,32 +99,6 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
         }
     }
 
-    /// Cast this opaque pointer type an enum that contains a pointer to the
-    /// concrete node type.
-    pub fn to_node_ptr(self) -> ConcreteNodePtr<K, V, PREFIX_LEN> {
-        match self.node_type() {
-            NodeType::Node4 => {
-                ConcreteNodePtr::Node4(NodePtr(
-                    self.0.to_ptr().cast::<InnerNode4<K, V, PREFIX_LEN>>(),
-                ))
-            },
-            NodeType::Node16 => ConcreteNodePtr::Node16(NodePtr(
-                self.0.to_ptr().cast::<InnerNode16<K, V, PREFIX_LEN>>(),
-            )),
-            NodeType::Node48 => ConcreteNodePtr::Node48(NodePtr(
-                self.0.to_ptr().cast::<InnerNode48<K, V, PREFIX_LEN>>(),
-            )),
-            NodeType::Node256 => ConcreteNodePtr::Node256(NodePtr(
-                self.0.to_ptr().cast::<InnerNodeDirect<K, V, PREFIX_LEN>>(),
-            )),
-            NodeType::Leaf => {
-                ConcreteNodePtr::LeafNode(NodePtr(
-                    self.0.to_ptr().cast::<LeafNode<K, V, PREFIX_LEN>>(),
-                ))
-            },
-        }
-    }
-
     /// Retrieve the runtime node type information.
     #[inline]
     pub fn node_type(self) -> NodeType {
@@ -133,36 +107,12 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
         unsafe { NodeType::from_u8(self.0.to_data() as u8) }
     }
 
-    /// Get a mutable reference to the header if the underlying node has a
-    /// header field, otherwise return `None`.
-    ///
-    /// # Safety
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'h is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the data. In particular, for the duration of this
-    ///    lifetime, the memory the pointer points to must not get accessed
-    ///    (read or written) through any other pointer.
-    pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header<PREFIX_LEN>> {
-        let header_ptr = match self.node_type() {
-            NodeType::Node4 | NodeType::Node16 | NodeType::Node48 | NodeType::Node256 => unsafe {
-                self.header_mut_unchecked()
-            },
-            NodeType::Leaf => {
-                return None;
-            },
-        };
-
-        // SAFETY: The pointer is properly aligned and points to a initialized instance
-        // of Header that is dereferenceable. The lifetime safety requirements are
-        // passed up to the caller of this function.
-        Some(header_ptr)
-    }
-
     /// Get a mutable reference to the header, this doesn't check if the
     /// pointer is to an inner node.
     ///
     /// # Safety
-    ///  - The pointer must be to a type which implements [`InnerNode`].
+    ///  - The pointer must be to a type which implements
+    ///    [`InnerNode`][super::InnerNode].
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'h is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -176,7 +126,8 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     /// pointer is to an inner node.
     ///
     /// # Safety
-    ///  - The pointer must be to a type which implements [`InnerNode`].
+    ///  - The pointer must be to a type which implements
+    ///    [`InnerNode`][super::InnerNode].
     ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
     ///    'h is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
@@ -187,130 +138,163 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     }
 }
 
-/// An enum that encapsulates pointers to every type of [`Node`]
-pub enum ConcreteNodePtr<K, V, const PREFIX_LEN: usize> {
-    /// Node that references between 2 and 4 children
-    Node4(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>),
-    /// Node that references between 5 and 16 children
-    Node16(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>),
-    /// Node that references between 17 and 49 children
-    Node48(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>),
-    /// Node that references between 49 and 256 children
-    Node256(NodePtr<PREFIX_LEN, InnerNodeDirect<K, V, PREFIX_LEN>>),
-    /// Node that contains a single value
-    LeafNode(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>),
-}
+macro_rules! impl_concrete_node_ptr {
+    ($($variant:ident $node_ty:ty;)+) => {
+        impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
+            /// Cast this opaque pointer type an enum that contains a pointer to the
+            /// concrete node type.
+            pub fn to_node_ptr(self) -> ConcreteNodePtr<K, V, PREFIX_LEN> {
+                match self.node_type() {
+                    $(
+                        NodeType::$variant => {
+                            ConcreteNodePtr::$variant(NodePtr(
+                                self.0.to_ptr().cast::<$node_ty>(),
+                            ))
+                        },
+                    )+
+                    NodeType::Leaf => {
+                        ConcreteNodePtr::LeafNode(NodePtr(
+                            self.0.to_ptr().cast::<LeafNode<K, V, PREFIX_LEN>>(),
+                        ))
+                    },
+                }
+            }
 
-impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteNodePtr<K, V, PREFIX_LEN> {}
+            /// Get a mutable reference to the header if the underlying node has a
+            /// header field, otherwise return `None`.
+            ///
+            /// # Safety
+            ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
+            ///    'h is arbitrarily chosen and does not necessarily reflect the actual
+            ///    lifetime of the data. In particular, for the duration of this
+            ///    lifetime, the memory the pointer points to must not get accessed
+            ///    (read or written) through any other pointer.
+            pub(crate) unsafe fn header_mut<'h>(self) -> Option<&'h mut Header<PREFIX_LEN>> {
+                let header_ptr = match self.node_type() {
+                    $(
+                        | NodeType::$variant
+                    )+ => unsafe { self.header_mut_unchecked() },
+                    NodeType::Leaf => {
+                        return None;
+                    },
+                };
 
-impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteNodePtr<K, V, PREFIX_LEN> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize> ConcreteNodePtr<K, V, PREFIX_LEN> {
-    /// Convert this node pointer with node type information into an
-    /// [`OpaqueNodePtr`] with the type information stored in the pointer.
-    pub fn to_opaque(self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
-        match self {
-            ConcreteNodePtr::Node4(node_ptr) => node_ptr.to_opaque(),
-            ConcreteNodePtr::Node16(node_ptr) => node_ptr.to_opaque(),
-            ConcreteNodePtr::Node48(node_ptr) => node_ptr.to_opaque(),
-            ConcreteNodePtr::Node256(node_ptr) => node_ptr.to_opaque(),
-            ConcreteNodePtr::LeafNode(node_ptr) => node_ptr.to_opaque(),
-        }
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteNodePtr<K, V, PREFIX_LEN> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
-            Self::Node16(arg0) => f.debug_tuple("Node16").field(arg0).finish(),
-            Self::Node48(arg0) => f.debug_tuple("Node48").field(arg0).finish(),
-            Self::Node256(arg0) => f.debug_tuple("Node256").field(arg0).finish(),
-            Self::LeafNode(arg0) => f.debug_tuple("LeafNode").field(arg0).finish(),
-        }
-    }
-}
-
-macro_rules! concrete_node_ptr_from {
-    ($input:ty, $variant:ident) => {
-        impl<K, V, const PREFIX_LEN: usize> From<$input> for ConcreteNodePtr<K, V, PREFIX_LEN> {
-            fn from(value: $input) -> Self {
-                ConcreteNodePtr::$variant(value)
+                // SAFETY: The pointer is properly aligned and points to a initialized instance
+                // of Header that is dereferenceable. The lifetime safety requirements are
+                // passed up to the caller of this function.
+                Some(header_ptr)
             }
         }
-    };
-}
 
-concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>, Node4);
-concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>, Node16);
-concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>, Node48);
-concrete_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNodeDirect<K, V, PREFIX_LEN>>, Node256);
-concrete_node_ptr_from!(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>, LeafNode);
-
-/// An enum that encapsulates pointers to every type of [`InnerNode`]
-pub enum ConcreteInnerNodePtr<K, V, const PREFIX_LEN: usize> {
-    /// Node that references between 2 and 4 children
-    Node4(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>),
-    /// Node that references between 5 and 16 children
-    Node16(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>),
-    /// Node that references between 17 and 49 children
-    Node48(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>),
-    /// Node that references between 49 and 256 children
-    Node256(NodePtr<PREFIX_LEN, InnerNodeDirect<K, V, PREFIX_LEN>>),
-}
-
-impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {}
-
-impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Node4(arg0) => f.debug_tuple("Node4").field(arg0).finish(),
-            Self::Node16(arg0) => f.debug_tuple("Node16").field(arg0).finish(),
-            Self::Node48(arg0) => f.debug_tuple("Node48").field(arg0).finish(),
-            Self::Node256(arg0) => f.debug_tuple("Node256").field(arg0).finish(),
+        /// An enum that encapsulates pointers to every type of [`Node`]
+        pub enum ConcreteNodePtr<K, V, const PREFIX_LEN: usize> {
+            $(
+                #[doc = concat!("A pointer to a [`", stringify!($node_ty),"`]")]
+                $variant(NodePtr<PREFIX_LEN, $node_ty>),
+            )+
+            /// A pointer to a [`LeafNode`]
+            LeafNode(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>),
         }
-    }
-}
 
-macro_rules! concrete_inner_node_ptr_from {
-    ($input:ty, $variant:ident) => {
-        impl<K, V, const PREFIX_LEN: usize> From<$input>
-            for ConcreteInnerNodePtr<K, V, PREFIX_LEN>
+        impl<K, V, const PREFIX_LEN: usize> ConcreteNodePtr<K, V, PREFIX_LEN> {
+            /// Convert this node pointer with node type information into an
+            /// [`OpaqueNodePtr`] with the type information stored in the pointer.
+            pub fn to_opaque(self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
+                match self {
+                    $(
+                        Self::$variant(node_ptr) => node_ptr.to_opaque(),
+                    )+
+                    ConcreteNodePtr::LeafNode(node_ptr) => node_ptr.to_opaque(),
+                }
+            }
+        }
+
+        impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteNodePtr<K, V, PREFIX_LEN> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self {
+                    $(
+                        Self::$variant(arg0) => f.debug_tuple(stringify!($variant)).field(arg0).finish(),
+                    )+
+                    Self::LeafNode(arg0) => f.debug_tuple("LeafNode").field(arg0).finish(),
+                }
+            }
+        }
+
+        impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteNodePtr<K, V, PREFIX_LEN> {}
+
+        impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteNodePtr<K, V, PREFIX_LEN> {
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+
+        $(
+            impl<K, V, const PREFIX_LEN: usize> From<NodePtr<PREFIX_LEN, $node_ty>> for ConcreteNodePtr<K, V, PREFIX_LEN> {
+                fn from(value: NodePtr<PREFIX_LEN, $node_ty>) -> Self {
+                    ConcreteNodePtr::$variant(value)
+                }
+            }
+        )+
+        impl<K, V, const PREFIX_LEN: usize> From<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>> for ConcreteNodePtr<K, V, PREFIX_LEN> {
+            fn from(value: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>) -> Self {
+                ConcreteNodePtr::LeafNode(value)
+            }
+        }
+
+        /// An enum that encapsulates pointers to every type of [`InnerNode`][super::InnerNode]
+        pub enum ConcreteInnerNodePtr<K, V, const PREFIX_LEN: usize> {
+            $(
+                #[doc = concat!("A pointer to a [`", stringify!($node_ty),"`]")]
+                $variant(NodePtr<PREFIX_LEN, $node_ty>),
+            )+
+        }
+
+        impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {}
+
+        impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+
+        impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self {
+                    $(
+                        Self::$variant(arg0) => f.debug_tuple(stringify!($variant)).field(arg0).finish(),
+                    )+
+                }
+            }
+        }
+
+        $(
+            impl<K, V, const PREFIX_LEN: usize> From<NodePtr<PREFIX_LEN, $node_ty>> for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
+                fn from(value: NodePtr<PREFIX_LEN, $node_ty>) -> Self {
+                    ConcreteInnerNodePtr::$variant(value)
+                }
+            }
+        )+
+
+        impl<K, V, const PREFIX_LEN: usize> From<ConcreteInnerNodePtr<K, V, PREFIX_LEN>>
+            for ConcreteNodePtr<K, V, PREFIX_LEN>
         {
-            fn from(value: $input) -> Self {
-                Self::$variant(value)
+            fn from(value: ConcreteInnerNodePtr<K, V, PREFIX_LEN>) -> Self {
+                match value {
+                    $(
+                        ConcreteInnerNodePtr::$variant(inner_ptr) => ConcreteNodePtr::$variant(inner_ptr),
+                    )+
+                }
             }
         }
     };
 }
 
-concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>>, Node4);
-concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode16<K, V, PREFIX_LEN>>, Node16);
-concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNode48<K, V, PREFIX_LEN>>, Node48);
-concrete_inner_node_ptr_from!(NodePtr<PREFIX_LEN, InnerNodeDirect<K, V, PREFIX_LEN>>, Node256);
-
-impl<K, V, const PREFIX_LEN: usize> From<ConcreteInnerNodePtr<K, V, PREFIX_LEN>>
-    for ConcreteNodePtr<K, V, PREFIX_LEN>
-{
-    fn from(value: ConcreteInnerNodePtr<K, V, PREFIX_LEN>) -> Self {
-        match value {
-            ConcreteInnerNodePtr::Node4(inner_ptr) => ConcreteNodePtr::Node4(inner_ptr),
-            ConcreteInnerNodePtr::Node16(inner_ptr) => ConcreteNodePtr::Node16(inner_ptr),
-            ConcreteInnerNodePtr::Node48(inner_ptr) => ConcreteNodePtr::Node48(inner_ptr),
-            ConcreteInnerNodePtr::Node256(inner_ptr) => ConcreteNodePtr::Node256(inner_ptr),
-        }
-    }
-}
+impl_concrete_node_ptr!(
+    Node4 InnerNode4<K, V, PREFIX_LEN>;
+    Node16 InnerNode16<K, V, PREFIX_LEN>;
+    Node48 InnerNode48<K, V, PREFIX_LEN>;
+    Node256 InnerNodeDirect<K, V, PREFIX_LEN>;
+);
 
 /// A pointer to a [`Node`].
 #[repr(transparent)]

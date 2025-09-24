@@ -1,6 +1,8 @@
 //! Module containing copies of Rust standard library unstable functions for use
 //! outside of the nightly distribution.
 
+#![cfg_attr(feature = "nightly", expect(clippy::incompatible_msrv))]
+
 /// Assuming all the elements are initialized, get a slice to them.
 ///
 /// # Safety
@@ -35,41 +37,6 @@ pub const unsafe fn maybe_uninit_slice_assume_init_ref<T>(
         // by `slice` which is a reference and thus guaranteed to be valid for
         // reads.
         unsafe { &*(slice as *const [core::mem::MaybeUninit<T>] as *const [T]) }
-    }
-}
-
-/// Assuming all the elements are initialized, get a mutable slice to them.
-///
-/// # Safety
-///
-/// It is up to the caller to guarantee that the `MaybeUninit<T>` elements
-/// really are in an initialized state.
-/// Calling this when the content is not yet fully initialized causes
-/// undefined behavior.
-///
-/// See [`assume_init_mut`][core::mem::MaybeUninit::assume_init_mut] for more
-/// details and examples.
-///
-/// **This is a unstable API copied from the Rust standard library, tracking
-/// issue is [#63569][issue-63569]**
-///
-/// [issue-63569]: https://github.com/rust-lang/rust/issues/63569
-#[inline]
-pub unsafe fn maybe_uninit_slice_assume_init_mut<T>(
-    slice: &mut [core::mem::MaybeUninit<T>],
-) -> &mut [T] {
-    #[cfg(feature = "nightly")]
-    {
-        // SAFETY: Covered by condition of containing function
-        unsafe { slice.assume_init_mut() }
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        // SAFETY: similar to safety notes for `maybe_uninit_slice_assume_init_ref`, but
-        // we have a mutable reference which is also guaranteed to be valid for
-        // writes.
-        unsafe { &mut *(slice as *mut [core::mem::MaybeUninit<T>] as *mut [T]) }
     }
 }
 

@@ -34,7 +34,7 @@ pub enum NodeType {
     Node4 = 0b000,
     /// Node that references between 5 and 16 children
     Node16 = 0b001, // 0b001
-    /// Node that references between 17 and 49 children
+    /// Node that references between 17 and 48 children
     Node48 = 0b010, // 0b010
     /// Node that references between 49 and 256 children
     Node256 = 0b011, // 0b011
