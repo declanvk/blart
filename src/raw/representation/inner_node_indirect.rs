@@ -1,110 +1,23 @@
+#[cfg(feature = "nightly")]
+use core::simd::{cmp::SimdPartialEq, u8x64};
 use core::{
-    cmp::Ordering,
-    error::Error,
     fmt,
     iter::{Enumerate, FusedIterator},
     mem::{self, MaybeUninit},
     ops::Bound,
     slice::Iter,
 };
-#[cfg(feature = "nightly")]
-use core::{
-    iter::{FilterMap, Map},
-    simd::{cmp::SimdPartialEq, u8x64},
-};
 
+use self::index::NonMaxIndex;
 use crate::{
     raw::{
         Header, InnerNode, InnerNode16, InnerNodeDirect, InnerNodeSorted, Node, NodeType,
         OpaqueNodePtr,
     },
-    rust_nightly_apis::{maybe_uninit_slice_assume_init_mut, maybe_uninit_slice_assume_init_ref},
+    rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
 
-/// A restricted index only valid from 0 to LIMIT - 1.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct RestrictedNodeIndex<const LIMIT: usize>(u8);
-
-impl<const LIMIT: usize> RestrictedNodeIndex<LIMIT> {
-    /// A placeholder index value that indicates that the index is not
-    /// occupied
-    pub const EMPTY: Self = RestrictedNodeIndex(LIMIT as u8);
-    /// This constant is used to check the range of values passed via the
-    /// `LIMIT` generic and trigger a compile error if its out of range.
-    const _RANGE_RESTRICTION: () = assert!(
-        LIMIT <= (u8::MAX as usize),
-        "The restricted node index LIMIT must be within the range of a u8 value"
-    );
-
-    /// Return true if the given index is the empty sentinel value
-    pub fn is_empty(self) -> bool {
-        self == Self::EMPTY
-    }
-}
-
-impl<const LIMIT: usize> From<RestrictedNodeIndex<LIMIT>> for u8 {
-    fn from(src: RestrictedNodeIndex<LIMIT>) -> Self {
-        src.0
-    }
-}
-
-impl<const LIMIT: usize> From<RestrictedNodeIndex<LIMIT>> for usize {
-    fn from(src: RestrictedNodeIndex<LIMIT>) -> Self {
-        usize::from(src.0)
-    }
-}
-
-impl<const LIMIT: usize> TryFrom<usize> for RestrictedNodeIndex<LIMIT> {
-    type Error = TryFromByteError;
-
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
-        if value < LIMIT {
-            Ok(RestrictedNodeIndex(value as u8))
-        } else {
-            Err(TryFromByteError(LIMIT as u8, value))
-        }
-    }
-}
-
-impl<const LIMIT: usize> TryFrom<u8> for RestrictedNodeIndex<LIMIT> {
-    type Error = TryFromByteError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value < LIMIT as u8 {
-            Ok(RestrictedNodeIndex(value))
-        } else {
-            Err(TryFromByteError(LIMIT as u8, usize::from(value)))
-        }
-    }
-}
-
-impl<const LIMIT: usize> PartialOrd for RestrictedNodeIndex<LIMIT> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.0 == LIMIT as u8 || other.0 == LIMIT as u8 {
-            None
-        } else {
-            Some(self.0.cmp(&other.0))
-        }
-    }
-}
-
-/// The error type returned when attempting to construct an index outside
-/// the accepted range of a PartialNodeIndex.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TryFromByteError(u8, usize);
-
-impl fmt::Display for TryFromByteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Input value [{}] is greater than the allowed maximum [{}] for PartialNodeIndex.",
-            self.1, self.0
-        )
-    }
-}
-
-impl Error for TryFromByteError {}
+mod index;
 
 /// Inner node type that uses a direct lookup for the key byte and uses the
 /// resulting value to lookup the child pointer.
@@ -124,7 +37,93 @@ pub struct InnerNodeIndirect<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     ///
     /// All the `child_indices` values are guaranteed to be
     /// `PartialNodeIndex<48>::EMPTY` when the node is constructed.
-    pub child_indices: [RestrictedNodeIndex<SIZE>; 256],
+    pub child_indices: [Option<NonMaxIndex>; 256],
+}
+
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
+    From<&InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>>
+    for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
+{
+    fn from(value: &InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
+        assert!(
+            value.header.num_children() <= SIZE,
+            "Cannot shrink a InnerNodeDirect when it has more than {SIZE} children. Currently has \
+             [{}] children.",
+            value.header.num_children()
+        );
+
+        let header = value.header.clone();
+        let mut child_indices = [None; 256];
+        let mut child_pointers = [MaybeUninit::uninit(); SIZE];
+
+        let (keys, _) = value.initialized_portion();
+
+        assert_eq!(
+            keys.len(),
+            value.keys.len(),
+            "Node must be full to grow to node 48"
+        );
+
+        for (index, key) in keys.iter().copied().enumerate() {
+            // SAFETY: This `try_from` will not panic because index is guaranteed to
+            // be 15 or less because of the length of the `InnerNode16.keys` array.
+            child_indices[usize::from(key)] =
+                Some(unsafe { NonMaxIndex::try_from(index).unwrap_unchecked() });
+        }
+
+        let num_children = header.num_children();
+
+        unsafe {
+            // SAFETY: By construction the number of children in the header
+            // is kept in sync with the number of children written in the node
+            // and if this number exceeds the maximum len the node should have
+            // already grown. So we know for a fact that that num_children <= node len
+            core::hint::assert_unchecked(num_children <= value.child_pointers.len());
+
+            // SAFETY: We know that the new size is >= old size, so this is safe
+            core::hint::assert_unchecked(num_children <= child_pointers.len());
+        }
+
+        child_pointers[..num_children].copy_from_slice(&value.child_pointers[..num_children]);
+
+        Self {
+            header,
+            child_indices,
+            child_pointers,
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, V, PREFIX_LEN>>
+    for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
+{
+    fn from(value: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self {
+        assert!(
+            value.header.num_children() <= SIZE,
+            "Cannot shrink a InnerNodeDirect when it has more than {SIZE} children. Currently has \
+             [{}] children.",
+            value.header.num_children()
+        );
+
+        let header = value.header.clone();
+        let mut child_indices = [None; 256];
+        let mut child_pointers = [MaybeUninit::uninit(); SIZE];
+
+        for (child_index, (key_byte, child_ptr)) in value.iter().enumerate() {
+            // PANIC SAFETY: This `try_from` will not panic because the `next_index` value
+            // is guaranteed to be 48 or less by the `assert!(num_children < 48)` at the
+            // start of the function.
+            let key_byte = usize::from(key_byte);
+            child_indices[key_byte] = Some(NonMaxIndex::try_from(child_index).unwrap());
+            child_pointers[child_index].write(child_ptr);
+        }
+
+        Self {
+            header,
+            child_indices,
+            child_pointers,
+        }
+    }
 }
 
 impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> fmt::Debug
@@ -166,7 +165,9 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeIndirect<K, V, P
 /// Node that references between 17 and 49 children.
 pub type InnerNode48<K, V, const PREFIX_LEN: usize> = InnerNodeIndirect<K, V, PREFIX_LEN, 48>;
 
-impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Node<PREFIX_LEN>
+    for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
+{
     type Key = K;
     type Value = V;
 
@@ -174,22 +175,12 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFI
 }
 
 // SAFETY: `InnerNode48` is `repr(C)` and has a `Header` as the first field
-unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
+unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNode<PREFIX_LEN>
+    for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
+{
     type GrownNode = InnerNodeDirect<K, V, PREFIX_LEN>;
-    #[cfg(not(feature = "nightly"))]
     type Iter<'a>
-        = Node48Iter<'a, K, V, PREFIX_LEN>
-    where
-        Self: 'a;
-    #[cfg(feature = "nightly")]
-    type Iter<'a>
-        = Map<
-        FilterMap<
-            Enumerate<Iter<'a, RestrictedNodeIndex<48>>>,
-            impl FnMut((usize, &'a RestrictedNodeIndex<48>)) -> Option<(u8, usize)>,
-        >,
-        impl FnMut((u8, usize)) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
-    >
+        = NodeIndirectIter<'a, K, V, PREFIX_LEN>
     where
         Self: 'a;
     type ShrunkNode = InnerNode16<K, V, PREFIX_LEN>;
@@ -199,17 +190,17 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
     }
 
     fn from_header(header: Header<PREFIX_LEN>) -> Self {
-        InnerNode48 {
+        InnerNodeIndirect {
             header,
-            child_indices: [RestrictedNodeIndex::<48>::EMPTY; 256],
-            child_pointers: [MaybeUninit::uninit(); 48],
+            child_indices: [None; 256],
+            child_pointers: [MaybeUninit::uninit(); SIZE],
         }
     }
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
         let index = &self.child_indices[usize::from(key_fragment)];
         let child_pointers = self.initialized_child_pointers();
-        if !index.is_empty() {
+        if let Some(index) = index {
             let idx = usize::from(*index);
 
             unsafe {
@@ -226,7 +217,10 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
 
     fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let key_fragment_idx = usize::from(key_fragment);
-        let child_index = if self.child_indices[key_fragment_idx] == RestrictedNodeIndex::EMPTY {
+        let child_index = if let Some(index) = self.child_indices[key_fragment_idx] {
+            // overwrite existing
+            usize::from(index)
+        } else {
             let child_index = self.header.num_children();
             debug_assert!(child_index < self.child_pointers.len(), "node is full");
 
@@ -241,12 +235,9 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
             // node is full and before calling this function again the node should
             // have already grown
             self.child_indices[key_fragment_idx] =
-                unsafe { RestrictedNodeIndex::try_from(child_index).unwrap_unchecked() };
+                Some(unsafe { NonMaxIndex::try_from(child_index).unwrap_unchecked() });
             self.header.inc_num_children();
             child_index
-        } else {
-            // overwrite existing
-            usize::from(self.child_indices[key_fragment_idx])
         };
 
         // SAFETY: This index can be up to <= 47 as described above
@@ -260,10 +251,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
     }
 
     fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
-        let restricted_index = self.child_indices[usize::from(key_fragment)];
-        if restricted_index.is_empty() {
-            return None;
-        }
+        let restricted_index = self.child_indices[usize::from(key_fragment)]?;
 
         // Replace child pointer with uninitialized value, even though it may possibly
         // be overwritten by the compaction step
@@ -280,21 +268,18 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
 
         // Take all child indices that are greater than the index we're removing, and
         // subtract one so that they remain valid
-        for other_restrict_index in &mut self.child_indices {
-            if matches!(
-                restricted_index.partial_cmp(other_restrict_index),
-                Some(Ordering::Less)
-            ) {
+        for other_restrict_index in self.child_indices.iter_mut().flatten() {
+            if restricted_index < *other_restrict_index {
                 // PANIC SAFETY: This will not underflow, because it is guaranteed to be
                 // greater than at least 1 other index. This will not panic in the
                 // `try_from` because the new value is derived from an existing restricted
                 // index.
                 *other_restrict_index =
-                    RestrictedNodeIndex::try_from(other_restrict_index.0 - 1).unwrap();
+                    NonMaxIndex::try_from(other_restrict_index.get() - 1).unwrap();
             }
         }
 
-        self.child_indices[usize::from(key_fragment)] = RestrictedNodeIndex::EMPTY;
+        self.child_indices[usize::from(key_fragment)] = None;
         self.header.dec_num_children();
         // SAFETY: This child pointer value is initialized because we got it by using a
         // non-`RestrictedNodeIndex::<>::EMPTY` index from the child indices array.
@@ -302,106 +287,27 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
     }
 
     fn grow(&self) -> Self::GrownNode {
-        let header = self.header.clone();
-        let mut child_pointers = [None; 256];
-        let initialized_child_pointers = self.initialized_child_pointers();
-        for (key_fragment, idx) in self.child_indices.iter().enumerate() {
-            if idx.is_empty() {
-                continue;
-            }
-
-            let idx = usize::from(*idx);
-
-            unsafe {
-                // SAFETY: When growing initialized_child_pointers should be full
-                // i.e initialized_child_pointers len == 48. And idx <= 47, since
-                // we can't insert in a full, node
-                core::hint::assert_unchecked(idx < initialized_child_pointers.len());
-            }
-            let child_pointer = initialized_child_pointers[idx];
-            child_pointers[key_fragment] = Some(child_pointer);
-        }
-
-        InnerNodeDirect {
-            header,
-            child_pointers,
-        }
+        self.into()
     }
 
     fn shrink(&self) -> Self::ShrunkNode {
-        assert!(
-            self.header.num_children() <= 16,
-            "Cannot shrink a Node48 when it has more than 16 children. Currently has [{}] \
-             children.",
-            self.header.num_children()
-        );
-
-        let header = self.header.clone();
-
-        let mut key_and_child_ptrs = [MaybeUninit::uninit(); 16];
-
-        for (idx, value) in self.iter().enumerate() {
-            key_and_child_ptrs[idx].write(value);
-        }
-
-        let init_key_and_child_ptrs = {
-            // SAFETY: The first `num_children` are guaranteed to be initialized in this
-            // array because the previous iterator loops through all children of the inner
-            // node.
-            let init_key_and_child_ptrs = unsafe {
-                maybe_uninit_slice_assume_init_mut(&mut key_and_child_ptrs[..header.num_children()])
-            };
-
-            init_key_and_child_ptrs.sort_unstable_by_key(|(key_byte, _)| *key_byte);
-
-            init_key_and_child_ptrs
-        };
-
-        let mut keys = [MaybeUninit::uninit(); 16];
-        let mut child_pointers = [MaybeUninit::uninit(); 16];
-
-        for (idx, (key_byte, child_ptr)) in init_key_and_child_ptrs.iter().copied().enumerate() {
-            keys[idx].write(key_byte);
-            child_pointers[idx].write(child_ptr);
-        }
-
-        InnerNodeSorted {
-            header,
-            keys,
-            child_pointers,
-        }
+        self.into()
     }
 
-    fn iter(&self) -> Self::Iter<'_> {
+    fn iter(&self) -> NodeIndirectIter<'_, K, V, PREFIX_LEN> {
         let child_pointers = self.initialized_child_pointers();
 
-        #[cfg(not(feature = "nightly"))]
-        {
-            Node48Iter {
-                it: self.child_indices.iter().enumerate(),
-                child_pointers,
-            }
-        }
-
-        #[cfg(feature = "nightly")]
-        {
-            self.child_indices
-                .iter()
-                .enumerate()
-                .filter_map(|(key, idx)| {
-                    (!idx.is_empty()).then_some((key as u8, usize::from(*idx)))
-                })
-                // SAFETY: By the construction of `Self` idx, must always
-                // be inbounds
-                .map(|(key, idx)| unsafe { (key, *child_pointers.get_unchecked(idx)) })
+        NodeIndirectIter {
+            it: self.child_indices.iter().enumerate(),
+            child_pointers,
         }
     }
 
     fn range(
         &self,
         bound: impl core::ops::RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + FusedIterator {
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
+    {
         {
             match (bound.start_bound(), bound.end_bound()) {
                 (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
@@ -433,7 +339,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
             .filter_map(|(key, idx)| {
                 // normally `enumerate()` has elements of (idx, val), but we're using the index
                 // as the key since it ranges from [0, 256)
-                (!idx.is_empty()).then_some((key as u8, usize::from(*idx)))
+                idx.map(|idx| (key as u8, usize::from(idx)))
             })
             // SAFETY: By the construction of `Self` idx, must always
             // be inbounds
@@ -448,10 +354,13 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        // SAFETY: Since `RestrictedNodeIndex` is
-        // repr(u8) is safe to transmute it
-        let child_indices: &[u8; 256] = unsafe { core::mem::transmute(&self.child_indices) };
-        let empty = u8x64::splat(48);
+        // SAFETY: Since `NonMaxIndex` is repr(transparent) is safe to transmute it to a
+        // u8. Since we're also working with `Option<NonMaxIndex>`, which is underneath
+        // actually `Option<NonZeroU8>`, we know that the value representing `None` will
+        // be `0`. That way we can check for non-zero values to see where `Some(...)`
+        // indices are.
+        let child_indices: &[u8; 256] = unsafe { mem::transmute(&self.child_indices) };
+        let empty = u8x64::splat(0);
         let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
             .simd_eq(empty)
             .to_bitmask();
@@ -483,7 +392,9 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
             core::hint::assert_unchecked(key < self.child_indices.len());
         }
 
-        let idx = usize::from(self.child_indices[key]);
+        // SAFETY: We know the value at `key` index is not `None` because this node must
+        // contain at least one child (similar to the logic above).
+        let idx = usize::from(unsafe { self.child_indices[key].unwrap_unchecked() });
         let child_pointers = self.initialized_child_pointers();
 
         unsafe {
@@ -500,9 +411,9 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
     #[cfg(not(feature = "nightly"))]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         for (key, idx) in self.child_indices.iter().enumerate() {
-            if idx.is_empty() {
+            let Some(idx) = idx else {
                 continue;
-            }
+            };
             let child_pointers = self.initialized_child_pointers();
             return (key as u8, child_pointers[usize::from(*idx)]);
         }
@@ -512,10 +423,13 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        // SAFETY: Since `RestrictedNodeIndex` is
-        // repr(u8) is safe to transmute it
-        let child_indices: &[u8; 256] = unsafe { core::mem::transmute(&self.child_indices) };
-        let empty = u8x64::splat(48);
+        // SAFETY: Since `NonMaxIndex` is repr(transparent) is safe to transmute it to a
+        // u8. Since we're also working with `Option<NonMaxIndex>`, which is underneath
+        // actually `Option<NonZeroU8>`, we know that the value representing `None` will
+        // be `0`. That way we can check for non-zero values to see where `Some(...)`
+        // indices are.
+        let child_indices: &[u8; 256] = unsafe { mem::transmute(&self.child_indices) };
+        let empty = u8x64::splat(0);
         let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
             .simd_eq(empty)
             .to_bitmask();
@@ -547,7 +461,9 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
             core::hint::assert_unchecked(key < self.child_indices.len());
         }
 
-        let idx = usize::from(self.child_indices[key]);
+        // SAFETY: We know the value at `key` index is not `None` because this node must
+        // contain at least one child (similar to the logic above).
+        let idx = usize::from(unsafe { self.child_indices[key].unwrap_unchecked() });
         let child_pointers = self.initialized_child_pointers();
 
         unsafe {
@@ -564,9 +480,9 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
     #[cfg(not(feature = "nightly"))]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         for (key, idx) in self.child_indices.iter().enumerate().rev() {
-            if idx.is_empty() {
+            let Some(idx) = idx else {
                 continue;
-            }
+            };
             let child_pointers = self.initialized_child_pointers();
             return (key as u8, child_pointers[usize::from(*idx)]);
         }
@@ -574,22 +490,20 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48
     }
 }
 
-/// This struct is an iterator over the children of a [`InnerNode48`].
-#[cfg(not(feature = "nightly"))]
-pub struct Node48Iter<'a, K, V, const PREFIX_LEN: usize> {
-    pub(crate) it: Enumerate<Iter<'a, RestrictedNodeIndex<48>>>,
+/// This struct is an iterator over the children of a [`InnerNodeIndirect`].
+pub struct NodeIndirectIter<'a, K, V, const PREFIX_LEN: usize> {
+    pub(crate) it: Enumerate<Iter<'a, Option<NonMaxIndex>>>,
     pub(crate) child_pointers: &'a [OpaqueNodePtr<K, V, PREFIX_LEN>],
 }
 
-#[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> Iterator for Node48Iter<'_, K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> Iterator for NodeIndirectIter<'_, K, V, PREFIX_LEN> {
     type Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
 
     fn next(&mut self) -> Option<Self::Item> {
         for (key, idx) in self.it.by_ref() {
-            if idx.is_empty() {
+            let Some(idx) = idx else {
                 continue;
-            }
+            };
             let key = key as u8;
             // SAFETY: This idx is in bounds, since the number
             // of iterations is always <= 48 (i.e 0-47)
@@ -600,13 +514,12 @@ impl<K, V, const PREFIX_LEN: usize> Iterator for Node48Iter<'_, K, V, PREFIX_LEN
     }
 }
 
-#[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node48Iter<'_, K, V, PREFIX_LEN> {
+impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for NodeIndirectIter<'_, K, V, PREFIX_LEN> {
     fn next_back(&mut self) -> Option<Self::Item> {
         while let Some((key, idx)) = self.it.next_back() {
-            if idx.is_empty() {
+            let Some(idx) = idx else {
                 continue;
-            }
+            };
             let key = key as u8;
             // SAFETY: This idx is in bounds, since the number
             // of iterations is always <= 48 (i.e 0-47)
@@ -617,8 +530,7 @@ impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for Node48Iter<'_, K, V,
     }
 }
 
-#[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> FusedIterator for Node48Iter<'_, K, V, PREFIX_LEN> {}
+impl<K, V, const PREFIX_LEN: usize> FusedIterator for NodeIndirectIter<'_, K, V, PREFIX_LEN> {}
 
 #[cfg(test)]
 mod tests {
@@ -650,9 +562,9 @@ mod tests {
         n.header.inc_num_children();
         n.header.inc_num_children();
 
-        n.child_indices[1] = 2usize.try_into().unwrap();
-        n.child_indices[3] = 0usize.try_into().unwrap();
-        n.child_indices[123] = 1usize.try_into().unwrap();
+        n.child_indices[1] = Some(2usize.try_into().unwrap());
+        n.child_indices[3] = Some(0usize.try_into().unwrap());
+        n.child_indices[123] = Some(1usize.try_into().unwrap());
 
         n.child_pointers[0].write(l1_ptr);
         n.child_pointers[1].write(l2_ptr);
@@ -705,8 +617,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "Cannot shrink a Node48 when it has more than 16 children. Currently has [17] \
-                      children."]
+    #[should_panic = "Cannot shrink a InnerNodeIndirect when it has more than 16 children. \
+                      Currently has [17] children."]
     fn shrink_too_many_children_panic() {
         inner_node_shrink_test(InnerNode48::<_, _, 16>::empty(), 17);
     }

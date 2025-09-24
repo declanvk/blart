@@ -12,7 +12,7 @@ use core::{
 };
 
 use crate::{
-    raw::{Header, InnerNode, InnerNode48, Node, NodeType, OpaqueNodePtr, RestrictedNodeIndex},
+    raw::{Header, InnerNode, InnerNodeDirect, InnerNodeIndirect, Node, NodeType, OpaqueNodePtr},
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
 
@@ -57,6 +57,63 @@ pub struct InnerNodeSorted<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     /// This array will only be initialized for the first `header.num_children`
     /// values.
     pub keys: [MaybeUninit<u8>; SIZE],
+}
+
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, V, PREFIX_LEN>>
+    for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
+{
+    fn from(value: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self {
+        assert!(
+            value.header.num_children() <= SIZE,
+            "Cannot shrink a InnerNodeDirect when it has more than {SIZE} children. Currently has \
+             [{}] children.",
+            value.header.num_children()
+        );
+
+        let header = value.header.clone();
+        let mut keys = [MaybeUninit::uninit(); SIZE];
+        let mut child_pointers = [MaybeUninit::uninit(); SIZE];
+
+        for (idx, (key_byte, child_ptr)) in value.iter().enumerate() {
+            keys[idx].write(key_byte);
+            child_pointers[idx].write(child_ptr);
+        }
+
+        Self {
+            header,
+            child_pointers,
+            keys,
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
+    From<&InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>>
+    for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
+{
+    fn from(value: &InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
+        assert!(
+            value.header.num_children() <= SIZE,
+            "Cannot shrink a InnerNodeIndirect when it has more than {SIZE} children. Currently \
+             has [{}] children.",
+            value.header.num_children()
+        );
+
+        let header = value.header.clone();
+        let mut keys = [MaybeUninit::uninit(); SIZE];
+        let mut child_pointers = [MaybeUninit::uninit(); SIZE];
+
+        for (idx, (key_byte, child_ptr)) in value.iter().enumerate() {
+            keys[idx].write(key_byte);
+            child_pointers[idx].write(child_ptr);
+        }
+
+        Self {
+            header,
+            child_pointers,
+            keys,
+        }
+    }
 }
 
 impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Clone
@@ -282,51 +339,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
         }
     }
 
-    /// Transform node into a [`InnerNode48`]
-    fn grow_node48(&self) -> InnerNode48<K, V, PREFIX_LEN> {
-        let header = self.header.clone();
-        let mut child_indices = [RestrictedNodeIndex::<48>::EMPTY; 256];
-        let mut child_pointers = [MaybeUninit::uninit(); 48];
-
-        let (keys, _) = self.initialized_portion();
-
-        assert_eq!(
-            keys.len(),
-            self.keys.len(),
-            "Node must be full to grow to node 48"
-        );
-
-        for (index, key) in keys.iter().copied().enumerate() {
-            // SAFETY: This `try_from` will not panic because index is guaranteed to
-            // be 15 or less because of the length of the `InnerNode16.keys` array.
-            child_indices[usize::from(key)] =
-                unsafe { RestrictedNodeIndex::try_from(index).unwrap_unchecked() };
-        }
-
-        let num_children = header.num_children();
-
-        unsafe {
-            // SAFETY: By construction the number of children in the header
-            // is kept in sync with the number of children written in the node
-            // and if this number exceeds the maximum len the node should have
-            // already grown. So we know for a fact that that num_children <= node len
-            core::hint::assert_unchecked(num_children <= self.child_pointers.len());
-
-            // SAFETY: We know that the new size is >= old size, so this is safe
-            core::hint::assert_unchecked(num_children <= child_pointers.len());
-        }
-
-        child_pointers[..num_children].copy_from_slice(&self.child_pointers[..num_children]);
-
-        InnerNode48 {
-            header,
-            child_indices,
-            child_pointers,
-        }
-    }
-
     /// Get an iterator over the keys and values of the node
-    fn inner_iter(&self) -> InnerNodeSortedIter<'_, K, V, PREFIX_LEN> {
+    pub(super) fn inner_iter(&self) -> InnerNodeSortedIter<'_, K, V, PREFIX_LEN> {
         let (keys, nodes) = self.initialized_portion();
         keys.iter().copied().zip(nodes.iter().copied())
     }
@@ -404,13 +418,9 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 
         keys.iter().copied().zip(nodes.iter().copied())
     }
-}
 
-/// Node that references between 2 and 4 children
-pub type InnerNode4<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 4>;
-
-impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode4<K, V, PREFIX_LEN> {
-    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+    #[inline]
+    fn default_lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         let (keys, _) = self.initialized_portion();
         for (child_index, key) in keys.iter().enumerate() {
             if key_fragment == *key {
@@ -421,7 +431,8 @@ impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode4<K, V, P
         None
     }
 
-    fn find_write_point(&self, key_fragment: u8) -> WritePoint {
+    #[inline]
+    fn default_find_write_point(&self, key_fragment: u8) -> WritePoint {
         let (keys, _) = self.initialized_portion();
 
         let mut child_index = 0;
@@ -437,6 +448,19 @@ impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode4<K, V, P
             child_index += 1;
         }
         WritePoint::Last(child_index)
+    }
+}
+
+/// Node that references between 2 and 4 children
+pub type InnerNode4<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 4>;
+
+impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode4<K, V, PREFIX_LEN> {
+    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        self.default_lookup_child_index(key_fragment)
+    }
+
+    fn find_write_point(&self, key_fragment: u8) -> WritePoint {
+        self.default_find_write_point(key_fragment)
     }
 }
 
@@ -529,6 +553,11 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<
 pub type InnerNode16<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 16>;
 
 impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode16<K, V, PREFIX_LEN> {
+    #[cfg(not(feature = "nightly"))]
+    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        self.default_lookup_child_index(key_fragment)
+    }
+
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
@@ -549,15 +578,8 @@ impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode16<K, V, 
     }
 
     #[cfg(not(feature = "nightly"))]
-    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        let (keys, _) = self.initialized_portion();
-        for (child_index, key) in keys.iter().enumerate() {
-            if key_fragment == *key {
-                return Some(child_index);
-            }
-        }
-
-        None
+    fn find_write_point(&self, key_fragment: u8) -> WritePoint {
+        self.default_find_write_point(key_fragment)
     }
 
     #[cfg(feature = "nightly")]
@@ -583,25 +605,6 @@ impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode16<K, V, 
             },
         }
     }
-
-    #[cfg(not(feature = "nightly"))]
-    fn find_write_point(&self, key_fragment: u8) -> WritePoint {
-        let (keys, _) = self.initialized_portion();
-
-        let mut child_index = 0;
-        for key in keys {
-            // Might be able to remove this `allow` once we bump the MSRV again. I'm not
-            // sure which version exactly (in between 1.82 and 1.88) has the fix.
-            #[allow(clippy::comparison_chain)]
-            if key_fragment < *key {
-                return WritePoint::Shift(child_index);
-            } else if key_fragment == *key {
-                return WritePoint::Existing(child_index);
-            }
-            child_index += 1;
-        }
-        WritePoint::Last(child_index)
-    }
 }
 
 impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
@@ -613,7 +616,7 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFI
 
 // SAFETY: `InnerNode16` is `repr(C)` and has a `Header` as the first field
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
-    type GrownNode = InnerNode48<K, V, PREFIX_LEN>;
+    type GrownNode = InnerNodeIndirect<K, V, PREFIX_LEN, 48>;
     type Iter<'a>
         = InnerNodeSortedIter<'a, K, V, PREFIX_LEN>
     where
@@ -645,7 +648,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16
     }
 
     fn grow(&self) -> Self::GrownNode {
-        self.grow_node48()
+        self.into()
     }
 
     fn shrink(&self) -> Self::ShrunkNode {
