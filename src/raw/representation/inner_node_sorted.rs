@@ -27,15 +27,6 @@ enum WritePoint {
     Shift(usize),
 }
 
-/// Common methods for searching in an [`InnerNodeSorted`]
-trait SearchInnerNodeSorted {
-    /// Get the index of the child if it exists
-    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize>;
-
-    /// Find the write point for `key_fragment`
-    fn find_write_point(&self, key_fragment: u8) -> WritePoint;
-}
-
 /// Node type that has a compact representation for key bytes and children
 /// pointers.
 ///
@@ -56,7 +47,7 @@ pub struct InnerNodeSorted<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
-    pub keys: [MaybeUninit<u8>; SIZE],
+    pub keys: [u8; SIZE],
 }
 
 impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, V, PREFIX_LEN>>
@@ -71,11 +62,11 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, 
         );
 
         let header = value.header.clone();
-        let mut keys = [MaybeUninit::uninit(); SIZE];
+        let mut keys = [u8::MAX; SIZE];
         let mut child_pointers = [MaybeUninit::uninit(); SIZE];
 
         for (idx, (key_byte, child_ptr)) in value.iter().enumerate() {
-            keys[idx].write(key_byte);
+            keys[idx] = key_byte;
             child_pointers[idx].write(child_ptr);
         }
 
@@ -100,11 +91,11 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
         );
 
         let header = value.header.clone();
-        let mut keys = [MaybeUninit::uninit(); SIZE];
+        let mut keys = [0; SIZE];
         let mut child_pointers = [MaybeUninit::uninit(); SIZE];
 
         for (idx, (key_byte, child_ptr)) in value.iter().enumerate() {
-            keys[idx].write(key_byte);
+            keys[idx] = key_byte;
             child_pointers[idx].write(child_ptr);
         }
 
@@ -156,7 +147,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
             core::hint::assert_unchecked(num_children <= self.keys.len());
 
             (
-                maybe_uninit_slice_assume_init_ref(self.keys.get_unchecked(0..num_children)),
+                self.keys.get_unchecked(0..num_children),
                 maybe_uninit_slice_assume_init_ref(
                     self.child_pointers.get_unchecked(0..num_children),
                 ),
@@ -165,10 +156,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     }
 
     /// Generalized version of [`InnerNode::lookup_child`] for compressed nodes
-    fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>>
-    where
-        Self: SearchInnerNodeSorted,
-    {
+    fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
         let idx = self.lookup_child_index(key_fragment)?;
         unsafe {
             // SAFETY: If `idx` is out of bounds the node should already have grown
@@ -190,9 +178,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
         &mut self,
         key_fragment: u8,
         child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) where
-        Self: SearchInnerNodeSorted,
-    {
+    ) {
         let num_children = self.header.num_children();
         let write_point = self.find_write_point(key_fragment);
         if !matches!(write_point, WritePoint::Existing(_)) {
@@ -266,7 +252,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
             // SAFETY: The `assert_unchecked` and `get_unchecked*` are both covered by the
             // safety requirements of the caller.
             core::hint::assert_unchecked(idx < self.keys.len());
-            self.keys.get_unchecked_mut(idx).write(key_fragment);
+            *self.keys.get_unchecked_mut(idx) = key_fragment;
             self.child_pointers
                 .get_unchecked_mut(idx)
                 .write(child_pointer);
@@ -274,10 +260,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     }
 
     /// Removes child if it exists
-    fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>>
-    where
-        Self: SearchInnerNodeSorted,
-    {
+    fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
         let child_index = self.lookup_child_index(key_fragment)?;
         let child_ptr = mem::replace(&mut self.child_pointers[child_index], MaybeUninit::uninit());
 
@@ -308,7 +291,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
         );
 
         let header = self.header.clone();
-        let mut keys = [MaybeUninit::new(0); NEW_SIZE];
+        let mut keys = [0; NEW_SIZE];
         let mut child_pointers = [MaybeUninit::uninit(); NEW_SIZE];
         let num_children = header.num_children();
 
@@ -349,10 +332,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     fn inner_range_iter(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> InnerNodeSortedIter<'_, K, V, PREFIX_LEN>
-    where
-        Self: SearchInnerNodeSorted,
-    {
+    ) -> InnerNodeSortedIter<'_, K, V, PREFIX_LEN> {
         {
             match (bound.start_bound(), bound.end_bound()) {
                 (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
@@ -420,6 +400,22 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     }
 
     #[inline]
+    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        #[cfg(feature = "nightly")]
+        {
+            if SIZE == 16 {
+                self.n16_lookup_child_index(key_fragment)
+            } else {
+                self.default_lookup_child_index(key_fragment)
+            }
+        }
+        #[cfg(not(feature = "nightly"))]
+        {
+            self.default_lookup_child_index(key_fragment)
+        }
+    }
+
+    #[inline]
     fn default_lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         let (keys, _) = self.initialized_portion();
         for (child_index, key) in keys.iter().enumerate() {
@@ -429,6 +425,65 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
         }
 
         None
+    }
+
+    #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
+    fn n16_lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        assert_eq!(SIZE, 16);
+        // This part is unfortunate, but seems like the most straightforward way to go
+        // from a `[u8; SIZE]` to `[u8; 16]` when we know `SIZE == 16`.
+        let keys = <[u8; 16]>::try_from(&self.keys[..]).unwrap();
+        let cmp = u8x16::splat(key_fragment)
+            .simd_eq(u8x16::from_array(keys))
+            .to_bitmask() as u32;
+        let mask = (1u32 << self.header.num_children()) - 1;
+        let bitfield = cmp & mask;
+        if bitfield != 0 {
+            Some(bitfield.trailing_zeros() as usize)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn find_write_point(&self, key_fragment: u8) -> WritePoint {
+        #[cfg(feature = "nightly")]
+        {
+            if SIZE == 16 {
+                self.n16_find_write_point(key_fragment)
+            } else {
+                self.default_find_write_point(key_fragment)
+            }
+        }
+        #[cfg(not(feature = "nightly"))]
+        {
+            self.default_find_write_point(key_fragment)
+        }
+    }
+
+    #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
+    fn n16_find_write_point(&self, key_fragment: u8) -> WritePoint {
+        match self.lookup_child_index(key_fragment) {
+            Some(child_index) => WritePoint::Existing(child_index),
+            None => {
+                assert_eq!(SIZE, 16);
+                // This part is unfortunate, but seems like the most straightforward way to go
+                // from a `[u8; SIZE]` to `[u8; 16]` when we know `SIZE == 16`.
+                let keys = <[u8; 16]>::try_from(&self.keys[..]).unwrap();
+                let cmp = u8x16::splat(key_fragment)
+                    .simd_lt(u8x16::from_array(keys))
+                    .to_bitmask() as u32;
+                let mask = (1u32 << self.header.num_children()) - 1;
+                let bitfield = cmp & mask;
+                if bitfield != 0 {
+                    WritePoint::Shift(bitfield.trailing_zeros() as usize)
+                } else {
+                    WritePoint::Last(self.header.num_children())
+                }
+            },
+        }
     }
 
     #[inline]
@@ -454,16 +509,6 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 /// Node that references between 2 and 4 children
 pub type InnerNode4<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 4>;
 
-impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode4<K, V, PREFIX_LEN> {
-    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        self.default_lookup_child_index(key_fragment)
-    }
-
-    fn find_write_point(&self, key_fragment: u8) -> WritePoint {
-        self.default_find_write_point(key_fragment)
-    }
-}
-
 impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
@@ -488,7 +533,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<
         Self {
             header,
             child_pointers: [MaybeUninit::uninit(); 4],
-            keys: [MaybeUninit::uninit(); 4],
+            keys: [0; 4],
         }
     }
 
@@ -552,61 +597,6 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<
 /// Node that references between 5 and 16 children
 pub type InnerNode16<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 16>;
 
-impl<K, V, const PREFIX_LEN: usize> SearchInnerNodeSorted for InnerNode16<K, V, PREFIX_LEN> {
-    #[cfg(not(feature = "nightly"))]
-    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        self.default_lookup_child_index(key_fragment)
-    }
-
-    #[cfg(feature = "nightly")]
-    #[cfg_attr(test, mutants::skip)]
-    fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        // SAFETY: Even though the type is marked is uninit data, when
-        // crated this is filled with initialized data, we just use it to
-        // remind us that a portion might be uninitialized
-        let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
-        let cmp = u8x16::splat(key_fragment)
-            .simd_eq(u8x16::from_array(keys))
-            .to_bitmask() as u32;
-        let mask = (1u32 << self.header.num_children()) - 1;
-        let bitfield = cmp & mask;
-        if bitfield != 0 {
-            Some(bitfield.trailing_zeros() as usize)
-        } else {
-            None
-        }
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    fn find_write_point(&self, key_fragment: u8) -> WritePoint {
-        self.default_find_write_point(key_fragment)
-    }
-
-    #[cfg(feature = "nightly")]
-    #[cfg_attr(test, mutants::skip)]
-    fn find_write_point(&self, key_fragment: u8) -> WritePoint {
-        match self.lookup_child_index(key_fragment) {
-            Some(child_index) => WritePoint::Existing(child_index),
-            None => {
-                // SAFETY: Even though the type is marked is uninit data, when
-                // crated this is filled with initialized data, we just use it to
-                // remind us that a portion might be uninitialized
-                let keys = unsafe { MaybeUninit::array_assume_init(self.keys) };
-                let cmp = u8x16::splat(key_fragment)
-                    .simd_lt(u8x16::from_array(keys))
-                    .to_bitmask() as u32;
-                let mask = (1u32 << self.header.num_children()) - 1;
-                let bitfield = cmp & mask;
-                if bitfield != 0 {
-                    WritePoint::Shift(bitfield.trailing_zeros() as usize)
-                } else {
-                    WritePoint::Last(self.header.num_children())
-                }
-            },
-        }
-    }
-}
-
 impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
     type Key = K;
     type Value = V;
@@ -631,7 +621,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16
         Self {
             header,
             child_pointers: [MaybeUninit::uninit(); 16],
-            keys: [MaybeUninit::new(0); 16],
+            keys: [0; 16],
         }
     }
 
@@ -719,9 +709,9 @@ mod tests {
         n.header.inc_num_children();
         n.header.inc_num_children();
 
-        n.keys[0].write(3);
-        n.keys[1].write(123);
-        n.keys[2].write(1);
+        n.keys[0] = 3;
+        n.keys[1] = 123;
+        n.keys[2] = 1;
 
         n.child_pointers[0].write(l1_ptr);
         n.child_pointers[1].write(l2_ptr);
@@ -797,9 +787,9 @@ mod tests {
         n.header.inc_num_children();
         n.header.inc_num_children();
 
-        n.keys[0].write(3);
-        n.keys[1].write(123);
-        n.keys[2].write(1);
+        n.keys[0] = 3;
+        n.keys[1] = 123;
+        n.keys[2] = 1;
 
         n.child_pointers[0].write(l1_ptr);
         n.child_pointers[1].write(l2_ptr);

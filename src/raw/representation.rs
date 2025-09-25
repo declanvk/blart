@@ -3,7 +3,7 @@
 use core::{
     fmt,
     iter::FusedIterator,
-    ops::{RangeBounds, RangeInclusive},
+    ops::{Bound, RangeBounds, RangeInclusive},
 };
 
 use crate::{raw::minimum_unchecked, rust_nightly_apis::likely, AsBytes};
@@ -611,6 +611,27 @@ impl<K, V, const PREFIX_LEN: usize> TreePathSearch<K, V, PREFIX_LEN> {
             (Some(_), None) => {
                 unreachable!("Impossible for grandparent to present while parent is not")
             },
+        }
+    }
+}
+
+/// Check that the given range bounds are valid, if not then panic.
+///
+/// Validity means:
+///  1. Range bounds are not completely empty
+///  2. Start bound is not greater than end bound
+fn assert_valid_range_bounds(bound: &impl RangeBounds<u8>) {
+    {
+        match (bound.start_bound(), bound.end_bound()) {
+            (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
+                panic!("range start and end are equal and excluded: ({s:?})")
+            },
+            (Bound::Included(s) | Bound::Excluded(s), Bound::Included(e) | Bound::Excluded(e))
+                if s > e =>
+            {
+                panic!("range start ({s:?}) is greater than range end ({e:?})")
+            },
+            _ => {},
         }
     }
 }
