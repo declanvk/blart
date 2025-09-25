@@ -13,9 +13,10 @@ pub use tree_stats::*;
 pub use well_formed::*;
 
 use super::{
-    ConcreteNodePtr, InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode,
-    Node, NodePtr, OpaqueNodePtr,
+    ConcreteNodePtr, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node,
+    NodePtr, OpaqueNodePtr,
 };
+use crate::raw::InnerNodeCommon;
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.

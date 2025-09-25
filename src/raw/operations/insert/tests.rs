@@ -6,7 +6,7 @@ use alloc::{
 use crate::{
     allocator::Global,
     raw::{
-        deallocate_tree, search_unchecked, InnerNode, InnerNode4, InnerNodeSorted,
+        deallocate_tree, search_unchecked, InnerNode4, InnerNodeCommon, InnerNodeSorted,
         InsertPrefixError, LeafNode, NodePtr, NodeType, OpaqueNodePtr,
     },
     testing::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},

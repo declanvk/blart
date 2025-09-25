@@ -109,8 +109,8 @@ pub trait Node<const PREFIX_LEN: usize>: private::Sealed {
 }
 
 /// This struct represents a successful match against a prefix using either the
-/// [`InnerNode::optimistic_match_prefix`] or [`InnerNode::match_full_prefix`]
-/// functions.
+/// [`InnerNodeCommon::optimistic_match_prefix`] or
+/// [`InnerNodeCommon::match_full_prefix`] functions.
 #[derive(Debug)]
 pub struct PrefixMatch {
     /// How many bytes were matched
@@ -118,7 +118,7 @@ pub struct PrefixMatch {
 }
 
 /// This struct represents a successful match against a prefix using the
-/// [`InnerNode::attempt_pessimistic_match_prefix`] function.
+/// [`InnerNodeCommon::attempt_pessimistic_match_prefix`] function.
 #[derive(Debug)]
 pub struct AttemptOptimisticPrefixMatch {
     /// How many bytes were matched
@@ -188,23 +188,20 @@ pub struct OptimisticMismatch {
     pub matched_bytes: usize,
 }
 
-/// Common methods implemented by all inner node.
+/// This trait contains all the functions/types that every inner node must
+/// implement.
+///
+/// This doesn't necessarily mean that the specific type will be used as an
+/// inner node, since that requires assigning it a [`NodeType`] and determining
+/// its "grow"/"shrink" order. See [`InnerNode`] for those details.
 ///
 /// # Safety
 ///
 /// All structures that implement this trait must be `repr(C)` and have a
 /// [`Header`] as the first field of the struct.
-pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
-    Node<PREFIX_LEN> + Sized + fmt::Debug
-{
-    /// The type of the next larger node type.
-    type GrownNode: InnerNode<PREFIX_LEN, Key = Self::Key, Value = Self::Value>;
-
-    /// The type of the next smaller node type.
-    type ShrunkNode: InnerNode<PREFIX_LEN, Key = Self::Key, Value = Self::Value>;
-
+pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     /// The type of the iterator over all children of the inner node
-    type Iter<'a>: Iterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
+    type Iter<'a>: Iterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>
         + DoubleEndedIterator
         + FusedIterator
     where
@@ -236,10 +233,7 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
 
     /// Search through this node for a child node that corresponds to the given
     /// key fragment.
-    fn lookup_child(
-        &self,
-        key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>>;
+    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>>;
 
     /// Write a child pointer with key fragment to this inner node.
     ///
@@ -248,37 +242,13 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
     ///
     /// # Panics
     ///  - Panics when the node is full.
-    fn write_child(
-        &mut self,
-        key_fragment: u8,
-        child_pointer: OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>,
-    );
+    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>);
 
     /// Attempt to remove a child pointer at the key fragment from this inner
     /// node.
     ///
     /// If the key fragment does not exist in this node, return `None`.
-    fn remove_child(
-        &mut self,
-        key_fragment: u8,
-    ) -> Option<OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>>;
-
-    /// Grow this node into the next larger class, copying over children and
-    /// prefix information.
-    fn grow(&self) -> Self::GrownNode;
-
-    /// Shrink this node into the next smaller class, copying over children and
-    /// prefix information.
-    ///
-    /// # Panics
-    ///  - Panics if the new, smaller node size does not have enough capacity to
-    ///    hold all the children.
-    fn shrink(&self) -> Self::ShrunkNode;
-
-    /// Returns true if this node has no more space to store children.
-    fn is_full(&self) -> bool {
-        self.header().num_children() >= *Self::TYPE.capacity_range().end()
-    }
+    fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>>;
 
     /// Create an iterator over all `(key bytes, child pointers)` in this inner
     /// node.
@@ -289,8 +259,7 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
     fn range(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + FusedIterator;
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator;
 
     /// Test the given key against the inner node header prefix by checking that
     /// the key length is greater than or equal to the length of the header
@@ -328,7 +297,7 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
     ///
     /// If the length of the header prefix is greater than the number of bytes
     /// stored (there are implicit bytes), then this falls back to using
-    /// [`optimistic_match_prefix`][InnerNode::optimistic_match_prefix].
+    /// [`optimistic_match_prefix`][InnerNodeCommon::optimistic_match_prefix].
     ///
     /// If this function fell into that condition, then the `any_implicit_bytes`
     /// flag will be set to `true` in the `Ok` case and `prefix_byte` will be
@@ -387,9 +356,9 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
         &self,
         key: &[u8],
         current_depth: usize,
-    ) -> Result<PrefixMatch, ExplicitMismatch<Self::Key, Self::Value, PREFIX_LEN>>
+    ) -> Result<PrefixMatch, ExplicitMismatch<K, V, PREFIX_LEN>>
     where
-        Self::Key: AsBytes,
+        K: AsBytes,
     {
         unsafe {
             // SAFETY: Since we are iterating the key and prefixes, we
@@ -421,12 +390,10 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
     /// Read the prefix as a whole, by reconstructing it if necessary from a
     /// leaf
     #[inline]
-    fn read_full_prefix(
-        &self,
-        current_depth: usize,
-    ) -> NodePrefix<'_, Self::Key, Self::Value, PREFIX_LEN>
+    fn read_full_prefix<'b>(&'b self, current_depth: usize) -> NodePrefix<'b, K, V, PREFIX_LEN>
     where
-        Self::Key: AsBytes,
+        K: AsBytes + 'b,
+        V: 'b,
     {
         let header = &self.header();
         let len = header.prefix_len();
@@ -472,7 +439,7 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
     /// have collapsed) so in this way we can avoid the [`Option`]. This is safe
     /// because if we had no children this current node should have been
     /// deleted.
-    fn min(&self) -> (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>);
+    fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
 
     /// Returns the maximum child pointer from this node and it's key
     ///
@@ -481,7 +448,40 @@ pub unsafe trait InnerNode<const PREFIX_LEN: usize>:
     /// have collapsed) so in this way we can avoid the [`Option`]. This is safe
     /// because if we had, no children this current node should have been
     /// deleted.
-    fn max(&self) -> (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>);
+    fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
+}
+
+/// Common methods implemented by all inner nodes that will be used in the tree.
+///
+/// To contrast with [`InnerNodeCommon`], this trait:
+///   - Incorporates a set value of [`NodeType`], accessible via [`Node::TYPE`].
+///   - Specifies where the inner node sits in the "growth order", via
+///     [`InnerNode::GrownNode`] and [`InnerNode::ShrunkNode`].
+pub trait InnerNode<const PREFIX_LEN: usize>:
+    Node<PREFIX_LEN> + Sized + fmt::Debug + InnerNodeCommon<Self::Key, Self::Value, PREFIX_LEN>
+{
+    /// The type of the next larger node type.
+    type GrownNode: InnerNode<PREFIX_LEN, Key = Self::Key, Value = Self::Value>;
+
+    /// The type of the next smaller node type.
+    type ShrunkNode: InnerNode<PREFIX_LEN, Key = Self::Key, Value = Self::Value>;
+
+    /// Grow this node into the next larger class, copying over children and
+    /// prefix information.
+    fn grow(&self) -> Self::GrownNode;
+
+    /// Shrink this node into the next smaller class, copying over children and
+    /// prefix information.
+    ///
+    /// # Panics
+    ///  - Panics if the new, smaller node size does not have enough capacity to
+    ///    hold all the children.
+    fn shrink(&self) -> Self::ShrunkNode;
+
+    /// Returns true if this node has no more space to store children.
+    fn is_full(&self) -> bool {
+        self.header().num_children() >= *Self::TYPE.capacity_range().end()
+    }
 }
 
 /// This type represents the contents of an [`InnerNode`] prefix, either read

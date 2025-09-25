@@ -5,8 +5,8 @@ use crate::{
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{
-        ConcreteNodePtr, InnerNode, InnerNode48, InnerNodeDirect, InnerNodeSorted, LeafNode,
-        OpaqueNodePtr,
+        ConcreteNodePtr, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeDirect, InnerNodeSorted,
+        LeafNode, OpaqueNodePtr,
     },
     AsBytes, TreeMap,
 };

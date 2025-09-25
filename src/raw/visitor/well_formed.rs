@@ -631,7 +631,7 @@ mod tests {
     use super::*;
     use crate::{
         allocator::Global,
-        raw::{InnerNode16, InnerNode4, LeafNode, NodePtr},
+        raw::{InnerNode16, InnerNode4, InnerNodeCommon, LeafNode, NodePtr},
         testing::{generate_key_fixed_length, setup_tree_from_entries},
         TreeMap,
     };

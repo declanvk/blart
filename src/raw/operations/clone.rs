@@ -5,7 +5,8 @@ use alloc::vec::Vec;
 use crate::{
     allocator::Allocator,
     raw::{
-        ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, LeafNode, Node, NodePtr, OpaqueNodePtr,
+        ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr,
+        OpaqueNodePtr,
     },
     AsBytes,
 };

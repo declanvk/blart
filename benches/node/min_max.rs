@@ -1,6 +1,6 @@
 use std::{ffi::CString, ptr::NonNull};
 
-use blart::raw::{InnerNode, InnerNode48, InnerNodeDirect, NodePtr};
+use blart::raw::{InnerNode48, InnerNodeCommon, InnerNodeDirect, NodePtr};
 use criterion::{criterion_group, Criterion};
 
 fn bench(c: &mut Criterion) {

@@ -564,7 +564,7 @@ mod tests {
     use alloc::boxed::Box;
 
     use super::*;
-    use crate::raw::InnerNode;
+    use crate::raw::InnerNodeCommon;
 
     #[test]
     fn opaque_node_ptr_is_correct() {

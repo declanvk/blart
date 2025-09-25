@@ -10,8 +10,8 @@ use core::{
 };
 
 use crate::raw::{
-    representation::assert_valid_range_bounds, Header, InnerNode, InnerNode48, InnerNodeIndirect,
-    InnerNodeSorted, Node, NodeType, OpaqueNodePtr,
+    representation::assert_valid_range_bounds, Header, InnerNode, InnerNode48, InnerNodeCommon,
+    InnerNodeIndirect, InnerNodeSorted, Node, NodeType, OpaqueNodePtr,
 };
 
 /// Inner node that stores up to 256 children, where lookup is performed by
@@ -90,18 +90,10 @@ impl<K, V, const PREFIX_LEN: usize> Clone for InnerNodeDirect<K, V, PREFIX_LEN> 
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNodeDirect<K, V, PREFIX_LEN> {
-    type Key = K;
-    type Value = V;
-
-    const TYPE: NodeType = NodeType::Node256;
-}
-
 // SAFETY: `InnerNodeDirect` is `repr(C)` and has a `Header` as the first field
-unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
+unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeDirect<K, V, PREFIX_LEN>
 {
-    type GrownNode = Self;
     #[cfg(not(feature = "nightly"))]
     type Iter<'a>
         = NodeDirectIter<'a, K, V, PREFIX_LEN>
@@ -117,7 +109,6 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     >
     where
         Self: 'a;
-    type ShrunkNode = InnerNode48<K, V, PREFIX_LEN>;
 
     fn header(&self) -> &Header<PREFIX_LEN> {
         &self.header
@@ -153,14 +144,6 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
         removed_child
     }
 
-    fn grow(&self) -> Self::GrownNode {
-        panic!("unable to grow a Node256, something went wrong!")
-    }
-
-    fn shrink(&self) -> Self::ShrunkNode {
-        self.into()
-    }
-
     fn iter(&self) -> Self::Iter<'_> {
         #[cfg(not(feature = "nightly"))]
         {
@@ -181,8 +164,8 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
     fn range(
         &self,
         bound: impl core::ops::RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + FusedIterator {
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
+    {
         assert_valid_range_bounds(&bound);
 
         let start = bound.start_bound().map(|val| usize::from(*val));
@@ -309,6 +292,26 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
             }
         }
         unreachable!("inner node must have non-zero number of children");
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNodeDirect<K, V, PREFIX_LEN> {
+    type Key = K;
+    type Value = V;
+
+    const TYPE: NodeType = NodeType::Node256;
+}
+
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNodeDirect<K, V, PREFIX_LEN> {
+    type GrownNode = Self;
+    type ShrunkNode = InnerNode48<K, V, PREFIX_LEN>;
+
+    fn grow(&self) -> Self::GrownNode {
+        panic!("unable to grow a Node256, something went wrong!")
+    }
+
+    fn shrink(&self) -> Self::ShrunkNode {
+        self.into()
     }
 }
 
