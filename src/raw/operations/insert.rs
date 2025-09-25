@@ -10,8 +10,8 @@ use crate::{
     allocator::Allocator,
     raw::{
         deallocate_tree, maximum_unchecked, minimum_unchecked, ConcreteNodePtr, ExplicitMismatch,
-        InnerNode, InnerNode4, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, TreePath,
-        TreePathSearch,
+        InnerNode, InnerNode4, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch,
+        TreePath, TreePathSearch,
     },
     rust_nightly_apis::{likely, unlikely},
     AsBytes,

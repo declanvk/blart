@@ -12,7 +12,10 @@ use core::{
 };
 
 use crate::{
-    raw::{Header, InnerNode, InnerNodeDirect, InnerNodeIndirect, Node, NodeType, OpaqueNodePtr},
+    raw::{
+        representation::assert_valid_range_bounds, Header, InnerNode, InnerNode48, InnerNodeCommon,
+        InnerNodeDirect, InnerNodeIndirect, Node, NodeType, OpaqueNodePtr,
+    },
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
 
@@ -155,74 +158,6 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
         }
     }
 
-    /// Generalized version of [`InnerNode::lookup_child`] for compressed nodes
-    fn lookup_child_inner(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
-        let idx = self.lookup_child_index(key_fragment)?;
-        unsafe {
-            // SAFETY: If `idx` is out of bounds the node should already have grown
-            // so it's safe to assume that `idx` is in bounds
-            core::hint::assert_unchecked(idx < self.child_pointers.len());
-
-            // SAFETY: The value at `child_index` is guaranteed to be initialized because
-            // the `lookup_child_index` function will only search in the initialized portion
-            // of the `child_pointers` array.
-            Some(MaybeUninit::assume_init(self.child_pointers[idx]))
-        }
-    }
-
-    /// Writes a child to the node by check the order of insertion
-    ///
-    /// # Panics
-    /// This function will panic if the node is full.
-    fn write_child_inner(
-        &mut self,
-        key_fragment: u8,
-        child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) {
-        let num_children = self.header.num_children();
-        let write_point = self.find_write_point(key_fragment);
-        if !matches!(write_point, WritePoint::Existing(_)) {
-            assert!(
-                num_children < SIZE,
-                "The number of children [{num_children}] must be smaller that [{SIZE}] so that \
-                 there is at least one slot to insert the new child"
-            );
-        }
-        let idx = match write_point {
-            WritePoint::Existing(child_index) => child_index,
-            WritePoint::Last(child_index) => {
-                self.header.inc_num_children();
-                child_index
-            },
-            WritePoint::Shift(child_index) => {
-                unsafe {
-                    // SAFETY: This is by construction, since the number of children
-                    // is always <= maximum number of keys (children) that we can hold
-                    core::hint::assert_unchecked(num_children <= self.keys.len());
-
-                    // SAFETY: When we are shifting children, because a new minimum one
-                    // is being inserted this guarantees to us that the index of insertion
-                    // is < current number of children (because if it was >= we wouldn't
-                    // need to shift the data)
-                    core::hint::assert_unchecked(child_index < num_children);
-                }
-                self.keys
-                    .copy_within(child_index..num_children, child_index + 1);
-                self.child_pointers
-                    .copy_within(child_index..num_children, child_index + 1);
-                self.header.inc_num_children();
-                child_index
-            },
-        };
-
-        unsafe {
-            // SAFETY: The guarantee that this node is not full is not part of the caller
-            // requirements, so we need the assert above to check
-
-            self.write_child_at(idx, key_fragment, child_pointer);
-        }
-    }
-
     /// Writes a child to the node without bounds check or order
     ///
     /// # Safety
@@ -257,23 +192,6 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
                 .get_unchecked_mut(idx)
                 .write(child_pointer);
         }
-    }
-
-    /// Removes child if it exists
-    fn remove_child_inner(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
-        let child_index = self.lookup_child_index(key_fragment)?;
-        let child_ptr = mem::replace(&mut self.child_pointers[child_index], MaybeUninit::uninit());
-
-        // Copy all the child_pointer and key values in higher indices down by one.
-        self.child_pointers
-            .copy_within((child_index + 1)..self.header.num_children(), child_index);
-        self.keys
-            .copy_within((child_index + 1)..self.header.num_children(), child_index);
-
-        self.header.dec_num_children();
-        // SAFETY: This child pointer value is initialized because we got it by
-        // searching through the initialized keys and got the `Ok(index)` value.
-        Some(unsafe { MaybeUninit::assume_init(child_ptr) })
     }
 
     /// Grows or shrinks the node
@@ -325,77 +243,6 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     /// Get an iterator over the keys and values of the node
     pub(super) fn inner_iter(&self) -> InnerNodeSortedIter<'_, K, V, PREFIX_LEN> {
         let (keys, nodes) = self.initialized_portion();
-        keys.iter().copied().zip(nodes.iter().copied())
-    }
-
-    /// Get an iterator over a range of keys and values of the node.
-    fn inner_range_iter(
-        &self,
-        bound: impl RangeBounds<u8>,
-    ) -> InnerNodeSortedIter<'_, K, V, PREFIX_LEN> {
-        {
-            match (bound.start_bound(), bound.end_bound()) {
-                (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
-                    panic!("range start and end are equal and excluded: ({s:?})")
-                },
-                (
-                    Bound::Included(s) | Bound::Excluded(s),
-                    Bound::Included(e) | Bound::Excluded(e),
-                ) if s > e => {
-                    panic!("range start ({s:?}) is greater than range end ({e:?})")
-                },
-                _ => {},
-            }
-        }
-
-        fn fixup_bound_lookup(bound: Bound<WritePoint>, is_start: bool) -> Bound<usize> {
-            // [0, 3, 85, 254]
-            match bound {
-                // key = Included(0), bound = Included(Existing(0)), output = Included(0)
-                Bound::Included(WritePoint::Existing(idx)) => Bound::Included(idx),
-                // key = Included(255), bound = Included(Last(4)), output = Included(4)
-                Bound::Included(WritePoint::Last(idx)) => Bound::Included(idx),
-                // key = Included(2), bound = Included(Shift(1)), output = Included(1)
-                Bound::Included(WritePoint::Shift(idx)) => {
-                    if is_start {
-                        Bound::Included(idx)
-                    } else {
-                        idx.checked_sub(1)
-                            .map_or(Bound::Excluded(0), Bound::Included)
-                    }
-                },
-                // key = Excluded(0), bound = Excluded(Existing(0)), output = Excluded(0)
-                Bound::Excluded(WritePoint::Existing(idx)) => Bound::Excluded(idx),
-                // key = Excluded(255), bound = Excluded(Last(4)), output = Excluded(4)
-                Bound::Excluded(WritePoint::Last(idx)) => Bound::Excluded(idx),
-                // key = Excluded(2), bound = Excluded(Shift(1)), output = Excluded(0)
-                Bound::Excluded(WritePoint::Shift(idx)) => {
-                    if is_start {
-                        idx.checked_sub(1).map_or(Bound::Unbounded, Bound::Excluded)
-                    } else {
-                        Bound::Excluded(idx)
-                    }
-                },
-                Bound::Unbounded => Bound::Unbounded,
-            }
-        }
-
-        let start_idx = fixup_bound_lookup(
-            bound.start_bound().map(|val| self.find_write_point(*val)),
-            true,
-        );
-        let end_idx = fixup_bound_lookup(
-            bound.end_bound().map(|val| self.find_write_point(*val)),
-            false,
-        );
-
-        let slice_range = (start_idx, end_idx);
-
-        let (mut keys, mut nodes) = self.initialized_portion();
-
-        keys = &keys[slice_range];
-        nodes = &nodes[slice_range];
-
         keys.iter().copied().zip(nodes.iter().copied())
     }
 
@@ -506,24 +353,14 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     }
 }
 
-/// Node that references between 2 and 4 children
-pub type InnerNode4<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 4>;
-
-impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
-    type Key = K;
-    type Value = V;
-
-    const TYPE: NodeType = NodeType::Node4;
-}
-
-// SAFETY: `InnerNode4` is `repr(C)` and has a `Header` as the first field
-unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
-    type GrownNode = InnerNode16<K, V, PREFIX_LEN>;
+// SAFETY: `InnerNodeSorted` is `repr(C)` and has a `Header` as the first field
+unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K, V, PREFIX_LEN>
+    for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
+{
     type Iter<'a>
         = InnerNodeSortedIter<'a, K, V, PREFIX_LEN>
     where
         Self: 'a;
-    type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
 
     fn header(&self) -> &Header<PREFIX_LEN> {
         &self.header
@@ -532,29 +369,84 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<
     fn from_header(header: Header<PREFIX_LEN>) -> Self {
         Self {
             header,
-            child_pointers: [MaybeUninit::uninit(); 4],
-            keys: [0; 4],
+            child_pointers: [MaybeUninit::uninit(); SIZE],
+            keys: [0; SIZE],
         }
     }
 
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
-        self.lookup_child_inner(key_fragment)
+        let idx = self.lookup_child_index(key_fragment)?;
+        unsafe {
+            // SAFETY: If `idx` is out of bounds the node should already have grown
+            // so it's safe to assume that `idx` is in bounds
+            core::hint::assert_unchecked(idx < self.child_pointers.len());
+
+            // SAFETY: The value at `child_index` is guaranteed to be initialized because
+            // the `lookup_child_index` function will only search in the initialized portion
+            // of the `child_pointers` array.
+            Some(MaybeUninit::assume_init(self.child_pointers[idx]))
+        }
     }
 
     fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        self.write_child_inner(key_fragment, child_pointer)
+        let num_children = self.header.num_children();
+        let write_point = self.find_write_point(key_fragment);
+        if !matches!(write_point, WritePoint::Existing(_)) {
+            assert!(
+                num_children < SIZE,
+                "The number of children [{num_children}] must be smaller that [{SIZE}] so that \
+                 there is at least one slot to insert the new child"
+            );
+        }
+        let idx = match write_point {
+            WritePoint::Existing(child_index) => child_index,
+            WritePoint::Last(child_index) => {
+                self.header.inc_num_children();
+                child_index
+            },
+            WritePoint::Shift(child_index) => {
+                unsafe {
+                    // SAFETY: This is by construction, since the number of children
+                    // is always <= maximum number of keys (children) that we can hold
+                    core::hint::assert_unchecked(num_children <= self.keys.len());
+
+                    // SAFETY: When we are shifting children, because a new minimum one
+                    // is being inserted this guarantees to us that the index of insertion
+                    // is < current number of children (because if it was >= we wouldn't
+                    // need to shift the data)
+                    core::hint::assert_unchecked(child_index < num_children);
+                }
+                self.keys
+                    .copy_within(child_index..num_children, child_index + 1);
+                self.child_pointers
+                    .copy_within(child_index..num_children, child_index + 1);
+                self.header.inc_num_children();
+                child_index
+            },
+        };
+
+        unsafe {
+            // SAFETY: The guarantee that this node is not full is not part of the caller
+            // requirements, so we need the assert above to check
+
+            self.write_child_at(idx, key_fragment, child_pointer);
+        }
     }
 
     fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
-        self.remove_child_inner(key_fragment)
-    }
+        let child_index = self.lookup_child_index(key_fragment)?;
+        let child_ptr = mem::replace(&mut self.child_pointers[child_index], MaybeUninit::uninit());
 
-    fn grow(&self) -> Self::GrownNode {
-        self.change_block_size()
-    }
+        // Copy all the child_pointer and key values in higher indices down by one.
+        self.child_pointers
+            .copy_within((child_index + 1)..self.header.num_children(), child_index);
+        self.keys
+            .copy_within((child_index + 1)..self.header.num_children(), child_index);
 
-    fn shrink(&self) -> Self::ShrunkNode {
-        panic!("unable to shrink a Node4, something went wrong!")
+        self.header.dec_num_children();
+        // SAFETY: This child pointer value is initialized because we got it by
+        // searching through the initialized keys and got the `Ok(index)` value.
+        Some(unsafe { MaybeUninit::assume_init(child_ptr) })
     }
 
     fn iter(&self) -> Self::Iter<'_> {
@@ -564,9 +456,59 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<
     fn range(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + core::iter::FusedIterator {
-        self.inner_range_iter(bound)
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + core::iter::FusedIterator
+    {
+        assert_valid_range_bounds(&bound);
+
+        fn fixup_bound_lookup(bound: Bound<WritePoint>, is_start: bool) -> Bound<usize> {
+            // [0, 3, 85, 254]
+            match bound {
+                // key = Included(0), bound = Included(Existing(0)), output = Included(0)
+                Bound::Included(WritePoint::Existing(idx)) => Bound::Included(idx),
+                // key = Included(255), bound = Included(Last(4)), output = Included(4)
+                Bound::Included(WritePoint::Last(idx)) => Bound::Included(idx),
+                // key = Included(2), bound = Included(Shift(1)), output = Included(1)
+                Bound::Included(WritePoint::Shift(idx)) => {
+                    if is_start {
+                        Bound::Included(idx)
+                    } else {
+                        idx.checked_sub(1)
+                            .map_or(Bound::Excluded(0), Bound::Included)
+                    }
+                },
+                // key = Excluded(0), bound = Excluded(Existing(0)), output = Excluded(0)
+                Bound::Excluded(WritePoint::Existing(idx)) => Bound::Excluded(idx),
+                // key = Excluded(255), bound = Excluded(Last(4)), output = Excluded(4)
+                Bound::Excluded(WritePoint::Last(idx)) => Bound::Excluded(idx),
+                // key = Excluded(2), bound = Excluded(Shift(1)), output = Excluded(0)
+                Bound::Excluded(WritePoint::Shift(idx)) => {
+                    if is_start {
+                        idx.checked_sub(1).map_or(Bound::Unbounded, Bound::Excluded)
+                    } else {
+                        Bound::Excluded(idx)
+                    }
+                },
+                Bound::Unbounded => Bound::Unbounded,
+            }
+        }
+
+        let start_idx = fixup_bound_lookup(
+            bound.start_bound().map(|val| self.find_write_point(*val)),
+            true,
+        );
+        let end_idx = fixup_bound_lookup(
+            bound.end_bound().map(|val| self.find_write_point(*val)),
+            false,
+        );
+
+        let slice_range = (start_idx, end_idx);
+
+        let (mut keys, mut nodes) = self.initialized_portion();
+
+        keys = &keys[slice_range];
+        nodes = &nodes[slice_range];
+
+        keys.iter().copied().zip(nodes.iter().copied())
     }
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
@@ -591,6 +533,29 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<
                 children.last().copied().unwrap_unchecked(),
             )
         }
+    }
+}
+
+/// Node that references between 2 and 4 children
+pub type InnerNode4<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 4>;
+
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
+    type Key = K;
+    type Value = V;
+
+    const TYPE: NodeType = NodeType::Node4;
+}
+
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode4<K, V, PREFIX_LEN> {
+    type GrownNode = InnerNode16<K, V, PREFIX_LEN>;
+    type ShrunkNode = Self;
+
+    fn grow(&self) -> Self::GrownNode {
+        self.change_block_size()
+    }
+
+    fn shrink(&self) -> Self::ShrunkNode {
+        panic!("unable to shrink a Node4, something went wrong!")
     }
 }
 
@@ -604,38 +569,9 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFI
     const TYPE: NodeType = NodeType::Node16;
 }
 
-// SAFETY: `InnerNode16` is `repr(C)` and has a `Header` as the first field
-unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
-    type GrownNode = InnerNodeIndirect<K, V, PREFIX_LEN, 48>;
-    type Iter<'a>
-        = InnerNodeSortedIter<'a, K, V, PREFIX_LEN>
-    where
-        Self: 'a;
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
+    type GrownNode = InnerNode48<K, V, PREFIX_LEN>;
     type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
-
-    fn header(&self) -> &Header<PREFIX_LEN> {
-        &self.header
-    }
-
-    fn from_header(header: Header<PREFIX_LEN>) -> Self {
-        Self {
-            header,
-            child_pointers: [MaybeUninit::uninit(); 16],
-            keys: [0; 16],
-        }
-    }
-
-    fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
-        self.lookup_child_inner(key_fragment)
-    }
-
-    fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        self.write_child_inner(key_fragment, child_pointer)
-    }
-
-    fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
-        self.remove_child_inner(key_fragment)
-    }
 
     fn grow(&self) -> Self::GrownNode {
         self.into()
@@ -643,40 +579,6 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16
 
     fn shrink(&self) -> Self::ShrunkNode {
         self.change_block_size()
-    }
-
-    fn iter(&self) -> Self::Iter<'_> {
-        self.inner_iter()
-    }
-
-    fn range(
-        &self,
-        bound: impl RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
-           + core::iter::FusedIterator {
-        self.inner_range_iter(bound)
-    }
-
-    fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        let (keys, children) = self.initialized_portion();
-        // SAFETY: Covered by the containing function
-        unsafe {
-            (
-                keys.first().copied().unwrap_unchecked(),
-                children.first().copied().unwrap_unchecked(),
-            )
-        }
-    }
-
-    fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        let (keys, children) = self.initialized_portion();
-        // SAFETY: Covered by the containing function
-        unsafe {
-            (
-                keys.last().copied().unwrap_unchecked(),
-                children.last().copied().unwrap_unchecked(),
-            )
-        }
     }
 }
 

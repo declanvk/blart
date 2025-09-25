@@ -2,7 +2,7 @@ use alloc::{boxed::Box, string::String};
 
 use crate::{
     raw::{
-        search_unchecked, InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect,
+        search_unchecked, InnerNode16, InnerNode4, InnerNode48, InnerNodeCommon, InnerNodeDirect,
         LeafNode, NodePtr, OpaqueNodePtr,
     },
     testing::{generate_key_with_prefix, swap, PrefixExpansion},

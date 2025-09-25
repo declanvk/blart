@@ -10,8 +10,8 @@ use core::{
 use self::index::NonMaxIndex;
 use crate::{
     raw::{
-        representation::assert_valid_range_bounds, Header, InnerNode, InnerNode16, InnerNodeDirect,
-        InnerNodeSorted, Node, NodeType, OpaqueNodePtr,
+        representation::assert_valid_range_bounds, Header, InnerNode, InnerNode16, InnerNodeCommon,
+        InnerNodeDirect, InnerNodeSorted, Node, NodeType, OpaqueNodePtr,
     },
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
@@ -161,28 +161,14 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeIndirect<K, V, P
     }
 }
 
-/// Node that references between 17 and 49 children.
-pub type InnerNode48<K, V, const PREFIX_LEN: usize> = InnerNodeIndirect<K, V, PREFIX_LEN, 48>;
-
-impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Node<PREFIX_LEN>
-    for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
-{
-    type Key = K;
-    type Value = V;
-
-    const TYPE: NodeType = NodeType::Node48;
-}
-
 // SAFETY: `InnerNode48` is `repr(C)` and has a `Header` as the first field
-unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNode<PREFIX_LEN>
+unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
 {
-    type GrownNode = InnerNodeDirect<K, V, PREFIX_LEN>;
     type Iter<'a>
         = NodeIndirectIter<'a, K, V, PREFIX_LEN>
     where
         Self: 'a;
-    type ShrunkNode = InnerNode16<K, V, PREFIX_LEN>;
 
     fn header(&self) -> &Header<PREFIX_LEN> {
         &self.header
@@ -283,14 +269,6 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNode<PREFIX_L
         // SAFETY: This child pointer value is initialized because we got it by using a
         // non-`RestrictedNodeIndex::<>::EMPTY` index from the child indices array.
         Some(unsafe { MaybeUninit::assume_init(child_ptr) })
-    }
-
-    fn grow(&self) -> Self::GrownNode {
-        self.into()
-    }
-
-    fn shrink(&self) -> Self::ShrunkNode {
-        self.into()
     }
 
     fn iter(&self) -> NodeIndirectIter<'_, K, V, PREFIX_LEN> {
@@ -473,6 +451,29 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNode<PREFIX_L
             return (key as u8, child_pointers[usize::from(*idx)]);
         }
         unreachable!("inner node must have non-zero number of children");
+    }
+}
+
+/// Node that references between 17 and 49 children.
+pub type InnerNode48<K, V, const PREFIX_LEN: usize> = InnerNodeIndirect<K, V, PREFIX_LEN, 48>;
+
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
+    type Key = K;
+    type Value = V;
+
+    const TYPE: NodeType = NodeType::Node48;
+}
+
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
+    type GrownNode = InnerNodeDirect<K, V, PREFIX_LEN>;
+    type ShrunkNode = InnerNode16<K, V, PREFIX_LEN>;
+
+    fn grow(&self) -> Self::GrownNode {
+        self.into()
+    }
+
+    fn shrink(&self) -> Self::ShrunkNode {
+        self.into()
     }
 }
 
