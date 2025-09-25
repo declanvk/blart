@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn convert() {
         use core::convert::TryFrom;
-        let zero = NonMaxIndex::try_from(0 as u8).unwrap();
+        let zero = NonMaxIndex::try_from(0u8).unwrap();
         let zero = u8::from(zero);
         assert_eq!(zero, 0);
 

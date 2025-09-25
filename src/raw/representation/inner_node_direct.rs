@@ -1,7 +1,6 @@
 use core::{
     fmt,
     iter::{Enumerate, FusedIterator},
-    ops::Bound,
     slice::Iter,
 };
 #[cfg(feature = "nightly")]
@@ -11,8 +10,8 @@ use core::{
 };
 
 use crate::raw::{
-    Header, InnerNode, InnerNode48, InnerNodeIndirect, InnerNodeSorted, Node, NodeType,
-    OpaqueNodePtr,
+    representation::assert_valid_range_bounds, Header, InnerNode, InnerNode48, InnerNodeIndirect,
+    InnerNodeSorted, Node, NodeType, OpaqueNodePtr,
 };
 
 /// Inner node that stores up to 256 children, where lookup is performed by
@@ -184,20 +183,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN>
         bound: impl core::ops::RangeBounds<u8>,
     ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<Self::Key, Self::Value, PREFIX_LEN>)>
            + FusedIterator {
-        {
-            match (bound.start_bound(), bound.end_bound()) {
-                (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
-                    panic!("range start and end are equal and excluded: ({s:?})")
-                },
-                (
-                    Bound::Included(s) | Bound::Excluded(s),
-                    Bound::Included(e) | Bound::Excluded(e),
-                ) if s > e => {
-                    panic!("range start ({s:?}) is greater than range end ({e:?})")
-                },
-                _ => {},
-            }
-        }
+        assert_valid_range_bounds(&bound);
 
         let start = bound.start_bound().map(|val| usize::from(*val));
         let key_offset = match bound.start_bound() {

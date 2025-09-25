@@ -4,15 +4,14 @@ use core::{
     fmt,
     iter::{Enumerate, FusedIterator},
     mem::{self, MaybeUninit},
-    ops::Bound,
     slice::Iter,
 };
 
 use self::index::NonMaxIndex;
 use crate::{
     raw::{
-        Header, InnerNode, InnerNode16, InnerNodeDirect, InnerNodeSorted, Node, NodeType,
-        OpaqueNodePtr,
+        representation::assert_valid_range_bounds, Header, InnerNode, InnerNode16, InnerNodeDirect,
+        InnerNodeSorted, Node, NodeType, OpaqueNodePtr,
     },
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
@@ -308,20 +307,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNode<PREFIX_L
         bound: impl core::ops::RangeBounds<u8>,
     ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
     {
-        {
-            match (bound.start_bound(), bound.end_bound()) {
-                (Bound::Excluded(s), Bound::Excluded(e)) if s == e => {
-                    panic!("range start and end are equal and excluded: ({s:?})")
-                },
-                (
-                    Bound::Included(s) | Bound::Excluded(s),
-                    Bound::Included(e) | Bound::Excluded(e),
-                ) if s > e => {
-                    panic!("range start ({s:?}) is greater than range end ({e:?})")
-                },
-                _ => {},
-            }
-        }
+        assert_valid_range_bounds(&bound);
 
         let child_pointers = self.initialized_child_pointers();
 
