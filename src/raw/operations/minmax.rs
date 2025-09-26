@@ -1,4 +1,6 @@
-use crate::raw::{ConcreteNodePtr, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::raw::{
+    match_concrete_node_ptr, ConcreteNodePtr, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr,
+};
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
@@ -13,15 +15,12 @@ pub unsafe fn minimum_unchecked<K, V, const PREFIX_LEN: usize>(
     let mut current_node = root;
 
     loop {
-        current_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_node) => unsafe { inner_node.as_ref().min().1 },
-            ConcreteNodePtr::Node16(inner_node) => unsafe { inner_node.as_ref().min().1 },
-            ConcreteNodePtr::Node48(inner_node) => unsafe { inner_node.as_ref().min().1 },
-            ConcreteNodePtr::Node256(inner_node) => unsafe { inner_node.as_ref().min().1 },
-            ConcreteNodePtr::LeafNode(inner_node) => {
-                return inner_node;
+        current_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            InnerNode(inner_node) => unsafe { inner_node.as_ref().min().1 },
+            LeafNode(leaf_node) => {
+                return leaf_node;
             },
-        }
+        });
     }
 }
 
@@ -38,15 +37,12 @@ pub unsafe fn maximum_unchecked<K, V, const PREFIX_LEN: usize>(
     let mut current_node = root;
 
     loop {
-        current_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_node) => unsafe { inner_node.as_ref().max().1 },
-            ConcreteNodePtr::Node16(inner_node) => unsafe { inner_node.as_ref().max().1 },
-            ConcreteNodePtr::Node48(inner_node) => unsafe { inner_node.as_ref().max().1 },
-            ConcreteNodePtr::Node256(inner_node) => unsafe { inner_node.as_ref().max().1 },
-            ConcreteNodePtr::LeafNode(inner_node) => {
-                return inner_node;
+        current_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            InnerNode(inner_node) => unsafe { inner_node.as_ref().max().1 },
+            LeafNode(leaf_node) => {
+                return leaf_node;
             },
-        }
+        });
     }
 }
 

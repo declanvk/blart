@@ -5,8 +5,8 @@ use alloc::vec::Vec;
 use crate::{
     allocator::Allocator,
     raw::{
-        ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr,
-        OpaqueNodePtr,
+        match_concrete_inner_node_ptr, match_concrete_node_ptr, ConcreteInnerNodePtr,
+        ConcreteNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr, OpaqueNodePtr,
     },
     AsBytes,
 };
@@ -72,36 +72,15 @@ pub unsafe fn clone_unchecked<
             return;
         };
 
-        let updated_num_children = match parent {
-            ConcreteInnerNodePtr::Node4(inner_ptr) => {
+        let updated_num_children = match_concrete_inner_node_ptr!(match (parent) {
+            InnerNode(inner_ptr) => {
                 // SAFETY: Covered by function safety doc AND the lifetime of this mutable
                 // reference is scoped to this block, and does not escape
                 let inner = unsafe { inner_ptr.as_mut() };
                 inner.write_child(key_byte, new_node_ptr.to_opaque());
                 inner.header().num_children()
             },
-            ConcreteInnerNodePtr::Node16(inner_ptr) => {
-                // SAFETY: Covered by function safety doc AND the lifetime of this mutable
-                // reference is scoped to this block, and does not escape
-                let inner = unsafe { inner_ptr.as_mut() };
-                inner.write_child(key_byte, new_node_ptr.to_opaque());
-                inner.header().num_children()
-            },
-            ConcreteInnerNodePtr::Node48(inner_ptr) => {
-                // SAFETY: Covered by function safety doc AND the lifetime of this mutable
-                // reference is scoped to this block, and does not escape
-                let inner = unsafe { inner_ptr.as_mut() };
-                inner.write_child(key_byte, new_node_ptr.to_opaque());
-                inner.header().num_children()
-            },
-            ConcreteInnerNodePtr::Node256(inner_ptr) => {
-                // SAFETY: Covered by function safety doc AND the lifetime of this mutable
-                // reference is scoped to this block, and does not escape
-                let inner = unsafe { inner_ptr.as_mut() };
-                inner.write_child(key_byte, new_node_ptr.to_opaque());
-                inner.header().num_children()
-            },
-        };
+        });
 
         debug_assert!(
             updated_num_children <= *expected_num_children,
@@ -185,8 +164,8 @@ pub unsafe fn clone_unchecked<
     dfs_stack.push((u8::MAX, root));
 
     while let Some((key_byte, current_ptr)) = dfs_stack.pop() {
-        match current_ptr.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        match_concrete_node_ptr!(match (current_ptr.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: The `clone_unchecked` safety comment covers other mutable references
                 // to the original trie, and we guarantee here there are no mutable references
                 // to nodes in the `unfinished_node_stack`
@@ -199,46 +178,7 @@ pub unsafe fn clone_unchecked<
                     alloc,
                 );
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: The `clone_unchecked` safety comment covers other mutable references
-                // to the original trie, and we guarantee here there are no mutable references
-                // to nodes in the `unfinished_node_stack`
-                clone_inner_node(
-                    &mut unfinished_nodes_stack,
-                    &mut dfs_stack,
-                    &mut new_root_node,
-                    key_byte,
-                    inner_ptr,
-                    alloc,
-                );
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: The `clone_unchecked` safety comment covers other mutable references
-                // to the original trie, and we guarantee here there are no mutable references
-                // to nodes in the `unfinished_node_stack`
-                clone_inner_node(
-                    &mut unfinished_nodes_stack,
-                    &mut dfs_stack,
-                    &mut new_root_node,
-                    key_byte,
-                    inner_ptr,
-                    alloc,
-                );
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: The `clone_unchecked` safety comment covers other mutable references
-                // to the original trie, and we guarantee here there are no mutable references
-                // to nodes in the `unfinished_node_stack`
-                clone_inner_node(
-                    &mut unfinished_nodes_stack,
-                    &mut dfs_stack,
-                    &mut new_root_node,
-                    key_byte,
-                    inner_ptr,
-                    alloc,
-                );
-            },
-            ConcreteNodePtr::LeafNode(leaf_ptr) => {
+            LeafNode(leaf_ptr) => {
                 // SAFETY: The `clone_unchecked` safety comment covers other mutable references
                 // to the original trie
                 let leaf = unsafe { leaf_ptr.as_ref() };
@@ -264,7 +204,7 @@ pub unsafe fn clone_unchecked<
                     )
                 };
             },
-        };
+        });
     }
 
     assert!(

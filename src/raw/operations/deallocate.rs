@@ -2,7 +2,10 @@ use alloc::vec::Vec;
 
 use crate::{
     allocator::Allocator,
-    raw::{ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawIterator},
+    raw::{
+        match_concrete_node_ptr, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
+        RawIterator,
+    },
 };
 
 /// Deallocate all the leaf nodes in the linked list starting that are within
@@ -54,27 +57,15 @@ pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize, A: Alloc
     stack.push(root);
 
     while let Some(next_node_ptr) = stack.pop() {
-        match next_node_ptr.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        match_concrete_node_ptr!(match (next_node_ptr.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
                 deallocate_inner_node(&mut stack, inner_ptr, not_leaf, alloc)
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, not_leaf, alloc)
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, not_leaf, alloc)
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, not_leaf, alloc)
-            },
-            ConcreteNodePtr::LeafNode(_) => {
+            LeafNode(_leaf) => {
                 unreachable!("should never encounter a leaf node")
             },
-        }
+        })
     }
 }
 
@@ -104,30 +95,18 @@ pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize, A: Allocator>(
     stack.push(root);
 
     while let Some(next_node_ptr) = stack.pop() {
-        match next_node_ptr.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        match_concrete_node_ptr!(match (next_node_ptr.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: Covered by function safety doc
                 deallocate_inner_node(&mut stack, inner_ptr, accept_all, alloc)
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, accept_all, alloc)
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, accept_all, alloc)
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: Covered by function safety doc
-                deallocate_inner_node(&mut stack, inner_ptr, accept_all, alloc)
-            },
-            ConcreteNodePtr::LeafNode(inner) => {
+            LeafNode(inner) => {
                 // SAFETY: The single call per node requirement is enforced by the safety
                 // requirements on this function.
                 drop(unsafe { NodePtr::deallocate_node_ptr(inner, alloc) });
                 count += 1;
             },
-        }
+        })
     }
     count
 }

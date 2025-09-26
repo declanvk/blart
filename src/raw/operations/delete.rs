@@ -4,8 +4,8 @@ use super::PrefixMatchBehavior;
 use crate::{
     allocator::Allocator,
     raw::{
-        operations::lookup, ConcreteNodePtr, InnerNode, InnerNodeCommon, LeafNode, NodePtr,
-        OpaqueNodePtr, TreePath, TreePathSearch,
+        match_concrete_node_ptr, operations::lookup, ConcreteNodePtr, InnerNode, InnerNodeCommon,
+        LeafNode, NodePtr, OpaqueNodePtr, TreePath, TreePathSearch,
     },
     AsBytes,
 };
@@ -150,8 +150,8 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
     original_root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     alloc: &A,
 ) -> DeleteResult<K, V, PREFIX_LEN> {
-    let new_parent_node_ptr = match parent_node_ptr.to_node_ptr() {
-        ConcreteNodePtr::Node4(parent_node_ptr) => unsafe {
+    let new_parent_node_ptr = match_concrete_node_ptr!(match (parent_node_ptr.to_node_ptr()) {
+        InnerNode(parent_node_ptr) => unsafe {
             // SAFETY: Covered by containing function safety doc
             remove_child_from_inner_node_and_compress(
                 parent_node_ptr,
@@ -161,76 +161,25 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
                 alloc,
             )
         },
-        ConcreteNodePtr::Node16(parent_node_ptr) => unsafe {
-            // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(
-                parent_node_ptr,
-                child_key_byte,
-                #[cfg(debug_assertions)]
-                leaf_node_ptr,
-                alloc,
-            )
-        },
-        ConcreteNodePtr::Node48(parent_node_ptr) => unsafe {
-            // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(
-                parent_node_ptr,
-                child_key_byte,
-                #[cfg(debug_assertions)]
-                leaf_node_ptr,
-                alloc,
-            )
-        },
-        ConcreteNodePtr::Node256(parent_node_ptr) => unsafe {
-            // SAFETY: Covered by containing function safety doc
-            remove_child_from_inner_node_and_compress(
-                parent_node_ptr,
-                child_key_byte,
-                #[cfg(debug_assertions)]
-                leaf_node_ptr,
-                alloc,
-            )
-        },
-        ConcreteNodePtr::LeafNode(_) => unreachable!("Cannot have delete from leaf node"),
-    };
+        LeafNode(_leaf) => unreachable!("Cannot have delete from leaf node"),
+    });
 
     // If the parent node was changed to something else, we have to write the new
     // value to the grandparent
     if let Some(new_parent_node_ptr) = new_parent_node_ptr {
         if let Some((grandparent_node_ptr, parent_key_byte)) = grandparent_node_ptr {
-            match grandparent_node_ptr.to_node_ptr() {
-                ConcreteNodePtr::Node4(inner_node_ptr) => {
+            match_concrete_node_ptr!(match (grandparent_node_ptr.to_node_ptr()) {
+                InnerNode(inner_node_ptr) => {
                     // SAFETY: The scope of the mutable reference is limited to this block, and
                     // the containing function safety requirements mean that there are no other
                     // mutable references to the same node.
                     let inner_node = unsafe { inner_node_ptr.as_mut() };
                     inner_node.write_child(parent_key_byte, new_parent_node_ptr);
                 },
-                ConcreteNodePtr::Node16(inner_node_ptr) => {
-                    // SAFETY: The scope of the mutable reference is limited to this block, and
-                    // the containing function safety requirements mean that there are no other
-                    // mutable references to the same node.
-                    let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
-                },
-                ConcreteNodePtr::Node48(inner_node_ptr) => {
-                    // SAFETY: The scope of the mutable reference is limited to this block, and
-                    // the containing function safety requirements mean that there are no other
-                    // mutable references to the same node.
-                    let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
-                },
-                ConcreteNodePtr::Node256(inner_node_ptr) => {
-                    // SAFETY: The scope of the mutable reference is limited to this block, and
-                    // the containing function safety requirements mean that there are no other
-                    // mutable references to the same node.
-                    let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
-                },
-                ConcreteNodePtr::LeafNode(_) => {
+                LeafNode(_leaf) => {
                     unreachable!("Cannot modify children of a leaf node")
                 },
-            }
+            })
         }
     }
 
@@ -381,8 +330,8 @@ where
     let mut prefix_match_state = PrefixMatchBehavior::default();
 
     loop {
-        let next_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        let next_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
                 lookup::check_prefix_lookup_child(
@@ -392,37 +341,7 @@ where
                     &mut prefix_match_state,
                 )
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                lookup::check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_state,
-                )
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                lookup::check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_state,
-                )
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                lookup::check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_state,
-                )
-            },
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+            LeafNode(leaf_node_ptr) => {
                 // SAFETY: The created reference doesn't escape the block and there are no
                 // concurrent mutable references.
                 let leaf = unsafe { leaf_node_ptr.as_ref() };
@@ -438,7 +357,7 @@ where
                     return None;
                 }
             },
-        }?;
+        })?;
 
         debug_assert!(
             current_depth > 0,
@@ -470,18 +389,16 @@ pub unsafe fn find_minimum_to_delete<K, V, const PREFIX_LEN: usize>(
     loop {
         // SAFETY: We hold a mutable reference, so creating
         // a shared reference is safe
-        let (last_key_byte, next_node) = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_node) => unsafe { inner_node.as_ref().min() },
-            ConcreteNodePtr::Node16(inner_node) => unsafe { inner_node.as_ref().min() },
-            ConcreteNodePtr::Node48(inner_node) => unsafe { inner_node.as_ref().min() },
-            ConcreteNodePtr::Node256(inner_node) => unsafe { inner_node.as_ref().min() },
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                return DeletePoint {
-                    path: path.finish(),
-                    leaf_node_ptr,
-                };
-            },
-        };
+        let (last_key_byte, next_node) =
+            match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+                InnerNode(inner_node) => unsafe { inner_node.as_ref().min() },
+                LeafNode(leaf_node_ptr) => {
+                    return DeletePoint {
+                        path: path.finish(),
+                        leaf_node_ptr,
+                    };
+                },
+            });
 
         path.visit_inner_node(current_node, last_key_byte);
         current_node = next_node;
@@ -505,18 +422,16 @@ pub unsafe fn find_maximum_to_delete<K, V, const PREFIX_LEN: usize>(
     loop {
         // SAFETY: We hold a mutable reference, so creating
         // a shared reference is safe
-        let (last_key_byte, next_node) = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_node) => unsafe { inner_node.as_ref().max() },
-            ConcreteNodePtr::Node16(inner_node) => unsafe { inner_node.as_ref().max() },
-            ConcreteNodePtr::Node48(inner_node) => unsafe { inner_node.as_ref().max() },
-            ConcreteNodePtr::Node256(inner_node) => unsafe { inner_node.as_ref().max() },
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
-                return DeletePoint {
-                    path: path.finish(),
-                    leaf_node_ptr,
-                };
-            },
-        };
+        let (last_key_byte, next_node) =
+            match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+                InnerNode(inner_node) => unsafe { inner_node.as_ref().max() },
+                LeafNode(leaf_node_ptr) => {
+                    return DeletePoint {
+                        path: path.finish(),
+                        leaf_node_ptr,
+                    };
+                },
+            });
 
         path.visit_inner_node(current_node, last_key_byte);
         current_node = next_node;

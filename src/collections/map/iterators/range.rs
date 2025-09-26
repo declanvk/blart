@@ -12,8 +12,9 @@ use crate::{
     allocator::{Allocator, Global},
     map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
     raw::{
-        maximum_unchecked, minimum_unchecked, AttemptOptimisticPrefixMatch, ConcreteNodePtr,
-        InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatchBehavior, RawIterator,
+        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
+        AttemptOptimisticPrefixMatch, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
+        PrefixMatchBehavior, RawIterator,
     },
     AsBytes, TreeMap,
 };
@@ -192,8 +193,8 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
     let mut prefix_match_behavior = PrefixMatchBehavior::default();
 
     loop {
-        let next_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        let next_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety documentation on the
                 // containing function
                 check_prefix_lookup_child(
@@ -203,37 +204,7 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
                     &mut prefix_match_behavior,
                 )
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety documentation on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety documentation on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety documentation on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::LeafNode(leaf_ptr) => {
+            LeafNode(leaf_ptr) => {
                 // SAFETY: The shared reference is bounded to this block and there are no
                 // concurrent modifications, by the safety conditions of this function.
                 let leaf_node = unsafe { leaf_ptr.as_ref() };
@@ -246,7 +217,7 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
                     leaf_key_comparison_to_search_key,
                 };
             },
-        };
+        });
 
         match next_node {
             ControlFlow::Continue(next_node) => {
@@ -385,24 +356,16 @@ pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN
                         } else {
                             (Bound::Unbounded, bound.map(|_| key_bytes[current_depth]))
                         };
-                        let possible_next_child = match node_ptr.to_node_ptr() {
-                            ConcreteNodePtr::Node4(inner_ptr) => {
-                                access_closest_child(inner_ptr, child_bounds, is_start)
-                            },
-                            ConcreteNodePtr::Node16(inner_ptr) => {
-                                access_closest_child(inner_ptr, child_bounds, is_start)
-                            },
-                            ConcreteNodePtr::Node48(inner_ptr) => {
-                                access_closest_child(inner_ptr, child_bounds, is_start)
-                            },
-                            ConcreteNodePtr::Node256(inner_ptr) => {
-                                access_closest_child(inner_ptr, child_bounds, is_start)
-                            },
-                            ConcreteNodePtr::LeafNode(_) => unreachable!(
-                                "This branch is unreachable because the \
-                                 TerminatingNodeSearchResult had the value InnerNode"
-                            ),
-                        };
+                        let possible_next_child =
+                            match_concrete_node_ptr!(match (node_ptr.to_node_ptr()) {
+                                InnerNode(inner_ptr) => {
+                                    access_closest_child(inner_ptr, child_bounds, is_start)
+                                },
+                                LeafNode(_leaf) => unreachable!(
+                                    "This branch is unreachable because the \
+                                     TerminatingNodeSearchResult had the value InnerNode"
+                                ),
+                            });
                         let (_, next_child) = possible_next_child?;
 
                         if is_start {
