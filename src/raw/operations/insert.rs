@@ -9,9 +9,9 @@ use core::{
 use crate::{
     allocator::Allocator,
     raw::{
-        deallocate_tree, maximum_unchecked, minimum_unchecked, ConcreteNodePtr, ExplicitMismatch,
-        InnerNode, InnerNode4, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch,
-        TreePath, TreePathSearch,
+        deallocate_tree, match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
+        ConcreteNodePtr, ExplicitMismatch, InnerNode, InnerNode4, InnerNodeCommon, LeafNode,
+        NodePtr, OpaqueNodePtr, PrefixMatch, TreePath, TreePathSearch,
     },
     rust_nightly_apis::{likely, unlikely},
     AsBytes,
@@ -155,15 +155,12 @@ unsafe fn parent_write_child<K: AsBytes, V, const PREFIX_LEN: usize>(
         parent_node.write_child(key_byte, new_child);
     }
 
-    match parent_inner_node.to_node_ptr() {
-        ConcreteNodePtr::Node4(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-        ConcreteNodePtr::Node16(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-        ConcreteNodePtr::Node48(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-        ConcreteNodePtr::Node256(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-        ConcreteNodePtr::LeafNode(_) => {
+    match_concrete_node_ptr!(match (parent_inner_node.to_node_ptr()) {
+        InnerNode(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
+        LeafNode(_leaf) => {
             unreachable!("A leaf pointer cannot be the parent of another node");
         },
-    }
+    })
 }
 
 impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
@@ -309,35 +306,17 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 }
             }
 
-            match inner_node_ptr.to_node_ptr() {
-                ConcreteNodePtr::Node4(inner_ptr) => write_new_child_in_existing_inner_node(
+            match_concrete_node_ptr!(match (inner_node_ptr.to_node_ptr()) {
+                InnerNode(inner_ptr) => write_new_child_in_existing_inner_node(
                     inner_ptr,
                     new_leaf_node,
                     key_bytes_used,
                     alloc,
                 ),
-                ConcreteNodePtr::Node16(inner_ptr) => write_new_child_in_existing_inner_node(
-                    inner_ptr,
-                    new_leaf_node,
-                    key_bytes_used,
-                    alloc,
-                ),
-                ConcreteNodePtr::Node48(inner_ptr) => write_new_child_in_existing_inner_node(
-                    inner_ptr,
-                    new_leaf_node,
-                    key_bytes_used,
-                    alloc,
-                ),
-                ConcreteNodePtr::Node256(inner_ptr) => write_new_child_in_existing_inner_node(
-                    inner_ptr,
-                    new_leaf_node,
-                    key_bytes_used,
-                    alloc,
-                ),
-                ConcreteNodePtr::LeafNode(_) => {
+                LeafNode(_leaf) => {
                     unreachable!("Cannot have insert into existing with leaf node");
                 },
-            }
+            })
         }
 
         let InsertPoint {
@@ -810,8 +789,8 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
                 overwrite_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
                 previous: bool,
             ) {
-                match parent_inner_node.to_node_ptr() {
-                    ConcreteNodePtr::Node4(inner_ptr) => {
+                match_concrete_node_ptr!(match (parent_inner_node.to_node_ptr()) {
+                    InnerNode(inner_ptr) => {
                         // Safety: covered by parents parent function doc comment.
                         let inner_ref = unsafe { inner_ptr.as_ref() };
                         let next_node = if previous {
@@ -821,37 +800,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
                         };
                         set_single_leaf_siblings(next_node, overwrite_leaf, previous);
                     },
-                    ConcreteNodePtr::Node16(inner_ptr) => {
-                        // Safety: covered by parents parent function doc comment.
-                        let inner_ref = unsafe { inner_ptr.as_ref() };
-                        let next_node = if previous {
-                            inner_ref.min().1
-                        } else {
-                            inner_ref.max().1
-                        };
-                        set_single_leaf_siblings(next_node, overwrite_leaf, previous);
-                    },
-                    ConcreteNodePtr::Node48(inner_ptr) => {
-                        // Safety: covered by parents parent function doc comment.
-                        let inner_ref = unsafe { inner_ptr.as_ref() };
-                        let next_node = if previous {
-                            inner_ref.min().1
-                        } else {
-                            inner_ref.max().1
-                        };
-                        set_single_leaf_siblings(next_node, overwrite_leaf, previous);
-                    },
-                    ConcreteNodePtr::Node256(inner_ptr) => {
-                        // Safety: covered by parents parent function doc comment.
-                        let inner_ref = unsafe { inner_ptr.as_ref() };
-                        let next_node = if previous {
-                            inner_ref.min().1
-                        } else {
-                            inner_ref.max().1
-                        };
-                        set_single_leaf_siblings(next_node, overwrite_leaf, previous);
-                    },
-                    ConcreteNodePtr::LeafNode(leaf) => {
+                    LeafNode(leaf) => {
                         if previous {
                             // Safety: covered by parents parent function doc comment.
                             let previous_node = unsafe { leaf.as_mut() }.previous;
@@ -872,7 +821,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
                             unsafe { overwrite_leaf.as_mut() }.next = next_node;
                         }
                     },
-                }
+                });
             }
             set_single_leaf_siblings(parent_inner_node, overwrite_leaf, true);
             set_single_leaf_siblings(parent_inner_node, overwrite_leaf, false);
@@ -885,8 +834,18 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
         } = self;
         let overwrite_leaf = LeafNode::with_no_siblings(key, value);
 
-        let (overwrite_ptr, leafs_removed) = match overwrite_point.to_node_ptr() {
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+        let (overwrite_ptr, leafs_removed) = match_concrete_node_ptr!(match (overwrite_point
+            .to_node_ptr())
+        {
+            InnerNode(old_inner) => {
+                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
+                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
+                // SAFETY: We never use `old_inner` after this call again.
+                // The rest is covered by the doc comment.
+                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
+                (overwrite_ptr, removed)
+            },
+            LeafNode(leaf_node_ptr) => {
                 // SAFETY: Covered by safety doc of this function
                 let mut old_leaf_node = unsafe { NodePtr::replace(leaf_node_ptr, overwrite_leaf) };
 
@@ -907,39 +866,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
                     leafs_removed: 0,
                 };
             },
-            ConcreteNodePtr::Node4(old_inner) => {
-                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
-                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
-                // SAFETY: We never use `old_inner` after this call again.
-                // The rest is covered by the doc comment.
-                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
-                (overwrite_ptr, removed)
-            },
-            ConcreteNodePtr::Node16(old_inner) => {
-                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
-                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
-                // SAFETY: We never use `old_inner` after this call again.
-                // The rest is covered by the doc comment.
-                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
-                (overwrite_ptr, removed)
-            },
-            ConcreteNodePtr::Node48(old_inner) => {
-                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
-                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
-                // SAFETY: We never use `old_inner` after this call again.
-                // The rest is covered by the doc comment.
-                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
-                (overwrite_ptr, removed)
-            },
-            ConcreteNodePtr::Node256(old_inner) => {
-                let overwrite_ptr = NodePtr::allocate_node_ptr(overwrite_leaf, alloc);
-                set_leaf_siblings(old_inner.to_opaque(), overwrite_ptr);
-                // SAFETY: We never use `old_inner` after this call again.
-                // The rest is covered by the doc comment.
-                let removed = unsafe { deallocate_tree(old_inner.to_opaque(), alloc) };
-                (overwrite_ptr, removed)
-            },
-        };
+        });
         match path {
             TreePath::Root => {
                 // If there was no parent, we overwrote the root leaf.
@@ -1062,24 +989,12 @@ where
         //     loop invariant assertion
         assert!(current_depth <= key_bytes.len());
 
-        let lookup_result = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        let lookup_result = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: comment and assert at top of loop
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: comment and assert at top of loop
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: comment and assert at top of loop
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
-            },
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+            LeafNode(leaf_node_ptr) => {
                 // SAFETY: function safety comment covers
                 let leaf_node = unsafe { leaf_node_ptr.as_ref() };
 
@@ -1131,7 +1046,7 @@ where
                     root,
                 });
             },
-        }?;
+        })?;
 
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
@@ -1217,24 +1132,12 @@ where
         //     loop invariant assertion
         assert!(current_depth <= key_bytes.len());
 
-        let lookup_result = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        let lookup_result = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: comment and assert at top of loop
                 test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: comment and assert at top of loop
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: comment and assert at top of loop
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: comment and assert at top of loop
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
-            },
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+            LeafNode(leaf_node_ptr) => {
                 // SAFETY: function safety comment covers
                 let leaf_node = unsafe { leaf_node_ptr.as_ref() };
 
@@ -1287,7 +1190,7 @@ where
                     root,
                 });
             },
-        };
+        });
 
         let lookup_result = match lookup_result {
             Ok(value) => value,

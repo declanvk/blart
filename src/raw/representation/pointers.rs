@@ -196,15 +196,33 @@ macro_rules! impl_concrete_node_ptr {
             LeafNode(NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>),
         }
 
+        macro_rules! match_concrete_node_ptr {
+            (
+                match ($match_e:expr) {
+                    InnerNode($inner_node_i:ident) => $inner_node_e:expr,
+                    LeafNode( $leaf_i:ident) => $leaf_e:expr,
+                }
+            ) => {
+                match $match_e {
+                    $(
+                        ConcreteNodePtr::$variant($inner_node_i) => $inner_node_e,
+                    )+
+                    ConcreteNodePtr::LeafNode($leaf_i) => $leaf_e,
+                }
+
+            };
+        }
+        pub(crate) use match_concrete_node_ptr;
+
         impl<K, V, const PREFIX_LEN: usize> ConcreteNodePtr<K, V, PREFIX_LEN> {
             /// Convert this node pointer with node type information into an
             /// [`OpaqueNodePtr`] with the type information stored in the pointer.
             pub fn to_opaque(self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
-                match self {
-                    $(
-                        Self::$variant(node_ptr) => node_ptr.to_opaque(),
-                    )+
-                    ConcreteNodePtr::LeafNode(node_ptr) => node_ptr.to_opaque(),
+                match_concrete_node_ptr! {
+                    match (self) {
+                        InnerNode(inner_ptr) => inner_ptr.to_opaque(),
+                        LeafNode(leaf_ptr) => leaf_ptr.to_opaque(),
+                    }
                 }
             }
         }
@@ -248,6 +266,22 @@ macro_rules! impl_concrete_node_ptr {
                 $variant(NodePtr<PREFIX_LEN, $node_ty>),
             )+
         }
+
+        macro_rules! match_concrete_inner_node_ptr {
+            (
+                match ($match_e:expr) {
+                    InnerNode($inner_node_i:ident) => $inner_node_e:expr,
+                }
+            ) => {
+                match $match_e {
+                    $(
+                        ConcreteInnerNodePtr::$variant($inner_node_i) => $inner_node_e,
+                    )+
+                }
+
+            };
+        }
+        pub(crate) use match_concrete_inner_node_ptr;
 
         impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {}
 

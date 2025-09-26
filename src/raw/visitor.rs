@@ -16,7 +16,7 @@ use super::{
     ConcreteNodePtr, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node,
     NodePtr, OpaqueNodePtr,
 };
-use crate::raw::InnerNodeCommon;
+use crate::raw::{match_concrete_node_ptr, InnerNodeCommon};
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.
@@ -57,12 +57,11 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
     for OpaqueNodePtr<K, T, PREFIX_LEN>
 {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
-        match self.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner) => inner.visit_with(visitor),
-            ConcreteNodePtr::Node16(inner) => inner.visit_with(visitor),
-            ConcreteNodePtr::Node48(inner) => inner.visit_with(visitor),
-            ConcreteNodePtr::Node256(inner) => inner.visit_with(visitor),
-            ConcreteNodePtr::LeafNode(inner) => inner.visit_with(visitor),
+        match_concrete_node_ptr! {
+            match (self.to_node_ptr()) {
+                InnerNode(inner) => inner.visit_with(visitor),
+                LeafNode(inner) => inner.visit_with(visitor),
+            }
         }
     }
 }

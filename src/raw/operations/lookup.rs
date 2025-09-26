@@ -2,8 +2,8 @@ use core::cmp::Ordering;
 
 use crate::{
     raw::{
-        AttemptOptimisticPrefixMatch, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
-        OptionalLeafPtr, PessimisticMismatch, PrefixMatch,
+        match_concrete_node_ptr, AttemptOptimisticPrefixMatch, ConcreteNodePtr, InnerNode,
+        LeafNode, NodePtr, OpaqueNodePtr, OptionalLeafPtr, PessimisticMismatch, PrefixMatch,
     },
     AsBytes,
 };
@@ -218,8 +218,8 @@ where
     let mut prefix_match_behavior = PrefixMatchBehavior::default();
 
     loop {
-        current_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        current_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
                 check_prefix_lookup_child(
@@ -229,37 +229,7 @@ where
                     &mut prefix_match_behavior,
                 )
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+            LeafNode(leaf_node_ptr) => {
                 // SAFETY: The shared reference is bounded to this block and there are no
                 // concurrent modifications, by the safety conditions of this function.
                 let leaf = unsafe { leaf_node_ptr.as_ref() };
@@ -270,7 +240,7 @@ where
                     return None;
                 }
             },
-        }?;
+        })?;
     }
 }
 
@@ -293,8 +263,8 @@ where
     let mut prefix_match_behavior = PrefixMatchBehavior::default();
 
     loop {
-        current_node = match current_node.to_node_ptr() {
-            ConcreteNodePtr::Node4(inner_ptr) => unsafe {
+        current_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            InnerNode(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety requirement on the
                 // containing function
                 check_prefix_lookup_child(
@@ -304,37 +274,7 @@ where
                     &mut prefix_match_behavior,
                 )
             },
-            ConcreteNodePtr::Node16(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::Node48(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::Node256(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
-            },
-            ConcreteNodePtr::LeafNode(leaf_node_ptr) => {
+            LeafNode(leaf_node_ptr) => {
                 // SAFETY: The shared reference is bounded to this block and there are no
                 // concurrent modifications, by the safety conditions of this function.
                 let leaf = unsafe { leaf_node_ptr.as_ref() };
@@ -345,7 +285,7 @@ where
                     return None;
                 }
             },
-        }?;
+        })?;
     }
 }
 

@@ -4,10 +4,7 @@ use core::{iter::FusedIterator, mem::MaybeUninit};
 use crate::{
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
-    raw::{
-        ConcreteNodePtr, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeDirect, InnerNodeSorted,
-        LeafNode, OpaqueNodePtr,
-    },
+    raw::{match_concrete_node_ptr, ConcreteNodePtr, InnerNode, LeafNode, OpaqueNodePtr},
     AsBytes, TreeMap,
 };
 
@@ -194,8 +191,8 @@ trait FuzzySearch<K: AsBytes, V, const PREFIX_LEN: usize> {
     }
 }
 
-impl<K: AsBytes, V, const PREFIX_LEN: usize, const SIZE: usize> FuzzySearch<K, V, PREFIX_LEN>
-    for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
+impl<K: AsBytes, V, const PREFIX_LEN: usize, N: InnerNode<PREFIX_LEN>> FuzzySearch<K, V, PREFIX_LEN>
+    for N
 where
     Self: InnerNode<PREFIX_LEN, Key = K, Value = V>,
 {
@@ -218,62 +215,6 @@ where
                 nodes_to_search.push(node);
             } else {
                 arena.pop();
-            }
-        }
-        false
-    }
-}
-
-impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
-    for InnerNode48<K, V, PREFIX_LEN>
-{
-    fn fuzzy_search(
-        &self,
-        arena: &mut StackArena,
-        key: &[u8],
-        old_row: &mut &mut [usize],
-        new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
-        max_edit_dist: usize,
-    ) -> bool {
-        if !self.fuzzy_search_prefix(key, old_row, new_row, max_edit_dist) {
-            return false;
-        }
-
-        for (k, node) in self.iter() {
-            let new_row = arena.push();
-            if edit_dist(key, k, old_row, new_row, max_edit_dist) {
-                nodes_to_search.push(node);
-            } else {
-                arena.pop();
-            }
-        }
-        false
-    }
-}
-
-impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
-    for InnerNodeDirect<K, V, PREFIX_LEN>
-{
-    fn fuzzy_search(
-        &self,
-        arena: &mut StackArena,
-        key: &[u8],
-        old_row: &mut &mut [usize],
-        new_row: &mut &mut [MaybeUninit<usize>],
-        nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
-        max_edit_dist: usize,
-    ) -> bool {
-        if !self.fuzzy_search_prefix(key, old_row, new_row, max_edit_dist) {
-            return false;
-        }
-
-        for (k, node) in self.iter() {
-            let new_row = arena.push();
-            if edit_dist(key, k, old_row, new_row, max_edit_dist) {
-                nodes_to_search.push(node);
-            } else {
-                arena.pop()
             }
         }
         false
@@ -377,8 +318,8 @@ macro_rules! gen_iter {
                     self.nodes_to_search.pop(),
                     self.arena.pop_copy(&mut old_row),
                 ) {
-                    match node.to_node_ptr() {
-                        ConcreteNodePtr::Node4(inner_ptr) => {
+                    match_concrete_node_ptr!(match (node.to_node_ptr()) {
+                        InnerNode(inner_ptr) => {
                             // SAFETY: Since `Self` holds a mutable/shared reference
                             // is safe to create a shared reference from it
                             let inner_node = unsafe { inner_ptr.as_ref() };
@@ -391,46 +332,7 @@ macro_rules! gen_iter {
                                 self.max_edit_dist,
                             );
                         },
-                        ConcreteNodePtr::Node16(inner_ptr) => {
-                            // SAFETY: Since `Self` holds a mutable/shared reference
-                            // is safe to create a shared reference from it
-                            let inner_node = unsafe { inner_ptr.as_ref() };
-                            inner_node.fuzzy_search(
-                                &mut self.arena,
-                                self.key,
-                                old_row,
-                                &mut new_row,
-                                &mut self.nodes_to_search,
-                                self.max_edit_dist,
-                            );
-                        },
-                        ConcreteNodePtr::Node48(inner_ptr) => {
-                            // SAFETY: Since `Self` holds a mutable/shared reference
-                            // is safe to create a shared reference from it
-                            let inner_node = unsafe { inner_ptr.as_ref() };
-                            inner_node.fuzzy_search(
-                                &mut self.arena,
-                                self.key,
-                                old_row,
-                                &mut new_row,
-                                &mut self.nodes_to_search,
-                                self.max_edit_dist,
-                            );
-                        },
-                        ConcreteNodePtr::Node256(inner_ptr) => {
-                            // SAFETY: Since `Self` holds a mutable/shared reference
-                            // is safe to create a shared reference from it
-                            let inner_node = unsafe { inner_ptr.as_ref() };
-                            inner_node.fuzzy_search(
-                                &mut self.arena,
-                                self.key,
-                                old_row,
-                                &mut new_row,
-                                &mut self.nodes_to_search,
-                                self.max_edit_dist,
-                            );
-                        },
-                        ConcreteNodePtr::LeafNode(inner_ptr) => {
+                        LeafNode(inner_ptr) => {
                             self.size -= 1;
 
                             // SAFETY: Since `Self` holds a mutable/shared reference
@@ -447,7 +349,7 @@ macro_rules! gen_iter {
                                 return unsafe { Some(inner_ptr.$op()) };
                             }
                         },
-                    };
+                    });
                 }
 
                 None
