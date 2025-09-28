@@ -1,0 +1,39 @@
+TreeStats {
+    inner_node: {
+        Node4: InnerNodeStats {
+            count: 16,
+            total_slots: 64,
+            sum_slots: 64,
+            total_header_bytes: 256,
+            sum_prefix_len_bytes: 0,
+            sum_capped_prefix_len_bytes: 0,
+            max_prefix_len_bytes: 0,
+            mem_usage: 1024,
+        },
+        Node16: InnerNodeStats {
+            count: 1,
+            total_slots: 16,
+            sum_slots: 16,
+            total_header_bytes: 16,
+            sum_prefix_len_bytes: 0,
+            sum_capped_prefix_len_bytes: 0,
+            max_prefix_len_bytes: 0,
+            mem_usage: 168,
+        },
+    },
+    tree: InnerNodeStats {
+        count: 17,
+        total_slots: 80,
+        sum_slots: 80,
+        total_header_bytes: 272,
+        sum_prefix_len_bytes: 0,
+        sum_capped_prefix_len_bytes: 0,
+        max_prefix_len_bytes: 0,
+        mem_usage: 1192,
+    },
+    leaf: LeafStats {
+        count: 64,
+        sum_key_bytes: 128,
+        mem_usage: 2048,
+    },
+}

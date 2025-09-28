@@ -16,7 +16,7 @@ use super::{
     ConcreteNodePtr, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node,
     NodePtr, OpaqueNodePtr,
 };
-use crate::raw::{match_concrete_node_ptr, InnerNodeCommon};
+use crate::raw::{match_concrete_node_ptr, InnerNode, InnerNodeCommon};
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.
@@ -41,13 +41,13 @@ pub trait Visitable<K, T, const PREFIX_LEN: usize> {
     ///     ...
     ///
     ///     fn visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
-    ///         visitor.visit_node4(self)
+    ///         visitor.visit_inner_node(self)
     ///     }
     /// }
     /// ```
     ///
-    /// The call to `visitor.visit_node4(self)` allows the visitor to execute
-    /// specific handling logic.
+    /// The call to `visitor.visit_inner_node(self)` allows the visitor to
+    /// execute specific handling logic.
     fn visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         self.super_visit_with(visitor)
     }
@@ -93,7 +93,7 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode4<K
     }
 
     fn visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
-        visitor.visit_node4(self)
+        visitor.visit_inner_node(self)
     }
 }
 
@@ -103,7 +103,7 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode16<
     }
 
     fn visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
-        visitor.visit_node16(self)
+        visitor.visit_inner_node(self)
     }
 }
 
@@ -113,7 +113,7 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode48<
     }
 
     fn visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
-        visitor.visit_node48(self)
+        visitor.visit_inner_node(self)
     }
 }
 
@@ -125,7 +125,7 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN>
     }
 
     fn visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
-        visitor.visit_node256(self)
+        visitor.visit_inner_node(self)
     }
 }
 
@@ -151,23 +151,11 @@ pub trait Visitor<K, V, const PREFIX_LEN: usize>: Sized {
     /// Combine two instances of the [`Self::Output`] type for this [`Visitor`].
     fn combine_output(&self, o1: Self::Output, o2: Self::Output) -> Self::Output;
 
-    /// Visit a [`InnerNode4`].
-    fn visit_node4(&mut self, t: &InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
-        t.super_visit_with(self)
-    }
-
-    /// Visit a [`InnerNode16`].
-    fn visit_node16(&mut self, t: &InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
-        t.super_visit_with(self)
-    }
-
-    /// Visit a [`InnerNode48`].
-    fn visit_node48(&mut self, t: &InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
-        t.super_visit_with(self)
-    }
-
-    /// Visit a [`InnerNodeDirect`].
-    fn visit_node256(&mut self, t: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self::Output {
+    /// Visit an [`InnerNode`].
+    fn visit_inner_node<N>(&mut self, t: &N) -> Self::Output
+    where
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V> + Visitable<K, V, PREFIX_LEN>,
+    {
         t.super_visit_with(self)
     }
 

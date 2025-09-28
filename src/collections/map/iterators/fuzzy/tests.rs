@@ -2,7 +2,10 @@ use alloc::ffi::CString;
 
 use super::*;
 use crate::{
-    raw::visitor::{TreeStats, TreeStatsCollector},
+    raw::{
+        visitor::{TreeStats, TreeStatsCollector},
+        NodeType,
+    },
     AsBytes, TreeMap,
 };
 
@@ -161,7 +164,10 @@ fn test_fuzzy_search_node48() {
 
     // Check that we indeed have a Node48 to make the test meaningful
     let stats = get_stats(&tree);
-    assert!(stats.node48.count > 0, "Test requires at least one Node48");
+    assert!(
+        stats.inner_node[NodeType::Node48].count > 0,
+        "Test requires at least one Node48"
+    );
 
     // Search for a key that doesn't exist to ensure the search can return false
     // This covers the mutation `replace -> bool with false`
@@ -186,7 +192,7 @@ fn test_fuzzy_search_node256() {
 
     let stats = get_stats(&tree);
     assert!(
-        stats.node256.count > 0,
+        stats.inner_node[NodeType::Node256].count > 0,
         "Test requires at least one Node256"
     );
 
