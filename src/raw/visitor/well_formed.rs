@@ -566,20 +566,11 @@ where
         Ok(o1? + o2?)
     }
 
-    fn visit_node4(&mut self, t: &super::InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
-        self.visit_inner_node(t)
-    }
-
-    fn visit_node16(&mut self, t: &super::InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
-        self.visit_inner_node(t)
-    }
-
-    fn visit_node48(&mut self, t: &super::InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
-        self.visit_inner_node(t)
-    }
-
-    fn visit_node256(&mut self, t: &super::InnerNodeDirect<K, V, PREFIX_LEN>) -> Self::Output {
-        self.visit_inner_node(t)
+    fn visit_inner_node<N>(&mut self, t: &N) -> Self::Output
+    where
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V> + Visitable<K, V, PREFIX_LEN>,
+    {
+        Self::visit_inner_node(self, t)
     }
 
     fn visit_leaf(&mut self, t: &super::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {

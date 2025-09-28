@@ -175,19 +175,10 @@ where
         unimplemented!("this visitor should never combine outputs")
     }
 
-    fn visit_node4(&mut self, t: &super::InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
-        self.write_inner_node(t)
-    }
-
-    fn visit_node16(&mut self, t: &super::InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
-        self.write_inner_node(t)
-    }
-
-    fn visit_node48(&mut self, t: &super::InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
-        self.write_inner_node(t)
-    }
-
-    fn visit_node256(&mut self, t: &super::InnerNodeDirect<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_inner_node<N>(&mut self, t: &N) -> Self::Output
+    where
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V> + Visitable<K, V, PREFIX_LEN>,
+    {
         self.write_inner_node(t)
     }
 
@@ -273,10 +264,14 @@ pub fn bytes_display_fmt(value: &impl AsBytes, f: &mut fmt::Formatter) -> fmt::R
 mod tests {
     use alloc::{string::String, vec::Vec};
 
+    #[cfg(not(miri))]
+    use expect_test::expect_file;
+
     use super::*;
     use crate::testing::swap;
 
     #[test]
+    #[cfg(not(miri))]
     fn simple_tree_output_to_dot() {
         let tree: TreeMap<_, _> = crate::testing::generate_key_fixed_length([3, 3])
             .enumerate()
@@ -298,54 +293,7 @@ mod tests {
         .unwrap();
 
         let output = String::from_utf8(buffer).unwrap();
-        assert_eq!(
-            output,
-            "strict digraph G {
-node [shape=record]
-n0 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
-n1 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
-n2 [label=\"{{<h0> Leaf} | {[0, 0]} | {0}}\"]
-n1:c0 -> n2:h0
-n3 [label=\"{{<h0> Leaf} | {[0, 1]} | {1}}\"]
-n1:c1 -> n3:h0
-n4 [label=\"{{<h0> Leaf} | {[0, 2]} | {2}}\"]
-n1:c2 -> n4:h0
-n5 [label=\"{{<h0> Leaf} | {[0, 3]} | {3}}\"]
-n1:c3 -> n5:h0
-n0:c0 -> n1:h0
-n6 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
-n7 [label=\"{{<h0> Leaf} | {[1, 0]} | {4}}\"]
-n6:c0 -> n7:h0
-n8 [label=\"{{<h0> Leaf} | {[1, 1]} | {5}}\"]
-n6:c1 -> n8:h0
-n9 [label=\"{{<h0> Leaf} | {[1, 2]} | {6}}\"]
-n6:c2 -> n9:h0
-n10 [label=\"{{<h0> Leaf} | {[1, 3]} | {7}}\"]
-n6:c3 -> n10:h0
-n0:c1 -> n6:h0
-n11 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
-n12 [label=\"{{<h0> Leaf} | {[2, 0]} | {8}}\"]
-n11:c0 -> n12:h0
-n13 [label=\"{{<h0> Leaf} | {[2, 1]} | {9}}\"]
-n11:c1 -> n13:h0
-n14 [label=\"{{<h0> Leaf} | {[2, 2]} | {10}}\"]
-n11:c2 -> n14:h0
-n15 [label=\"{{<h0> Leaf} | {[2, 3]} | {11}}\"]
-n11:c3 -> n15:h0
-n0:c2 -> n11:h0
-n16 [label=\"{{<h0> Node4 | 0 | []} | {<c0> 0| <c1> 1| <c2> 2| <c3> 3}}\"]
-n17 [label=\"{{<h0> Leaf} | {[3, 0]} | {12}}\"]
-n16:c0 -> n17:h0
-n18 [label=\"{{<h0> Leaf} | {[3, 1]} | {13}}\"]
-n16:c1 -> n18:h0
-n19 [label=\"{{<h0> Leaf} | {[3, 2]} | {14}}\"]
-n16:c2 -> n19:h0
-n20 [label=\"{{<h0> Leaf} | {[3, 3]} | {15}}\"]
-n16:c3 -> n20:h0
-n0:c3 -> n16:h0
-}
-"
-        );
+        expect_file!["./pretty_printer/simple_tree_output_to_dot.expect"].assert_eq(&output);
     }
 
     #[test]

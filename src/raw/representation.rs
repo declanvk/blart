@@ -27,7 +27,7 @@ mod pointers;
 pub use pointers::*;
 
 /// The representation of inner nodes
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum NodeType {
     /// Node that references between 2 and 4 children

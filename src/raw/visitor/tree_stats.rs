@@ -1,10 +1,9 @@
-use core::ops::Add;
+use core::{fmt, ops::Add};
+use std::{collections::HashMap, vec::Vec};
 
 use crate::{
     allocator::Allocator,
-    raw::{
-        InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, OpaqueNodePtr,
-    },
+    raw::{InnerNode, LeafNode, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
     AsBytes, TreeMap,
 };
@@ -174,20 +173,44 @@ impl Add for LeafStats {
     }
 }
 
+/// TODO
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct FixedOrderNodeStats(HashMap<NodeType, InnerNodeStats>);
+
+impl FixedOrderNodeStats {
+    /// TODO
+    pub fn get(&self, node_type: NodeType) -> Option<&InnerNodeStats> {
+        self.0.get(&node_type)
+    }
+}
+
+impl core::ops::Index<NodeType> for FixedOrderNodeStats {
+    type Output = InnerNodeStats;
+
+    fn index(&self, index: NodeType) -> &Self::Output {
+        self.get(index).unwrap()
+    }
+}
+
+impl fmt::Debug for FixedOrderNodeStats {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut node_types = self.0.keys().collect::<Vec<_>>();
+        node_types.sort();
+        f.debug_map()
+            .entries(
+                node_types
+                    .into_iter()
+                    .map(|node_type| (node_type, self.0.get(node_type).unwrap())),
+            )
+            .finish()
+    }
+}
+
 /// Collection of stats about the number of nodes types present in a tree
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TreeStats {
-    /// Stats for [`InnerNode4`]s
-    pub node4: InnerNodeStats,
-
-    /// Stats for [`InnerNode16`]s
-    pub node16: InnerNodeStats,
-
-    /// Stats for [`InnerNode48`]s
-    pub node48: InnerNodeStats,
-
-    /// Stats for [`InnerNodeDirect`]s
-    pub node256: InnerNodeStats,
+    /// Stats for [`InnerNode`]s
+    pub inner_node: FixedOrderNodeStats,
 
     /// Stats for the whole tree
     pub tree: InnerNodeStats,
@@ -224,27 +247,17 @@ where
 
     fn combine_output(&self, _: Self::Output, _: Self::Output) -> Self::Output {}
 
-    fn visit_node4(&mut self, t: &InnerNode4<K, V, PREFIX_LEN>) -> Self::Output {
+    fn visit_inner_node<N>(&mut self, t: &N) -> Self::Output
+    where
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V> + Visitable<K, V, PREFIX_LEN>,
+    {
         t.super_visit_with(self);
-        self.current.node4.aggregate_data(t);
-        self.current.tree.aggregate_data(t);
-    }
-
-    fn visit_node16(&mut self, t: &InnerNode16<K, V, PREFIX_LEN>) -> Self::Output {
-        t.super_visit_with(self);
-        self.current.node16.aggregate_data(t);
-        self.current.tree.aggregate_data(t);
-    }
-
-    fn visit_node48(&mut self, t: &InnerNode48<K, V, PREFIX_LEN>) -> Self::Output {
-        t.super_visit_with(self);
-        self.current.node48.aggregate_data(t);
-        self.current.tree.aggregate_data(t);
-    }
-
-    fn visit_node256(&mut self, t: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self::Output {
-        t.super_visit_with(self);
-        self.current.node256.aggregate_data(t);
+        self.current
+            .inner_node
+            .0
+            .entry(N::TYPE)
+            .or_default()
+            .aggregate_data(t);
         self.current.tree.aggregate_data(t);
     }
 
@@ -255,14 +268,11 @@ where
     }
 }
 
-impl core::fmt::Display for TreeStats {
+impl fmt::Display for TreeStats {
     #[rustfmt::skip]
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let TreeStats {
-            node4,
-            node16,
-            node48,
-            node256,
+            inner_node,
             tree,
             ..
         } = self;
@@ -276,10 +286,13 @@ impl core::fmt::Display for TreeStats {
         f.write_fmt(format_args!("avg capped prefix length:          {:.5} bytes\n", tree.avg_capped_prefix_len()))?;
         f.write_fmt(format_args!("% used header bytes (0-1):         {:.5}\n", tree.percentage_header_bytes()))?;
         f.write_fmt(format_args!("% used slots (0-1):                {:.5}\n", tree.percentage_slots()))?;
-        f.write_fmt(format_args!("n4 size:                           {:?} bytes\n", node4.node_size()))?;
-        f.write_fmt(format_args!("n16 size:                          {:?} bytes\n", node16.node_size()))?;
-        f.write_fmt(format_args!("n48 size:                          {:?} bytes\n", node48.node_size()))?;
-        f.write_fmt(format_args!("n256 size:                         {:?} bytes\n", node256.node_size()))?;
+        let mut node_types = inner_node.0.keys().collect::<Vec<_>>();
+        node_types.sort();
+        for node_type in node_types {
+            let stats = inner_node.0.get(node_type).unwrap();
+            let label = format!("{node_type:?} size:");
+            f.write_fmt(format_args!("{label:<34} {:?} bytes\n", stats.node_size()))?;
+        }
         f.write_fmt(format_args!("max prefix length:                 {} bytes", tree.max_prefix_len_bytes))?;
         Ok(())
     }
@@ -289,10 +302,14 @@ impl core::fmt::Display for TreeStats {
 mod tests {
     use alloc::vec::Vec;
 
+    #[cfg(not(miri))]
+    use expect_test::expect_file;
+
     use super::*;
     use crate::{testing::generate_key_fixed_length, TreeMap};
 
     #[test]
+    #[cfg(not(miri))]
     fn mostly_empty_tree_stats_fixed_length_tree() {
         let mut tree = TreeMap::new();
         for (k, v) in generate_key_fixed_length([1, 1, 1, 1])
@@ -303,31 +320,12 @@ mod tests {
         }
         let stats = TreeStatsCollector::collect(&tree).unwrap();
 
-        let expected_inner = InnerNodeStats {
-            count: 15,
-            total_slots: 60,
-            sum_slots: 30,
-            total_header_bytes: 240,
-            sum_prefix_len_bytes: 0,
-            sum_capped_prefix_len_bytes: 0,
-            max_prefix_len_bytes: 0,
-            mem_usage: 960,
-        };
-        let expected = TreeStats {
-            node4: expected_inner,
-            tree: expected_inner,
-            leaf: LeafStats {
-                count: 16,
-                sum_key_bytes: 64,
-                mem_usage: 512,
-            },
-            ..Default::default()
-        };
-
-        assert_eq!(stats, expected);
+        expect_file!["./tree_stats/mostly_empty_tree_stats_fixed_length_tree.expect"]
+            .assert_debug_eq(&stats);
     }
 
     #[test]
+    #[cfg(not(miri))]
     fn full_tree_stats_fixed_length_tree() {
         let mut tree = TreeMap::new();
         for (k, v) in generate_key_fixed_length([15, 3])
@@ -338,39 +336,8 @@ mod tests {
         }
         let stats = TreeStatsCollector::collect(&tree).unwrap();
 
-        let node4 = InnerNodeStats {
-            count: 16,
-            total_slots: 64,
-            sum_slots: 64,
-            total_header_bytes: 256,
-            sum_prefix_len_bytes: 0,
-            sum_capped_prefix_len_bytes: 0,
-            max_prefix_len_bytes: 0,
-            mem_usage: 1024,
-        };
-        let node16 = InnerNodeStats {
-            count: 1,
-            total_slots: 16,
-            sum_slots: 16,
-            total_header_bytes: 16,
-            sum_prefix_len_bytes: 0,
-            sum_capped_prefix_len_bytes: 0,
-            max_prefix_len_bytes: 0,
-            mem_usage: 168,
-        };
-        let expected = TreeStats {
-            node4,
-            node16,
-            tree: node4 + node16,
-            leaf: LeafStats {
-                count: 64,
-                sum_key_bytes: 128,
-                mem_usage: 2048,
-            },
-            ..Default::default()
-        };
-
-        assert_eq!(stats, expected);
+        expect_file!["./tree_stats/full_tree_stats_fixed_length_tree.expect"]
+            .assert_debug_eq(&stats);
     }
 
     #[test]
@@ -545,25 +512,28 @@ mod tests {
 
     #[test]
     fn tree_with_node48_and_node256() {
+        use NodeType::*;
+
         let mut tree: TreeMap<Vec<u8>, u8> = TreeMap::new();
-        // This will create a Node4, then grow to Node16, then to Node48
+        // This will create a Node4, then grow to Node16, then to
+        // Node48
         for i in 0u8..48 {
             tree.try_insert(vec![i], i).unwrap();
         }
         let stats = TreeStatsCollector::collect(&tree).unwrap();
-        assert_eq!(stats.node48.count, 1);
-        assert_eq!(stats.node4.count, 0);
-        assert_eq!(stats.node16.count, 0);
-        assert_eq!(stats.node256.count, 0);
+        assert!(stats.inner_node.get(Node4).is_none());
+        assert!(stats.inner_node.get(Node16).is_none());
+        assert_eq!(stats.inner_node[Node48].count, 1);
+        assert!(stats.inner_node.get(Node256).is_none());
 
-        // This will grow the Node48 to a Node256
-        for i in 48u8..255 {
+        // This will grow the Node32 to a Node64 to a Node256
+        for i in 32u8..255 {
             tree.try_insert(vec![i], i).unwrap();
         }
         let stats = TreeStatsCollector::collect(&tree).unwrap();
-        assert_eq!(stats.node256.count, 1);
-        assert_eq!(stats.node48.count, 0);
-        assert_eq!(stats.node16.count, 0);
-        assert_eq!(stats.node4.count, 0);
+        assert!(stats.inner_node.get(Node4).is_none());
+        assert!(stats.inner_node.get(Node16).is_none());
+        assert!(stats.inner_node.get(Node48).is_none());
+        assert_eq!(stats.inner_node[Node256].count, 1);
     }
 }
