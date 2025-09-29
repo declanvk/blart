@@ -9,7 +9,7 @@ set -o xtrace # print a trace of all commands executed by script
 
 FUZZ_DURATION_SECS="${1:-3600}" # 3600 seconds = 1 hour, 14400 seconds = 4 hours
 NUM_FUZZ_WORKERS="${2:-$(nproc)}"
-FUZZ_TEST="fuzz_raw_api"
+FUZZ_TEST="tree_map_api"
 BACKUP_FOLDER="/home/declan/backup-files/repos_github_declanvk_blart"
 
 echo "Starting fuzzing '${FUZZ_TEST}' for [${FUZZ_DURATION_SECS}] seconds using [${NUM_FUZZ_WORKERS}] jobs..."
