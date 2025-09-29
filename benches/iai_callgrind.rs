@@ -2,8 +2,8 @@ use std::{borrow::Borrow, ops::RangeBounds};
 
 use blart::{AsBytes, NoPrefixesBytes, TreeMap};
 use iai_callgrind::{
-    library_benchmark, library_benchmark_group, main, Callgrind, FlamegraphConfig,
-    LibraryBenchmarkConfig, OutputFormat,
+    library_benchmark, library_benchmark_group, main, Callgrind, LibraryBenchmarkConfig,
+    OutputFormat,
 };
 
 use crate::common::{
@@ -335,8 +335,7 @@ library_benchmark_group!(
 fn config() -> LibraryBenchmarkConfig {
     let mut output = OutputFormat::default();
     output.truncate_description(Some(0));
-    let mut tool = Callgrind::default();
-    tool.flamegraph(FlamegraphConfig::default());
+    let tool = Callgrind::default();
     let mut c = LibraryBenchmarkConfig::default();
     c.output_format(output);
     c.tool(tool);
