@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     allocator::{Allocator, Global},
-    map::DEFAULT_PREFIX_LEN,
+    map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
     raw::{maximum_unchecked, minimum_unchecked, RawIterator},
     AsBytes, TreeMap,
 };
@@ -40,48 +40,11 @@ macro_rules! implement_prefix_iter {
                     };
                 };
 
-                // SAFETY: Since we have a (shared or mutable) reference to the original
-                // TreeMap, we know there will be no concurrent mutation
-                let search_result = unsafe { find_terminating_node(tree_state.root, prefix) };
-                let (start, end) = match search_result {
-                    TerminatingNodeSearchResult::Leaf { leaf_ptr, .. } => {
-                        // SAFETY: Its safe to create a shared reference to the leaf since we hold
-                        // either a shared or mutable reference to the owning TreeMap, which prevents
-                        // other concurrent mutable references.
-                        let leaf = unsafe { leaf_ptr.as_ref() };
-
-                        // Only include the item in the iterator if the prefix actually matches
-                        if leaf.key_ref().as_bytes().starts_with(prefix) {
-                            (leaf_ptr, leaf_ptr)
-                        } else {
-                            return Self {
-                                _tree: tree,
-                                inner: RawIterator::empty(),
-                            };
-                        }
-                    },
-                    TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult { node_ptr, reason, .. }) => {
-                        if matches!(reason, InnerNodeSearchResultReason::MissingChild) {
-                            // if the child is missing, then there is nothing to be the prefix of
-                            return Self {
-                                _tree: tree,
-                                inner: RawIterator::empty(),
-                            };
-                        }
-
-                        // SAFETY: Its safe to create a shared reference to the leaf since we hold
-                        // either a shared or mutable reference to the owning TreeMap, which prevents
-                        // other concurrent mutable references.
-                        unsafe { (minimum_unchecked(node_ptr), maximum_unchecked(node_ptr)) }
-                    },
-                };
+                let inner = prefix_iter_constructor(tree_state, prefix);
 
                 Self {
                     _tree: tree,
-                    // SAFETY: `start` is guaranteed to be less than or equal to `end` in the iteration
-                    // order because of the check we do on the bytes of the resolved leaf pointers, just
-                    // above this line
-                    inner: unsafe { RawIterator::new(start, end) },
+                    inner,
                 }
             }
         }
@@ -118,6 +81,53 @@ macro_rules! implement_prefix_iter {
 
         impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for $name<'a, K, V, PREFIX_LEN, A> {}
     };
+}
+
+fn prefix_iter_constructor<K: AsBytes, V, const PREFIX_LEN: usize>(
+    tree_state: &NonEmptyTree<K, V, PREFIX_LEN>,
+    prefix: &[u8],
+) -> RawIterator<K, V, PREFIX_LEN> {
+    // SAFETY: Since we have a (shared or mutable) reference to the original
+    // TreeMap, we know there will be no concurrent mutation
+    let search_result = unsafe { find_terminating_node(tree_state.root, prefix) };
+    let (start, end) = match search_result {
+        TerminatingNodeSearchResult::Leaf { leaf_ptr, .. } => {
+            // SAFETY: Its safe to create a shared reference to the leaf since we hold
+            // either a shared or mutable reference to the owning TreeMap, which prevents
+            // other concurrent mutable references.
+            let leaf = unsafe { leaf_ptr.as_ref() };
+
+            // Only include the item in the iterator if the prefix actually matches
+            if leaf.key_ref().as_bytes().starts_with(prefix) {
+                (leaf_ptr, leaf_ptr)
+            } else {
+                return RawIterator::empty();
+            }
+        },
+        TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+            node_ptr, reason, ..
+        }) => {
+            match reason {
+                InnerNodeSearchResultReason::PrefixMismatch
+                | InnerNodeSearchResultReason::MissingChild => {
+                    // if the child is missing OR there is a prefix mismatch, then there is nothing
+                    // to be the prefix of
+                    return RawIterator::empty();
+                },
+                InnerNodeSearchResultReason::InsufficientBytes => {
+                    // SAFETY: Its safe to create a shared reference to the leaf since we hold
+                    // either a shared or mutable reference to the owning TreeMap, which prevents
+                    // other concurrent mutable references.
+                    unsafe { (minimum_unchecked(node_ptr), maximum_unchecked(node_ptr)) }
+                },
+            }
+        },
+    };
+
+    // SAFETY: `start` is guaranteed to be less than or equal to `end` in the
+    // iteration order because of the check we do on the bytes of the resolved
+    // leaf pointers, just above this line
+    unsafe { RawIterator::new(start, end) }
 }
 
 implement_prefix_iter!(
@@ -438,8 +448,7 @@ mod tests {
     /// the prefix. In blart 0.3.0 and 0.4.0 it incorrectly returns both
     /// keys.
     #[test]
-    #[should_panic(expected = "`left == right` failed")]
-    fn test_prefix_iterator_no_false_matches() {
+    fn prefix_iterator_no_false_matches() {
         // Construct a map with the following keys
         // [0, 0]
         // [0, 1]

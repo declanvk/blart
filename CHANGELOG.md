@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
  - `TreeMap::{get_prefix, get_prefix_key_value, get_prefix_mut, force_insert}` were renamed to `TreeMap::{prefix_get, prefix_get_key_value, prefix_get_mut, prefix_insert}`. This makes it clear that they're all centered around the theme of manipulating or querying key prefixes.
  - Update MSRV to 1.85
 
+### Fixed
+
+ - `TreeMap::prefix` iterator was broken (see [issue 66]) because a refactor stopped distinguishing between different cases of inner nodes matching or not matching the prefix.
+
+[issue 66]: https://github.com/declanvk/blart/issues/66
+
 ## [0.4.0] - 2025-07-10
 
 ### Added

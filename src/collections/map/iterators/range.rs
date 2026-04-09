@@ -14,7 +14,7 @@ use crate::{
     raw::{
         match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
         AttemptOptimisticPrefixMatch, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
-        PrefixMatchBehavior, RawIterator,
+        PessimisticMismatch, PrefixMatchBehavior, RawIterator,
     },
     AsBytes, TreeMap,
 };
@@ -55,9 +55,11 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNodeSearchResult<K, V, P
 #[derive(Debug)]
 pub(crate) enum InnerNodeSearchResultReason {
     /// This variant means the search terminated in a mismatched prefix of an
-    /// inner node OR the prefix matched, but there were insufficient key bytes
-    /// to lookup a child of the inner node.
-    PrefixMismatchOrInsufficientBytes,
+    /// inner node.
+    PrefixMismatch,
+    /// This variant means the search terminated because the key was too short,
+    /// not because of a mismatch with prefix or child key byte.
+    InsufficientBytes,
     /// This variant means the search terminated in an inner node, when there
     /// was no corresponding child for a key byte.
     MissingChild,
@@ -136,17 +138,34 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
         let match_prefix =
             prefix_match_behavior.match_prefix(inner_node, &key_bytes[*current_depth..]);
         match match_prefix {
-            Err(_) => {
+            Err(PessimisticMismatch { matched_bytes, .. }) => {
                 let (full_prefix, _) = inner_node.read_full_prefix(*current_depth);
                 let upper_bound = (*current_depth + full_prefix.len()).min(key_bytes.len());
                 let key_segment = &key_bytes[(*current_depth)..upper_bound];
 
                 let node_prefix_comparison_to_search_key_segment = full_prefix.cmp(key_segment);
 
+                debug_assert_ne!(
+                    node_prefix_comparison_to_search_key_segment,
+                    Ordering::Equal,
+                    "if there was a mismatch, the prefix must not be equal"
+                );
+
+                // We report a prefix mismatch if the prefix is longer that the remaining
+                // portion of the key bytes. However, in the context of the
+                // `InnerNodeSearchResultReason` running out of bytes is really a different
+                // thing than a mismatch. We should only report mismatch as the reason if there
+                // was an actual byte difference.
+                let reason = if matched_bytes == key_bytes[*current_depth..].len() {
+                    InnerNodeSearchResultReason::InsufficientBytes
+                } else {
+                    InnerNodeSearchResultReason::PrefixMismatch
+                };
+
                 ControlFlow::Break(InnerNodeSearchResult {
                     node_ptr: inner_ptr.to_opaque(),
                     current_depth: *current_depth,
-                    reason: InnerNodeSearchResultReason::PrefixMismatchOrInsufficientBytes,
+                    reason,
                     node_prefix_comparison_to_search_key_segment,
                 })
             },
@@ -163,7 +182,7 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
                     return ControlFlow::Break(InnerNodeSearchResult {
                         node_ptr: inner_ptr.to_opaque(),
                         current_depth: *current_depth,
-                        reason: InnerNodeSearchResultReason::PrefixMismatchOrInsufficientBytes,
+                        reason: InnerNodeSearchResultReason::InsufficientBytes,
                         node_prefix_comparison_to_search_key_segment: Ordering::Equal,
                     });
                 };
@@ -308,7 +327,8 @@ pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN
                     reason,
                     node_prefix_comparison_to_search_key_segment,
                 }) => match reason {
-                    InnerNodeSearchResultReason::PrefixMismatchOrInsufficientBytes => {
+                    InnerNodeSearchResultReason::PrefixMismatch
+                    | InnerNodeSearchResultReason::InsufficientBytes => {
                         match (is_start, node_prefix_comparison_to_search_key_segment) {
                             (true, Ordering::Equal | Ordering::Greater) => unsafe {
                                 // SAFETY: Covered by function safety doc
