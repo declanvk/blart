@@ -316,4 +316,141 @@ mod tests {
             vec![(c"abcde", 0), (c"abcdx", 100), (c"abcx", 100), (c"bx", 0)]
         )
     }
+
+    #[test]
+    fn prefix_mut_rev() {
+        let mut t = TreeMap::new();
+        t.insert(c"abcde", 1);
+        t.insert(c"abcdexxx", 2);
+        t.insert(c"abcdexxy", 3);
+        t.insert(c"bx", 4);
+
+        let result: Vec<_> = t.prefix_mut(c"abcde".to_bytes()).rev().collect();
+        assert_eq!(
+            result,
+            vec![
+                (&c"abcdexxy", &mut 3),
+                (&c"abcdexxx", &mut 2),
+                (&c"abcde", &mut 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn prefix_interleaved_forward_and_backward() {
+        let mut t = TreeMap::new();
+        t.insert(c"abcde", 0);
+        t.insert(c"abcdexxx", 1);
+        t.insert(c"abcdexxy", 2);
+        t.insert(c"abcdexyz", 3);
+
+        let mut it = t.prefix(c"abcde".to_bytes());
+        assert_eq!(it.next(), Some((&c"abcde", &0)));
+        assert_eq!(it.next_back(), Some((&c"abcdexyz", &3)));
+        assert_eq!(it.next(), Some((&c"abcdexxx", &1)));
+        assert_eq!(it.next_back(), Some((&c"abcdexxy", &2)));
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next_back(), None);
+    }
+
+    #[test]
+    fn prefix_fused_after_exhaustion() {
+        let mut t = TreeMap::new();
+        t.insert(c"abc", 0);
+
+        let mut it = t.prefix(c"abc".to_bytes());
+        assert_eq!(it.next(), Some((&c"abc", &0)));
+        assert_eq!(it.next(), None);
+        // fused: must keep returning None
+        assert_eq!(it.next(), None);
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn prefix_longer_than_all_keys_returns_empty() {
+        let mut t = TreeMap::new();
+        t.insert(c"ab", 0);
+        t.insert(c"abc", 1);
+
+        // Searching for a prefix longer than any existing key
+        assert_eq!(t.prefix(b"abcdefgh").count(), 0);
+    }
+
+    #[test]
+    fn prefix_key_is_also_a_prefix_of_other_keys() {
+        // "abcde" is both a key and a prefix of "abcdexxx"
+        let mut t = TreeMap::new();
+        t.insert(c"abcde", 0);
+        t.insert(c"abcdexxx", 1);
+        t.insert(c"abcx", 2);
+
+        let p: Vec<_> = t.prefix(c"abcde".to_bytes()).collect();
+        assert_eq!(p, vec![(&c"abcde", &0), (&c"abcdexxx", &1)]);
+    }
+
+    #[test]
+    fn prefix_single_matching_key() {
+        let mut t = TreeMap::new();
+        t.insert([1u8, 2u8, 3u8], 42);
+
+        assert_eq!(t.prefix(&[1u8, 2u8, 3u8]).count(), 1);
+        assert_eq!(t.prefix(&[1u8, 2u8]).count(), 1);
+        assert_eq!(t.prefix(&[1u8]).count(), 1);
+        assert_eq!(t.prefix(&[2u8]).count(), 0);
+    }
+
+    #[test]
+    fn prefix_multiple_disjoint_subtrees() {
+        // Keys share no common prefix; each subtree should be isolated
+        let mut t = TreeMap::new();
+        t.insert(c"aaa", 0);
+        t.insert(c"aab", 1);
+        t.insert(c"baa", 2);
+        t.insert(c"bab", 3);
+
+        let pa: Vec<_> = t.prefix(c"a".to_bytes()).collect();
+        assert_eq!(pa, vec![(&c"aaa", &0), (&c"aab", &1)]);
+
+        let pb: Vec<_> = t.prefix(c"b".to_bytes()).collect();
+        assert_eq!(pb, vec![(&c"baa", &2), (&c"bab", &3)]);
+    }
+
+    #[test]
+    fn prefix_full_key_bytes_no_nul_terminator() {
+        // Use raw byte arrays so there is no implicit NUL; the prefix is the
+        // full key, ensuring the leaf-check path in the iterator is exercised.
+        let mut t = TreeMap::<[u8; 3], i32>::new();
+        t.insert([0u8, 0u8, 1u8], 1);
+        t.insert([0u8, 0u8, 2u8], 2);
+        t.insert([0u8, 1u8, 0u8], 3);
+
+        let p: Vec<_> = t.prefix(&[0u8, 0u8]).collect();
+        assert_eq!(p, vec![(&[0u8, 0u8, 1u8], &1), (&[0u8, 0u8, 2u8], &2)]);
+
+        // Prefix that matches exactly one leaf
+        let p: Vec<_> = t.prefix(&[0u8, 0u8, 1u8]).collect();
+        assert_eq!(p, vec![(&[0u8, 0u8, 1u8], &1)]);
+    }
+
+    /// Regression test for https://github.com/declanvk/blart/issues/66
+    ///
+    /// The prefix iterator should return an empty iterator when no keys match
+    /// the prefix. In blart 0.3.0 and 0.4.0 it incorrectly returns both
+    /// keys.
+    #[test]
+    #[should_panic(expected = "`left == right` failed")]
+    fn test_prefix_iterator_no_false_matches() {
+        // Construct a map with the following keys
+        // [0, 0]
+        // [0, 1]
+        let mut map = TreeMap::<[u8; 2], ()>::new();
+        map.insert(0u16.to_be_bytes(), ());
+        map.insert(1u16.to_be_bytes(), ());
+
+        // Search for entries with prefix [1, 0]
+        let prefix: &[u8] = &256u16.to_be_bytes();
+
+        // There should be no results here
+        assert_eq!(0, map.prefix(prefix).count());
+    }
 }
