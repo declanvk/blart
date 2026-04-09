@@ -315,7 +315,7 @@ pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
     }
 
     let mut sorted_expansions = expansions.to_vec();
-    sorted_expansions.sort_by(|a, b| a.base_index.cmp(&b.base_index));
+    sorted_expansions.sort_by_key(|a| a.base_index);
 
     let full_key_len = expansions
         .iter()
