@@ -147,7 +147,7 @@ where
     }
 }
 
-impl<'a, K, V, F, const PREFIX_LEN: usize, A> Iterator for ExtractIf<'a, K, V, F, PREFIX_LEN, A>
+impl<K, V, F, const PREFIX_LEN: usize, A> Iterator for ExtractIf<'_, K, V, F, PREFIX_LEN, A>
 where
     K: AsBytes,
     F: FnMut(&K, &mut V) -> bool,
@@ -171,8 +171,8 @@ where
     }
 }
 
-impl<'a, K, V, F, const PREFIX_LEN: usize, A> DoubleEndedIterator
-    for ExtractIf<'a, K, V, F, PREFIX_LEN, A>
+impl<K, V, F, const PREFIX_LEN: usize, A> DoubleEndedIterator
+    for ExtractIf<'_, K, V, F, PREFIX_LEN, A>
 where
     K: AsBytes,
     F: FnMut(&K, &mut V) -> bool,

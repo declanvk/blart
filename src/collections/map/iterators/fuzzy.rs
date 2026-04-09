@@ -114,8 +114,8 @@ pub(crate) fn edit_dist(
         unsafe {
             let b = *key.get_unchecked(i - 1) == c;
 
-            let k1 = b as usize;
-            let k2 = !b as usize;
+            let k1: usize = b.into();
+            let k2: usize = (!b).into();
 
             let substitution = *old.get_unchecked(i - 1);
             let insertion = *old.get_unchecked(i);

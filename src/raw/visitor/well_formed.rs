@@ -54,7 +54,7 @@ pub enum MalformedTreeError<K, V, const PREFIX_LEN: usize> {
     WrongChildrenCount {
         /// The key prefix identifying the inner node
         key_prefix: KeyPrefix,
-        /// The type of the inner node (InnerNode4, InnerNode16, etc)
+        /// The type of the inner node (`InnerNode4`, `InnerNode16`, etc)
         ///
         /// This field is guaranteed not to be [`NodeType::Leaf`]
         inner_node_type: NodeType,
@@ -324,7 +324,7 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Error for MalformedTreeError<K, V, 
 /// In this context, well-formed means that in the tree:
 ///  1. there are no loops between nodes
 ///  2. every inner node has a number of children that is in range for the inner
-///     node type. For example, InnerNode16 has between 5 and 16 children.
+///     node type. For example, `InnerNode16` has between 5 and 16 children.
 ///  3. the elements of the key (as part of inner node prefixes and child
 ///     pointers) combine to match the leaf node key prefix
 ///  4. the `previous` and `next` pointers that form a doubly-linked list of
@@ -559,7 +559,7 @@ where
     fn default_output(&self) -> Self::Output {
         // Chose zero so that any places that call `default_output` don't influence the
         // overall count
-        Ok(Default::default())
+        Ok(WellFormedTreeStats::default())
     }
 
     fn combine_output(&self, o1: Self::Output, o2: Self::Output) -> Self::Output {

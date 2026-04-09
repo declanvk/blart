@@ -180,7 +180,7 @@ impl<P, const MIN_BITS: u32> From<&mut P> for TaggedPointer<P, MIN_BITS> {
         //
         // Panics: Further, the pointer produced is guaranteed to be aligned for the
         // underlying type, meaning that we will not have any panics.
-        unsafe { Self::new_unchecked(reference as *mut _) }
+        unsafe { Self::new_unchecked(core::ptr::from_mut(reference)) }
     }
 }
 

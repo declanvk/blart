@@ -57,7 +57,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> Drop for IntoIter<K, V, PREFIX
             deallocate_leaves(
                 mem::replace(&mut self.inner, RawIterator::empty()),
                 &self.alloc,
-            )
+            );
         }
 
         // Just to be safe, clear the iterator size
@@ -76,7 +76,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> IntoIter<K, V, PREFIX_LEN, A> 
         //
         // Also this is safe from a double-free since we're using `ManuallyDrop` to
         // inhibit the first copy of `A` (in the `tree` value) from doing anything.
-        let alloc = unsafe { ptr::read(&tree.alloc) };
+        let alloc = unsafe { ptr::read(&raw const tree.alloc) };
 
         if let Some(state) = &tree.state {
             // SAFETY: By construction (and maintained on insert/delete), the `min_leaf` is
