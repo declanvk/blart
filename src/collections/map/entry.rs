@@ -320,7 +320,7 @@ where
     /// the key that was moved during the .entry(key) method call.
     ///
     /// The reference to the moved key is provided so that cloning or copying
-    /// the key is unnecessary, unlike with .or_insert_with(|| ... ).
+    /// the key is unnecessary, unlike with `.or_insert_with(|| ... )`.
     pub fn or_insert_with_key<F>(self, f: F) -> &'a mut V
     where
         F: FnOnce(&K) -> V,

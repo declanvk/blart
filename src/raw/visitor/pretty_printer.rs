@@ -1,11 +1,12 @@
 use std::{
-    fmt::{self},
+    fmt,
     io::{self, Write},
+    ptr,
 };
 
 use crate::{
     allocator::Allocator,
-    raw::{InnerNode, NodeType, OpaqueNodePtr},
+    raw::{InnerNode, NodePtr, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
     AsBytes, TreeMap,
 };
@@ -119,7 +120,7 @@ impl<O: Write, K, V> DotPrinter<O, K, V> {
             write!(
                 self.output,
                 "{{<h0> {:p}}}  | {{{:?} | {:?} | {:?}}} | {{",
-                inner_node as *const _,
+                ptr::from_ref(inner_node),
                 N::TYPE,
                 header.prefix_len(),
                 header.read_prefix()
@@ -200,13 +201,12 @@ where
             writeln!(
                 self.output,
                 "{{<h0> {:p}}} | {{{:?}}} | {{{}}} | {{{}}} | {{{:p} {:p}}} }}\"]",
-                t as *const _,
+                ptr::from_ref(t),
                 NodeType::Leaf,
                 key,
                 value,
-                t.previous
-                    .map_or(std::ptr::null_mut(), |prev| prev.to_ptr()),
-                t.next.map_or(std::ptr::null_mut(), |next| next.to_ptr()),
+                t.previous.map_or(ptr::null_mut(), NodePtr::to_ptr),
+                t.next.map_or(ptr::null_mut(), NodePtr::to_ptr),
             )?;
         } else {
             writeln!(
@@ -239,6 +239,11 @@ impl<T> fmt::Display for OverrideDisplay<'_, T> {
 /// This function can be used to override the formatting of key or value types
 /// when printing with [`DotPrinter`].
 ///
+/// # Errors
+///
+/// This function returns an error if the provided [`fmt::Formatter`] returns
+/// `Err`.
+///
 /// [`Debug::fmt`]: std::fmt::Debug::fmt
 pub fn debug_as_display_fmt(value: &impl fmt::Debug, f: &mut fmt::Formatter) -> fmt::Result {
     value.fmt(f)
@@ -248,6 +253,11 @@ pub fn debug_as_display_fmt(value: &impl fmt::Debug, f: &mut fmt::Formatter) -> 
 ///
 /// This function can be used to override the formatting of key or value types
 /// when printing with [`DotPrinter`].
+///
+/// # Errors
+///
+/// This function returns an error if the provided [`fmt::Formatter`] returns
+/// `Err`.
 pub fn null_display_fmt(_value: &impl fmt::Debug, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "[null]")
 }
@@ -256,6 +266,11 @@ pub fn null_display_fmt(_value: &impl fmt::Debug, f: &mut fmt::Formatter) -> fmt
 ///
 /// This function can be used to override the formatting of key or value types
 /// when printing with [`DotPrinter`].
+///
+/// # Errors
+///
+/// This function returns an error if the provided [`fmt::Formatter`] returns
+/// `Err`.
 pub fn bytes_display_fmt(value: &impl AsBytes, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "{:?}", value.as_bytes())
 }

@@ -273,6 +273,10 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     /// the key. The caller who uses this function must perform a final check
     /// against the leaf key bytes to make sure that the search key matches the
     /// found key.
+    ///
+    /// # Errors
+    /// This function returns an error if there is a mismatch between the
+    /// partial stored prefix and the given truncated key.
     #[inline]
     fn optimistic_match_prefix(
         &self,
@@ -307,6 +311,10 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     /// reaches a leaf node using these results, then the caller must perform a
     /// final check against the leaf key bytes to make sure that the search
     /// key matches the found key.
+    ///
+    /// # Errors
+    /// This function returns an error if there is a mismatch between the given
+    /// truncated key and the stored (implicit or full) prefix.
     #[inline]
     fn attempt_pessimistic_match_prefix(
         &self,
@@ -351,6 +359,10 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     ///
     /// # Safety
     /// `current_depth` must be less than or equal to `key.len()`
+    ///
+    /// # Errors
+    /// This function returns an error if there is a mismatch between the
+    /// provided key and the full prefix.
     #[inline]
     unsafe fn match_full_prefix(
         &self,

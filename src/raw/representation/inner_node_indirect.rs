@@ -35,7 +35,7 @@ pub struct InnerNodeIndirect<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     /// the `child_pointers` array.
     ///
     /// All the `child_indices` values are guaranteed to be
-    /// `PartialNodeIndex<48>::EMPTY` when the node is constructed.
+    /// `None` when the node is constructed.
     pub child_indices: [Option<NonMaxIndex>; 256],
 }
 

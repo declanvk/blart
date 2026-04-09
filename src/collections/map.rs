@@ -351,7 +351,7 @@ assert!(matches!(map.allocator(), &System));
         //
         // Also this is safe from a double-free since we're using `ManuallyDrop` to
         // inhibit the first copy of `A` (in the `tree` value) from doing anything.
-        let alloc = unsafe { ptr::read(&tree.alloc) };
+        let alloc = unsafe { ptr::read(&raw const tree.alloc) };
         let root = tree.state.as_ref().map(|state| state.root);
 
         (root, alloc)
@@ -1875,13 +1875,14 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
     /// Tries to get the given key’s corresponding prefix entry in the map for
     /// in-place manipulation.
     ///
-    /// This entry represents an unfinished [prefix_insert](Self::prefix_insert)
-    /// operation. Compared to [Entry], it has one extra occupied state
-    /// called [InnerOccupiedEntry]. This entry represents the
+    /// This entry represents an unfinished
+    /// [`prefix_insert`](Self::prefix_insert) operation. Compared to
+    /// [`Entry`], it has one extra occupied state
+    /// called [`InnerOccupiedEntry`]. This entry represents the
     /// `prefix_insert` case were the exact key was not found, but a prefix
     /// of the given key or vice versa was found.
     ///
-    /// See also: [Self::try_entry].
+    /// See also: [`Self::try_entry`].
     ///
     /// # Examples
     ///

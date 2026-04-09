@@ -112,7 +112,7 @@ where
     /// Erase the subtree and insert the value with the previously given key in
     /// its place.
     ///
-    /// Returns an [OccupiedEntry].
+    /// Returns an [`OccupiedEntry`].
     pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A> {
         // no fixup required since an overwrite never changes the parent node.
         let path = self.overwrite_point.path;
@@ -189,7 +189,7 @@ where
 
     /// Sets the value of the entry.
     ///
-    /// Returns an [OccupiedEntry].
+    /// Returns an [`OccupiedEntry`].
     pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, PREFIX_LEN, A> {
         match self {
             Self::Leaf(mut leaf) => {

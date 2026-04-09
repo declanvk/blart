@@ -359,7 +359,7 @@ where
     TreeMap::into_raw(tree).unwrap()
 }
 
-// disabled for miri because the runtime is too large, and this does not test
+// disabled for miri because the run-time is too large, and this does not test
 // any safety-critical stuff
 #[cfg(all(test, not(miri)))]
 mod tests {

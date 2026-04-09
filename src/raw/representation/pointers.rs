@@ -26,7 +26,7 @@ pub(super) struct OpaqueValue;
 
 /// An opaque pointer to a [`Node`].
 ///
-/// Could be any one of the NodeTypes, need to perform check on the runtime
+/// Could be any one of the [`NodeType`]s, need to perform check on the runtime
 /// type and then cast to a [`NodePtr`].
 #[repr(transparent)]
 pub struct OpaqueNodePtr<K, V, const PREFIX_LEN: usize>(
@@ -348,6 +348,10 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
 
     /// Allocate the given [`Node`] on the [`alloc::alloc::Global`] heap and
     /// return a [`NodePtr`] that wrap the raw pointer.
+    ///
+    /// # Panics
+    /// This function will panic if the underlying allocate function returns an
+    /// error.
     pub fn allocate_node_ptr(node: N, alloc: &impl Allocator) -> Self {
         let layout = Layout::new::<mem::MaybeUninit<N>>();
         let mut ptr: NonNull<mem::MaybeUninit<N>> =
@@ -435,7 +439,7 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get mutated
-    ///    (except inside UnsafeCell).
+    ///    (except inside `UnsafeCell`).
     pub unsafe fn as_ref<'a>(self) -> &'a N {
         // SAFETY: The pointer is properly aligned and points to a initialized instance
         // of N that is dereferenceable. The lifetime safety requirements are passed up
@@ -473,7 +477,7 @@ impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LE
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get mutated
-    ///    (except inside UnsafeCell).
+    ///    (except inside `UnsafeCell`).
     pub unsafe fn as_key_value_ref<'a>(self) -> (&'a K, &'a V) {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_ref() };
@@ -506,7 +510,7 @@ impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LE
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get mutated
-    ///    (except inside UnsafeCell).
+    ///    (except inside `UnsafeCell`).
     pub unsafe fn as_key_ref<'a>(self) -> &'a K
     where
         V: 'a,
@@ -525,7 +529,7 @@ impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LE
     ///    'a is arbitrarily chosen and does not necessarily reflect the actual
     ///    lifetime of the data. In particular, for the duration of this
     ///    lifetime, the memory the pointer points to must not get mutated
-    ///    (except inside UnsafeCell).
+    ///    (except inside `UnsafeCell`).
     pub unsafe fn as_value_ref<'a>(self) -> &'a V
     where
         K: 'a,
@@ -569,7 +573,7 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> From<&mut N> for NodePtr<PREF
     fn from(node_ref: &mut N) -> Self {
         // SAFETY: Pointer is non-null, aligned, and pointing to a valid instance of N
         // because it was constructed from a mutable reference.
-        unsafe { NodePtr::new(node_ref as *mut _) }
+        unsafe { NodePtr::new(ptr::from_mut(node_ref)) }
     }
 }
 

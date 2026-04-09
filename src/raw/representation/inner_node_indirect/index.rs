@@ -98,7 +98,7 @@ impl PartialOrd for NonMaxIndex {
 }
 
 /// The error type returned when attempting to construct an index outside
-/// the accepted range of a PartialNodeIndex.
+/// the accepted range of a [`NonMaxIndex`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TryFromByteError(());
 
