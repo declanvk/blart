@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 keywords = ["tree", "map", "collection", "radix-tree"]
 categories = ["data-structures"]
 # MSRV
-rust-version = "1.82"
+rust-version = "1.85"
 
 exclude = [
     "fuzz/",

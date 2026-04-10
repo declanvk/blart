@@ -228,7 +228,7 @@ struct OverrideDisplay<'a, T> {
     fmt_fn: fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result,
 }
 
-impl<'a, T> fmt::Display for OverrideDisplay<'a, T> {
+impl<T> fmt::Display for OverrideDisplay<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (self.fmt_fn)(self.value, f)
     }
