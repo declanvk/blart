@@ -195,6 +195,8 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> ExactSizeIterator
 {
 }
 
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for IntoKeys<K, V, PREFIX_LEN, A> {}
+
 /// An owning iterator over the values of a [`TreeMap`].
 ///
 /// This `struct` is created by the [`into_values`] method on [`TreeMap`].
@@ -232,6 +234,11 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> DoubleEndedIterator
 }
 
 impl<K, V, const PREFIX_LEN: usize, A: Allocator> ExactSizeIterator
+    for IntoValues<K, V, PREFIX_LEN, A>
+{
+}
+
+impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator
     for IntoValues<K, V, PREFIX_LEN, A>
 {
 }

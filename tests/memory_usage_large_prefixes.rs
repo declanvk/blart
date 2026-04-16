@@ -20,6 +20,7 @@ fn test_memory_usage() {
 
     let keys: Vec<_> =
         testing::generate_key_with_prefix(KEY_LEVEL_WIDTH, PREFIX_EXPANSIONS).collect();
+    let keys_copy = keys.clone();
     let prof = get_profiler(file!());
 
     test_heap(&prof, |stats| {
@@ -28,18 +29,15 @@ fn test_memory_usage() {
     });
 
     {
-        let keys = keys.into_iter();
         let mut tree = TreeMap::new();
 
-        for (idx, key) in keys.enumerate() {
+        for (idx, key) in keys.into_iter().enumerate() {
             tree.try_insert(key, idx).unwrap();
         }
 
-        for (value, key) in
-            testing::generate_key_with_prefix(KEY_LEVEL_WIDTH, PREFIX_EXPANSIONS).enumerate()
-        {
+        for (value, key) in keys_copy.into_iter().enumerate() {
             let result = tree.get(&key).unwrap();
-            assert_eq!(result, &value);
+            assert_eq!(result, &value, "{tree:?} {key:?}");
         }
     }
 
