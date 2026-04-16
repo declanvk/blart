@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - ReleaseDate
 
+### Added
+ - `TreeSet` added, a set data structure that uses `TreeMap` under the hoods and has an interface which mirrors that of `std::collections::BTreeSet`. This include set operation iterators like `union`, `intersection`, `difference`, and `symmetric_difference`. 
+
+### Changed
+ - Implement `FusedIterator` for `TreeMap` iterators `IntoKeys` and `IntoValues`.
+
 ## [0.5.0] - 2026-04-16
 
 ### Added
