@@ -16,26 +16,29 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        # 1.85 is the MSRV for the crate
-        rust: ['nightly', 'beta', 'stable', '1.85']
+        rust: ['nightly', 'beta', 'stable', 'msrv']
 
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
         uses: actions/checkout@v3
 
-      - name: Install ${{matrix.rust}} toolchain
+      - name: Resolve version
+        id: resolve_version
+        run: echo "version=$(./scripts/resolve-toolchain-version.sh ${{matrix.rust}})" >> "${GITHUB_OUTPUT}"
+
+      - name: Install ${{ steps.resolve_version.outputs.version }} toolchain
         if: matrix.rust == 'nightly'
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{matrix.rust}}
+          toolchain: ${{ steps.resolve_version.outputs.version }}
           components: miri rustfmt clippy
       
-      - name: Install ${{matrix.rust}} toolchain
+      - name: Install ${{ steps.resolve_version.outputs.version }} toolchain
         if: matrix.rust != 'nightly'
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{matrix.rust}}
+          toolchain: ${{ steps.resolve_version.outputs.version }}
           components: rustfmt clippy
       
       - uses: taiki-e/install-action@cargo-binstall
@@ -51,4 +54,4 @@ jobs:
 
 
       - name: Run full test script
-        run: ./scripts/full-test.sh "${{matrix.rust}}"
+        run: ./scripts/full-test.sh "${{ steps.resolve_version.outputs.version }}"
