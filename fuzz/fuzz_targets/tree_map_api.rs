@@ -1,17 +1,19 @@
 #![no_main]
 #![feature(btree_entry_insert)]
 
+use std::{
+    collections::{hash_map::RandomState, BTreeMap},
+    hash::BuildHasher,
+    mem,
+    ops::Bound,
+};
+
 use blart::{
     map::{PrefixEntry, PrefixOccupied},
     visitor::WellFormedChecker,
     TreeMap,
 };
 use libfuzzer_sys::arbitrary::{self, Arbitrary};
-use std::{
-    collections::{hash_map::RandomState, BTreeMap},
-    hash::BuildHasher,
-    mem,
-};
 
 #[derive(Arbitrary, Debug)]
 enum EntryAction {
@@ -46,6 +48,44 @@ enum RetainKind {
 }
 
 #[derive(Arbitrary, Debug)]
+enum RangeBound {
+    Unbounded,
+    Included(Box<[u8]>),
+    Excluded(Box<[u8]>),
+}
+
+impl RangeBound {
+    fn as_bound(&self) -> Bound<&[u8]> {
+        match self {
+            RangeBound::Unbounded => Bound::Unbounded,
+            RangeBound::Included(k) => Bound::Included(k.as_ref()),
+            RangeBound::Excluded(k) => Bound::Excluded(k.as_ref()),
+        }
+    }
+
+    fn key_bytes(&self) -> Option<&[u8]> {
+        match self {
+            RangeBound::Unbounded => None,
+            RangeBound::Included(k) | RangeBound::Excluded(k) => Some(k.as_ref()),
+        }
+    }
+}
+
+fn range_is_valid(start: &RangeBound, end: &RangeBound) -> bool {
+    match (start.key_bytes(), end.key_bytes()) {
+        (None, _) | (_, None) => true,
+        (Some(s), Some(e)) => {
+            s < e
+                || (s == e
+                    && matches!(
+                        (start, end),
+                        (RangeBound::Included(_), RangeBound::Included(_))
+                    ))
+        },
+    }
+}
+
+#[derive(Arbitrary, Debug)]
 enum Action {
     Clear,
     ContainsKey(Box<[u8]>),
@@ -69,6 +109,7 @@ enum Action {
     Fuzzy(Box<[u8]>),
     Prefix(Box<[u8]>),
     IntoIter { take_front: usize, take_back: usize },
+    Range(RangeBound, RangeBound),
     Retain(RetainKind),
     SplitOff(Box<[u8]>),
 }
@@ -258,12 +299,30 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 });
             },
             Action::Fuzzy(key) => {
+                // TODO: Provide an oracle implementation for fuzzy search (hard)
                 let v: Vec<_> = tree.fuzzy(&key, 3).collect();
                 std::hint::black_box(v);
             },
             Action::Prefix(key) => {
+                // TODO: Provide an oracle implementation for prefix search (easy)
                 let v: Vec<_> = tree.prefix(&key).collect();
                 std::hint::black_box(v);
+            },
+            Action::Range(start, end) => {
+                if range_is_valid(&start, &end) {
+                    let bounds = (start.as_bound(), end.as_bound());
+                    let tree_result: Vec<_> = tree.range::<[u8], _>(bounds).collect();
+                    let oracle_result: Vec<_> = oracle.range::<[u8], _>(bounds).collect();
+                    assert_eq!(
+                        tree_result.len(),
+                        oracle_result.len(),
+                        "range result lengths differ for bounds {bounds:?}"
+                    );
+                    for ((tk, tv), (ok, ov)) in tree_result.iter().zip(oracle_result.iter()) {
+                        assert_eq!(tk.as_ref() as &[u8], ok.as_ref() as &[u8]);
+                        assert_eq!(tv, ov);
+                    }
+                }
             },
             Action::IntoIter {
                 take_front,
