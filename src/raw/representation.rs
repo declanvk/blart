@@ -1,6 +1,7 @@
 //! Trie node representation
 
 use core::{
+    cmp::Ordering,
     fmt,
     iter::FusedIterator,
     ops::{Bound, RangeBounds, RangeInclusive},
@@ -138,6 +139,8 @@ pub struct ExplicitMismatch<K, V, const PREFIX_LEN: usize> {
     pub prefix_byte: u8,
     /// Pointer to the leaf if the prefix was reconstructed
     pub leaf_ptr: OptionalLeafPtr<K, V, PREFIX_LEN>,
+    /// Comparison between the full prefix and the relevant key segment
+    pub node_prefix_comparison_to_search_key_segment: Ordering,
 }
 
 impl<K, V, const PREFIX_LEN: usize> Clone for ExplicitMismatch<K, V, PREFIX_LEN> {
@@ -381,18 +384,28 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
         }
 
         let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
-        let key = &key[current_depth..];
 
         let matched_bytes = prefix
             .iter()
-            .zip(key)
+            .zip(&key[current_depth..])
             .take_while(|(a, b)| **a == **b)
             .count();
         if matched_bytes < prefix.len() {
+            let upper_bound = (current_depth + prefix.len()).min(key.len());
+            let key_segment = &key[current_depth..upper_bound];
+            let node_prefix_comparison_to_search_key_segment = prefix.cmp(key_segment);
+
+            debug_assert_ne!(
+                node_prefix_comparison_to_search_key_segment,
+                Ordering::Equal,
+                "if there was a mismatch, the prefix must not be equal"
+            );
+
             Err(ExplicitMismatch {
                 matched_bytes,
                 prefix_byte: prefix[matched_bytes],
                 leaf_ptr,
+                node_prefix_comparison_to_search_key_segment,
             })
         } else {
             Ok(PrefixMatch { matched_bytes })

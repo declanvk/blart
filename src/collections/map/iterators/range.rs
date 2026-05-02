@@ -12,9 +12,8 @@ use crate::{
     allocator::{Allocator, Global},
     map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
     raw::{
-        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
-        AttemptOptimisticPrefixMatch, ConcreteNodePtr, InnerNode, LeafNode, NodePtr, OpaqueNodePtr,
-        PessimisticMismatch, PrefixMatchBehavior, RawIterator,
+        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, ConcreteNodePtr,
+        ExplicitMismatch, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, RawIterator,
     },
     AsBytes, TreeMap,
 };
@@ -124,7 +123,6 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
         inner_ptr: NodePtr<PREFIX_LEN, N>,
         key_bytes: &[u8],
         current_depth: &mut usize,
-        prefix_match_behavior: &mut PrefixMatchBehavior,
     ) -> ControlFlow<InnerNodeSearchResult<K, V, PREFIX_LEN>, OpaqueNodePtr<K, V, PREFIX_LEN>>
     where
         N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
@@ -135,22 +133,20 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
         // enforced the "no concurrent reads or writes" requirement on the
         // `check_prefix_lookup_child` function.
         let inner_node = unsafe { inner_ptr.as_ref() };
-        let match_prefix =
-            prefix_match_behavior.match_prefix(inner_node, &key_bytes[*current_depth..]);
+
+        assert!(*current_depth <= key_bytes.len());
+        // SAFETY: The condition that "`current_depth` must be less than or equal to
+        // `key.len()`" is checked via assertion just above.
+        // TODO: Figure out a better reasoning for this safety condition, I think it
+        // should be possible just via reasoning through the range lookup
+        // process (without needing an assert).
+        let match_prefix = unsafe { inner_node.match_full_prefix(key_bytes, *current_depth) };
         match match_prefix {
-            Err(PessimisticMismatch { matched_bytes, .. }) => {
-                let (full_prefix, _) = inner_node.read_full_prefix(*current_depth);
-                let upper_bound = (*current_depth + full_prefix.len()).min(key_bytes.len());
-                let key_segment = &key_bytes[(*current_depth)..upper_bound];
-
-                let node_prefix_comparison_to_search_key_segment = full_prefix.cmp(key_segment);
-
-                debug_assert_ne!(
-                    node_prefix_comparison_to_search_key_segment,
-                    Ordering::Equal,
-                    "if there was a mismatch, the prefix must not be equal"
-                );
-
+            Err(ExplicitMismatch {
+                matched_bytes,
+                node_prefix_comparison_to_search_key_segment,
+                ..
+            }) => {
                 // We report a prefix mismatch if the prefix is longer that the remaining
                 // portion of the key bytes. However, in the context of the
                 // `InnerNodeSearchResultReason` running out of bytes is really a different
@@ -169,7 +165,7 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
                     node_prefix_comparison_to_search_key_segment,
                 })
             },
-            Ok(AttemptOptimisticPrefixMatch { matched_bytes, .. }) => {
+            Ok(PrefixMatch { matched_bytes }) => {
                 // Since the prefix matched, advance the depth by the size of the prefix
                 *current_depth += matched_bytes;
 
@@ -209,27 +205,20 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
 
     let mut current_node = root;
     let mut current_depth = 0;
-    let mut prefix_match_behavior = PrefixMatchBehavior::default();
 
     loop {
         let next_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
             InnerNode(inner_ptr) => unsafe {
                 // SAFETY: The safety requirement is covered by the safety documentation on the
                 // containing function
-                check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_behavior,
-                )
+                check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
             },
             LeafNode(leaf_ptr) => {
                 // SAFETY: The shared reference is bounded to this block and there are no
                 // concurrent modifications, by the safety conditions of this function.
                 let leaf_node = unsafe { leaf_ptr.as_ref() };
 
-                let leaf_key_comparison_to_search_key =
-                    prefix_match_behavior.compare_leaf_key(leaf_node, key_bytes, current_depth);
+                let leaf_key_comparison_to_search_key = leaf_node.compare_full_key(key_bytes);
 
                 return TerminatingNodeSearchResult::Leaf {
                     leaf_ptr,
@@ -268,11 +257,11 @@ pub(crate) fn validate_range_bounds(start_bound: &Bound<&[u8]>, end_bound: &Boun
 type KeyByteAndChild<K, V, const PREFIX_LEN: usize> = Option<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>;
 
 /// This function searches a trie for the smallest/largest leaf node that is
-/// greater/less than the given bound.
+/// greater than or equal (GTE) / less than or equal (LTE) to the given bound.
 ///
 /// If `is_start` is true, its looking for the smallest leaf node that is
-/// greater than the given bound. If `is_start` is false, we're looking for the
-/// greatest leaf node that is smaller than the given bound.
+/// GTE than the given bound. If `is_start` is false, we're looking for the
+/// greatest leaf node that is LTE than the given bound.
 ///
 /// # Safety
 ///
@@ -327,32 +316,117 @@ pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN
                     reason,
                     node_prefix_comparison_to_search_key_segment,
                 }) => match reason {
-                    InnerNodeSearchResultReason::PrefixMismatch
-                    | InnerNodeSearchResultReason::InsufficientBytes => {
-                        match (is_start, node_prefix_comparison_to_search_key_segment) {
-                            (true, Ordering::Equal | Ordering::Greater) => unsafe {
+                    InnerNodeSearchResultReason::PrefixMismatch => {
+                        // If there was a prefix mismatch while searching, then we must know whether
+                        // the mismatch occurred because the search key was
+                        // greater than OR less than the prefix.
+
+                        if matches!(
+                            node_prefix_comparison_to_search_key_segment,
+                            Ordering::Greater
+                        ) {
+                            // If the node prefix was greater than the search key segment, then our
+                            // candidates are going to be around the minimum leaf of this subtree.
+
+                            // SAFETY: Covered by function safety doc
+                            let min_leaf_ptr = unsafe { minimum_unchecked(node_ptr) };
+                            if is_start {
+                                // In the context of a start bound, the search key being
+                                // lexicographically smaller is easy to understand, since it will be
+                                // ordered before the minimum key of the subtree in all cases.
+
+                                min_leaf_ptr
+                            } else {
+                                // In the context of a end bound, the search key being
+                                // lexicographically shorted means
+                                // that none of the keys in this subtree are eligible to
+                                // be in range. So we must find the minimum and then go one before
+                                // that.
+
                                 // SAFETY: Covered by function safety doc
-                                minimum_unchecked(node_ptr)
-                            },
-                            (true, Ordering::Less) => unsafe {
-                                // SAFETY: Covered by function safety doc
-                                let max_leaf_ptr = maximum_unchecked(node_ptr);
-                                let max_leaf = max_leaf_ptr.as_ref();
-                                max_leaf.next?
-                            },
-                            (false, Ordering::Equal | Ordering::Less) => unsafe {
-                                // SAFETY: Covered by function safety doc
-                                maximum_unchecked(node_ptr)
-                            },
-                            (false, Ordering::Greater) => unsafe {
-                                // SAFETY: Covered by function safety doc
-                                let min_leaf_ptr = minimum_unchecked(node_ptr);
+                                unsafe {
+                                    let min_leaf = min_leaf_ptr.as_ref();
+                                    min_leaf.previous?
+                                }
+                            }
+                        } else {
+                            // We assume here that Equal is impossible otherwise
+                            // there would be no mismatch.
+                            //
+                            // If the node prefix was less than the search key segment, then our
+                            // candidates are going to be around the maximum leaf of this subtree.
+
+                            // SAFETY: Covered by function safety doc
+                            let max_leaf_ptr = unsafe { maximum_unchecked(node_ptr) };
+                            if is_start {
+                                // In the case of a start bound, the maximum leaf of this tree is
+                                // going to be smaller than the search key. So we need to get the
+                                // next larger leaf
+                                unsafe {
+                                    let max_leaf = max_leaf_ptr.as_ref();
+                                    max_leaf.next?
+                                }
+                            } else {
+                                // In the case of an end bound, the maximum leaf is the largest key
+                                // less than or equal to the search key, so we return it directly.
+                                max_leaf_ptr
+                            }
+                        }
+                    },
+                    InnerNodeSearchResultReason::InsufficientBytes => {
+                        // If we've run out of bytes while searching, it means that the key was
+                        // shorter than all the keys in the subtree rooted by
+                        // the inner node. In a lexicographic ordering, given an equal prefix, the
+                        // shorter sequence is always ordered before the longer sequence.
+
+                        // SAFETY: Covered by function safety doc
+                        let min_leaf_ptr = unsafe { minimum_unchecked(node_ptr) };
+                        if is_start {
+                            // In the context of a start bound, the search key being
+                            // lexicographically shorter is easy to understand, since it will be
+                            // ordered before the minimum key of the subtree in all cases.
+
+                            min_leaf_ptr
+                        } else {
+                            // In the context of a end bound, the search key being lexicographically
+                            // shorted means that none of the keys in this subtree are eligible to
+                            // be in range. So we must find the minimum and then go one before that.
+
+                            // SAFETY: Covered by function safety doc
+                            unsafe {
                                 let min_leaf = min_leaf_ptr.as_ref();
                                 min_leaf.previous?
-                            },
+                            }
                         }
                     },
                     InnerNodeSearchResultReason::MissingChild => {
+                        // If we stopped on an inner node because there was no corresponding child
+                        // to continue the search, then it is possible that the key is anywhere
+                        // within the subtree rooted by the inner node. In this case, we have to
+                        // find the next largest or next smallest child and then find their minimum
+                        // or maximum leaf node accordingly.
+                        //
+                        // There are a couple of baseline cases without considering the `is_start`
+                        // bit yet. Imagine an array of child keys (with implicit pointers):
+                        //
+                        // ```text
+                        //   Middle         Start           End
+                        // |---|---|      |---|---|      |---|---|
+                        // | 3 | 7 |      | 3 | 7 |      | 3 | 7 |
+                        // |---|---|      |---|---|      |---|---|
+                        //     ^          ^                      ^
+                        //     5          1                      9
+                        // ```
+                        //
+                        // Now consider start vs end bound:
+                        //  - If we're in the "Middle" case, with `is_start == true`, then we want
+                        //    the next largest key and `is_start == false` we want the next smallest
+                        //    key. Both are accessible within this subtree, just selecting the
+                        //    appropriate child neighbor and then going to the minimum or maximum
+                        //    descendant.
+                        //  - If we're in the "Start" case, then `is_start == true` is the same as
+                        //    the "Middle" case. The `is_start == false` means we need to go the
+                        //    portion of the tree just outside of this node, to the "left" (less).
                         fn access_closest_child<
                             const PREFIX_LEN: usize,
                             N: InnerNode<PREFIX_LEN>,
@@ -361,7 +435,7 @@ pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN
                             child_bounds: (Bound<u8>, Bound<u8>),
                             is_start: bool,
                         ) -> KeyByteAndChild<N::Key, N::Value, PREFIX_LEN> {
-                            // SAFETY: Covered by function safety doc
+                            // SAFETY: Covered by outer function safety doc
                             let inner = unsafe { inner_ptr.as_ref() };
                             let mut child_it = inner.range(child_bounds);
                             if is_start {
@@ -371,11 +445,14 @@ pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN
                             }
                         }
 
+                        // The close-side of the range is always excluded because the child that
+                        // would have been equal was missing.
                         let child_bounds = if is_start {
-                            (bound.map(|_| key_bytes[current_depth]), Bound::Unbounded)
+                            (Bound::Excluded(key_bytes[current_depth]), Bound::Unbounded)
                         } else {
-                            (Bound::Unbounded, bound.map(|_| key_bytes[current_depth]))
+                            (Bound::Unbounded, Bound::Excluded(key_bytes[current_depth]))
                         };
+
                         let possible_next_child =
                             match_concrete_node_ptr!(match (node_ptr.to_node_ptr()) {
                                 InnerNode(inner_ptr) => {
@@ -386,14 +463,48 @@ pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN
                                      TerminatingNodeSearchResult had the value InnerNode"
                                 ),
                             });
-                        let (_, next_child) = possible_next_child?;
 
-                        if is_start {
-                            // SAFETY: Covered by function safety doc
-                            unsafe { minimum_unchecked(next_child) }
-                        } else {
-                            // SAFETY: Covered by function safety doc
-                            unsafe { maximum_unchecked(next_child) }
+                        match (is_start, possible_next_child) {
+                            (true, None) => {
+                                // This is case "End" from above. If we're trying to get the start
+                                // bound, but there is no next sibling, we should go to leaf after
+                                // the maximum leaf of this subtree.
+
+                                // SAFETY: Covered by function safety doc
+                                unsafe {
+                                    let max_leaf_ptr = maximum_unchecked(node_ptr);
+                                    let max_leaf = max_leaf_ptr.as_ref();
+                                    max_leaf.next?
+                                }
+                            },
+                            (true, Some((_, next_child))) => {
+                                // This is possibly case "Middle" from above. We select the smallest
+                                // leaf of the next larger sibling.
+
+                                // SAFETY: Covered by function safety doc
+                                unsafe { minimum_unchecked(next_child) }
+                            },
+                            (false, None) => {
+                                // This is case "Start" from above. If we're
+                                // trying to get the end bound, but there is no
+                                // previous sibling, we should go the leaf prior
+                                // to the minimum leaf of this subtree.
+
+                                // SAFETY: Covered by function safety doc
+                                unsafe {
+                                    let min_leaf_ptr = minimum_unchecked(node_ptr);
+                                    let min_leaf = min_leaf_ptr.as_ref();
+                                    min_leaf.previous?
+                                }
+                            },
+                            (false, Some((_, prev_child))) => {
+                                // This is possibly case "Middle" from above. We
+                                // select the largest leaf of the next smaller
+                                // sibling.
+
+                                // SAFETY: Covered by function safety doc
+                                unsafe { maximum_unchecked(prev_child) }
+                            },
                         }
                     },
                 },
@@ -961,5 +1072,259 @@ mod tests {
                 (&[0, 0, 0, 0, 0, 3].into(), &3)
             ]
         );
+    }
+
+    #[test]
+    fn range_inclusive_end_past_all_node_keys() {
+        // Regression test: when the end bound's key byte at a Node4/Node16 level
+        // exceeds all child key bytes and no child is found (MissingChild), the
+        // node's range() method was called with Included(byte > max_key), which
+        // mapped Last(n) → Included(n) and caused an out-of-bounds panic on the
+        // n-element initialized slice.
+
+        let mut tree: TreeMap<u8, usize> = TreeMap::default();
+        tree.try_insert(0x10u8, 1).unwrap();
+        tree.try_insert(0x20u8, 2).unwrap();
+        tree.try_insert(0x30u8, 3).unwrap();
+
+        // End-bound first byte 0x50 > max child byte 0x30 at root → MissingChild
+        // → inner.range((Unbounded, Included(0x50))) was previously OOB
+        let result: Vec<_> = tree
+            .range((
+                core::ops::Bound::Unbounded,
+                core::ops::Bound::Included(0x50u8),
+            ))
+            .map(|(k, v)| (*k, *v))
+            .collect();
+        assert_eq!(result, [(0x10u8, 1), (0x20u8, 2), (0x30u8, 3),]);
+    }
+
+    #[test]
+    fn range_excluded_start_past_all_node_keys() {
+        // Regression test: when the start bound's key byte at a Node4/Node16 level
+        // exceeds all child key bytes and no child is found (MissingChild), the
+        // node's range() method was called with Excluded(byte > max_key), which
+        // mapped Last(n) → Excluded(n) and caused an out-of-bounds panic (slice
+        // start at n+1 on an n-element slice).
+
+        let mut tree: TreeMap<u8, usize> = TreeMap::default();
+        tree.try_insert(0x10u8, 1).unwrap();
+        tree.try_insert(0x20u8, 2).unwrap();
+        tree.try_insert(0x30u8, 3).unwrap();
+
+        // Start-bound first byte 0x50 > max child byte 0x30 at root → MissingChild
+        // → inner.range((Excluded(0x50), Unbounded)) was previously OOB
+        let result: Vec<_> = tree
+            .range((
+                core::ops::Bound::Excluded(0x50u8),
+                core::ops::Bound::Unbounded,
+            ))
+            .collect();
+        assert!(result.is_empty(), "expected empty range, got {result:?}");
+    }
+
+    #[test]
+    fn range_excluded_empty_end_bound_is_empty() {
+        // Regression test: Excluded(&[]) as an end bound should yield an empty
+        // iterator because [] is the lexicographic minimum — no key is less than
+        // the empty slice.  Previously find_leaf_pointer_for_bound hit the
+        // (false, Equal) arm of PrefixMismatchOrInsufficientBytes and returned
+        // maximum_unchecked(root), producing all entries instead of none.
+        let mut tree: TreeMap<Box<[u8]>, u32> = TreeMap::new();
+        for i in 0u8..=9 {
+            tree.try_insert(Box::from([i]), i as u32).unwrap();
+        }
+
+        let result: Vec<_> = tree
+            .range::<[u8], _>((Bound::Unbounded, Bound::Excluded([].as_ref())))
+            .collect();
+        assert!(result.is_empty(), "expected empty range, got {result:?}");
+    }
+
+    #[test]
+    fn range_regression_missing_child_62c8b0067a82ea8bf3a296d73915e1c0b76359ae() {
+        // [
+        //     TryInsertMany(
+        //         [
+        //             59,
+        //         ],
+        //         7,
+        //     ),
+        //     TryInsertMany(
+        //         [
+        //             247,
+        //         ],
+        //         35,
+        //     ),
+        //     Range(
+        //         Included(
+        //             [
+        //                 59,
+        //                 59,
+        //                 0,
+        //             ],
+        //         ),
+        //         Unbounded,
+        //     ),
+        // ]
+        let mut map = TreeMap::<Box<[u8]>, usize>::new();
+
+        for first_subtree in 0..=7u8 {
+            map.try_insert(Box::new([59, first_subtree]), map.len())
+                .unwrap();
+        }
+        for second_subtree in 0..=35 {
+            map.try_insert(Box::new([247, second_subtree]), map.len())
+                .unwrap();
+        }
+
+        let contents = map
+            .range((Bound::Included(Box::from([59u8, 59, 0])), Bound::Unbounded))
+            .map(|(k, _)| k.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            contents,
+            (0..=35u8).map(|v| Box::from([247, v])).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn range_regression_prefix_mismatch_b91a7f054453649d83d175c6ca31635e311f03fa() {
+        // [
+        //     TryInsertMany(
+        //         [
+        //             151,
+        //             93,
+        //             151,
+        //             151,
+        //             151,
+        //             151,
+        //             215,
+        //             151,
+        //             255,
+        //             255,
+        //             151,
+        //             255,
+        //             255,
+        //             247,
+        //             0,
+        //             3,
+        //             16,
+        //         ],
+        //         91,
+        //     ),
+        //     Range(
+        //         Included(
+        //             [
+        //                 255,
+        //                 26,
+        //             ],
+        //         ),
+        //         Unbounded,
+        //     ),
+        // ]
+
+        let mut map = TreeMap::<Box<[u8]>, usize>::new();
+        for k in 0..=91u8 {
+            map.try_insert(
+                Box::from([
+                    151u8, 93, 151, 151, 151, 151, 215, 151, 255, 255, 151, 255, 255, 247, 0, 3,
+                    16, k,
+                ]),
+                map.len(),
+            )
+            .unwrap();
+        }
+
+        let contents = map
+            .range((Bound::Included(Box::from([255, 26])), Bound::Unbounded))
+            // Make it easier to read, only unique part of key is last byte
+            .map(|(k, _)| k[17])
+            .collect::<Vec<_>>();
+
+        // Results should be empty because `255, 26` is greater than the prefix
+        assert_eq!(contents, &[]);
+    }
+
+    #[test]
+    fn range_regression_excluded_0ef360aad5ebf9e3d5968d3ca6ba381ccb749cc8() {
+        // [
+        //     TryInsertMany(
+        //         [
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //             255,
+        //         ],
+        //         225,
+        //     ),
+        //     Range(
+        //         Excluded(
+        //             [
+        //                 225,
+        //                 146,
+        //                 225,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 251,
+        //                 232,
+        //                 2,
+        //             ],
+        //         ),
+        //         Unbounded,
+        //     ),
+        // ]
+
+        let mut map = TreeMap::<Box<[u8]>, usize>::new();
+        for k in 0..=64 {
+            map.try_insert(
+                Box::from([
+                    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                    255, k,
+                ]),
+                map.len(),
+            )
+            .unwrap();
+        }
+
+        let contents = map
+            .range((
+                Bound::Excluded(Box::from([
+                    225, 146, 225, 251, 251, 251, 251, 251, 251, 251, 251, 251, 251, 251, 251, 251,
+                    232, 2,
+                ])),
+                Bound::Unbounded,
+            ))
+            // Make it easier to read, only unique part of key is last byte
+            .map(|(k, _)| k[17])
+            .collect::<Vec<_>>();
+
+        // The range should contain all elements in the tree because the range start is
+        // less than all the keys in the tree.
+        assert_eq!(contents, (0..=64).collect::<Vec<_>>());
     }
 }
