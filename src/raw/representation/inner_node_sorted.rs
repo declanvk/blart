@@ -465,8 +465,20 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
             match bound {
                 // key = Included(0), bound = Included(Existing(0)), output = Included(0)
                 Bound::Included(WritePoint::Existing(idx)) => Bound::Included(idx),
-                // key = Included(255), bound = Included(Last(4)), output = Included(4)
-                Bound::Included(WritePoint::Last(idx)) => Bound::Included(idx),
+                // Last(n) means "insert after all n children".
+                //   - as start bound: key > all children → empty range; Included(idx) on an
+                //     idx-element slice starts at idx (valid empty slice).
+                //   - as end bound: include all n children → last valid index is idx-1. Previously
+                //     Included(idx) was returned, which caused &slice[..=idx] on an idx-element
+                //     slice to panic.
+                Bound::Included(WritePoint::Last(idx)) => {
+                    if is_start {
+                        Bound::Included(idx)
+                    } else {
+                        idx.checked_sub(1)
+                            .map_or(Bound::Excluded(0), Bound::Included)
+                    }
+                },
                 // key = Included(2), bound = Included(Shift(1)), output = Included(1)
                 Bound::Included(WritePoint::Shift(idx)) => {
                     if is_start {
@@ -478,8 +490,17 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
                 },
                 // key = Excluded(0), bound = Excluded(Existing(0)), output = Excluded(0)
                 Bound::Excluded(WritePoint::Existing(idx)) => Bound::Excluded(idx),
-                // key = Excluded(255), bound = Excluded(Last(4)), output = Excluded(4)
-                Bound::Excluded(WritePoint::Last(idx)) => Bound::Excluded(idx),
+                // key = Excluded(255), bound = Excluded(Last(4)):
+                //   - as end bound  → Excluded(4), meaning &slice[..4] = all children
+                //   - as start bound → key > all children, so result is empty; Excluded(idx-1)
+                //     starts the slice at idx (empty) without OOB.
+                Bound::Excluded(WritePoint::Last(idx)) => {
+                    if is_start {
+                        idx.checked_sub(1).map_or(Bound::Unbounded, Bound::Excluded)
+                    } else {
+                        Bound::Excluded(idx)
+                    }
+                },
                 // key = Excluded(2), bound = Excluded(Shift(1)), output = Excluded(0)
                 Bound::Excluded(WritePoint::Shift(idx)) => {
                     if is_start {
@@ -943,6 +964,31 @@ mod tests {
     }
 
     #[test]
+    fn node4_range_inclusive_end_past_max() {
+        let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node4_fixture_empty_edges();
+        // keys = [2, 3, 85, 254]; end bound 255 > max key 254
+        // Previously: Last(4) → Included(4) → &slice[..=4] on 4-elem slice → panic
+        let pairs: Vec<_> = node
+            .range((Bound::<u8>::Unbounded, Bound::Included(255)))
+            .collect();
+        assert_eq!(
+            pairs,
+            [(2u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (254, l2_ptr)]
+        );
+    }
+
+    #[test]
+    fn node4_range_excluded_start_past_max() {
+        let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node4_fixture_empty_edges();
+        // keys = [2, 3, 85, 254]; start bound Excluded(255) > max key 254
+        // Previously: Last(4) → Excluded(4) → &slice[5..] on 4-elem slice → panic
+        let pairs: Vec<_> = node
+            .range((Bound::Excluded(255u8), Bound::<u8>::Unbounded))
+            .collect();
+        assert_eq!(pairs, []);
+    }
+
+    #[test]
     #[should_panic = "range start and end are equal and excluded: (80)"]
     fn node4_range_iterate_out_of_bounds_panic_both_excluded() {
         let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node4_fixture();
@@ -1153,6 +1199,31 @@ mod tests {
             .range((Bound::<u8>::Unbounded, Bound::Excluded(4)))
             .collect::<Vec<_>>();
         assert_eq!(pairs, &[(0u8, l3_ptr), (3, l1_ptr)]);
+    }
+
+    #[test]
+    fn node16_range_inclusive_end_past_max() {
+        let (node, _, [l1_ptr, l2_ptr, l3_ptr, l4_ptr]) = node16_fixture_empty_edges();
+        // keys = [2, 3, 85, 254]; end bound 255 > max key 254
+        // Previously: Last(4) → Included(4) → &slice[..=4] on 4-elem slice → panic
+        let pairs: Vec<_> = node
+            .range((Bound::<u8>::Unbounded, Bound::Included(255)))
+            .collect();
+        assert_eq!(
+            pairs,
+            [(2u8, l3_ptr), (3, l1_ptr), (85, l4_ptr), (254, l2_ptr)]
+        );
+    }
+
+    #[test]
+    fn node16_range_excluded_start_past_max() {
+        let (node, _, [_l1_ptr, _l2_ptr, _l3_ptr, _l4_ptr]) = node16_fixture_empty_edges();
+        // keys = [2, 3, 85, 254]; start bound Excluded(255) > max key 254
+        // Previously: Last(4) → Excluded(4) → &slice[5..] on 4-elem slice → panic
+        let pairs: Vec<_> = node
+            .range((Bound::Excluded(255u8), Bound::<u8>::Unbounded))
+            .collect();
+        assert_eq!(pairs, []);
     }
 
     #[test]
