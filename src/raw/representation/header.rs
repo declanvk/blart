@@ -103,16 +103,12 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         let begin = len;
         let end = begin + self.capped_prefix_len();
 
-        unsafe {
-            // SAFETY: This function is called when mismatch happened and
-            // we used the node to match the number of bytes,
-            // by this we know that len < prefix len, but since we + 1,
-            // to skip the key byte we have that len <= prefix len
-            core::hint::assert_unchecked(end <= self.prefix.len());
-
-            // SAFETY: This is by construction end = begin + len
-            core::hint::assert_unchecked(begin <= end);
-        }
+        assert!(
+            end <= self.prefix.len(),
+            "prefix copy range end [{end}] must not exceed prefix array length [{}]; ltrim_by \
+             must only be called when prefix_len <= PREFIX_LEN",
+            self.prefix.len()
+        );
         self.prefix.copy_within(begin..end, 0);
     }
 
@@ -179,16 +175,12 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         let end = begin + self.capped_prefix_len();
         let len = end - begin;
 
-        unsafe {
-            // SAFETY: This function is called a mismatch happened and
-            // we used the leaf to match the number of matching bytes,
-            // by this we know that len < prefix len, but since we + 1,
-            // to skip the key byte we have that len <= prefix len
-            core::hint::assert_unchecked(end <= leaf_key.len());
-
-            // SAFETY: This is by construction end = begin + len
-            core::hint::assert_unchecked(begin <= end);
-        }
+        assert!(
+            end <= leaf_key.len(),
+            "leaf key slice end [{end}] must not exceed leaf key length [{}]; leaf must be a \
+             descendant of this node so its key covers depth+prefix_len bytes",
+            leaf_key.len()
+        );
 
         let leaf_key = &leaf_key[begin..end];
         self.prefix[..len].copy_from_slice(leaf_key)

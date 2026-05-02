@@ -173,12 +173,13 @@ impl Add for LeafStats {
     }
 }
 
-/// TODO
+/// A mapping from [`NodeType`] to [`InnerNodeStats`] that has a fixed debug
+/// ordering.
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct FixedOrderNodeStats(HashMap<NodeType, InnerNodeStats>);
 
 impl FixedOrderNodeStats {
-    /// TODO
+    /// Lookup the inner node stats for a specific node type.
     pub fn get(&self, node_type: NodeType) -> Option<&InnerNodeStats> {
         self.0.get(&node_type)
     }
