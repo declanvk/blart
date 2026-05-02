@@ -425,20 +425,18 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
             let leaf = unsafe { leaf_ptr.as_ref() };
             let leaf = leaf.key_ref().as_bytes();
 
-            unsafe {
-                // SAFETY: Since we are iterating the key and prefixes, we
-                // expect that the depth never exceeds the key len.
-                // Because if this happens we ran out of bytes in the key to match
-                // and the whole process should be already finished
-                core::hint::assert_unchecked(current_depth <= leaf.len());
-
-                // SAFETY: By the construction of the prefix we know that this is inbounds
-                // since the prefix len guarantees it to us
-                core::hint::assert_unchecked(current_depth + len <= leaf.len());
-
-                // SAFETY: This can't overflow since len comes from a u32
-                core::hint::assert_unchecked(current_depth <= current_depth + len);
-            }
+            assert!(
+                current_depth <= leaf.len(),
+                "current_depth [{current_depth}] must not exceed leaf key length [{}]; leaf must \
+                 be a descendant of this node",
+                leaf.len()
+            );
+            assert!(
+                current_depth + len <= leaf.len(),
+                "current_depth [{current_depth}] + prefix_len [{len}] must not exceed leaf key \
+                 length [{}]; leaf must be a descendant of this node",
+                leaf.len()
+            );
             let leaf = &leaf[current_depth..(current_depth + len)];
             (leaf, Some(leaf_ptr))
         }
