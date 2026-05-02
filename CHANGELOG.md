@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
  - Implement `FusedIterator` for `TreeMap` iterators `IntoKeys` and `IntoValues`.
 
+### Fixed
+ - `TreeMap::range` iterator had bugs in a couple of places, specifically around determining bounds when the initial lookup terminated in an inner node. I added some better fuzz coverage for this iterator that helped with finding these issues.
+
 ## [0.5.0] - 2026-04-16
 
 ### Added
