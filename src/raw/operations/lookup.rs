@@ -1,5 +1,3 @@
-use core::cmp::Ordering;
-
 use crate::{
     raw::{
         match_concrete_node_ptr, AttemptOptimisticPrefixMatch, ConcreteNodePtr, InnerNode,
@@ -99,40 +97,6 @@ impl PrefixMatchBehavior {
         }
 
         result
-    }
-
-    /// This function will compare the key bytes against the key in the given
-    /// leaf node.
-    ///
-    /// Specifically:
-    ///  - If the current behavior is "optimistic", then the entire leaf key
-    ///    will be compared against the given key bytes
-    ///  - If the current behavior is "pessimistic", then only the key bytes
-    ///    that were not used during the lookup process will be compared against
-    ///    the corresponding leaf key bytes.
-    ///
-    /// This is a minor optimization to reduce the amount of work needed
-    /// confirming that a lookup found the right leaf node.
-    pub fn compare_leaf_key<K: AsBytes, V, const PREFIX_LEN: usize>(
-        self,
-        leaf: &LeafNode<K, V, PREFIX_LEN>,
-        key_bytes: &[u8],
-        current_depth: usize,
-    ) -> Ordering {
-        match self {
-            PrefixMatchBehavior::Pessimistic => {
-                let leaf_key_bytes = leaf.key_ref().as_bytes();
-                let current_depth = current_depth.min(leaf_key_bytes.len()).min(key_bytes.len());
-                // PANIC SAFETY: Since we limit `current_depth` to be the minimum of the lengths
-                // and the current depth we will at most get an empty slice, it
-                // should panic. I ran a small test to make sure that `&[1][1..] == &[][..]` and
-                // does not panic.
-                let leaf_key_bytes = &leaf_key_bytes[current_depth..];
-                let key_bytes = &key_bytes[current_depth..];
-                leaf_key_bytes.cmp(key_bytes)
-            },
-            PrefixMatchBehavior::Optimistic => leaf.key_ref().as_bytes().cmp(key_bytes),
-        }
     }
 
     /// This function will test the key bytes against the key in the given leaf

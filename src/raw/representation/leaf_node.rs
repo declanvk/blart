@@ -1,3 +1,5 @@
+use core::cmp::Ordering;
+
 use crate::{
     raw::{Node, NodePtr, NodeType},
     AsBytes,
@@ -214,6 +216,15 @@ impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
         K: AsBytes,
     {
         self.key.as_bytes().eq(possible_key)
+    }
+
+    /// Compare lexicographically the leaf stored key bytes with the given
+    /// search key bytes.
+    pub fn compare_full_key(&self, possible_key: &[u8]) -> Ordering
+    where
+        K: AsBytes,
+    {
+        self.key.as_bytes().cmp(possible_key)
     }
 
     /// Check that the key starts with the given slice.
