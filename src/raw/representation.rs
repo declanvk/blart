@@ -217,7 +217,7 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     /// `prefix_len` as the node prefix length.
     ///
     /// This is done because when a prefix mismatch happens
-    /// the length of the mismatch can be grater or equal to
+    /// the length of the mismatch can be greater or equal to
     /// prefix size, since we search for the first child of the
     /// node to recreate the prefix, that's why we don't use
     /// `prefix.len()` as the node prefix length

@@ -29,3 +29,4 @@ doc = false
 
 [profile.release]
 rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]
+debug-assertions = true
