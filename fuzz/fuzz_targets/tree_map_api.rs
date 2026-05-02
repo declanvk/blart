@@ -304,9 +304,13 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 std::hint::black_box(v);
             },
             Action::Prefix(key) => {
-                // TODO: Provide an oracle implementation for prefix search (easy)
-                let v: Vec<_> = tree.prefix(&key).collect();
-                std::hint::black_box(v);
+                let tree_result: Vec<_> = tree.prefix(&key).collect();
+                let oracle_result: Vec<_> = oracle
+                    .range::<[u8], _>((Bound::Included(key.as_ref()), Bound::Unbounded))
+                    .take_while(|(k, _)| k.starts_with(&key))
+                    .collect();
+
+                assert_eq!(tree_result, oracle_result);
             },
             Action::Range(start, end) => {
                 if range_is_valid(&start, &end) {
