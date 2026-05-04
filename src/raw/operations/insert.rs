@@ -354,50 +354,60 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), alloc);
                 let new_leaf_pointer_opaque = new_leaf_pointer.to_opaque();
 
-                let mut new_n4 = {
-                    // SAFETY: The lifetime of the header reference is bounded to this block and no
-                    // current mutation happens. Also, we know this is an inner node pointer because
-                    // of the specific insert case
+                let n4_builder = {
+                    // SAFETY: The `header` pointer is bounded to this block and must be pointing to
+                    // an existing inner node.
                     let header = unsafe { mismatched_inner_node_ptr.header_ref_unchecked() };
 
                     // prefix mismatch, need to split prefix into two separate nodes and take the
                     // common prefix into a new parent node
                     let prefix = header.read_prefix();
                     let prefix = &prefix[..prefix.len().min(mismatch.matched_bytes)];
-                    InnerNode4::from_prefix(prefix, mismatch.matched_bytes)
+                    InnerNode4::builder(prefix, mismatch.matched_bytes)
                 };
 
-                unsafe {
-                    // SAFETY: This is a new node 4 so it's empty and we have
-                    // space for writing new children. We also check the order
-                    // of the keys before writing
-                    if mismatch.prefix_byte < key_byte {
-                        new_n4
-                            .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
-                        new_n4.write_child_unchecked(key_byte, new_leaf_pointer_opaque);
+                let new_n4 = if mismatch.prefix_byte < key_byte {
+                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
+                    // starts empty and we're adding 2 children (out of a capacity of 4)
+                    // in the correct sorted order (given by the if-else condition).
+                    let new_n4 = unsafe {
+                        n4_builder
+                            .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr)
+                            .write_child_unchecked(key_byte, new_leaf_pointer_opaque)
+                            .build()
+                    };
 
-                        // SAFETY: There are no concurrent modifications, the `apply` safety doc
-                        // covers this
-                        let previous_leaf_ptr = maximum_unchecked(mismatched_inner_node_ptr);
+                    // SAFETY: There are no concurrent modifications, the `apply` safety doc
+                    // covers this
+                    let previous_leaf_ptr = unsafe { maximum_unchecked(mismatched_inner_node_ptr) };
 
-                        // SAFETY: There is no concurrent modification of the new leaf node, the
-                        // the `apply` function.
-                        LeafNode::insert_after(new_leaf_pointer, previous_leaf_ptr);
-                    } else {
-                        new_n4.write_child_unchecked(key_byte, new_leaf_pointer_opaque);
-                        new_n4
-                            .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr);
+                    // SAFETY: There is no concurrent modification of the new leaf node, the
+                    // the `apply` function.
+                    unsafe { LeafNode::insert_after(new_leaf_pointer, previous_leaf_ptr) };
 
-                        // SAFETY: There are no concurrent modifications, the `apply` safety doc
-                        // covers this
-                        let next_leaf_ptr = minimum_unchecked(mismatched_inner_node_ptr);
+                    new_n4
+                } else {
+                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
+                    // starts empty and we're adding 2 children (out of a capacity of 4)
+                    // in the correct sorted order (given by the if-else condition).
+                    let new_n4 = unsafe {
+                        n4_builder
+                            .write_child_unchecked(key_byte, new_leaf_pointer_opaque)
+                            .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr)
+                            .build()
+                    };
 
-                        // SAFETY: There is no concurrent modification of the new leaf node, the
-                        // existing leaf node, or its siblings because of the safety requirements of
-                        // the `apply` function.
-                        LeafNode::insert_before(new_leaf_pointer, next_leaf_ptr);
-                    }
-                }
+                    // SAFETY: There are no concurrent modifications, the `apply` safety doc
+                    // covers this
+                    let next_leaf_ptr = unsafe { minimum_unchecked(mismatched_inner_node_ptr) };
+
+                    // SAFETY: There is no concurrent modification of the new leaf node, the
+                    // existing leaf node, or its siblings because of the safety requirements of
+                    // the `apply` function.
+                    unsafe { LeafNode::insert_before(new_leaf_pointer, next_leaf_ptr) };
+
+                    new_n4
+                };
 
                 {
                     // Scope header mutation so that the mutable reference is held for the minimum
@@ -481,44 +491,61 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     core::hint::assert_unchecked(key_bytes_used <= new_key_bytes_used);
                 }
 
-                let mut new_n4 = InnerNode4::from_prefix(
+                let leaf_node_key_byte = leaf_bytes[new_key_bytes_used];
+                let new_leaf_node_key_byte = key_bytes[new_key_bytes_used];
+
+                // Build the node with the existing leaf as the first child. This
+                // exhausts the `key_bytes` borrow of `key` so that `key` can be
+                // moved into the new leaf below.
+                let n4_builder = InnerNode4::builder(
                     &key_bytes[key_bytes_used..new_key_bytes_used],
                     new_key_bytes_used - key_bytes_used,
                 );
 
-                let leaf_node_key_byte = leaf_bytes[new_key_bytes_used];
-                let new_leaf_node_key_byte = key_bytes[new_key_bytes_used];
                 let new_leaf_node_pointer =
                     NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), alloc);
 
-                unsafe {
-                    // SAFETY: This is a new node 4 so it's empty and we have
-                    // space for writing new children. We also check the order
-                    // of the keys before writing
-                    if leaf_node_key_byte < new_leaf_node_key_byte {
-                        new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
-                        new_n4.write_child_unchecked(
-                            new_leaf_node_key_byte,
-                            new_leaf_node_pointer.to_opaque(),
-                        );
+                let new_n4 = if leaf_node_key_byte < new_leaf_node_key_byte {
+                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
+                    // starts empty and we're adding 2 children (out of a capacity of 4)
+                    // in the correct sorted order (given by the if-else condition).
+                    let new_n4 = unsafe {
+                        n4_builder
+                            .write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque())
+                            .write_child_unchecked(
+                                new_leaf_node_key_byte,
+                                new_leaf_node_pointer.to_opaque(),
+                            )
+                            .build()
+                    };
 
-                        // SAFETY: There is no concurrent modification of the new leaf node, the
-                        // existing leaf node, or its siblings because of the safety requirements of
-                        // the `apply` function.
-                        LeafNode::insert_after(new_leaf_node_pointer, leaf_node_ptr);
-                    } else {
-                        new_n4.write_child_unchecked(
-                            new_leaf_node_key_byte,
-                            new_leaf_node_pointer.to_opaque(),
-                        );
-                        new_n4.write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque());
+                    // SAFETY: There is no concurrent modification of the new leaf node, the
+                    // existing leaf node, or its siblings because of the safety requirements of
+                    // the `apply` function.
+                    unsafe { LeafNode::insert_after(new_leaf_node_pointer, leaf_node_ptr) };
 
-                        // SAFETY: There is no concurrent modification of the new leaf node, the
-                        // existing leaf node, or its siblings because of the safety requirements of
-                        // the `apply` function.
-                        LeafNode::insert_before(new_leaf_node_pointer, leaf_node_ptr);
-                    }
-                }
+                    new_n4
+                } else {
+                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
+                    // starts empty and we're adding 2 children (out of a capacity of 4)
+                    // in the correct sorted order (given by the if-else condition).
+                    let new_n4 = unsafe {
+                        n4_builder
+                            .write_child_unchecked(
+                                new_leaf_node_key_byte,
+                                new_leaf_node_pointer.to_opaque(),
+                            )
+                            .write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque())
+                            .build()
+                    };
+
+                    // SAFETY: There is no concurrent modification of the new leaf node, the
+                    // existing leaf node, or its siblings because of the safety requirements of
+                    // the `apply` function.
+                    unsafe { LeafNode::insert_before(new_leaf_node_pointer, leaf_node_ptr) };
+
+                    new_n4
+                };
 
                 (
                     NodePtr::allocate_node_ptr(new_n4, alloc).to_opaque(),

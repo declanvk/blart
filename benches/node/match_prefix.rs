@@ -26,18 +26,22 @@ fn bench(c: &mut Criterion) {
     ];
 
     let p0 = &[0, 0, 0, 0, 0, 0, 0, 0];
-    let mut node48_small = InnerNode48::<Box<[u8]>, usize, 16>::from_prefix(p0, p0.len());
-    let mut node256_small = InnerNodeDirect::<Box<[u8]>, usize, 16>::from_prefix(p0, p0.len());
-    node48_small.write_child(99, leaf_opaque);
-    node256_small.write_child(99, leaf_opaque);
+    let node48_small = InnerNode48::<Box<[u8]>, usize, 16>::builder(p0, p0.len())
+        .write_child(99, leaf_opaque)
+        .build();
+    let node256_small = InnerNodeDirect::<Box<[u8]>, usize, 16>::builder(p0, p0.len())
+        .write_child(99, leaf_opaque)
+        .build();
 
     let p1 = &[
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
-    let mut node48_large = InnerNode48::<Box<[u8]>, usize, 16>::from_prefix(p1, p1.len());
-    let mut node256_large = InnerNodeDirect::<Box<[u8]>, usize, 16>::from_prefix(p1, p1.len());
-    node48_large.write_child(99, leaf_opaque);
-    node256_large.write_child(99, leaf_opaque);
+    let node48_large = InnerNode48::<Box<[u8]>, usize, 16>::builder(p1, p1.len())
+        .write_child(99, leaf_opaque)
+        .build();
+    let node256_large = InnerNodeDirect::<Box<[u8]>, usize, 16>::builder(p1, p1.len())
+        .write_child(99, leaf_opaque)
+        .build();
 
     macro_rules! generate_benches {
         (single_bench $match_func:ident $b:ident $node:ident $key:ident $($current_depth:literal)?) => {

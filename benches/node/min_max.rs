@@ -12,16 +12,18 @@ fn bench(c: &mut Criterion) {
     let nodes48: Vec<_> = (0..count)
         .map(|i| {
             let idx = i * skip;
-            let mut node = InnerNode48::<CString, usize, 16>::empty();
-            node.write_child(idx, dangling_opaque);
+            let node = InnerNode48::<CString, usize, 16>::builder(&[], 0)
+                .write_child(idx, dangling_opaque)
+                .build();
             (idx, node)
         })
         .collect();
     let nodes256: Vec<_> = (0..count)
         .map(|i| {
             let idx = i * skip;
-            let mut node = InnerNodeDirect::<CString, usize, 16>::empty();
-            node.write_child(idx, dangling_opaque);
+            let node = InnerNodeDirect::<CString, usize, 16>::builder(&[], 0)
+                .write_child(idx, dangling_opaque)
+                .build();
             (idx, node)
         })
         .collect();

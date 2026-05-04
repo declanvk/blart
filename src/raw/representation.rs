@@ -4,6 +4,7 @@ use core::{
     cmp::Ordering,
     fmt,
     iter::FusedIterator,
+    marker::PhantomData,
     ops::{Bound, RangeBounds, RangeInclusive},
 };
 
@@ -93,6 +94,56 @@ pub(crate) mod private {
     }
     impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNodeDirect<K, V, PREFIX_LEN> {}
     impl<K, V, const PREFIX_LEN: usize> Sealed for super::LeafNode<K, V, PREFIX_LEN> {}
+
+    /// Internal construction trait for inner nodes.
+    ///
+    /// This is `pub(crate)` so external users cannot access `from_header`,
+    /// `empty`, or `from_prefix` directly — use [`super::InnerNodeBuilder`]
+    /// from the public API instead.
+    pub trait InnerNodeInit<const PREFIX_LEN: usize>: Sealed + Sized {
+        fn from_header(header: super::Header<PREFIX_LEN>) -> Self;
+
+        fn from_prefix(prefix: &[u8], prefix_len: usize) -> Self {
+            Self::from_header(super::Header::new(prefix, prefix_len))
+        }
+    }
+
+    impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeInit<PREFIX_LEN>
+        for super::InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
+    {
+        fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
+            use core::mem::MaybeUninit;
+            Self {
+                header,
+                child_pointers: [MaybeUninit::uninit(); SIZE],
+                keys: [0; SIZE],
+            }
+        }
+    }
+
+    impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeInit<PREFIX_LEN>
+        for super::InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
+    {
+        fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
+            use core::mem::MaybeUninit;
+            super::InnerNodeIndirect {
+                header,
+                child_indices: [None; 256],
+                child_pointers: [MaybeUninit::uninit(); SIZE],
+            }
+        }
+    }
+
+    impl<K, V, const PREFIX_LEN: usize> InnerNodeInit<PREFIX_LEN>
+        for super::InnerNodeDirect<K, V, PREFIX_LEN>
+    {
+        fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
+            super::InnerNodeDirect {
+                header,
+                child_pointers: [None; 256],
+            }
+        }
+    }
 }
 
 /// All nodes which contain a runtime tag that validates their type.
@@ -202,7 +253,9 @@ pub struct OptimisticMismatch {
 ///
 /// All structures that implement this trait must be `repr(C)` and have a
 /// [`Header`] as the first field of the struct.
-pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
+pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
+    Sized + private::InnerNodeInit<PREFIX_LEN>
+{
     /// The type of the iterator over all children of the inner node
     type Iter<'a>: Iterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>
         + DoubleEndedIterator
@@ -210,26 +263,20 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     where
         Self: 'a;
 
-    /// Create an empty [`InnerNode`], with no children and no prefix
-    #[inline]
-    fn empty() -> Self {
-        Self::from_header(Header::empty())
-    }
-
-    /// Create a new [`InnerNode`] using `prefix` as the node prefix and
-    /// `prefix_len` as the node prefix length.
+    /// Create a builder for constructing an inner node with at least one child.
     ///
-    /// This is done because when a prefix mismatch happens
-    /// the length of the mismatch can be greater or equal to
-    /// prefix size, since we search for the first child of the
-    /// node to recreate the prefix, that's why we don't use
-    /// `prefix.len()` as the node prefix length
-    fn from_prefix(prefix: &[u8], prefix_len: usize) -> Self {
-        Self::from_header(Header::new(prefix, prefix_len))
+    /// The builder uses the typestate pattern to ensure
+    /// [`InnerNodeBuilder::build`] cannot be called until at least one
+    /// child has been added via [`InnerNodeBuilder::write_child`].
+    fn builder(
+        prefix: &[u8],
+        prefix_len: usize,
+    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, Self, NoChild> {
+        InnerNodeBuilder {
+            node: <Self as private::InnerNodeInit<PREFIX_LEN>>::from_prefix(prefix, prefix_len),
+            _state: PhantomData,
+        }
     }
-
-    /// Create a new [`InnerNode`] using a `Header`
-    fn from_header(header: Header<PREFIX_LEN>) -> Self;
 
     /// Get the `Header` from the [`InnerNode`]
     fn header(&self) -> &Header<PREFIX_LEN>;
@@ -507,6 +554,107 @@ pub trait InnerNode<const PREFIX_LEN: usize>:
     }
 }
 
+/// Marker type for [`InnerNodeBuilder`]: no children have been added yet.
+pub struct NoChild;
+
+/// Marker type for [`InnerNodeBuilder`]: at least one child has been added.
+pub struct HasChild;
+
+/// Typestate builder for inner nodes that enforces the non-empty invariant.
+///
+/// The only way to call [`build`][InnerNodeBuilder::build] is to first add at
+/// least one child via
+/// [`write_child`][InnerNodeBuilder::write_child]. This is checked at
+/// compile time via the `S` typestate parameter.
+///
+/// Obtain a builder via [`InnerNodeCommon::builder`].
+#[expect(clippy::type_complexity)]
+pub struct InnerNodeBuilder<K, V, const PREFIX_LEN: usize, N, S = NoChild> {
+    node: N,
+    _state: PhantomData<fn() -> (K, V, S)>,
+}
+
+impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, NoChild>
+where
+    N: InnerNodeCommon<K, V, PREFIX_LEN>,
+{
+    /// Add the first child, transitioning the builder to the [`HasChild`] state
+    /// and enabling [`build`][InnerNodeBuilder::build].
+    pub fn write_child(
+        mut self,
+        key_byte: u8,
+        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasChild> {
+        self.node.write_child(key_byte, child);
+        InnerNodeBuilder {
+            node: self.node,
+            _state: PhantomData,
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize>
+    InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, NoChild>
+{
+    /// Add the first child to the node without bounds check or order.
+    ///
+    /// This function transitions the build to the [`HasChild`] state and
+    /// enabling [`build`][InnerNodeBuilder::build].
+    ///
+    /// # Safety
+    /// - This functions assumes that the write is gonna be inbound (i.e the
+    ///   check for a full node is done previously to the call of this function)
+    pub unsafe fn write_child_unchecked(
+        mut self,
+        key_byte: u8,
+        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasChild> {
+        // SAFETY: Covered by function safety requirements
+        unsafe { self.node.write_child_unchecked(key_byte, child) };
+        InnerNodeBuilder {
+            node: self.node,
+            _state: PhantomData,
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasChild>
+where
+    N: InnerNodeCommon<K, V, PREFIX_LEN>,
+{
+    /// Add another child to the node being built.
+    pub fn write_child(mut self, key_byte: u8, child: OpaqueNodePtr<K, V, PREFIX_LEN>) -> Self {
+        self.node.write_child(key_byte, child);
+        self
+    }
+
+    /// Consume the builder and return the finished inner node.
+    ///
+    /// Only callable after at least one child has been added.
+    pub fn build(self) -> N {
+        self.node
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize>
+    InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasChild>
+{
+    /// Add a child to the node without bounds check or order.
+    ///
+    /// # Safety
+    /// - This functions assumes that the write is gonna be inbound (i.e the
+    ///   check for a full node is done previously to the call of this function)
+    pub unsafe fn write_child_unchecked(
+        mut self,
+        key_byte: u8,
+        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> Self {
+        // SAFETY: Covered by function safety requirements
+        unsafe { self.node.write_child_unchecked(key_byte, child) };
+        self
+    }
+}
+
 /// This type represents the contents of an [`InnerNode`] prefix, either read
 /// directly from the prefix or fetched from a leaf node descendant.
 ///
@@ -744,10 +892,21 @@ mod tests {
             mem::align_of::<OpaqueValue>()
         );
 
-        let n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
-        let n16 = InnerNode4::<Box<[u8]>, (), 16>::empty();
-        let n48 = InnerNode4::<Box<[u8]>, (), 16>::empty();
-        let n256 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+        let mut leaf = LeafNode::<Box<[u8]>, (), 16>::with_no_siblings(vec![].into(), ());
+        let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
+
+        let n4 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(0, leaf_ptr)
+            .build();
+        let n16 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(0, leaf_ptr)
+            .build();
+        let n48 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(0, leaf_ptr)
+            .build();
+        let n256 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(0, leaf_ptr)
+            .build();
 
         let n4_ptr = const_addr(&n4 as *const InnerNode4<Box<[u8]>, (), 16>);
         let n16_ptr = const_addr(&n16 as *const InnerNode4<Box<[u8]>, (), 16>);
@@ -762,92 +921,94 @@ mod tests {
         assert!(n256_ptr.trailing_zeros() >= 3);
     }
 
-    pub(crate) fn inner_node_write_child_test<const PREFIX_LEN: usize>(
-        mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
-        num_children: usize,
-    ) {
-        let mut leaves = Vec::with_capacity(num_children);
-        for _ in 0..num_children {
-            leaves.push(LeafNode::with_no_siblings(vec![].into(), ()));
-        }
+    pub(crate) fn inner_node_write_child_test<const PREFIX_LEN: usize, N>(num_children: usize)
+    where
+        N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+    {
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), PREFIX_LEN>> = (0..num_children)
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
+
+        let leaf_pointers: Vec<OpaqueNodePtr<Box<[u8]>, (), PREFIX_LEN>> = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect();
+
+        let mut node = N::builder(&[], 0).write_child(0, leaf_pointers[0]).build();
 
         assert!(!node.is_full());
-        {
-            let leaf_pointers = leaves
-                .iter_mut()
-                .map(|leaf| NodePtr::from(leaf).to_opaque())
-                .collect::<Vec<_>>();
 
-            for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
-                node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
-            }
+        for (idx, leaf_pointer) in leaf_pointers[1..].iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx + 1).unwrap(), leaf_pointer);
+        }
 
-            for (idx, leaf_pointer) in leaf_pointers.into_iter().enumerate() {
-                assert_eq!(
-                    node.lookup_child(u8::try_from(idx).unwrap()),
-                    Some(leaf_pointer)
-                );
-            }
+        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            assert_eq!(
+                node.lookup_child(u8::try_from(idx).unwrap()),
+                Some(leaf_pointer)
+            );
         }
 
         assert!(node.is_full());
     }
 
-    pub fn inner_node_remove_child_test<const PREFIX_LEN: usize>(
-        mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
-        num_children: usize,
-    ) {
-        let mut leaves = Vec::with_capacity(num_children);
-        for _ in 0..num_children {
-            leaves.push(LeafNode::with_no_siblings(vec![].into(), ()));
-        }
+    pub fn inner_node_remove_child_test<const PREFIX_LEN: usize, N>(num_children: usize)
+    where
+        N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+    {
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), PREFIX_LEN>> = (0..num_children)
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
+
+        let leaf_pointers: Vec<OpaqueNodePtr<Box<[u8]>, (), PREFIX_LEN>> = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect();
+
+        let mut node = N::builder(&[], 0).write_child(0, leaf_pointers[0]).build();
 
         assert!(!node.is_full());
-        {
-            let leaf_pointers = leaves
-                .iter_mut()
-                .map(|leaf| NodePtr::from(leaf).to_opaque())
-                .collect::<Vec<_>>();
 
-            for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
-                node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
-            }
-
-            for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
-                assert_eq!(
-                    node.lookup_child(u8::try_from(idx).unwrap()),
-                    Some(leaf_pointer)
-                );
-            }
-
-            for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
-                assert_eq!(
-                    node.remove_child(u8::try_from(idx).unwrap()),
-                    Some(leaf_pointer)
-                );
-
-                assert_eq!(node.lookup_child(u8::try_from(idx).unwrap()), None);
-            }
+        for (idx, leaf_pointer) in leaf_pointers[1..].iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx + 1).unwrap(), leaf_pointer);
         }
+
+        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            assert_eq!(
+                node.lookup_child(u8::try_from(idx).unwrap()),
+                Some(leaf_pointer)
+            );
+        }
+
+        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
+            assert_eq!(
+                node.remove_child(u8::try_from(idx).unwrap()),
+                Some(leaf_pointer)
+            );
+
+            assert_eq!(node.lookup_child(u8::try_from(idx).unwrap()), None);
+        }
+
         assert!(!node.is_full());
     }
 
-    pub(crate) fn inner_node_shrink_test<const PREFIX_LEN: usize>(
-        mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
-        num_children: usize,
-    ) {
-        let mut leaves = Vec::with_capacity(num_children);
-        for _ in 0..num_children {
-            leaves.push(LeafNode::with_no_siblings(vec![].into(), ()));
-        }
+    pub(crate) fn inner_node_shrink_test<const PREFIX_LEN: usize, N>(num_children: usize)
+    where
+        N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+    {
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), PREFIX_LEN>> = (0..num_children)
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
 
-        let leaf_pointers = leaves
+        let leaf_pointers: Vec<OpaqueNodePtr<Box<[u8]>, (), PREFIX_LEN>> = leaves
             .iter_mut()
             .map(|leaf| NodePtr::from(leaf).to_opaque())
-            .collect::<Vec<_>>();
+            .collect();
 
-        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
-            node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        let mut node = N::builder(&[], 0).write_child(0, leaf_pointers[0]).build();
+
+        for (idx, leaf_pointer) in leaf_pointers[1..].iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx + 1).unwrap(), leaf_pointer);
         }
 
         let shrunk_node = node.shrink();
@@ -860,27 +1021,28 @@ mod tests {
         }
     }
 
-    pub(crate) fn inner_node_min_max_test<const PREFIX_LEN: usize>(
-        mut node: impl InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
-        num_children: usize,
-    ) {
+    pub(crate) fn inner_node_min_max_test<const PREFIX_LEN: usize, N>(num_children: usize)
+    where
+        N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+    {
         assert!(
             num_children >= 2,
             "test harness must specify more than 1 child"
         );
 
-        let mut leaves = Vec::with_capacity(num_children);
-        for _ in 0..num_children {
-            leaves.push(LeafNode::with_no_siblings(vec![].into(), ()));
-        }
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), PREFIX_LEN>> = (0..num_children)
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
 
-        let leaf_pointers = leaves
+        let leaf_pointers: Vec<OpaqueNodePtr<Box<[u8]>, (), PREFIX_LEN>> = leaves
             .iter_mut()
             .map(|leaf| NodePtr::from(leaf).to_opaque())
-            .collect::<Vec<_>>();
+            .collect();
 
-        for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
-            node.write_child(u8::try_from(idx).unwrap(), leaf_pointer);
+        let mut node = N::builder(&[], 0).write_child(0, leaf_pointers[0]).build();
+
+        for (idx, leaf_pointer) in leaf_pointers[1..].iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx + 1).unwrap(), leaf_pointer);
         }
 
         assert_eq!(node.header().num_children(), num_children);
