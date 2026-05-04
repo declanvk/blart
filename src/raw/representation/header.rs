@@ -52,16 +52,6 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         header
     }
 
-    /// Create a new `Header` for an empty node.
-    #[inline]
-    pub fn empty() -> Self {
-        Self {
-            num_children: 0,
-            prefix_len: 0,
-            prefix: [0; PREFIX_LEN],
-        }
-    }
-
     /// Read the initialized portion of the prefix present in the header.
     #[inline]
     pub fn read_prefix(&self) -> &[u8] {

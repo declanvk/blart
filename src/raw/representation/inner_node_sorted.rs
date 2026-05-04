@@ -366,14 +366,6 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         &self.header
     }
 
-    fn from_header(header: Header<PREFIX_LEN>) -> Self {
-        Self {
-            header,
-            child_pointers: [MaybeUninit::uninit(); SIZE],
-            keys: [0; SIZE],
-        }
-    }
-
     fn lookup_child(&self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
         let idx = self.lookup_child_index(key_fragment)?;
         unsafe {
@@ -618,7 +610,6 @@ mod tests {
 
     #[test]
     fn node4_lookup() {
-        let mut n = InnerNode4::<Box<[u8]>, (), 16>::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -626,42 +617,33 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        assert!(n.lookup_child(123).is_none());
-
-        n.header.inc_num_children();
-        n.header.inc_num_children();
-        n.header.inc_num_children();
-
-        n.keys[0] = 3;
-        n.keys[1] = 123;
-        n.keys[2] = 1;
-
-        n.child_pointers[0].write(l1_ptr);
-        n.child_pointers[1].write(l2_ptr);
-        n.child_pointers[2].write(l3_ptr);
+        let n = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(123, l2_ptr)
+            .write_child(1, l3_ptr)
+            .build();
 
         assert_eq!(n.lookup_child(123), Some(l2_ptr));
     }
 
     #[test]
     fn node4_write_child() {
-        inner_node_write_child_test(InnerNode4::<_, _, 16>::empty(), 4)
+        inner_node_write_child_test::<16, InnerNode4<Box<[u8]>, (), 16>>(4)
     }
 
     #[test]
     fn node4_remove_child() {
-        inner_node_remove_child_test(InnerNode4::<_, _, 16>::empty(), 4)
+        inner_node_remove_child_test::<16, InnerNode4<Box<[u8]>, (), 16>>(4)
     }
 
     #[test]
     #[should_panic]
     fn node4_write_child_full_panic() {
-        inner_node_write_child_test(InnerNode4::<_, _, 16>::empty(), 5);
+        inner_node_write_child_test::<16, InnerNode4<Box<[u8]>, (), 16>>(5);
     }
 
     #[test]
     fn node4_grow() {
-        let mut n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -669,9 +651,11 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        n4.write_child(3, l1_ptr);
-        n4.write_child(123, l2_ptr);
-        n4.write_child(1, l3_ptr);
+        let n4 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(123, l2_ptr)
+            .write_child(1, l3_ptr)
+            .build();
 
         let n16 = n4.grow();
 
@@ -684,19 +668,22 @@ mod tests {
     #[test]
     #[should_panic = "unable to shrink a Node4, something went wrong!"]
     fn node4_shrink() {
-        let n4 = InnerNode4::<Box<[u8]>, (), 16>::empty();
+        let mut leaf = LeafNode::<Box<[u8]>, (), 16>::with_no_siblings(vec![].into(), ());
+        let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
+        let n4 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(0, leaf_ptr)
+            .build();
 
         n4.shrink();
     }
 
     #[test]
     fn node4_min_max() {
-        inner_node_min_max_test(InnerNode4::<_, _, 16>::empty(), 4);
+        inner_node_min_max_test::<16, InnerNode4<Box<[u8]>, (), 16>>(4);
     }
 
     #[test]
     fn node16_lookup() {
-        let mut n = InnerNode16::<Box<[u8]>, (), 16>::empty();
         let mut l1 = LeafNode::with_no_siblings(Box::from([]), ());
         let mut l2 = LeafNode::with_no_siblings(Box::from([]), ());
         let mut l3 = LeafNode::with_no_siblings(Box::from([]), ());
@@ -704,43 +691,34 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        assert!(n.lookup_child(123).is_none());
-
-        n.header.inc_num_children();
-        n.header.inc_num_children();
-        n.header.inc_num_children();
-
-        n.keys[0] = 3;
-        n.keys[1] = 123;
-        n.keys[2] = 1;
-
-        n.child_pointers[0].write(l1_ptr);
-        n.child_pointers[1].write(l2_ptr);
-        n.child_pointers[2].write(l3_ptr);
+        let n = InnerNode16::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(123, l2_ptr)
+            .write_child(1, l3_ptr)
+            .build();
 
         assert_eq!(n.lookup_child(123), Some(l2_ptr));
     }
 
     #[test]
     fn node16_write_child() {
-        inner_node_write_child_test(InnerNode16::<_, _, 16>::empty(), 16)
+        inner_node_write_child_test::<16, InnerNode16<Box<[u8]>, (), 16>>(16)
     }
 
     #[test]
     fn node16_remove_child() {
-        inner_node_remove_child_test(InnerNode16::<_, _, 16>::empty(), 16)
+        inner_node_remove_child_test::<16, InnerNode16<Box<[u8]>, (), 16>>(16)
     }
 
     #[test]
     #[should_panic]
     fn node16_write_child_full_panic() {
-        inner_node_write_child_test(InnerNode16::<_, _, 16>::empty(), 17);
+        inner_node_write_child_test::<16, InnerNode16<Box<[u8]>, (), 16>>(17);
     }
 
     #[test]
     #[should_panic = "Node must be full to grow to node 48"]
     fn node16_grow_panic() {
-        let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -748,22 +726,30 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        n16.write_child(3, l1_ptr);
-        n16.write_child(123, l2_ptr);
-        n16.write_child(1, l3_ptr);
+        let n16 = InnerNode16::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(123, l2_ptr)
+            .write_child(1, l3_ptr)
+            .build();
 
         let _n48 = n16.grow();
     }
 
     #[test]
     fn node16_grow() {
-        let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::empty();
-        let mut v = Vec::new();
-        for i in 0..16 {
-            let mut l = LeafNode::with_no_siblings(vec![].into(), ());
-            let l_ptr = NodePtr::from(&mut l).to_opaque();
-            v.push(l_ptr);
-            n16.write_child(i * 2, l_ptr);
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), 16>> = (0..16)
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
+        let v: Vec<_> = leaves
+            .iter_mut()
+            .map(|l| NodePtr::from(l).to_opaque())
+            .collect();
+
+        let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(0, v[0])
+            .build();
+        for i in 1..16u8 {
+            n16.write_child(i * 2, v[usize::from(i)]);
         }
 
         let n48 = n16.grow();
@@ -775,23 +761,22 @@ mod tests {
 
     #[test]
     fn node16_shrink() {
-        inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 4);
+        inner_node_shrink_test::<16, InnerNode16<Box<[u8]>, (), 16>>(4);
     }
 
     #[test]
     #[should_panic = "Cannot change InnerNodeSorted<16> to size 4 when it has more than 4 \
                       children. Currently has [5] children."]
     fn node16_shrink_too_many_children_panic() {
-        inner_node_shrink_test(InnerNode16::<_, _, 16>::empty(), 5);
+        inner_node_shrink_test::<16, InnerNode16<Box<[u8]>, (), 16>>(5);
     }
 
     #[test]
     fn node16_min_max() {
-        inner_node_min_max_test(InnerNode16::<_, _, 16>::empty(), 16);
+        inner_node_min_max_test::<16, InnerNode16<Box<[u8]>, (), 16>>(16);
     }
 
     fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {
-        let mut n4 = InnerNode4::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -801,10 +786,12 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        n4.write_child(3, l1_ptr);
-        n4.write_child(255, l2_ptr);
-        n4.write_child(0u8, l3_ptr);
-        n4.write_child(85, l4_ptr);
+        let n4 = InnerNode4::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(255, l2_ptr)
+            .write_child(0u8, l3_ptr)
+            .write_child(85, l4_ptr)
+            .build();
 
         (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }
@@ -885,7 +872,6 @@ mod tests {
     }
 
     fn node4_fixture_empty_edges() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {
-        let mut n4 = InnerNode4::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -895,10 +881,12 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        n4.write_child(3, l1_ptr);
-        n4.write_child(254, l2_ptr);
-        n4.write_child(2u8, l3_ptr);
-        n4.write_child(85, l4_ptr);
+        let n4 = InnerNode4::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(254, l2_ptr)
+            .write_child(2u8, l3_ptr)
+            .write_child(85, l4_ptr)
+            .build();
 
         (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }
@@ -1009,7 +997,6 @@ mod tests {
     }
 
     fn node16_fixture() -> FixtureReturn<InnerNode16<Box<[u8]>, (), 16>, 4> {
-        let mut n16 = InnerNode16::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -1019,10 +1006,12 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        n16.write_child(3, l1_ptr);
-        n16.write_child(255, l2_ptr);
-        n16.write_child(0u8, l3_ptr);
-        n16.write_child(85, l4_ptr);
+        let n16 = InnerNode16::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(255, l2_ptr)
+            .write_child(0u8, l3_ptr)
+            .write_child(85, l4_ptr)
+            .build();
 
         (n16, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }
@@ -1108,7 +1097,6 @@ mod tests {
     }
 
     fn node16_fixture_empty_edges() -> FixtureReturn<InnerNode16<Box<[u8]>, (), 16>, 4> {
-        let mut n16 = InnerNode16::empty();
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -1118,10 +1106,12 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        n16.write_child(3, l1_ptr);
-        n16.write_child(254, l2_ptr);
-        n16.write_child(2u8, l3_ptr);
-        n16.write_child(85, l4_ptr);
+        let n16 = InnerNode16::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(254, l2_ptr)
+            .write_child(2u8, l3_ptr)
+            .write_child(85, l4_ptr)
+            .build();
 
         (n16, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }

@@ -11,6 +11,13 @@ fn iter_node<const PREFIX_LEN: usize, M: Measurement, N: InnerNode<PREFIX_LEN>>(
     ty: &str,
     sizes: &[u16],
 ) {
+    for (idx, size) in sizes.iter().enumerate() {
+        assert!(
+            *size > 0,
+            "size {size} in index {idx} must be greater than zero"
+        );
+    }
+
     let mut rng = StdRng::seed_from_u64(69420);
     let bytes: Vec<_> = (0..=255u8).collect();
 
@@ -20,10 +27,13 @@ fn iter_node<const PREFIX_LEN: usize, M: Measurement, N: InnerNode<PREFIX_LEN>>(
 
     let mut group = c.benchmark_group(format!("iter_node/{ty}"));
     for size in sizes {
-        let mut node = N::empty();
-        for key in bytes.choose_multiple(&mut rng, *size as usize) {
-            node.write_child(*key, dangling_opaque)
+        let mut iter = bytes.choose_multiple(&mut rng, *size as usize);
+        let mut builder = N::builder(&[], 0).write_child(*iter.next().unwrap(), dangling_opaque);
+        for key in iter {
+            builder = builder.write_child(*key, dangling_opaque);
         }
+
+        let node = builder.build();
 
         group.bench_function(format!("{size}").as_str(), |b| {
             b.iter(|| {
