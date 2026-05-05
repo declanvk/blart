@@ -14,6 +14,7 @@ fn bench(c: &mut Criterion) {
             let idx = i * skip;
             let node = InnerNode48::<CString, usize, 16>::builder(&[], 0)
                 .write_child(idx, dangling_opaque)
+                .write_child(idx.wrapping_add(1), dangling_opaque)
                 .build();
             (idx, node)
         })
@@ -23,6 +24,7 @@ fn bench(c: &mut Criterion) {
             let idx = i * skip;
             let node = InnerNodeDirect::<CString, usize, 16>::builder(&[], 0)
                 .write_child(idx, dangling_opaque)
+                .write_child(idx.wrapping_add(1), dangling_opaque)
                 .build();
             (idx, node)
         })
