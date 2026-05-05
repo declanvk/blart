@@ -14,7 +14,7 @@ use core::{
 use crate::{
     raw::{
         representation::assert_valid_range_bounds, Header, InnerNode, InnerNode48, InnerNodeCommon,
-        InnerNodeDirect, InnerNodeIndirect, Node, NodeType, OpaqueNodePtr,
+        InnerNodeDirect, InnerNodeIndirect, LeafNode, Node, NodeType, OpaqueNodePtr,
     },
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
@@ -545,6 +545,22 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
                 keys.last().copied().unwrap_unchecked(),
                 children.last().copied().unwrap_unchecked(),
             )
+        }
+    }
+
+    fn any_child_prefer_leaf(&self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
+        let (_, children) = self.initialized_portion();
+        // SAFETY: Any Node4 must have at least 2 children, so the `keys` and
+        // `children` arrays must be non-empty
+        unsafe {
+            let first = *children.get_unchecked(0);
+            if first.is::<LeafNode<K, V, PREFIX_LEN>>() {
+                return first;
+            }
+
+            // Must have at least two children right
+            let second = *children.get_unchecked(1);
+            second
         }
     }
 }

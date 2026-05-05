@@ -11,7 +11,7 @@ use self::index::NonMaxIndex;
 use crate::{
     raw::{
         representation::assert_valid_range_bounds, Header, InnerNode, InnerNode16, InnerNodeCommon,
-        InnerNodeDirect, InnerNodeSorted, Node, NodeType, OpaqueNodePtr,
+        InnerNodeDirect, InnerNodeSorted, LeafNode, Node, NodeType, OpaqueNodePtr,
     },
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
@@ -443,6 +443,22 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
             return (key as u8, child_pointers[usize::from(*idx)]);
         }
         unreachable!("inner node must have non-zero number of children");
+    }
+
+    fn any_child_prefer_leaf(&self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
+        let children = self.initialized_child_pointers();
+
+        // SAFETY: Since inner nodes must have at least two children, and the
+        // `InnerNodeIndirect` maintains a compact array of child pointers, this must be
+        // a valid access.
+        let first = unsafe { children.get_unchecked(0) };
+        if first.is::<LeafNode<K, V, PREFIX_LEN>>() {
+            return *first;
+        }
+
+        // SAFETY: Same as above, just for the second child
+        let second = unsafe { children.get_unchecked(1) };
+        *second
     }
 }
 

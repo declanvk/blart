@@ -8,7 +8,7 @@ use core::{
     ops::{Bound, RangeBounds, RangeInclusive},
 };
 
-use crate::{raw::minimum_unchecked, rust_nightly_apis::likely, AsBytes};
+use crate::{rust_nightly_apis::likely, AsBytes};
 
 mod header;
 pub use header::*;
@@ -472,16 +472,12 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
         if likely!(len <= PREFIX_LEN) {
             (header.read_prefix(), None)
         } else {
-            // SAFETY: By construction a InnerNode, must have >= 1 children, this
-            // is even more strict since in the case of 1 child the node can be
-            // collapsed, so a InnerNode must have >= 2 children, so it's safe
-            // to search for the minium. And the same applies to the `minimum_unchecked`
-            // function
-            let (_, min_child) = self.min();
-            let leaf_ptr = unsafe { minimum_unchecked(min_child) };
+            // SAFETY: Given we have a shared reference to this leaf node, there must be no
+            // concurrent mutation on this node or any child node of this node.
+            let leaf_ptr = unsafe { any_subtree_leaf(self) };
 
-            // SAFETY: Since have a shared reference
-            // is safe to create a shared reference from it
+            // SAFETY: Since have a shared reference is safe to create a shared reference
+            // from it
             let leaf = unsafe { leaf_ptr.as_ref() };
             let leaf = leaf.key_ref().as_bytes();
 
@@ -519,6 +515,16 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
     /// because if we had, no children this current node should have been
     /// deleted.
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
+
+    /// Returns any child pointer from this node, preferring children that are
+    /// pointers to leaf nodes.
+    ///
+    /// This function is useful in context where we need to quickly find a leaf
+    /// of a subtree, but don't care how we get there.
+    fn any_child_prefer_leaf(&self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
+        // The minimum child is a valid choice
+        self.min().1
+    }
 }
 
 /// Common methods implemented by all inner nodes that will be used in the tree.
@@ -850,6 +856,33 @@ fn assert_valid_range_bounds(bound: &impl RangeBounds<u8>) {
             },
             _ => {},
         }
+    }
+}
+
+/// Find any leaf in the subtree rooted by `root`.
+///
+/// # Safety
+///  - This function cannot be called concurrently with any mutating operation
+///    on `root` or any child node of `root`. This function will arbitrarily
+///    read to any child in the given tree.
+#[inline]
+unsafe fn any_subtree_leaf<N, K, V, const PREFIX_LEN: usize>(
+    root: &N,
+) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>
+where
+    N: InnerNodeCommon<K, V, PREFIX_LEN>,
+{
+    let mut current_node = root.any_child_prefer_leaf();
+
+    loop {
+        current_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
+            // SAFETY: No other concurrent mutation will happen, the reference returned from
+            // `as_ref` is also bounded to this loop, not returned outside.
+            InnerNode(inner_node) => unsafe { inner_node.as_ref().any_child_prefer_leaf() },
+            LeafNode(leaf_node) => {
+                return leaf_node;
+            },
+        });
     }
 }
 
