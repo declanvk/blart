@@ -611,15 +611,19 @@ mod tests {
 
         let mut n4 = InnerNode4::<Box<[u8]>, usize, 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
         let mut n16 = InnerNode16::<Box<[u8]>, usize, 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
         let mut n48 = InnerNode48::<Box<[u8]>, usize, 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
         let mut n256 = InnerNodeDirect::<Box<[u8]>, usize, 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
 
         let n4_ptr = NodePtr::from(&mut n4).to_opaque();

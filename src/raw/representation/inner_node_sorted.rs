@@ -672,6 +672,7 @@ mod tests {
         let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
         let n4 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
 
         n4.shrink();
@@ -747,8 +748,9 @@ mod tests {
 
         let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::builder(&[], 0)
             .write_child(0, v[0])
+            .write_child(2, v[1])
             .build();
-        for i in 1..16u8 {
+        for i in 2..16u8 {
             n16.write_child(i * 2, v[usize::from(i)]);
         }
 

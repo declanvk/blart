@@ -28,9 +28,11 @@ fn bench(c: &mut Criterion) {
     let p0 = &[0, 0, 0, 0, 0, 0, 0, 0];
     let node48_small = InnerNode48::<Box<[u8]>, usize, 16>::builder(p0, p0.len())
         .write_child(99, leaf_opaque)
+        .write_child(100, leaf_opaque)
         .build();
     let node256_small = InnerNodeDirect::<Box<[u8]>, usize, 16>::builder(p0, p0.len())
         .write_child(99, leaf_opaque)
+        .write_child(100, leaf_opaque)
         .build();
 
     let p1 = &[
@@ -38,9 +40,11 @@ fn bench(c: &mut Criterion) {
     ];
     let node48_large = InnerNode48::<Box<[u8]>, usize, 16>::builder(p1, p1.len())
         .write_child(99, leaf_opaque)
+        .write_child(100, leaf_opaque)
         .build();
     let node256_large = InnerNodeDirect::<Box<[u8]>, usize, 16>::builder(p1, p1.len())
         .write_child(99, leaf_opaque)
+        .write_child(100, leaf_opaque)
         .build();
 
     macro_rules! generate_benches {

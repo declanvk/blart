@@ -13,8 +13,8 @@ fn iter_node<const PREFIX_LEN: usize, M: Measurement, N: InnerNode<PREFIX_LEN>>(
 ) {
     for (idx, size) in sizes.iter().enumerate() {
         assert!(
-            *size > 0,
-            "size {size} in index {idx} must be greater than zero"
+            *size >= 2,
+            "size {size} in index {idx} must be at least two"
         );
     }
 
@@ -28,7 +28,9 @@ fn iter_node<const PREFIX_LEN: usize, M: Measurement, N: InnerNode<PREFIX_LEN>>(
     let mut group = c.benchmark_group(format!("iter_node/{ty}"));
     for size in sizes {
         let mut iter = bytes.choose_multiple(&mut rng, *size as usize);
-        let mut builder = N::builder(&[], 0).write_child(*iter.next().unwrap(), dangling_opaque);
+        let mut builder = N::builder(&[], 0)
+            .write_child(*iter.next().unwrap(), dangling_opaque)
+            .write_child(*iter.next().unwrap(), dangling_opaque);
         for key in iter {
             builder = builder.write_child(*key, dangling_opaque);
         }
@@ -46,7 +48,7 @@ fn iter_node<const PREFIX_LEN: usize, M: Measurement, N: InnerNode<PREFIX_LEN>>(
 }
 
 fn bench(c: &mut Criterion) {
-    iter_node::<16, _, InnerNode4<CString, usize, 16>>(c, "n4", &[1, 4]);
+    iter_node::<16, _, InnerNode4<CString, usize, 16>>(c, "n4", &[2, 4]);
     iter_node::<16, _, InnerNode16<CString, usize, 16>>(c, "n16", &[5, 12, 16]);
     iter_node::<16, _, InnerNode48<CString, usize, 16>>(c, "n48", &[17, 32, 48]);
     iter_node::<16, _, InnerNodeDirect<CString, usize, 16>>(c, "n256", &[49, 100, 152, 204, 256]);

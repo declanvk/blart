@@ -557,15 +557,18 @@ pub trait InnerNode<const PREFIX_LEN: usize>:
 /// Marker type for [`InnerNodeBuilder`]: no children have been added yet.
 pub struct NoChild;
 
-/// Marker type for [`InnerNodeBuilder`]: at least one child has been added.
+/// Marker type for [`InnerNodeBuilder`]: exactly one child has been added.
+pub struct HasOneChild;
+
+/// Marker type for [`InnerNodeBuilder`]: at least two children have been added.
 pub struct HasChild;
 
-/// Typestate builder for inner nodes that enforces the non-empty invariant.
+/// Typestate builder for inner nodes that enforces the two-child minimum
+/// invariant.
 ///
 /// The only way to call [`build`][InnerNodeBuilder::build] is to first add at
-/// least one child via
-/// [`write_child`][InnerNodeBuilder::write_child]. This is checked at
-/// compile time via the `S` typestate parameter.
+/// least two children via [`write_child`][InnerNodeBuilder::write_child]. This
+/// is checked at compile time via the `S` typestate parameter.
 ///
 /// Obtain a builder via [`InnerNodeCommon::builder`].
 #[expect(clippy::type_complexity)]
@@ -578,8 +581,27 @@ impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, NoC
 where
     N: InnerNodeCommon<K, V, PREFIX_LEN>,
 {
-    /// Add the first child, transitioning the builder to the [`HasChild`] state
-    /// and enabling [`build`][InnerNodeBuilder::build].
+    /// Add the first child, transitioning the builder to the [`HasOneChild`]
+    /// state.
+    pub fn write_child(
+        mut self,
+        key_byte: u8,
+        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasOneChild> {
+        self.node.write_child(key_byte, child);
+        InnerNodeBuilder {
+            node: self.node,
+            _state: PhantomData,
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasOneChild>
+where
+    N: InnerNodeCommon<K, V, PREFIX_LEN>,
+{
+    /// Add the second child, transitioning the builder to the [`HasChild`]
+    /// state and enabling [`build`][InnerNodeBuilder::build].
     pub fn write_child(
         mut self,
         key_byte: u8,
@@ -598,7 +620,31 @@ impl<K, V, const PREFIX_LEN: usize>
 {
     /// Add the first child to the node without bounds check or order.
     ///
-    /// This function transitions the build to the [`HasChild`] state and
+    /// This function transitions the builder to the [`HasOneChild`] state.
+    ///
+    /// # Safety
+    /// - This functions assumes that the write is gonna be inbound (i.e the
+    ///   check for a full node is done previously to the call of this function)
+    pub unsafe fn write_child_unchecked(
+        mut self,
+        key_byte: u8,
+        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasOneChild> {
+        // SAFETY: Covered by function safety requirements
+        unsafe { self.node.write_child_unchecked(key_byte, child) };
+        InnerNodeBuilder {
+            node: self.node,
+            _state: PhantomData,
+        }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize>
+    InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasOneChild>
+{
+    /// Add the second child to the node without bounds check or order.
+    ///
+    /// This function transitions the builder to the [`HasChild`] state and
     /// enabling [`build`][InnerNodeBuilder::build].
     ///
     /// # Safety
@@ -897,15 +943,19 @@ mod tests {
 
         let n4 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
         let n16 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
         let n48 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
         let n256 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
 
         let n4_ptr = const_addr(&n4 as *const InnerNode4<Box<[u8]>, (), 16>);
@@ -934,12 +984,15 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        let mut node = N::builder(&[], 0).write_child(0, leaf_pointers[0]).build();
+        let mut node = N::builder(&[], 0)
+            .write_child(0, leaf_pointers[0])
+            .write_child(1, leaf_pointers[1])
+            .build();
 
         assert!(!node.is_full());
 
-        for (idx, leaf_pointer) in leaf_pointers[1..].iter().copied().enumerate() {
-            node.write_child(u8::try_from(idx + 1).unwrap(), leaf_pointer);
+        for (idx, leaf_pointer) in leaf_pointers[2..].iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx + 2).unwrap(), leaf_pointer);
         }
 
         for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
@@ -965,12 +1018,15 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        let mut node = N::builder(&[], 0).write_child(0, leaf_pointers[0]).build();
+        let mut node = N::builder(&[], 0)
+            .write_child(0, leaf_pointers[0])
+            .write_child(1, leaf_pointers[1])
+            .build();
 
         assert!(!node.is_full());
 
-        for (idx, leaf_pointer) in leaf_pointers[1..].iter().copied().enumerate() {
-            node.write_child(u8::try_from(idx + 1).unwrap(), leaf_pointer);
+        for (idx, leaf_pointer) in leaf_pointers[2..].iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx + 2).unwrap(), leaf_pointer);
         }
 
         for (idx, leaf_pointer) in leaf_pointers.iter().copied().enumerate() {
@@ -1005,10 +1061,13 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        let mut node = N::builder(&[], 0).write_child(0, leaf_pointers[0]).build();
+        let mut node = N::builder(&[], 0)
+            .write_child(0, leaf_pointers[0])
+            .write_child(1, leaf_pointers[1])
+            .build();
 
-        for (idx, leaf_pointer) in leaf_pointers[1..].iter().copied().enumerate() {
-            node.write_child(u8::try_from(idx + 1).unwrap(), leaf_pointer);
+        for (idx, leaf_pointer) in leaf_pointers[2..].iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx + 2).unwrap(), leaf_pointer);
         }
 
         let shrunk_node = node.shrink();
@@ -1039,10 +1098,13 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        let mut node = N::builder(&[], 0).write_child(0, leaf_pointers[0]).build();
+        let mut node = N::builder(&[], 0)
+            .write_child(0, leaf_pointers[0])
+            .write_child(1, leaf_pointers[1])
+            .build();
 
-        for (idx, leaf_pointer) in leaf_pointers[1..].iter().copied().enumerate() {
-            node.write_child(u8::try_from(idx + 1).unwrap(), leaf_pointer);
+        for (idx, leaf_pointer) in leaf_pointers[2..].iter().copied().enumerate() {
+            node.write_child(u8::try_from(idx + 2).unwrap(), leaf_pointer);
         }
 
         assert_eq!(node.header().num_children(), num_children);

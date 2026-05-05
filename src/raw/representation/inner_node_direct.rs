@@ -394,6 +394,7 @@ mod tests {
         let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
         let n = InnerNodeDirect::<Box<[u8]>, (), 16>::builder(&[], 0)
             .write_child(0, leaf_ptr)
+            .write_child(1, leaf_ptr)
             .build();
 
         n.grow();
