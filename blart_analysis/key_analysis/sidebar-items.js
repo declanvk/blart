@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["InnerNodeKind"],"fn":["analyze_sorted_key_iter","cost_between"],"struct":["CalculateInnerNodeDist","InnerNodeWidth","InnerNodeWidthAssignment","InnerNodeWidthDistribution","PrefixFrame","WidthTryFromIntError"]};
