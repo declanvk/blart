@@ -11,6 +11,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions: {}
+
 jobs:
   test:
     strategy:
@@ -21,7 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Resolve version
         id: resolve_version
@@ -29,19 +33,22 @@ jobs:
 
       - name: Install ${{ steps.resolve_version.outputs.version }} toolchain
         if: matrix.rust == 'nightly'
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
         with:
           toolchain: ${{ steps.resolve_version.outputs.version }}
           components: miri rustfmt clippy
-      
+
       - name: Install ${{ steps.resolve_version.outputs.version }} toolchain
         if: matrix.rust != 'nightly'
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
         with:
           toolchain: ${{ steps.resolve_version.outputs.version }}
           components: rustfmt clippy
-      
-      - uses: taiki-e/install-action@cargo-binstall
+
+      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
+        with:
+          tool: cargo-binstall
+
       - name: Install iai-callgrind-runner and valgrind
         run: |
           version=$(cargo metadata --format-version=1 |\
@@ -54,4 +61,6 @@ jobs:
 
 
       - name: Run full test script
-        run: ./scripts/full-test.sh "${{ steps.resolve_version.outputs.version }}"
+        run: ./scripts/full-test.sh "${STEPS_RESOLVE_VERSION_OUTPUTS_VERSION}"
+        env:
+          STEPS_RESOLVE_VERSION_OUTPUTS_VERSION: ${{ steps.resolve_version.outputs.version }}
