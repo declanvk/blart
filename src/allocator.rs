@@ -69,8 +69,7 @@ mod inner {
         ///
         /// # Safety
         ///
-        /// * `ptr` must denote a block of memory [*currently allocated*] via
-        ///   this allocator, and
+        /// * `ptr` must denote a block of memory [*currently allocated*] via this allocator, and
         /// * `layout` must [*fit*] that block of memory.
         ///
         /// [*currently allocated*]: https://doc.rust-lang.org/std/alloc/trait.Allocator.html#currently-allocated-memory

@@ -103,11 +103,10 @@ impl PrefixMatchBehavior {
     /// node.
     ///
     /// Specifically:
-    ///  - If the current behavior is "optimistic", then the entire leaf key
-    ///    will be matched against the given key bytes
-    ///  - If the current behavior is "pessimistic", then only the key bytes
-    ///    that were not used during the lookup process will be tested against
-    ///    the corresponding leaf key bytes.
+    ///  - If the current behavior is "optimistic", then the entire leaf key will be matched against
+    ///    the given key bytes
+    ///  - If the current behavior is "pessimistic", then only the key bytes that were not used
+    ///    during the lookup process will be tested against the corresponding leaf key bytes.
     ///
     /// This is a minor optimization to reduce the amount of work needed
     /// confirming that a lookup found the right leaf node.
@@ -136,11 +135,10 @@ impl PrefixMatchBehavior {
     /// This function will test given leaf key is a prefix of the key bytes.
     ///
     /// Specifically:
-    ///  - If the current behavior is "optimistic", then the entire leaf key
-    ///    will be matched against the given key bytes
-    ///  - If the current behavior is "pessimistic", then only the key bytes
-    ///    that were not used during the lookup process will be tested against
-    ///    the corresponding leaf key bytes.
+    ///  - If the current behavior is "optimistic", then the entire leaf key will be matched against
+    ///    the given key bytes
+    ///  - If the current behavior is "pessimistic", then only the key bytes that were not used
+    ///    during the lookup process will be tested against the corresponding leaf key bytes.
     pub fn leaf_key_is_prefix<K: AsBytes, V, const PREFIX_LEN: usize>(
         self,
         leaf: &LeafNode<K, V, PREFIX_LEN>,
@@ -167,9 +165,8 @@ impl PrefixMatchBehavior {
 /// Search in the given tree for the value stored with the given key.
 ///
 /// # Safety
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 pub unsafe fn search_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
@@ -212,9 +209,8 @@ where
 /// `key_bytes`
 ///
 /// # Safety
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 pub unsafe fn prefix_search_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
@@ -260,8 +256,7 @@ where
 /// child for the key byte, it returns `None`.
 ///
 /// # Safety
-///  - No other access or mutation to the `inner_ptr` Node can happen while this
-///    function runs.
+///  - No other access or mutation to the `inner_ptr` Node can happen while this function runs.
 pub(crate) unsafe fn check_prefix_lookup_child<K, V, N, const PREFIX_LEN: usize>(
     inner_ptr: NodePtr<PREFIX_LEN, N>,
     key_bytes: &[u8],

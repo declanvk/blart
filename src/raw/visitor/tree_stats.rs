@@ -31,9 +31,8 @@ impl TreeStatsCollector {
     ///
     /// # Safety
     ///  - `root` must be a pointer to a well formed tree.
-    ///  - This function cannot be called concurrently with any mutating
-    ///    operation on `root` or any child node of `root`. This function will
-    ///    read to all children in the given tree.
+    ///  - This function cannot be called concurrently with any mutating operation on `root` or any
+    ///    child node of `root`. This function will read to all children in the given tree.
     pub unsafe fn collect_ptr<K: AsBytes, V, const PREFIX_LEN: usize>(
         root: &OpaqueNodePtr<K, V, PREFIX_LEN>,
     ) -> TreeStats {

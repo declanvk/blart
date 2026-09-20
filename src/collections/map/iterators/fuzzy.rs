@@ -411,8 +411,7 @@ gen_iter!(
 // SAFETY:
 //  1. `FuzzyMut` holds a mutable reference to the original tree
 //  2. `&mut T` is `Send` when `T` is `Send`
-//  3. `TreeMap<K, V, PREFIX_LEN, A>` is `Send` if `K`, `V`, and `A` are all
-//     `Send`
+//  3. `TreeMap<K, V, PREFIX_LEN, A>` is `Send` if `K`, `V`, and `A` are all `Send`
 unsafe impl<K, V, A, const PREFIX_LEN: usize> Send for FuzzyMut<'_, '_, K, V, PREFIX_LEN, A>
 where
     K: Send,
@@ -424,8 +423,7 @@ where
 // SAFETY:
 //  1. `FuzzyMut` holds a mutable reference to the original tree
 //  2. `&mut T` is `Sync` if and only if `T` is `Sync`
-//  3. `TreeMap<K, V, PREFIX_LEN, A>` is `Sync` if `K`, `V`, and `A` are all
-//     `Sync`
+//  3. `TreeMap<K, V, PREFIX_LEN, A>` is `Sync` if `K`, `V`, and `A` are all `Sync`
 unsafe impl<K, V, A, const PREFIX_LEN: usize> Sync for FuzzyMut<'_, '_, K, V, PREFIX_LEN, A>
 where
     K: Sync,

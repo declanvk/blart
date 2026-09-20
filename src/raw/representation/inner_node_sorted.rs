@@ -161,8 +161,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     /// Writes a child to the node without bounds check or order
     ///
     /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the
-    ///   check for a full node is done previously to the call of this function)
+    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
+    ///   is done previously to the call of this function)
     pub unsafe fn write_child_unchecked(
         &mut self,
         key_fragment: u8,

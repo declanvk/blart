@@ -70,8 +70,8 @@ impl<O: Write, K, V> DotPrinter<O, K, V> {
     /// Write the dot-format of the given tree to the given output.
     ///
     /// # Safety
-    ///  - For the duration of this function, the given node and all its
-    ///    children nodes must not get mutated.
+    ///  - For the duration of this function, the given node and all its children nodes must not get
+    ///    mutated.
     pub(crate) unsafe fn print_tree<const PREFIX_LEN: usize>(
         output: O,
         tree: &OpaqueNodePtr<K, V, PREFIX_LEN>,

@@ -5,9 +5,8 @@ use crate::raw::{
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
 /// # Safety
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 #[inline]
 pub unsafe fn minimum_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
@@ -27,9 +26,8 @@ pub unsafe fn minimum_unchecked<K, V, const PREFIX_LEN: usize>(
 /// Search for the leaf with the maximum key, by lexicographic ordering.
 ///
 /// # Safety
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 #[inline]
 pub unsafe fn maximum_unchecked<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,

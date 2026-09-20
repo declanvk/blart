@@ -256,8 +256,7 @@ pub struct PrefixExpansion {
 ///  - Panics if `base_key_len` is 0.
 ///  - Panics if `value_stops` is 0.
 ///  - Panics if any `PrefixExpansion` has `expanded_length` equal to 0.
-///  - Panics if any `PrefixExpansion` has `base_index` greater than or equal to
-///    `base_key_len`.
+///  - Panics if any `PrefixExpansion` has `base_index` greater than or equal to `base_key_len`.
 pub fn generate_key_with_prefix<const KEY_LENGTH: usize>(
     level_widths: [u8; KEY_LENGTH],
     prefix_expansions: impl AsRef<[PrefixExpansion]>,

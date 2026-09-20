@@ -132,8 +132,8 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertPoint<K, V, PREFIX_LEN>
 ///
 /// # Safety
 ///
-///  - This function must not be called concurrently with and other read or
-///    modification of the trie.
+///  - This function must not be called concurrently with and other read or modification of the
+///    trie.
 unsafe fn parent_write_child<K: AsBytes, V, const PREFIX_LEN: usize>(
     parent_inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_byte: u8,
@@ -169,14 +169,13 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
     ///
     /// # Safety
     ///
-    ///  - This function must not be called concurrently with and other read or
-    ///    modification of the trie.
-    ///  - The given allocator must be the same one that was used to allocate
-    ///    the nodes of this trie.
-    ///  - This function may invalidate existing pointers into the trie when
-    ///    inner nodes are grown. Callers must ensure that they delete
-    ///    invalidated pointers, the new pointers are returned in
-    ///    [`InsertResult`].
+    ///  - This function must not be called concurrently with and other read or modification of the
+    ///    trie.
+    ///  - The given allocator must be the same one that was used to allocate the nodes of this
+    ///    trie.
+    ///  - This function may invalidate existing pointers into the trie when inner nodes are grown.
+    ///    Callers must ensure that they delete invalidated pointers, the new pointers are returned
+    ///    in [`InsertResult`].
     pub unsafe fn apply<'a, A>(
         self,
         key: K,
@@ -220,10 +219,9 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 A: Allocator,
             {
                 /// This function will:
-                ///   1. Find the nearest (previous or next) sibling leaf for
-                ///      the new leaf pointer
-                ///   2. Use that sibling leaf node to add the new leaf pointer
-                ///      into the linked list of leaves
+                ///   1. Find the nearest (previous or next) sibling leaf for the new leaf pointer
+                ///   2. Use that sibling leaf node to add the new leaf pointer into the linked list
+                ///      of leaves
                 fn insert_new_leaf_in_linked_list<'a, K, V, N, const PREFIX_LEN: usize>(
                     new_leaf_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
                     inner_node: &mut N,
@@ -724,10 +722,10 @@ impl<K, V, const PREFIX_LEN: usize> PrefixInsertPoint<K, V, PREFIX_LEN> {
     ///
     /// # Safety
     ///
-    ///  - This function must not be called concurrently with and other read or
-    ///    modification of the trie.
-    ///  - The given allocator must be the same one that was used to allocate
-    ///    the nodes of this trie.
+    ///  - This function must not be called concurrently with and other read or modification of the
+    ///    trie.
+    ///  - The given allocator must be the same one that was used to allocate the nodes of this
+    ///    trie.
     pub unsafe fn apply<'a, A>(
         self,
         key: K,
@@ -790,10 +788,10 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
     ///
     /// # Safety
     ///
-    ///  - This function must not be called concurrently with and other read or
-    ///    modification of the trie.
-    ///  - The given allocator must be the same one that was used to allocate
-    ///    the nodes of this trie.
+    ///  - This function must not be called concurrently with and other read or modification of the
+    ///    trie.
+    ///  - The given allocator must be the same one that was used to allocate the nodes of this
+    ///    trie.
     pub unsafe fn apply<'a, A>(
         self,
         key: K,
@@ -943,9 +941,8 @@ type SearchControlFlow<K, V, const PREFIX_LEN: usize> =
 /// the given key.
 ///
 /// # Safety
-///  - This function cannot be called concurrently to any writes of the `root`
-///    node or any child node of `root`. This function will arbitrarily read to
-///    any child in the given tree.
+///  - This function cannot be called concurrently to any writes of the `root` node or any child
+///    node of `root`. This function will arbitrarily read to any child in the given tree.
 ///  - `current_depth` must be less than or equal to `key.len()`
 #[inline]
 unsafe fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
@@ -991,13 +988,11 @@ where
 /// starting at the given root node.
 ///
 /// # Safety
-///  - This function cannot be called concurrently to any writes of the `root`
-///    node or any child node of `root`. This function will arbitrarily read to
-///    any child in the given tree.
+///  - This function cannot be called concurrently to any writes of the `root` node or any child
+///    node of `root`. This function will arbitrarily read to any child in the given tree.
 ///
 /// # Errors
-///  - If the given `key` is a prefix of an existing key, this function will
-///    return an error.
+///  - If the given `key` is a prefix of an existing key, this function will return an error.
 pub unsafe fn search_for_insert_point<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
@@ -1012,8 +1007,8 @@ where
     loop {
         // SAFETY (covering all `test_prefix_identify_insert` function calls):
         //  1. Concurrent read/write overed by caller safety requirements
-        //  2. `current_depth` can never be greater than `key_bytes.len()` because of
-        //     loop invariant assertion
+        //  2. `current_depth` can never be greater than `key_bytes.len()` because of loop invariant
+        //     assertion
         assert!(current_depth <= key_bytes.len());
 
         let lookup_result = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
@@ -1134,13 +1129,11 @@ where
 /// starting at the given root node.
 ///
 /// # Safety
-///  - This function cannot be called concurrently to any writes of the `root`
-///    node or any child node of `root`. This function will arbitrarily read to
-///    any child in the given tree.
+///  - This function cannot be called concurrently to any writes of the `root` node or any child
+///    node of `root`. This function will arbitrarily read to any child in the given tree.
 ///
 /// # Errors
-///  - If the given `key` is a prefix of an existing key, this function will
-///    return an error.
+///  - If the given `key` is a prefix of an existing key, this function will return an error.
 pub unsafe fn search_for_prefix_insert_point<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
@@ -1155,8 +1148,8 @@ where
     loop {
         // SAFETY (covering all `test_prefix_identify_insert` function calls):
         //  1. Concurrent read/write overed by caller safety requirements
-        //  2. `current_depth` can never be greater than `key_bytes.len()` because of
-        //     loop invariant assertion
+        //  2. `current_depth` can never be greater than `key_bytes.len()` because of loop invariant
+        //     assertion
         assert!(current_depth <= key_bytes.len());
 
         let lookup_result = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {

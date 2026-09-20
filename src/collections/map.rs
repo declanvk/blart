@@ -139,10 +139,9 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     ///  - The raw pointer must have been previously returned by a call to
     ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`].
-    ///     - The allocator of the previous tree must have been the "default"
-    ///       allocator named `Global`.
-    ///  - The given `root` pointer must be unique and there are no other
-    ///    pointers into the tree.
+    ///     - The allocator of the previous tree must have been the "default" allocator named
+    ///       `Global`.
+    ///  - The given `root` pointer must be unique and there are no other pointers into the tree.
     ///  - `root` must be a pointer to a well formed tree.
     ///
     /// # Examples
@@ -177,10 +176,9 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
     ///
     ///  - The raw pointer must have been previously returned by a call to
     ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`].
-    ///     - The allocator of the previous tree must have been the "default"
-    ///       allocator named `Global`.
-    ///  - The given `root` pointer must be unique and there are no other
-    ///    pointers into the tree.
+    ///     - The allocator of the previous tree must have been the "default" allocator named
+    ///       `Global`.
+    ///  - The given `root` pointer must be unique and there are no other pointers into the tree.
     ///
     /// # Errors
     ///
@@ -282,9 +280,8 @@ assert!(matches!(map.allocator(), &System));
     pub fn clear(&mut self) {
         if let Some(state) = &mut self.state {
             // SAFETY:
-            //  - Since we have a mutable reference to the map, we know that there are no
-            //    other mutable references to any node in the tree, meaning we can
-            //    deallocate all of them.
+            //  - Since we have a mutable reference to the map, we know that there are no other
+            //    mutable references to any node in the tree, meaning we can deallocate all of them.
             //  - `self.alloc` was used to allocate all the nodes of the tree
             unsafe {
                 deallocate_tree(state.root, &self.alloc);
@@ -363,12 +360,10 @@ assert!(matches!(map.allocator(), &System));
     /// # Safety
     ///
     ///  - The raw pointer must have been previously returned by a call to
-    ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`] with a
-    ///    known allocator.
-    ///  - The given `root` pointer must be unique and there are no other
-    ///    pointers into the tree.
-    ///  - The given `alloc` must have been used to allocate all of the nodes
-    ///    referenced by the given `root` pointer.
+    ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`] with a known allocator.
+    ///  - The given `root` pointer must be unique and there are no other pointers into the tree.
+    ///  - The given `alloc` must have been used to allocate all of the nodes referenced by the
+    ///    given `root` pointer.
     ///  - `root` must be a pointer to a well formed tree.
     pub unsafe fn from_raw_in_unchecked(
         root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
@@ -412,12 +407,10 @@ assert!(matches!(map.allocator(), &System));
     /// # Safety
     ///
     ///  - The raw pointer must have been previously returned by a call to
-    ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`] with a
-    ///    known allocator.
-    ///  - The given `root` pointer must be unique and there are no other
-    ///    pointers into the tree.
-    ///  - The given `alloc` must have been used to allocate all of the nodes
-    ///    referenced by the given `root` pointer.
+    ///    [`TreeMap::into_raw_with_allocator`] or [`TreeMap::into_raw`] with a known allocator.
+    ///  - The given `root` pointer must be unique and there are no other pointers into the tree.
+    ///  - The given `alloc` must have been used to allocate all of the nodes referenced by the
+    ///    given `root` pointer.
     ///
     /// # Errors
     ///
@@ -1003,8 +996,8 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         K: AsBytes,
     {
         // SAFETY:
-        //  - This call is safe because we have a mutable reference on the tree, so no
-        //    other operation can be concurrent with this one.
+        //  - This call is safe because we have a mutable reference on the tree, so no other
+        //    operation can be concurrent with this one.
         //  - The same allocator is used for all inserts and deletes
         let insert_result = unsafe { insert_point.apply(key, value, &self.alloc) };
         let insert_result = self.apply_insert_result(insert_result);
@@ -1022,8 +1015,8 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         K: AsBytes,
     {
         // SAFETY:
-        //  - This call is safe because we have a mutable reference on the tree, so no
-        //    other operation can be concurrent with this one.
+        //  - This call is safe because we have a mutable reference on the tree, so no other
+        //    operation can be concurrent with this one.
         //  - The same allocator is used for all inserts and deletes
         let insert_result = unsafe { insert_point.apply(key, value, &self.alloc) };
         let leafs_removed = insert_result.leafs_removed;
@@ -1094,12 +1087,11 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         delete_point: DeletePoint<K, V, PREFIX_LEN>,
     ) -> DeleteResult<K, V, PREFIX_LEN> {
         // SAFETY:
-        // - The root is sure to not be `None`, since the we somehow got a
-        //   `DeletePoint`. So the caller must have checked this. Also, since we have a
-        //   mutable reference to the tree, no other read or write operation can be
-        //   happening concurrently.
-        // - `self.alloc` is the same allocator which is used for all inserts and
-        //   deletes on this tree
+        // - The root is sure to not be `None`, since the we somehow got a `DeletePoint`. So the
+        //   caller must have checked this. Also, since we have a mutable reference to the tree, no
+        //   other read or write operation can be happening concurrently.
+        // - `self.alloc` is the same allocator which is used for all inserts and deletes on this
+        //   tree
         // - Invalidated pointers covered by this caller's functions requirements
         let delete_result =
             unsafe { delete_point.apply(self.state.as_ref().unwrap_unchecked().root, &self.alloc) };
@@ -1173,8 +1165,8 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// value is returned.
     ///
     /// # Errors
-    ///  - If the map has an existing key, such that the new key is a prefix of
-    ///    the existing key or vice versa, then it returns an error.
+    ///  - If the map has an existing key, such that the new key is a prefix of the existing key or
+    ///    vice versa, then it returns an error.
     ///
     /// # Examples
     ///

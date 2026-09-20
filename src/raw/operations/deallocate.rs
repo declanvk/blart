@@ -12,13 +12,11 @@ use crate::{
 /// the given iterator.
 ///
 /// # Safety
-///  - This function must only be called once for this `start` node and all
-///    following leaf nodes in the linked list, otherwise a double-free could
-///    result.
-///  - This function should not be called concurrently with any read of the
-///    tree, otherwise it could result in a use-after-free.
-///  - `alloc` must be the same allocator which was used to allocate all the
-///    leaves of the tree.
+///  - This function must only be called once for this `start` node and all following leaf nodes in
+///    the linked list, otherwise a double-free could result.
+///  - This function should not be called concurrently with any read of the tree, otherwise it could
+///    result in a use-after-free.
+///  - `alloc` must be the same allocator which was used to allocate all the leaves of the tree.
 pub unsafe fn deallocate_leaves<K, V, const PREFIX_LEN: usize, A: Allocator>(
     mut leaf_range: RawIterator<K, V, PREFIX_LEN>,
     alloc: &A,
@@ -34,12 +32,12 @@ pub unsafe fn deallocate_leaves<K, V, const PREFIX_LEN: usize, A: Allocator>(
 /// leaf nodes.
 ///
 /// # Safety
-///  - This function must only be called once for this root node and all
-///    descendants, otherwise a double-free could result.
-///  - This function should not be called concurrently with any read of the
-///    tree, otherwise it could result in a use-after-free.
-///  - `alloc` must be the same allocator which was used to allocate all the
-///    inner nodes of the tree.
+///  - This function must only be called once for this root node and all descendants, otherwise a
+///    double-free could result.
+///  - This function should not be called concurrently with any read of the tree, otherwise it could
+///    result in a use-after-free.
+///  - `alloc` must be the same allocator which was used to allocate all the inner nodes of the
+///    tree.
 pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize, A: Allocator>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     alloc: &A,
@@ -75,12 +73,11 @@ pub unsafe fn deallocate_tree_non_leaves<K, V, const PREFIX_LEN: usize, A: Alloc
 /// This function returns the amount of leaf nodes deallocated.
 ///
 /// # Safety
-///  - This function must only be called once for this root node and all
-///    descendants, otherwise a double-free could result.
-///  - This function should not be called concurrently with any read of the
-///    tree, otherwise it could result in a use-after-free.
-///  - `alloc` must be the same allocator which was used to allocate all the
-///    nodes of the tree.
+///  - This function must only be called once for this root node and all descendants, otherwise a
+///    double-free could result.
+///  - This function should not be called concurrently with any read of the tree, otherwise it could
+///    result in a use-after-free.
+///  - `alloc` must be the same allocator which was used to allocate all the nodes of the tree.
 pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize, A: Allocator>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     alloc: &A,
@@ -117,8 +114,7 @@ pub unsafe fn deallocate_tree<K, V, const PREFIX_LEN: usize, A: Allocator>(
 ///
 /// # Safety
 ///  - This function must only be called once for this inner node
-///  - This function cannot be called concurrently with any read of modification
-///    of the trie.
+///  - This function cannot be called concurrently with any read of modification of the trie.
 unsafe fn deallocate_inner_node<K, V, N, A: Allocator, const PREFIX_LEN: usize>(
     stack: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
     inner_ptr: NodePtr<PREFIX_LEN, N>,

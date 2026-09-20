@@ -49,10 +49,10 @@ where
 impl<K, V, const PREFIX_LEN: usize, A: Allocator> Drop for IntoIter<K, V, PREFIX_LEN, A> {
     fn drop(&mut self) {
         // SAFETY:
-        //  - The `deallocate_tree_non_leaves` function is called earlier on the trie
-        //    (which we have unique access to), so the leaves will still be allocated.
-        //  - `self.alloc` was taken from the `TreeMap` and was the same allocator used
-        //    to allocate all the nodes of the trie.
+        //  - The `deallocate_tree_non_leaves` function is called earlier on the trie (which we have
+        //    unique access to), so the leaves will still be allocated.
+        //  - `self.alloc` was taken from the `TreeMap` and was the same allocator used to allocate
+        //    all the nodes of the trie.
         unsafe {
             deallocate_leaves(
                 mem::replace(&mut self.inner, RawIterator::empty()),
@@ -84,8 +84,8 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> IntoIter<K, V, PREFIX_LEN, A> 
             let inner = unsafe { RawIterator::new(state.min_leaf, state.max_leaf) };
 
             // SAFETY:
-            //  - Since this function takes an owned `TreeMap`, we can assume there is no
-            //    concurrent read or modification, that this is a unique handle to the trie.
+            //  - Since this function takes an owned `TreeMap`, we can assume there is no concurrent
+            //    read or modification, that this is a unique handle to the trie.
             //  - `tree.alloc` was used to allocate all the nodes of the tree
             unsafe { deallocate_tree_non_leaves(state.root, &tree.alloc) }
 
@@ -114,10 +114,10 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> Iterator for IntoIter<K, V, PR
 
         leaf_ptr.map(|leaf_ptr| {
             // SAFETY:
-            //  - This function is only called once for a given `leaf_ptr` since the
-            //    iterator will never repeat an element
-            //  - `self.alloc` is the same allocator which was used to allocate all the
-            //    nodes of the tree, since it was taken from the `TreeMap` value.
+            //  - This function is only called once for a given `leaf_ptr` since the iterator will
+            //    never repeat an element
+            //  - `self.alloc` is the same allocator which was used to allocate all the nodes of the
+            //    tree, since it was taken from the `TreeMap` value.
             unsafe { NodePtr::deallocate_node_ptr(leaf_ptr, &self.alloc) }.into_entry()
         })
     }
@@ -137,10 +137,10 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> DoubleEndedIterator
 
         leaf_ptr.map(|leaf_ptr| {
             // SAFETY:
-            //  - This function is only called once for a given `leaf_ptr` since the
-            //    iterator will never repeat an element
-            //  - `self.alloc` is the same allocator which was used to allocate all the
-            //    nodes of the tree, since it was taken from the `TreeMap` value.
+            //  - This function is only called once for a given `leaf_ptr` since the iterator will
+            //    never repeat an element
+            //  - `self.alloc` is the same allocator which was used to allocate all the nodes of the
+            //    tree, since it was taken from the `TreeMap` value.
             unsafe { NodePtr::deallocate_node_ptr(leaf_ptr, &self.alloc) }.into_entry()
         })
     }

@@ -98,10 +98,10 @@ pub unsafe fn clone_unchecked<
     ///
     /// # Safety
     ///
-    ///  - This function can only be called while there are no mutable
-    ///    references to any of the nodes in the trie referenced by `inner_ptr`.
-    ///  - Additionally, there must not be any other mutable references to nodes
-    ///    in the `unfinished_nodes_stack` stack.
+    ///  - This function can only be called while there are no mutable references to any of the
+    ///    nodes in the trie referenced by `inner_ptr`.
+    ///  - Additionally, there must not be any other mutable references to nodes in the
+    ///    `unfinished_nodes_stack` stack.
     unsafe fn clone_inner_node<N, K, V, A, const PREFIX_LEN: usize>(
         unfinished_nodes_stack: &mut Vec<(usize, ConcreteInnerNodePtr<K, V, PREFIX_LEN>)>,
         dfs_stack: &mut Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,

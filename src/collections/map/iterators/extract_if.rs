@@ -299,10 +299,10 @@ mod tests {
     #[test]
     fn singleton_compress_previous_child_in_node() {
         // The `SingletonCompress` fixup cases has two(?) variants:
-        //   1. The single remaining child in the node was already visited by the
-        //      `ExtractIf` iterator, in which case we don't need to update it.
-        //   2. The single remaining child in the node has not yet been visited, in
-        //      which case we need to update it.
+        //   1. The single remaining child in the node was already visited by the `ExtractIf`
+        //      iterator, in which case we don't need to update it.
+        //   2. The single remaining child in the node has not yet been visited, in which case we
+        //      need to update it.
 
         let mut tree: TreeMap<_, _> = [
             // root node

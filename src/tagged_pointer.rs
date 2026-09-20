@@ -54,8 +54,8 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// pointer.
     ///
     /// # Panics
-    ///  - Panics if the given `pointer` is not aligned according to the minimum
-    ///    alignment required for the `P` type.
+    ///  - Panics if the given `pointer` is not aligned according to the minimum alignment required
+    ///    for the `P` type.
     pub fn new(pointer: *mut P) -> Option<TaggedPointer<P, MIN_BITS>> {
         if pointer.is_null() {
             return None;
@@ -69,8 +69,8 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// non-null.
     ///
     /// # Panics
-    ///  - Panics if the given `pointer` is not aligned according to the minimum
-    ///    alignment required for the `P` type.
+    ///  - Panics if the given `pointer` is not aligned according to the minimum alignment required
+    ///    for the `P` type.
     ///
     /// # Safety
     ///  - The `pointer` value must not be null.
@@ -100,8 +100,8 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// Returns `None` if the given pointer is null.
     ///
     /// # Panics
-    ///  - Panics if the given `pointer` is not aligned according to the minimum
-    ///    alignment required for the `P` type.
+    ///  - Panics if the given `pointer` is not aligned according to the minimum alignment required
+    ///    for the `P` type.
     pub fn new_with_data(pointer: *mut P, data: usize) -> Option<TaggedPointer<P, MIN_BITS>> {
         let mut tagged_ptr = TaggedPointer::new(pointer)?;
         tagged_ptr.set_data(data);
@@ -134,8 +134,8 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// Update the data this tagged pointer carries to a new value.
     ///
     /// # Panics
-    ///  - Panics if any bits other than the lowest [`Self::NUM_BITS`] are
-    ///    non-zero in the new `data` value.
+    ///  - Panics if any bits other than the lowest [`Self::NUM_BITS`] are non-zero in the new
+    ///    `data` value.
     pub fn set_data(&mut self, data: usize) {
         assert_eq!(
             data & Self::POINTER_MASK,
