@@ -531,8 +531,8 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
 ///
 /// To contrast with [`InnerNodeCommon`], this trait:
 ///   - Incorporates a set value of [`NodeType`], accessible via [`Node::TYPE`].
-///   - Specifies where the inner node sits in the "growth order", via
-///     [`InnerNode::GrownNode`] and [`InnerNode::ShrunkNode`].
+///   - Specifies where the inner node sits in the "growth order", via [`InnerNode::GrownNode`] and
+///     [`InnerNode::ShrunkNode`].
 pub trait InnerNode<const PREFIX_LEN: usize>:
     Node<PREFIX_LEN> + Sized + fmt::Debug + InnerNodeCommon<Self::Key, Self::Value, PREFIX_LEN>
 {
@@ -550,8 +550,8 @@ pub trait InnerNode<const PREFIX_LEN: usize>:
     /// prefix information.
     ///
     /// # Panics
-    ///  - Panics if the new, smaller node size does not have enough capacity to
-    ///    hold all the children.
+    ///  - Panics if the new, smaller node size does not have enough capacity to hold all the
+    ///    children.
     fn shrink(&self) -> Self::ShrunkNode;
 
     /// Returns true if this node has no more space to store children.
@@ -629,8 +629,8 @@ impl<K, V, const PREFIX_LEN: usize>
     /// This function transitions the builder to the [`HasOneChild`] state.
     ///
     /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the
-    ///   check for a full node is done previously to the call of this function)
+    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
+    ///   is done previously to the call of this function)
     pub unsafe fn write_child_unchecked(
         mut self,
         key_byte: u8,
@@ -654,8 +654,8 @@ impl<K, V, const PREFIX_LEN: usize>
     /// enabling [`build`][InnerNodeBuilder::build].
     ///
     /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the
-    ///   check for a full node is done previously to the call of this function)
+    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
+    ///   is done previously to the call of this function)
     pub unsafe fn write_child_unchecked(
         mut self,
         key_byte: u8,
@@ -694,8 +694,8 @@ impl<K, V, const PREFIX_LEN: usize>
     /// Add a child to the node without bounds check or order.
     ///
     /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the
-    ///   check for a full node is done previously to the call of this function)
+    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
+    ///   is done previously to the call of this function)
     pub unsafe fn write_child_unchecked(
         mut self,
         key_byte: u8,
@@ -862,9 +862,8 @@ fn assert_valid_range_bounds(bound: &impl RangeBounds<u8>) {
 /// Find any leaf in the subtree rooted by `root`.
 ///
 /// # Safety
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 #[inline]
 unsafe fn any_subtree_leaf<N, K, V, const PREFIX_LEN: usize>(
     root: &N,

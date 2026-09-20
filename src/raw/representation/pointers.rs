@@ -111,12 +111,10 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     /// pointer is to an inner node.
     ///
     /// # Safety
-    ///  - The pointer must be to a type which implements
-    ///    [`InnerNode`][super::InnerNode].
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'h is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the data. In particular, for the duration of this
-    ///    lifetime, the memory the pointer points to must not get accessed
+    ///  - The pointer must be to a type which implements [`InnerNode`][super::InnerNode].
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'h is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the data. In particular,
+    ///    for the duration of this lifetime, the memory the pointer points to must not get accessed
     ///    (read or written) through any other pointer.
     pub(crate) unsafe fn header_mut_unchecked<'h>(self) -> &'h mut Header<PREFIX_LEN> {
         unsafe { self.0.to_ptr().cast::<Header<PREFIX_LEN>>().as_mut() }
@@ -126,12 +124,10 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     /// pointer is to an inner node.
     ///
     /// # Safety
-    ///  - The pointer must be to a type which implements
-    ///    [`InnerNode`][super::InnerNode].
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'h is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the data. In particular, for the duration of this
-    ///    lifetime, the memory the pointer points to must not be mutated
+    ///  - The pointer must be to a type which implements [`InnerNode`][super::InnerNode].
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'h is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the data. In particular,
+    ///    for the duration of this lifetime, the memory the pointer points to must not be mutated
     ///    through any other pointer.
     pub(crate) unsafe fn header_ref_unchecked<'h>(self) -> &'h Header<PREFIX_LEN> {
         unsafe { self.0.to_ptr().cast::<Header<PREFIX_LEN>>().as_ref() }
@@ -338,8 +334,8 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     /// Create a safe pointer to a [`Node`].
     ///
     /// # Safety
-    /// - Given pointer must be non-null, aligned, and valid for reads or writes
-    ///   of a value of N type.
+    /// - Given pointer must be non-null, aligned, and valid for reads or writes of a value of N
+    ///   type.
     pub unsafe fn new(ptr: *mut N) -> Self {
         // SAFETY: The safety requirements of this function match the
         // requirements of `NonNull::new_unchecked`.
@@ -390,10 +386,10 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
             // all `Node`s don't implement drop.
 
             // SAFETY:
-            //  - The safety condition on this function requires that this allocator is the
-            //    same one which initially allocated the memory block
-            //  - The layout fits the block of memory because it was the same layout used to
-            //    create the block (in `allocate_node_ptr`).
+            //  - The safety condition on this function requires that this allocator is the same one
+            //    which initially allocated the memory block
+            //  - The layout fits the block of memory because it was the same layout used to create
+            //    the block (in `allocate_node_ptr`).
             unsafe {
                 alloc.deallocate(node.0.cast(), layout);
             }
@@ -407,8 +403,8 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     /// Neither value is dropped.
     ///
     /// # Safety
-    ///  - The node the `dest` pointers points to must not get accessed (read or
-    ///    written) through any other pointers concurrent to this modification.
+    ///  - The node the `dest` pointers points to must not get accessed (read or written) through
+    ///    any other pointers concurrent to this modification.
     pub unsafe fn replace(dest: Self, new_value: N) -> N {
         // SAFETY: The lifetime of the `dest` reference is restricted to this function,
         // and the referenced node is not accessed by the safety doc on the containing
@@ -435,10 +431,9 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     /// Returns a shared reference to the value.
     ///
     /// # Safety
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the data. In particular, for the duration of this
-    ///    lifetime, the memory the pointer points to must not get mutated
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'a is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the data. In particular,
+    ///    for the duration of this lifetime, the memory the pointer points to must not get mutated
     ///    (except inside `UnsafeCell`).
     pub unsafe fn as_ref<'a>(self) -> &'a N {
         // SAFETY: The pointer is properly aligned and points to a initialized instance
@@ -450,11 +445,10 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     /// Returns a unique mutable reference to the node.
     ///
     /// # Safety
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the node. In particular, for the duration of this
-    ///    lifetime, the node the pointer points to must not get accessed (read
-    ///    or written) through any other pointer.
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'a is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the node. In particular,
+    ///    for the duration of this lifetime, the node the pointer points to must not get accessed
+    ///    (read or written) through any other pointer.
     pub unsafe fn as_mut<'a>(mut self) -> &'a mut N {
         // SAFETY: The pointer is properly aligned and points to a initialized instance
         // of N that is dereferenceable. The lifetime safety requirements are passed up
@@ -473,10 +467,9 @@ impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LE
     /// [`LeafNode`].
     ///
     /// # Safety
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the data. In particular, for the duration of this
-    ///    lifetime, the memory the pointer points to must not get mutated
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'a is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the data. In particular,
+    ///    for the duration of this lifetime, the memory the pointer points to must not get mutated
     ///    (except inside `UnsafeCell`).
     pub unsafe fn as_key_value_ref<'a>(self) -> (&'a K, &'a V) {
         // SAFETY: Safety requirements are covered by the containing function.
@@ -489,11 +482,10 @@ impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LE
     /// pointed to [`LeafNode`].
     ///
     /// # Safety
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the node. In particular, for the duration of this
-    ///    lifetime, the node the pointer points to must not get accessed (read
-    ///    or written) through any other pointer.
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'a is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the node. In particular,
+    ///    for the duration of this lifetime, the node the pointer points to must not get accessed
+    ///    (read or written) through any other pointer.
     pub unsafe fn as_key_ref_value_mut<'a>(self) -> (&'a K, &'a mut V) {
         // SAFETY: Safety requirements are covered by the containing function.
         let leaf = unsafe { self.as_mut() };
@@ -506,10 +498,9 @@ impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LE
     /// pointed to [`LeafNode`].
     ///
     /// # Safety
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the data. In particular, for the duration of this
-    ///    lifetime, the memory the pointer points to must not get mutated
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'a is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the data. In particular,
+    ///    for the duration of this lifetime, the memory the pointer points to must not get mutated
     ///    (except inside `UnsafeCell`).
     pub unsafe fn as_key_ref<'a>(self) -> &'a K
     where
@@ -525,10 +516,9 @@ impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LE
     /// pointed to [`LeafNode`].
     ///
     /// # Safety
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the data. In particular, for the duration of this
-    ///    lifetime, the memory the pointer points to must not get mutated
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'a is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the data. In particular,
+    ///    for the duration of this lifetime, the memory the pointer points to must not get mutated
     ///    (except inside `UnsafeCell`).
     pub unsafe fn as_value_ref<'a>(self) -> &'a V
     where
@@ -545,11 +535,10 @@ impl<K, V, const PREFIX_LEN: usize> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LE
     /// pointed to [`LeafNode`].
     ///
     /// # Safety
-    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime
-    ///    'a is arbitrarily chosen and does not necessarily reflect the actual
-    ///    lifetime of the node. In particular, for the duration of this
-    ///    lifetime, the node the pointer points to must not get accessed (read
-    ///    or written) through any other pointer.
+    ///  - You must enforce Rust’s aliasing rules, since the returned lifetime 'a is arbitrarily
+    ///    chosen and does not necessarily reflect the actual lifetime of the node. In particular,
+    ///    for the duration of this lifetime, the node the pointer points to must not get accessed
+    ///    (read or written) through any other pointer.
     pub unsafe fn as_value_mut<'a>(self) -> &'a mut V
     where
         K: 'a,

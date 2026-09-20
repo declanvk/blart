@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
  - `TreeMap::range` iterator had bugs in a couple of places, specifically around determining bounds when the initial lookup terminated in an inner node. I added some better fuzz coverage for this iterator that helped with finding these issues.
+ - `#![no_std]` builds were broken (reported in [issue 75]) because the `raw::visitor::tree_stats` module had references to `std::vec::Vec` and `std::collections::HashMap`. I fixed it by swapping to a different data structure and updated CI to actually test `no_std` case.
+
+[issue 75]: https://github.com/declanvk/blart/issues/75
 
 ## [0.5.0] - 2026-04-16
 

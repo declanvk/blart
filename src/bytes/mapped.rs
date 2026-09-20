@@ -274,9 +274,9 @@ impl_ordered_bytes_ints!(
 
 /// # Safety
 ///
-/// 1. This macro must only be used with types `$elem` where `size_of::<$elem>
-///    == <$elem as AsBytes>::as_bytes(&instance).len()`. The types must also be
-///    fixed size, so all instance of `$elem` must have the same size.
+/// 1. This macro must only be used with types `$elem` where `size_of::<$elem> == <$elem as
+///    AsBytes>::as_bytes(&instance).len()`. The types must also be fixed size, so all instance of
+///    `$elem` must have the same size.
 /// 2. This macro must only be used with types that implement
 /// ```ignore
 /// impl BytesMapping<$elem> for $mapping {

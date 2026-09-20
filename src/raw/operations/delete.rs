@@ -18,12 +18,10 @@ use crate::{
 /// inner node key prefix and child key byte to the child's key prefix.
 ///
 /// # Safety
-///  - `inner_node_ptr` must be a unique pointer to the node and must not have
-///    any other mutable references.
-///  - There must not be any mutable references to the children of the given
-///    inner node either.
-///  - `alloc` must be the same allocator that was used to allocate the nodes of
-///    the trie.
+///  - `inner_node_ptr` must be a unique pointer to the node and must not have any other mutable
+///    references.
+///  - There must not be any mutable references to the children of the given inner node either.
+///  - `alloc` must be the same allocator that was used to allocate the nodes of the trie.
 unsafe fn remove_child_from_inner_node_and_compress<
     const PREFIX_LEN: usize,
     N: InnerNode<PREFIX_LEN>,
@@ -132,16 +130,15 @@ unsafe fn remove_child_from_inner_node_and_compress<
 /// Delete the given non-root leaf node.
 ///
 /// # Safety
-///  - `parent_node_ptr` must be a unique pointer to the node and must not have
-///    any other mutable references.
-///  - There must not be any other mutable references to any children of the
-///    `parent_node_ptr` either.
-///  - `grandparent_node_ptr` must be a unique pointer to the node and must not
-///    have any other mutable references.
-///  - `leaf_node_ptr` must be a unique pointer to the node and not have any
-///    other mutable references.
-///  - `alloc` must be the same allocator that was used to allocate the nodes of
-///    the trie.
+///  - `parent_node_ptr` must be a unique pointer to the node and must not have any other mutable
+///    references.
+///  - There must not be any other mutable references to any children of the `parent_node_ptr`
+///    either.
+///  - `grandparent_node_ptr` must be a unique pointer to the node and must not have any other
+///    mutable references.
+///  - `leaf_node_ptr` must be a unique pointer to the node and not have any other mutable
+///    references.
+///  - `alloc` must be the same allocator that was used to allocate the nodes of the trie.
 unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allocator>(
     leaf_node_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     parent_node_ptr: OpaqueNodePtr<K, V, PREFIX_LEN>,
@@ -237,17 +234,14 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
     /// been found.
     ///
     /// # Safety
-    ///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the
-    ///    underlying tree
-    ///  - This function cannot be called concurrently to any reads or writes of
-    ///    the `root` node or any child node of `root`. This function will
-    ///    arbitrarily read or write to any child in the given tree.
-    ///  - `alloc` must be the same allocator that was used to allocate the
-    ///    nodes of the trie.
-    ///  - This function may invalidate existing pointers into the trie when
-    ///    leaves are deleted and when inner nodes are deleted or shrunk.
-    ///    Callers must ensure that they delete invalidated pointers, the new
-    ///    pointers are returned in [`DeleteResult`].
+    ///  - The `root` [`OpaqueNodePtr`] must be a unique pointer to the underlying tree
+    ///  - This function cannot be called concurrently to any reads or writes of the `root` node or
+    ///    any child node of `root`. This function will arbitrarily read or write to any child in
+    ///    the given tree.
+    ///  - `alloc` must be the same allocator that was used to allocate the nodes of the trie.
+    ///  - This function may invalidate existing pointers into the trie when leaves are deleted and
+    ///    when inner nodes are deleted or shrunk. Callers must ensure that they delete invalidated
+    ///    pointers, the new pointers are returned in [`DeleteResult`].
     pub unsafe fn apply<A: Allocator>(
         self,
         root: OpaqueNodePtr<K, V, PREFIX_LEN>,
@@ -314,9 +308,8 @@ impl<K, V, const PREFIX_LEN: usize> DeletePoint<K, V, PREFIX_LEN> {
 /// process, like the parent and possibly grandparent nodes.
 ///
 /// # Safety
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 pub unsafe fn search_for_delete_point<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
@@ -376,9 +369,8 @@ where
 /// delete it.
 ///
 /// # Safety
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 #[inline]
 pub unsafe fn find_minimum_to_delete<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
@@ -409,9 +401,8 @@ pub unsafe fn find_minimum_to_delete<K, V, const PREFIX_LEN: usize>(
 /// delete it.
 ///
 /// # Safety
-///  - This function cannot be called concurrently with any mutating operation
-///    on `root` or any child node of `root`. This function will arbitrarily
-///    read to any child in the given tree.
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 #[inline]
 pub unsafe fn find_maximum_to_delete<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,

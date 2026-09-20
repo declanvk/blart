@@ -4,7 +4,7 @@ edition = "2018"
 unstable_features = false
 
 blank_lines_upper_bound = 1
-comment_width = 80
+comment_width = 100
 condense_wildcard_suffixes = true
 format_strings = true
 match_block_trailing_comma = true

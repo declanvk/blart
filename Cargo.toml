@@ -6,7 +6,6 @@ name = "blart"
 version = "0.5.0"
 description = "An implementation of an adaptive radix tree packaged as a BTreeMap replacement"
 repository = "https://github.com/declanvk/blart"
-readme = "README.md"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 keywords = ["tree", "map", "collection", "radix-tree"]
@@ -28,7 +27,7 @@ exclude = [
 autobenches = false
 
 [dependencies]
-allocator-api2 = { version = "0.2.20", optional = true }
+allocator-api2 = { version = "0.2.20", optional = true, default-features = false, features = ["alloc"] }
 paste = "1.0.15"
 zerocopy = "0.8.26"
 
@@ -36,7 +35,7 @@ zerocopy = "0.8.26"
 default = ["std"]
 nightly = []
 allocator-api2 = ["dep:allocator-api2"]
-std = ["zerocopy/std"]
+std = ["zerocopy/std", "allocator-api2?/std"]
 testing = ["std"]
 
 [dev-dependencies]

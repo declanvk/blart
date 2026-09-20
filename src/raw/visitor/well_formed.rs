@@ -323,15 +323,14 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Error for MalformedTreeError<K, V, 
 ///
 /// In this context, well-formed means that in the tree:
 ///  1. there are no loops between nodes
-///  2. every inner node has a number of children that is in range for the inner
-///     node type. For example, `InnerNode16` has between 5 and 16 children.
-///  3. the elements of the key (as part of inner node prefixes and child
-///     pointers) combine to match the leaf node key prefix
-///  4. the `previous` and `next` pointers that form a doubly-linked list of
-///     leaf nodes has no loops, and the ordering of the leaves in the list is
-///     equal to the ordering of the leaves when sorted by key. The linked list
-///     should also be properly terminated with `previous = None` at the start
-///     and `next = None` at the end.
+///  2. every inner node has a number of children that is in range for the inner node type. For
+///     example, `InnerNode16` has between 5 and 16 children.
+///  3. the elements of the key (as part of inner node prefixes and child pointers) combine to match
+///     the leaf node key prefix
+///  4. the `previous` and `next` pointers that form a doubly-linked list of leaf nodes has no
+///     loops, and the ordering of the leaves in the list is equal to the ordering of the leaves
+///     when sorted by key. The linked list should also be properly terminated with `previous =
+///     None` at the start and `next = None` at the end.
 ///
 /// #1 and #3 are unlikely, but #2 is a possibility if specific tree operations
 /// are not implemented correctly. This visitor can be used to sanity check the
@@ -379,8 +378,8 @@ where
     /// number of leaf nodes in the tree.
     ///
     /// # Safety
-    ///  - For the duration of this function, the given node and all its
-    ///    children nodes must not be mutated.
+    ///  - For the duration of this function, the given node and all its children nodes must not be
+    ///    mutated.
     ///
     /// # Errors
     ///  - Returns an error if the given tree is not well-formed.

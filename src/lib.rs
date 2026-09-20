@@ -31,10 +31,9 @@
 //!
 //! # References
 //!
-//!  - Leis, V., Kemper, A., & Neumann, T. (2013, April). The adaptive radix
-//!    tree: ARTful indexing for main-memory databases. In 2013 IEEE 29th
-//!    International Conference on Data Engineering (ICDE) (pp. 38-49). IEEE.
-//!    [Link to PDF][ART paper]
+//!  - Leis, V., Kemper, A., & Neumann, T. (2013, April). The adaptive radix tree: ARTful indexing
+//!    for main-memory databases. In 2013 IEEE 29th International Conference on Data Engineering
+//!    (ICDE) (pp. 38-49). IEEE. [Link to PDF][ART paper]
 //!
 //! [ART paper]: http://web.archive.org/web/20240508000744/https://db.in.tum.de/~leis/papers/ART.pdf
 
