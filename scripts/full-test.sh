@@ -42,3 +42,14 @@ do
         cargo "${TOOLCHAIN_ARG}" check --manifest-path fuzz/Cargo.toml
     fi
 done
+
+# Check `no_std` build
+NO_STD_TARGET="x86_64-unknown-none"
+rustup target add --toolchain "${TOOLCHAIN}" "${NO_STD_TARGET}"
+
+for no_std_args in "" "--features allocator-api2"
+do
+    cargo "${TOOLCHAIN_ARG}" build  --lib --no-default-features $no_std_args
+    cargo "${TOOLCHAIN_ARG}" build  --lib --no-default-features $no_std_args --target "${NO_STD_TARGET}"
+    cargo "${TOOLCHAIN_ARG}" clippy --lib --no-default-features $no_std_args
+done

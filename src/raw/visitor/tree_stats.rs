@@ -1,5 +1,5 @@
+use alloc::collections::BTreeMap;
 use core::{fmt, ops::Add};
-use std::{collections::HashMap, vec::Vec};
 
 use crate::{
     allocator::Allocator,
@@ -173,9 +173,9 @@ impl Add for LeafStats {
 }
 
 /// A mapping from [`NodeType`] to [`InnerNodeStats`] that has a fixed debug
-/// ordering.
+/// ordering, following the [`Ord`] implementation of [`NodeType`].
 #[derive(Clone, PartialEq, Eq, Default)]
-pub struct FixedOrderNodeStats(HashMap<NodeType, InnerNodeStats>);
+pub struct FixedOrderNodeStats(BTreeMap<NodeType, InnerNodeStats>);
 
 impl FixedOrderNodeStats {
     /// Lookup the inner node stats for a specific node type.
@@ -194,15 +194,7 @@ impl core::ops::Index<NodeType> for FixedOrderNodeStats {
 
 impl fmt::Debug for FixedOrderNodeStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut node_types = self.0.keys().collect::<Vec<_>>();
-        node_types.sort();
-        f.debug_map()
-            .entries(
-                node_types
-                    .into_iter()
-                    .map(|node_type| (node_type, self.0.get(node_type).unwrap())),
-            )
-            .finish()
+        f.debug_map().entries(self.0.iter()).finish()
     }
 }
 
@@ -286,10 +278,7 @@ impl fmt::Display for TreeStats {
         f.write_fmt(format_args!("avg capped prefix length:          {:.5} bytes\n", tree.avg_capped_prefix_len()))?;
         f.write_fmt(format_args!("% used header bytes (0-1):         {:.5}\n", tree.percentage_header_bytes()))?;
         f.write_fmt(format_args!("% used slots (0-1):                {:.5}\n", tree.percentage_slots()))?;
-        let mut node_types = inner_node.0.keys().collect::<Vec<_>>();
-        node_types.sort();
-        for node_type in node_types {
-            let stats = inner_node.0.get(node_type).unwrap();
+        for (node_type, stats) in &inner_node.0 {
             let label = format!("{node_type:?} size:");
             f.write_fmt(format_args!("{label:<34} {:?} bytes\n", stats.node_size()))?;
         }
@@ -303,7 +292,7 @@ mod tests {
     use alloc::vec::Vec;
 
     #[cfg(not(miri))]
-    use expect_test::expect_file;
+    use expect_test::{expect, expect_file};
 
     use super::*;
     use crate::{testing::generate_key_fixed_length, TreeMap};
@@ -338,6 +327,162 @@ mod tests {
 
         expect_file!["./tree_stats/full_tree_stats_fixed_length_tree.expect"]
             .assert_debug_eq(&stats);
+    }
+
+    fn unsorted_node_stats() -> FixedOrderNodeStats {
+        FixedOrderNodeStats(BTreeMap::from([
+            (
+                NodeType::Node256,
+                InnerNodeStats {
+                    count: 256,
+                    ..Default::default()
+                },
+            ),
+            (
+                NodeType::Node4,
+                InnerNodeStats {
+                    count: 4,
+                    ..Default::default()
+                },
+            ),
+            (
+                NodeType::Node48,
+                InnerNodeStats {
+                    count: 48,
+                    ..Default::default()
+                },
+            ),
+            (
+                NodeType::Node16,
+                InnerNodeStats {
+                    count: 16,
+                    ..Default::default()
+                },
+            ),
+        ]))
+    }
+
+    #[test]
+    fn fixed_order_node_stats_debug_is_sorted() {
+        let debug = format!("{:?}", unsorted_node_stats());
+        let node4 = debug.find("Node4:").unwrap();
+        let node16 = debug.find("Node16:").unwrap();
+        let node48 = debug.find("Node48:").unwrap();
+        let node256 = debug.find("Node256:").unwrap();
+        assert!(node4 < node16 && node16 < node48 && node48 < node256);
+    }
+
+    #[test]
+    fn fixed_order_node_stats_get_and_index() {
+        let stats = unsorted_node_stats();
+
+        assert_eq!(stats.get(NodeType::Node4).unwrap().count, 4);
+        assert_eq!(stats[NodeType::Node256].count, 256);
+        assert!(stats.get(NodeType::Leaf).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
+    fn fixed_order_node_stats_index_missing_node_type() {
+        let _ = unsorted_node_stats()[NodeType::Leaf];
+    }
+
+    #[test]
+    #[cfg(not(miri))]
+    fn tree_stats_display() {
+        let stats = TreeStats {
+            inner_node: unsorted_node_stats(),
+            tree: InnerNodeStats {
+                count: 324,
+                total_slots: 1000,
+                sum_slots: 250,
+                total_header_bytes: 400,
+                sum_prefix_len_bytes: 800,
+                sum_capped_prefix_len_bytes: 300,
+                max_prefix_len_bytes: 9,
+                mem_usage: 5000,
+            },
+            leaf: LeafStats {
+                count: 100,
+                sum_key_bytes: 400,
+                mem_usage: 2000,
+            },
+        };
+
+        expect![[r#"
+            TreeStats {
+                inner_node: {
+                    Node4: InnerNodeStats {
+                        count: 4,
+                        total_slots: 0,
+                        sum_slots: 0,
+                        total_header_bytes: 0,
+                        sum_prefix_len_bytes: 0,
+                        sum_capped_prefix_len_bytes: 0,
+                        max_prefix_len_bytes: 0,
+                        mem_usage: 0,
+                    },
+                    Node16: InnerNodeStats {
+                        count: 16,
+                        total_slots: 0,
+                        sum_slots: 0,
+                        total_header_bytes: 0,
+                        sum_prefix_len_bytes: 0,
+                        sum_capped_prefix_len_bytes: 0,
+                        max_prefix_len_bytes: 0,
+                        mem_usage: 0,
+                    },
+                    Node48: InnerNodeStats {
+                        count: 48,
+                        total_slots: 0,
+                        sum_slots: 0,
+                        total_header_bytes: 0,
+                        sum_prefix_len_bytes: 0,
+                        sum_capped_prefix_len_bytes: 0,
+                        max_prefix_len_bytes: 0,
+                        mem_usage: 0,
+                    },
+                    Node256: InnerNodeStats {
+                        count: 256,
+                        total_slots: 0,
+                        sum_slots: 0,
+                        total_header_bytes: 0,
+                        sum_prefix_len_bytes: 0,
+                        sum_capped_prefix_len_bytes: 0,
+                        max_prefix_len_bytes: 0,
+                        mem_usage: 0,
+                    },
+                },
+                tree: InnerNodeStats {
+                    count: 324,
+                    total_slots: 1000,
+                    sum_slots: 250,
+                    total_header_bytes: 400,
+                    sum_prefix_len_bytes: 800,
+                    sum_capped_prefix_len_bytes: 300,
+                    max_prefix_len_bytes: 9,
+                    mem_usage: 5000,
+                },
+                leaf: LeafStats {
+                    count: 100,
+                    sum_key_bytes: 400,
+                    mem_usage: 2000,
+                },
+            }
+            memory usage (inner nodes):        5000 bytes
+            memory usage (inner nodes + leaf): 7000 bytes
+            bytes/entry:                       50.00000
+            bytes/entry (with leaf):           70.00000
+            avg prefix length:                 2.46914 bytes
+            avg capped prefix length:          0.92593 bytes
+            % used header bytes (0-1):         0.75000
+            % used slots (0-1):                0.25000
+            Node4 size:                        Some(0) bytes
+            Node16 size:                       Some(0) bytes
+            Node48 size:                       Some(0) bytes
+            Node256 size:                      Some(0) bytes
+            max prefix length:                 9 bytes"#]]
+        .assert_eq(&format!("{stats}"));
     }
 
     #[test]
