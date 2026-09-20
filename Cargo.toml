@@ -69,11 +69,14 @@ required-features = ["std"]
 [[test]]
 name = "memory_usage_fixed_length_dense"
 required-features = ["std"]
+harness = false
 
 [[test]]
 name = "memory_usage_large_prefixes"
 required-features = ["std"]
+harness = false
 
 [[test]]
 name = "memory_usage_skewed"
 required-features = ["std"]
+harness = false

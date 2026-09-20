@@ -1,6 +1,15 @@
+//! Memory usage check for a maximally skewed (single spine) tree.
+//!
+//! This target runs without the `libtest` harness so that allocations from that harness don't
+//! impact test results.
+
 mod common;
 
-#[test]
+fn main() {
+    #[cfg(not(miri))]
+    test_memory_usage();
+}
+
 #[cfg(not(miri))]
 fn test_memory_usage() {
     use blart::{testing, TreeMap};
