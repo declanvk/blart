@@ -49,15 +49,8 @@ jobs:
         with:
           tool: cargo-binstall
 
-      - name: Install iai-callgrind-runner and valgrind
-        run: |
-          version=$(cargo metadata --format-version=1 |\
-            jq '.packages[] | select(.name == "iai-callgrind").version' |\
-            tr -d '"'
-          )
-          cargo binstall --no-confirm iai-callgrind-runner --version $version
-          sudo apt update -y
-          sudo apt install -y valgrind
+      - name: Setup gungraun-runner and Valgrind
+        uses: gungraun/setup-gungraun@62591572561bb2f4ed2ae300b8a8bea99ea8ddaf # v1.1.3
 
 
       - name: Run full test script
