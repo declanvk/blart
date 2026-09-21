@@ -248,17 +248,55 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 
     #[inline]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        #[cfg(feature = "nightly")]
-        {
-            if SIZE == 16 {
-                self.n16_lookup_child_index(key_fragment)
-            } else {
-                self.default_lookup_child_index(key_fragment)
+        if SIZE == 16 {
+            cfg_select! {
+                feature = "nightly" => self.n16_lookup_child_index(key_fragment),
+                not(feature = "nightly") => self.bitmask_lookup_child_index(key_fragment),
             }
-        }
-        #[cfg(not(feature = "nightly"))]
-        {
+        } else {
             self.default_lookup_child_index(key_fragment)
+        }
+    }
+
+    #[cfg(not(feature = "nightly"))]
+    #[inline(always)]
+    fn keys_bitmask(&self, predicate: impl Fn(u8) -> bool) -> u32 {
+        const { assert!(SIZE <= 16, "bitmask must be wide enough to hold all keys") };
+
+        let mut bitmask = 0u32;
+        for (child_index, key) in self.keys.iter().enumerate() {
+            bitmask |= u32::from(predicate(*key)) << child_index;
+        }
+
+        // `num_children <= SIZE <= 16`, so this shift does not overflow
+        bitmask & ((1u32 << self.header.num_children()) - 1)
+    }
+
+    #[cfg(not(feature = "nightly"))]
+    #[inline]
+    fn bitmask_lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        let bitmask = self.keys_bitmask(|key| key == key_fragment);
+        if bitmask != 0 {
+            Some(bitmask.trailing_zeros() as usize)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(feature = "nightly"))]
+    #[inline]
+    fn bitmask_find_write_point(&self, key_fragment: u8) -> WritePoint {
+        if let Some(child_index) = self.bitmask_lookup_child_index(key_fragment) {
+            return WritePoint::Existing(child_index);
+        }
+
+        // Keys are sorted, so the first key greater than the fragment is the
+        // insertion point
+        let greater = self.keys_bitmask(|key| key_fragment < key);
+        if greater != 0 {
+            WritePoint::Shift(greater.trailing_zeros() as usize)
+        } else {
+            WritePoint::Last(self.header.num_children())
         }
     }
 
@@ -295,16 +333,12 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 
     #[inline]
     fn find_write_point(&self, key_fragment: u8) -> WritePoint {
-        #[cfg(feature = "nightly")]
-        {
-            if SIZE == 16 {
-                self.n16_find_write_point(key_fragment)
-            } else {
-                self.default_find_write_point(key_fragment)
+        if SIZE == 16 {
+            cfg_select! {
+                feature = "nightly" => self.n16_find_write_point(key_fragment),
+                not(feature = "nightly") => self.bitmask_find_write_point(key_fragment),
             }
-        }
-        #[cfg(not(feature = "nightly"))]
-        {
+        } else {
             self.default_find_write_point(key_fragment)
         }
     }
@@ -615,8 +649,9 @@ mod tests {
     use super::*;
     use crate::raw::{
         representation::tests::{
-            inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
-            inner_node_write_child_test, FixtureReturn,
+            inner_node_min_max_test, inner_node_nearest_sibling_test, inner_node_remove_child_test,
+            inner_node_shrink_test, inner_node_write_child_test, nearest_sibling_keys,
+            FixtureReturn, SiblingKey,
         },
         LeafNode, NodePtr,
     };
@@ -789,6 +824,70 @@ mod tests {
     #[test]
     fn node16_min_max() {
         inner_node_min_max_test::<16, InnerNode16<Box<[u8]>, (), 16>>(16);
+    }
+
+    #[test]
+    fn node4_nearest_sibling() {
+        type Node = InnerNode4<Box<[u8]>, (), 16>;
+
+        inner_node_nearest_sibling_test::<16, Node>(&[7]);
+        inner_node_nearest_sibling_test::<16, Node>(&[10, 200]);
+        inner_node_nearest_sibling_test::<16, Node>(&[3, 255, 0, 85]);
+        inner_node_nearest_sibling_test::<16, Node>(&[1, 2, 3]);
+    }
+
+    #[test]
+    fn node16_nearest_sibling() {
+        type Node = InnerNode16<Box<[u8]>, (), 16>;
+
+        inner_node_nearest_sibling_test::<16, Node>(&[7]);
+        inner_node_nearest_sibling_test::<16, Node>(&[10, 200]);
+        inner_node_nearest_sibling_test::<16, Node>(&[3, 255, 0, 85]);
+        inner_node_nearest_sibling_test::<16, Node>(&(0..=u8::MAX).step_by(17).collect::<Vec<_>>());
+        inner_node_nearest_sibling_test::<16, Node>(&(240..=u8::MAX).rev().collect::<Vec<_>>());
+    }
+
+    fn nearest_sibling_prefers_next_test<N>()
+    where
+        N: InnerNode<16, Key = Box<[u8]>, Value = ()>,
+    {
+        use SiblingKey::{Next, Previous};
+
+        let queries = [0, 9, 10, 11, 104, 105, 106, 199, 200, 201, 255];
+        let results = nearest_sibling_keys::<16, N>(&[10, 200], queries);
+
+        // The next child is always preferred, even when the previous child is
+        // closer. The previous child is only returned if there are no greater
+        // children.
+        assert_eq!(
+            results,
+            [
+                Some(Next(10)),
+                Some(Next(10)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Previous(10)),
+                Some(Previous(200)),
+                Some(Previous(200)),
+            ]
+        );
+
+        let results = nearest_sibling_keys::<16, N>(&[7], [0, 7, 255]);
+        assert_eq!(results, [Some(Next(7)), None, Some(Previous(7))]);
+    }
+
+    #[test]
+    fn node4_nearest_sibling_prefers_next() {
+        nearest_sibling_prefers_next_test::<InnerNode4<Box<[u8]>, (), 16>>();
+    }
+
+    #[test]
+    fn node16_nearest_sibling_prefers_next() {
+        nearest_sibling_prefers_next_test::<InnerNode16<Box<[u8]>, (), 16>>();
     }
 
     fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {

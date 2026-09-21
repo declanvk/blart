@@ -147,10 +147,6 @@ pub(crate) mod private {
     impl<K, V, const PREFIX_LEN: usize> Sealed for super::LeafNode<K, V, PREFIX_LEN> {}
 
     /// Internal construction trait for inner nodes.
-    ///
-    /// This is `pub(crate)` so external users cannot access `from_header`,
-    /// `empty`, or `from_prefix` directly — use [`super::InnerNodeBuilder`]
-    /// from the public API instead.
     pub trait InnerNodeInit<const PREFIX_LEN: usize>: Sealed + Sized {
         fn from_header(header: super::Header<PREFIX_LEN>) -> Self;
 
@@ -484,11 +480,16 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
 
         let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
 
-        let matched_bytes = prefix
-            .iter()
-            .zip(&key[current_depth..])
-            .take_while(|(a, b)| **a == **b)
-            .count();
+        let matched_bytes = if leaf_ptr.is_some() {
+            // The prefix was reconstructed from a leaf, so it is longer than `PREFIX_LEN`
+            long_common_prefix_len(prefix, &key[current_depth..])
+        } else {
+            prefix
+                .iter()
+                .zip(&key[current_depth..])
+                .take_while(|(a, b)| **a == **b)
+                .count()
+        };
         if matched_bytes < prefix.len() {
             let upper_bound = (current_depth + prefix.len()).min(key.len());
             let key_segment = &key[current_depth..upper_bound];
@@ -577,6 +578,28 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
         // The minimum child is a valid choice
         self.min().1
     }
+
+    /// Return the nearest sibling to the given child key byte.
+    ///
+    /// The given key byte doesn't need to exist as a child in this inner node.
+    fn nearest_sibling(&self, child_key_byte: u8) -> Option<Sibling<K, V, PREFIX_LEN>> {
+        self.range((Bound::Excluded(child_key_byte), Bound::Unbounded))
+            .next()
+            .map(|(_, next_node)| Sibling::Next(next_node))
+            .or_else(|| {
+                self.range((Bound::Unbounded, Bound::Excluded(child_key_byte)))
+                    .next_back()
+                    .map(|(_, previous_node)| Sibling::Previous(previous_node))
+            })
+    }
+}
+
+/// Represents the nearby inner node child that was found relative to some original search.
+pub enum Sibling<K, V, const PREFIX_LEN: usize> {
+    /// The found inner node child was after (key byte larger) than the search start.
+    Next(OpaqueNodePtr<K, V, PREFIX_LEN>),
+    /// The found inner node child was before (key byte smaller) than the search start.
+    Previous(OpaqueNodePtr<K, V, PREFIX_LEN>),
 }
 
 /// Common methods implemented by all inner nodes that will be used in the tree.
@@ -913,6 +936,33 @@ fn assert_valid_range_bounds(bound: &impl RangeBounds<u8>) {
     }
 }
 
+/// Returns the number of leading bytes that are equal in `a` and `b`.
+#[inline(never)]
+fn long_common_prefix_len(a: &[u8], b: &[u8]) -> usize {
+    let len = a.len().min(b.len());
+    let (a, b) = (&a[..len], &b[..len]);
+
+    let mut matched = 0;
+    for (a_chunk, b_chunk) in a.as_chunks::<8>().0.iter().zip(b.as_chunks::<8>().0) {
+        // Little endian load, so that the lowest bits correspond to the earliest
+        // bytes on every platform
+        let a_word = u64::from_le_bytes(*a_chunk);
+        let b_word = u64::from_le_bytes(*b_chunk);
+        let diff = a_word ^ b_word;
+        if diff != 0 {
+            return matched + (diff.trailing_zeros() / 8) as usize;
+        }
+        matched += 8;
+    }
+
+    matched
+        + a[matched..]
+            .iter()
+            .zip(&b[matched..])
+            .take_while(|(a, b)| a == b)
+            .count()
+}
+
 /// Find any leaf in the subtree rooted by `root`.
 ///
 /// # Safety
@@ -946,6 +996,30 @@ mod tests {
 
     use super::*;
     use crate::rust_nightly_apis::ptr::const_addr;
+
+    #[test]
+    fn long_common_prefix_len_matches_bytewise() {
+        fn bytewise(a: &[u8], b: &[u8]) -> usize {
+            a.iter().zip(b).take_while(|(a, b)| a == b).count()
+        }
+
+        let base: Vec<u8> = (0..40u8).collect();
+        for len in 0..base.len() {
+            // Identical inputs, and inputs of different lengths
+            assert_eq!(long_common_prefix_len(&base[..len], &base[..len]), len);
+            assert_eq!(long_common_prefix_len(&base[..len], &base), len);
+            assert_eq!(long_common_prefix_len(&base, &base[..len]), len);
+
+            // Mismatch at every position
+            let mut other = base.clone();
+            other[len] ^= 0xFF;
+            assert_eq!(long_common_prefix_len(&base, &other), len);
+            assert_eq!(
+                long_common_prefix_len(&base, &other),
+                bytewise(&base, &other)
+            );
+        }
+    }
 
     #[test]
     #[cfg(target_pointer_width = "64")]
@@ -1237,6 +1311,94 @@ mod tests {
         }
 
         assert_eq!(node.header().num_children(), 0);
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum SiblingKey {
+        Next(u8),
+        Previous(u8),
+    }
+
+    pub(crate) fn nearest_sibling_keys<const PREFIX_LEN: usize, N>(
+        child_keys: &[u8],
+        queries: impl IntoIterator<Item = u8>,
+    ) -> Vec<Option<SiblingKey>>
+    where
+        N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+    {
+        assert!(
+            !child_keys.is_empty(),
+            "test harness must specify at least 1 child"
+        );
+
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), PREFIX_LEN>> = child_keys
+            .iter()
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
+
+        let leaf_pointers: Vec<OpaqueNodePtr<Box<[u8]>, (), PREFIX_LEN>> = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect();
+
+        // When there is only a single child key, the builder writes the same
+        // child twice, which leaves the node with one child.
+        let second = 1.min(child_keys.len() - 1);
+        let mut node = N::builder(&[], 0)
+            .write_child(child_keys[0], leaf_pointers[0])
+            .write_child(child_keys[second], leaf_pointers[second])
+            .build();
+
+        for (key, leaf_pointer) in child_keys.iter().zip(&leaf_pointers).skip(2) {
+            node.write_child(*key, *leaf_pointer);
+        }
+
+        assert_eq!(node.header().num_children(), child_keys.len());
+
+        let key_for_pointer = |ptr: OpaqueNodePtr<Box<[u8]>, (), PREFIX_LEN>| {
+            let idx = leaf_pointers.iter().position(|p| *p == ptr).unwrap();
+            child_keys[idx]
+        };
+
+        queries
+            .into_iter()
+            .map(|query| {
+                node.nearest_sibling(query).map(|sibling| match sibling {
+                    Sibling::Next(ptr) => SiblingKey::Next(key_for_pointer(ptr)),
+                    Sibling::Previous(ptr) => SiblingKey::Previous(key_for_pointer(ptr)),
+                })
+            })
+            .collect()
+    }
+
+    pub(crate) fn inner_node_nearest_sibling_test<const PREFIX_LEN: usize, N>(child_keys: &[u8])
+    where
+        N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+    {
+        let results = nearest_sibling_keys::<PREFIX_LEN, N>(child_keys, 0..=u8::MAX);
+
+        for (query, result) in (0..=u8::MAX).zip(results) {
+            let successor = child_keys.iter().copied().filter(|k| *k > query).min();
+            let predecessor = child_keys.iter().copied().filter(|k| *k < query).max();
+
+            match result {
+                Some(SiblingKey::Next(key)) => assert_eq!(
+                    Some(key),
+                    successor,
+                    "query [{query}] returned a next sibling that is not the successor"
+                ),
+                Some(SiblingKey::Previous(key)) => assert_eq!(
+                    Some(key),
+                    predecessor,
+                    "query [{query}] returned a previous sibling that is not the predecessor"
+                ),
+                None => assert!(
+                    successor.is_none() && predecessor.is_none(),
+                    "query [{query}] returned no sibling, expected one of [{successor:?}] or \
+                     [{predecessor:?}]"
+                ),
+            }
+        }
     }
 
     // --------------------------------------- ITERATORS

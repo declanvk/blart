@@ -1,17 +1,12 @@
 use alloc::boxed::Box;
-use core::{
-    error::Error,
-    fmt,
-    marker::PhantomData,
-    ops::{Bound, ControlFlow},
-};
+use core::{error::Error, fmt, marker::PhantomData, ops::ControlFlow};
 
 use crate::{
     allocator::Allocator,
     raw::{
         deallocate_tree, match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
         ExplicitMismatch, InnerNode, InnerNode4, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr,
-        PrefixMatch, TreePath, TreePathSearch,
+        PrefixMatch, Sibling, TreePath, TreePathSearch,
     },
     rust_nightly_apis::{likely, unlikely},
     AsBytes,
@@ -231,42 +226,36 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     K: AsBytes + 'a,
                     V: 'a,
                 {
-                    if let Some((_, next_node)) = inner_node
-                        .range((Bound::Excluded(new_leaf_key_byte), Bound::Unbounded))
-                        .next()
-                    {
-                        // in this branch we're looking for the next larger leaf node, which we'll
-                        // get by iterating over the inner node starting from the excluded new leaf
-                        // key byte. Then we find the minimum leaf of that next node to be the
-                        // `next` sibling
+                    let sibling = inner_node.nearest_sibling(new_leaf_key_byte);
 
-                        // SAFETY: There are no concurrent modifications, the `apply` safety doc
-                        // covers this
-                        let next_leaf = unsafe { minimum_unchecked(next_node) };
+                    match sibling {
+                        Some(Sibling::Next(next_node)) => {
+                            // The minimum leaf of the next larger child is the `next` sibling
 
-                        // SAFETY: There is no concurrent modification of the new leaf node, the
-                        // existing leaf node, or its siblings because of the safety requirements of
-                        // the `apply` function.
-                        unsafe { LeafNode::insert_before(new_leaf_ptr, next_leaf) };
-                    } else if let Some((_, previous_node)) = inner_node
-                        .range((Bound::Unbounded, Bound::Excluded(new_leaf_key_byte)))
-                        .next_back()
-                    {
-                        // in this branch we're looking for the next smaller leaf node, which we'll
-                        // get by iterating over the inner node ending with the excluded new leaf
-                        // key byte. Then we find the maximum leaf of that next node to be the
-                        // `previous` sibling
+                            // SAFETY: There are no concurrent modifications, the `apply` safety
+                            // doc covers this
+                            let next_leaf = unsafe { minimum_unchecked(next_node) };
 
-                        // SAFETY: There are no concurrent modifications, the `apply` safety doc
-                        // covers this
-                        let previous_leaf = unsafe { maximum_unchecked(previous_node) };
+                            // SAFETY: There is no concurrent modification of the new leaf node,
+                            // the existing leaf node, or its siblings because of the safety
+                            // requirements of the `apply` function.
+                            unsafe { LeafNode::insert_before(new_leaf_ptr, next_leaf) };
+                        },
+                        Some(Sibling::Previous(previous_node)) => {
+                            // The maximum leaf of the next smaller child is the `previous` sibling
 
-                        // SAFETY: There is no concurrent modification of the new leaf node, the
-                        // existing leaf node, or its siblings because of the safety requirements of
-                        // the `apply` function.
-                        unsafe { LeafNode::insert_after(new_leaf_ptr, previous_leaf) };
-                    } else {
-                        unreachable!("the inner node should have at least one other child");
+                            // SAFETY: There are no concurrent modifications, the `apply` safety
+                            // doc covers this
+                            let previous_leaf = unsafe { maximum_unchecked(previous_node) };
+
+                            // SAFETY: There is no concurrent modification of the new leaf node,
+                            // the existing leaf node, or its siblings because of the safety
+                            // requirements of the `apply` function.
+                            unsafe { LeafNode::insert_after(new_leaf_ptr, previous_leaf) };
+                        },
+                        None => {
+                            unreachable!("the inner node should have at least one other child")
+                        },
                     }
                 }
 

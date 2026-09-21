@@ -8,6 +8,7 @@ use core::{
 };
 
 use self::index::NonMaxIndex;
+use super::Sibling;
 use crate::{
     raw::{
         representation::assert_valid_range_bounds, Header, InnerNode, InnerNode16, InnerNodeCommon,
@@ -444,6 +445,21 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         let second = unsafe { children.get_unchecked(1) };
         *second
     }
+
+    fn nearest_sibling(&self, new_leaf_key_byte: u8) -> Option<Sibling<K, V, PREFIX_LEN>> {
+        (1..=u8::MAX).find_map(|distance| {
+            new_leaf_key_byte
+                .checked_add(distance)
+                .and_then(|key_byte| self.lookup_child(key_byte))
+                .map(Sibling::Next)
+                .or_else(|| {
+                    new_leaf_key_byte
+                        .checked_sub(distance)
+                        .and_then(|key_byte| self.lookup_child(key_byte))
+                        .map(Sibling::Previous)
+                })
+        })
+    }
 }
 
 /// Node that references between 17 and 49 children.
@@ -519,8 +535,9 @@ mod tests {
     use super::*;
     use crate::raw::{
         representation::tests::{
-            inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
-            inner_node_write_child_test, FixtureReturn,
+            inner_node_min_max_test, inner_node_nearest_sibling_test, inner_node_remove_child_test,
+            inner_node_shrink_test, inner_node_write_child_test, nearest_sibling_keys,
+            FixtureReturn, SiblingKey,
         },
         LeafNode, NodePtr,
     };
@@ -597,6 +614,60 @@ mod tests {
     #[test]
     fn min_max() {
         inner_node_min_max_test::<16, InnerNode48<Box<[u8]>, (), 16>>(48);
+    }
+
+    #[test]
+    fn nearest_sibling() {
+        type Node = InnerNode48<Box<[u8]>, (), 16>;
+
+        inner_node_nearest_sibling_test::<16, Node>(&[7]);
+        inner_node_nearest_sibling_test::<16, Node>(&[10, 200]);
+        inner_node_nearest_sibling_test::<16, Node>(&[3, 255, 0, 85]);
+        inner_node_nearest_sibling_test::<16, Node>(&(0..=u8::MAX).step_by(6).collect::<Vec<_>>());
+        inner_node_nearest_sibling_test::<16, Node>(&(0..48).collect::<Vec<_>>());
+        inner_node_nearest_sibling_test::<16, Node>(&(208..=u8::MAX).rev().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn nearest_sibling_prefers_closest() {
+        use SiblingKey::{Next, Previous};
+
+        let queries = [0, 9, 10, 11, 104, 105, 106, 199, 200, 201, 255];
+        let results =
+            nearest_sibling_keys::<16, InnerNode48<Box<[u8]>, (), 16>>(&[10, 200], queries);
+
+        // When the next and previous children are equally distant, the next
+        // child is preferred.
+        assert_eq!(
+            results,
+            [
+                Some(Next(10)),
+                Some(Next(10)),
+                Some(Next(200)),
+                Some(Previous(10)),
+                Some(Previous(10)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Previous(10)),
+                Some(Previous(200)),
+                Some(Previous(200)),
+            ]
+        );
+    }
+
+    #[test]
+    fn nearest_sibling_single_child() {
+        let results = nearest_sibling_keys::<16, InnerNode48<Box<[u8]>, (), 16>>(&[7], [0, 7, 255]);
+
+        assert_eq!(
+            results,
+            [
+                Some(SiblingKey::Next(7)),
+                None,
+                Some(SiblingKey::Previous(7))
+            ]
+        );
     }
 
     fn fixture() -> FixtureReturn<InnerNode48<Box<[u8]>, (), 16>, 4> {
