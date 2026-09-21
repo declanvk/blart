@@ -42,7 +42,6 @@ testing = ["std"]
 argh = "0.1.12"
 criterion = "0.5.1"
 dhat = "0.3.3"
-iai-callgrind = "0.15.1"
 bumpalo = { version = "3.16.0", features = ["allocator-api2"] }
 mutants = "0.0.3"
 rand_distr = "0.5.1"
@@ -50,13 +49,14 @@ rand = "0.9.1"
 # Need to enable the `testing` feature for unit and integration tests
 blart = { path = ".", features = ["testing"] }
 expect-test = "1.5.1"
+gungraun = "0.19.4"
 
 [[bench]]
 name = "criterion"
 harness = false
 
 [[bench]]
-name = "iai_callgrind"
+name = "callgrind"
 harness = false
 
 [profile.bench]

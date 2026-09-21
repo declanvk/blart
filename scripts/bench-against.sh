@@ -9,10 +9,10 @@ git switch --quiet --detach "$1"
 BASELINE_NAME="$(git rev-parse --short HEAD)"
 
 # Create the baseline benchmark and don't output the summary
-cargo bench --quiet --bench iai_callgrind -- --save-baseline="${BASELINE_NAME}" > /dev/null
+cargo bench --quiet --bench callgrind -- --save-baseline="${BASELINE_NAME}" > /dev/null
 
 # Using '-' will switch back to the previous branch or git checkout
 git switch --quiet -
 
 # Run the benchmark again with comparison to baseline
-cargo bench --quiet --bench iai_callgrind -- --baseline="${BASELINE_NAME}"
+cargo bench --quiet --bench callgrind -- --baseline="${BASELINE_NAME}"
