@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["blart",[["impl&lt;K, const PREFIX_LEN: <a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.usize.html\">usize</a>, A: <a class=\"trait\" href=\"blart/allocator/trait.Allocator.html\" title=\"trait blart::allocator::Allocator\">Allocator</a>&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/ops/arith/trait.Sub.html\" title=\"trait core::ops::arith::Sub\">Sub</a>&lt;&amp;<a class=\"struct\" href=\"blart/struct.TreeSet.html\" title=\"struct blart::TreeSet\">TreeSet</a>&lt;K, PREFIX_LEN, A&gt;&gt; for &amp;<a class=\"struct\" href=\"blart/struct.TreeSet.html\" title=\"struct blart::TreeSet\">TreeSet</a>&lt;K, PREFIX_LEN, A&gt;<div class=\"where\">where\n    K: <a class=\"trait\" href=\"blart/trait.OrderedBytes.html\" title=\"trait blart::OrderedBytes\">OrderedBytes</a> + <a class=\"trait\" href=\"blart/trait.NoPrefixesBytes.html\" title=\"trait blart::NoPrefixesBytes\">NoPrefixesBytes</a> + <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a>,</div>",0]]],["blart_analysis",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/ops/arith/trait.Sub.html\" title=\"trait core::ops::arith::Sub\">Sub</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>&gt; for <a class=\"struct\" href=\"blart_analysis/key_analysis/struct.InnerNodeWidth.html\" title=\"struct blart_analysis::key_analysis::InnerNodeWidth\">InnerNodeWidth</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1094,441]}

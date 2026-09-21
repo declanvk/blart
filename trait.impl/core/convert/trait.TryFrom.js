@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["blart",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html\" title=\"trait core::convert::TryFrom\">TryFrom</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>&gt; for <a class=\"struct\" href=\"blart/raw/representation/inner_node_indirect/index/struct.NonMaxIndex.html\" title=\"struct blart::raw::representation::inner_node_indirect::index::NonMaxIndex\">NonMaxIndex</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html\" title=\"trait core::convert::TryFrom\">TryFrom</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.usize.html\">usize</a>&gt; for <a class=\"struct\" href=\"blart/raw/representation/inner_node_indirect/index/struct.NonMaxIndex.html\" title=\"struct blart::raw::representation::inner_node_indirect::index::NonMaxIndex\">NonMaxIndex</a>",0]]],["blart_analysis",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/convert/trait.TryFrom.html\" title=\"trait core::convert::TryFrom\">TryFrom</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.usize.html\">usize</a>&gt; for <a class=\"struct\" href=\"blart_analysis/key_analysis/struct.InnerNodeWidth.html\" title=\"struct blart_analysis::key_analysis::InnerNodeWidth\">InnerNodeWidth</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[951,454]}

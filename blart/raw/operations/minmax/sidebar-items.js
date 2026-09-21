@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["maximum_unchecked","minimum_unchecked"]};

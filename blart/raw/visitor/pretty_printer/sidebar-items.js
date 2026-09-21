@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bytes_display_fmt","debug_as_display_fmt","null_display_fmt"],"struct":["DotPrinter","DotPrinterSettings","OverrideDisplay"]};
