@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - ReleaseDate
 
+### Changed
+ - Update MSRV to `1.90`
+
 ## [0.6.0] - 2026-09-21
 
 ### Added
