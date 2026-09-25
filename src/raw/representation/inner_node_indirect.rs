@@ -199,18 +199,12 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
             usize::from(index)
         } else {
             let child_index = self.header.num_children();
-            debug_assert!(child_index < self.child_pointers.len(), "node is full");
+            // The contract of this functions says that it will panic on insert of a new child if
+            // the node is full.
+            assert!(child_index < self.child_pointers.len(), "node is full");
 
-            // SAFETY: By construction the number of children in the header
-            // is kept in sync with the number of children written in the node
-            // and if this number exceeds the maximum len the node should have
-            // already grown. So we know for a fact that that num_children <= node len.
-            //
-            // With this we know that child_index is <= 47, because at the 48th time
-            // calling this function for writing, the current len will bet 47, and
-            // after this insert we increment it to 48, so this symbolizes that the
-            // node is full and before calling this function again the node should
-            // have already grown
+            // SAFETY: After the assert above, `child_index < 48`, so the `get_unchecked_mut` (and
+            // indexing) below are in bounds.
             self.child_indices[key_fragment_idx] =
                 Some(unsafe { NonMaxIndex::try_from(child_index).unwrap_unchecked() });
             self.header.inc_num_children();
@@ -570,7 +564,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "node is full")]
     fn write_child_full_panic() {
         inner_node_write_child_test::<16, InnerNode48<Box<[u8]>, (), 16>>(49);
     }
