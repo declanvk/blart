@@ -46,7 +46,7 @@ impl StackArena {
             // SAFETY: Every time we call `Self::push` the
             // vector is extended by `self.n`, so it's safe to
             // assume this
-            core::hint::assert_unchecked(self.data.len() % self.n == 0);
+            core::hint::assert_unchecked(self.data.len().is_multiple_of(self.n));
         }
 
         if self.data.is_empty() {

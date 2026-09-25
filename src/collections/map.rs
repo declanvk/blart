@@ -1019,10 +1019,10 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         //    operation can be concurrent with this one.
         //  - The same allocator is used for all inserts and deletes
         let insert_result = unsafe { insert_point.apply(key, value, &self.alloc) };
-        let leafs_removed = insert_result.leafs_removed;
+        let leaves_removed = insert_result.leaves_removed;
         let insert_result = self.apply_insert_result(insert_result.insert_result);
 
-        self.num_entries -= leafs_removed;
+        self.num_entries -= leaves_removed;
 
         insert_result
     }
