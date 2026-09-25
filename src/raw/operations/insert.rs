@@ -336,16 +336,11 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 // `apply` caller requirements.
                 let key_bytes = key.as_bytes();
 
-                unsafe {
-                    // SAFETY: Since we are iterating the key and prefixes, we
-                    // expect that the depth never exceeds the key len.
-                    // Because if this happens we ran out of bytes in the key to match
-                    // and the whole process should be already finished
-                    core::hint::assert_unchecked(
-                        key_bytes_used + mismatch.matched_bytes < key_bytes.len(),
-                    );
-                }
-
+                // The `key_bytes` is generated via a fresh call to `AsBytes::as_bytes` and there
+                // is no safety contract that the `AsByte` impl must always return the same content
+                // on each call. This means that we can't `assert_unchecked` to
+                // elide bounds checking on this indexing call because the
+                // `new_key_bytes_used + mismatch.matched_bytes` could be OOB
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
 
                 let new_leaf_pointer =
@@ -473,22 +468,11 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 // SAFETY: We hold a mutable reference, so creating a shared reference is safe
                 let leaf_bytes = unsafe { leaf_node_ptr.as_key_ref().as_bytes() };
 
-                unsafe {
-                    // SAFETY: When reaching this point in the insertion process this invariant
-                    // should always be true, due to the check of [`InsertPrefixError`] which
-                    // guarantees that the amount of bytes used is always < len of the key or key in
-                    // the leaf if this was not true, then a
-                    // [`InsertPrefixError`] would already be triggered
-                    core::hint::assert_unchecked(key_bytes_used < leaf_bytes.len());
-                    core::hint::assert_unchecked(key_bytes_used < key_bytes.len());
-                    core::hint::assert_unchecked(new_key_bytes_used < leaf_bytes.len());
-                    core::hint::assert_unchecked(new_key_bytes_used < key_bytes.len());
-
-                    // SAFETY: This is safe by construction, since new_key_bytes_used =
-                    // key_bytes_used + x
-                    core::hint::assert_unchecked(key_bytes_used <= new_key_bytes_used);
-                }
-
+                // The `leaf_bytes` is generated via a fresh call to `AsBytes::as_bytes` and there
+                // is no safety contract that the `AsByte` impl must always return the same content
+                // on each call. This means that we can't `assert_unchecked` to
+                // elide bounds checking on this indexing call because the
+                // `new_key_bytes_used` could be OOB
                 let leaf_node_key_byte = leaf_bytes[new_key_bytes_used];
                 let new_leaf_node_key_byte = key_bytes[new_key_bytes_used];
 
@@ -741,7 +725,7 @@ impl<K, V, const PREFIX_LEN: usize> PrefixInsertPoint<K, V, PREFIX_LEN> {
             Self::InsertPoint(insert_point) => PrefixInsertResult {
                 // Safety: covered by function doc comment.
                 insert_result: unsafe { insert_point.apply(key, value, alloc) },
-                leafs_removed: 0,
+                leaves_removed: 0,
             },
             Self::OverwritePoint(overwrite_point) =>
             // Safety: covered by function doc comment.
@@ -778,7 +762,7 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for OverwritePoint<K, V, PREFIX_L
 #[derive(Debug)]
 pub struct PrefixInsertResult<'a, K, V, const PREFIX_LEN: usize> {
     pub insert_result: InsertResult<'a, K, V, PREFIX_LEN>,
-    pub leafs_removed: usize,
+    pub leaves_removed: usize,
 }
 
 impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
@@ -859,7 +843,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
         } = self;
         let overwrite_leaf = LeafNode::with_no_siblings(key, value);
 
-        let (overwrite_ptr, leafs_removed) = match_concrete_node_ptr!(match (overwrite_point
+        let (overwrite_ptr, leaves_removed) = match_concrete_node_ptr!(match (overwrite_point
             .to_node_ptr())
         {
             InnerNode(old_inner) => {
@@ -888,7 +872,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
                         parent_node_change: InsertParentNodeChange::NoChange,
                         marker: PhantomData,
                     },
-                    leafs_removed: 0,
+                    leaves_removed: 0,
                 };
             },
         });
@@ -903,7 +887,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
                         parent_node_change: InsertParentNodeChange::NoChange,
                         marker: PhantomData,
                     },
-                    leafs_removed,
+                    leaves_removed,
                 }
             },
             TreePath::ChildOfRoot {
@@ -927,7 +911,7 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
                         parent_node_change: InsertParentNodeChange::NoChange,
                         marker: PhantomData,
                     },
-                    leafs_removed,
+                    leaves_removed,
                 }
             },
         }
@@ -1031,15 +1015,11 @@ where
 
                 let leaf_bytes = leaf_node.key_ref().as_bytes();
 
-                unsafe {
-                    // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
-                    // which would lead to this not holding, but since it already checked we know
-                    // that current_depth < len of the key and the key in the leaf. But there is an
-                    // edge case, if the root of the tree is a leaf than the depth can be = len
-                    core::hint::assert_unchecked(current_depth <= leaf_bytes.len());
-                    core::hint::assert_unchecked(current_depth <= key_bytes.len());
-                }
-
+                // The `leaf_bytes` is generated via a fresh call to `AsBytes::as_bytes` and there
+                // is no safety contract that the `AsByte` impl must always return the same content
+                // on each call. This means that we can't `assert_unchecked` to
+                // elide bounds checking on this indexing call because the
+                // `current_depth` could be OOB
                 let prefix_size = leaf_bytes[current_depth..]
                     .iter()
                     .zip(key_bytes[current_depth..].iter())
@@ -1072,15 +1052,6 @@ where
 
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
-                unsafe {
-                    // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
-                    // which would lead to this not holding, but since it already checked we know
-                    // that current_depth < len of the key and the key in the leaf. And also the
-                    // only edge case can occur in the Leaf node, but if we reach a leaf not the
-                    // function returns early, so it's impossible to be <=
-                    core::hint::assert_unchecked(current_depth < key_bytes.len());
-                }
-
                 match next_child_node {
                     Some(next_child_node) => {
                         let byte = key_bytes[current_depth];
@@ -1172,15 +1143,11 @@ where
 
                 let leaf_bytes = leaf_node.key_ref().as_bytes();
 
-                unsafe {
-                    // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
-                    // which would lead to this not holding, but since it already checked we know
-                    // that current_depth < len of the key and the key in the leaf. But there is an
-                    // edge case, if the root of the tree is a leaf than the depth can be = len
-                    core::hint::assert_unchecked(current_depth <= leaf_bytes.len());
-                    core::hint::assert_unchecked(current_depth <= key_bytes.len());
-                }
-
+                // The `leaf_bytes` is generated via a fresh call to `AsBytes::as_bytes` and there
+                // is no safety contract that the `AsByte` impl must always return the same content
+                // on each call. This means that we can't `assert_unchecked` to
+                // elide bounds checking on this indexing call because the
+                // `current_depth` could be OOB
                 let prefix_size = leaf_bytes[current_depth..]
                     .iter()
                     .zip(key_bytes[current_depth..].iter())
@@ -1226,15 +1193,6 @@ where
 
         match lookup_result {
             ControlFlow::Continue(next_child_node) => {
-                unsafe {
-                    // SAFETY: The [`test_prefix_identify_insert`] checks for [`InsertPrefixError`]
-                    // which would lead to this not holding, but since it already checked we know
-                    // that current_depth < len of the key and the key in the leaf. And also the
-                    // only edge case can occur in the Leaf node, but if we reach a leaf not the
-                    // function returns early, so it's impossible to be <=
-                    core::hint::assert_unchecked(current_depth < key_bytes.len());
-                }
-
                 match next_child_node {
                     Some(next_child_node) => {
                         let byte = key_bytes[current_depth];
