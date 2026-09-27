@@ -135,7 +135,8 @@ fn test_stack_arena_pop() {
     let slice1_ptr = arena.push().as_mut_ptr();
 
     // Pop the row.
-    arena.pop();
+    // SAFETY: We called `arena.push()` immediately above, so this is a matching pop.
+    unsafe { arena.pop() };
 
     // Push again and get a pointer to the new row.
     let slice2_ptr = arena.push().as_mut_ptr();
