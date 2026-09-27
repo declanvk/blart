@@ -32,11 +32,13 @@ paste = "1.0.15"
 zerocopy = "0.8.26"
 
 [features]
+# Make sure to update the crate documentation for each feature
 default = ["std"]
 nightly = []
 allocator-api2 = ["dep:allocator-api2"]
 std = ["zerocopy/std", "allocator-api2?/std"]
 testing = ["std"]
+_internal = []
 
 [dev-dependencies]
 argh = "0.1.12"
@@ -54,6 +56,7 @@ gungraun = "0.19.4"
 [[bench]]
 name = "criterion"
 harness = false
+required-features = ["_internal"]
 
 [[bench]]
 name = "callgrind"

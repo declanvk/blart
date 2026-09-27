@@ -348,14 +348,14 @@ impl InnerNodeWidthDistribution {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InnerNodeKind {
     /// This kind matches the `Node4` or `Node16` from the original ART paper,
-    /// or a [`blart::raw::InnerNodeSorted`].
+    /// or a `blart` `InnerNodeSorted`.
     ///
     /// In an inner node with width `w`, nodes of this kind have `w` values of
     /// `u8` representing the child key bytes and `w` values of roughly `*const
     /// ()` representing the pointers to children.
     KeyChildCompressed = 0,
     /// This kind matches the `Node48` from the original ART paper, or a
-    /// [`blart::raw::InnerNode48`].
+    /// a `blart` `InnerNode48`.
     ///
     /// In an inner node with width `w`, nodes of this kind have `256` values of
     /// `u8` representing the child key bytes and `w` values of roughly `*const
