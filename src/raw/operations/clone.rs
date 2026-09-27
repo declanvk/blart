@@ -5,8 +5,9 @@ use alloc::vec::Vec;
 use crate::{
     allocator::Allocator,
     raw::{
-        match_concrete_inner_node_ptr, match_concrete_node_ptr, ConcreteInnerNodePtr,
-        ConcreteNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr, OpaqueNodePtr,
+        deallocate_tree, match_concrete_inner_node_ptr, match_concrete_node_ptr,
+        ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr,
+        OpaqueNodePtr,
     },
     AsBytes,
 };
@@ -20,6 +21,43 @@ pub struct CloneResult<K, V, const PREFIX_LEN: usize> {
     pub min_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     /// The last leaf in the trie, aka the leaf with the maximum key
     pub max_leaf: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+}
+
+/// Drop guard that deallocates a partially-cloned trie if a user-provided
+/// `Clone` implementation (for `K`, `V`, or a node header) panics partway
+/// through [`clone_unchecked`].
+struct PartialCloneGuard<'a, K, V, A: Allocator, const PREFIX_LEN: usize> {
+    /// Root of the partially-built new trie, or `None` if no node has been
+    /// allocated yet.
+    new_root_node: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
+    /// The allocator that every node of the new trie was allocated with.
+    alloc: &'a A,
+}
+
+impl<K, V, A: Allocator, const PREFIX_LEN: usize> PartialCloneGuard<'_, K, V, A, PREFIX_LEN> {
+    fn into_root(mut self) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
+        self.new_root_node.take()
+    }
+}
+
+impl<K, V, A: Allocator, const PREFIX_LEN: usize> Drop
+    for PartialCloneGuard<'_, K, V, A, PREFIX_LEN>
+{
+    fn drop(&mut self) {
+        if let Some(root) = self.new_root_node {
+            // SAFETY:
+            //  - This guard is the sole owner of the partially-built new trie, so this is the only
+            //    call to `deallocate_tree` for these nodes; there is no double-free.
+            //  - The new trie is not shared with any other thread and no references into it are
+            //    live at this point, so there is no concurrent read and no use-after-free.
+            //  - `alloc` is the same allocator that every node of the new trie was allocated with.
+            //  - Every child pointer written into the partial trie points to a fully allocated
+            //    node, so the traversal only ever visits valid nodes.
+            unsafe {
+                let _ = deallocate_tree(root, self.alloc);
+            }
+        }
+    }
 }
 
 /// Clone the given trie and all the key-values paired contained.
@@ -155,7 +193,11 @@ pub unsafe fn clone_unchecked<
     // (Key byte of this node, node pointer)
     let mut dfs_stack: Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> = Vec::new();
 
-    let mut new_root_node: Option<OpaqueNodePtr<K, V, PREFIX_LEN>> = None;
+    // Guard deallocates partial root on unwinding
+    let mut guard = PartialCloneGuard {
+        new_root_node: None,
+        alloc,
+    };
     let mut first_leaf: Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>> = None;
     let mut previous_leaf: Option<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>> = None;
 
@@ -172,7 +214,7 @@ pub unsafe fn clone_unchecked<
                 clone_inner_node(
                     &mut unfinished_nodes_stack,
                     &mut dfs_stack,
-                    &mut new_root_node,
+                    &mut guard.new_root_node,
                     key_byte,
                     inner_ptr,
                     alloc,
@@ -198,7 +240,7 @@ pub unsafe fn clone_unchecked<
                 unsafe {
                     update_parent(
                         &mut unfinished_nodes_stack,
-                        &mut new_root_node,
+                        &mut guard.new_root_node,
                         key_byte,
                         new_leaf_ptr,
                     )
@@ -211,6 +253,8 @@ pub unsafe fn clone_unchecked<
         unfinished_nodes_stack.is_empty(),
         "The list of unfinished nodes must be empty when exiting the loop"
     );
+
+    let new_root_node = guard.into_root();
 
     CloneResult {
         root: new_root_node.expect("there should be at least one cloned node"),
@@ -283,5 +327,60 @@ mod tests {
                 expanded_length: 3,
             }],
         ))
+    }
+
+    #[test]
+    fn clone_panicking_value_does_not_leak() {
+        use std::{
+            panic::{catch_unwind, AssertUnwindSafe},
+            sync::atomic::{AtomicUsize, Ordering},
+        };
+
+        static REMAINING_CLONES: AtomicUsize = AtomicUsize::new(0);
+
+        #[derive(PartialEq, Eq, Debug)]
+        struct PanicAfter(u32);
+
+        impl Clone for PanicAfter {
+            fn clone(&self) -> Self {
+                let left = REMAINING_CLONES.fetch_sub(1, Ordering::Relaxed);
+                assert!(left > 0, "boom: PanicAfter cloned too many times");
+                PanicAfter(self.0)
+            }
+        }
+
+        let mut tree: TreeMap<[u8; 2], PanicAfter> = TreeMap::new();
+        tree.try_insert([0, 0], PanicAfter(0)).unwrap();
+        for i in 1..=16u8 {
+            tree.try_insert([1, i], PanicAfter(i.into())).unwrap();
+        }
+
+        // At this point the tree should be something like:
+        // ```
+        //         node4
+        //         |   |
+        //         0   node16
+        //             | .. |
+        //             1 - 16
+        // ```
+        //
+        // Setting the number of remaining clones to 4 means that the first leaf is cloned and we
+        // have two levels of partially constructed leaf nodes before the unwinding starts. I think
+        // this should be sufficiently complicated and will exercise the deallocation with two
+        // partial inner nodes of different kinds.
+        REMAINING_CLONES.store(4, Ordering::Relaxed);
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let _ = tree.clone();
+        }));
+        assert!(
+            result.is_err(),
+            "clone should have unwound when the value `Clone` panicked"
+        );
+
+        assert_eq!(tree.get(&[0, 0]), Some(&PanicAfter(0)));
+        for i in 1..=16u8 {
+            assert_eq!(tree.get(&[1, i]), Some(&PanicAfter(i.into())));
+        }
     }
 }
