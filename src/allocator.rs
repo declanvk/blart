@@ -84,11 +84,27 @@ mod inner {
     unsafe impl Allocator for Global {
         #[inline]
         fn allocate(&self, layout: Layout) -> Result<NonNull<u8>, ()> {
+            if layout.size() == 0 {
+                // SAFETY: `Layout::align` is always a non-zero power of two, so
+                // the pointer is non-null and correctly aligned.
+                return Ok(unsafe { NonNull::new_unchecked(layout.align() as *mut u8) });
+            }
+
+            // SAFETY: Layout has a non-zero size (we just checked)
             unsafe { NonNull::new(alloc(layout)).ok_or(()) }
         }
 
         #[inline]
         unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+            if layout.size() == 0 {
+                // Zero-size layouts were never passed to `alloc::alloc::alloc`,
+                // so its safe to do nothing. We also know the layout is the same as the one passed
+                // to `allocate` because that is a safety precondition of `Allocator::deallocate`.
+                return;
+            }
+
+            // SAFETY: The safety preconditions of this call are the same as the
+            // `Allocator::deallocate` preconditions, so they must be fulfilled by the caller.
             unsafe { dealloc(ptr.as_ptr(), layout) };
         }
     }
@@ -104,5 +120,26 @@ mod inner {
     /// allocator.
     pub(crate) fn do_alloc<A: Allocator>(alloc: &A, layout: Layout) -> Result<NonNull<u8>, ()> {
         alloc.allocate(layout)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{Allocator, Global, Layout};
+
+        #[test]
+        fn global_handles_zero_sized_layout() {
+            let layout = Layout::from_size_align(0, 8).unwrap();
+
+            let ptr = Global
+                .allocate(layout)
+                .expect("zero-sized allocation should succeed");
+            assert_eq!(
+                (ptr.as_ptr() as usize) % layout.align(),
+                0,
+                "returned pointer must respect the requested alignment"
+            );
+
+            unsafe { Global.deallocate(ptr, layout) };
+        }
     }
 }
