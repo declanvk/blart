@@ -34,18 +34,22 @@ impl StackArena {
         unsafe { self.data.get_unchecked_mut(old_len..new_len) }
     }
 
-    /// SAFETY: This function should only be called after [`Self::push`]
+    /// Copy the most recently pushed row into `buffer` and pop it, returning the
+    /// now-initialized `buffer` (or `None` if the arena is empty).
     ///
-    /// SAFETY: The passed `buffer` must have the exact same
-    /// size as the `n` from `new`
-    pub fn pop_copy<'a, 'b>(
+    /// # Safety
+    ///
+    /// - This function must only be called after a matching [`Self::push`], so that the arena's
+    ///   length is always an exact multiple of `n`.
+    /// - `buffer` must have exactly the same length as the arena's `n`.
+    pub unsafe fn pop_copy<'a, 'b>(
         &mut self,
         buffer: &'a mut &'b mut [MaybeUninit<usize>],
     ) -> Option<&'a mut &'b mut [usize]> {
         unsafe {
-            // SAFETY: Every time we call `Self::push` the
-            // vector is extended by `self.n`, so it's safe to
-            // assume this
+            // SAFETY: The caller only calls this after a matching `Self::push`, and every
+            // `Self::push` extends the vector by `self.n` while every pop removes `self.n`, so
+            // the length is always an exact multiple of `self.n`.
             core::hint::assert_unchecked(self.data.len().is_multiple_of(self.n));
         }
 
@@ -61,14 +65,16 @@ impl StackArena {
         let s = unsafe { &self.data.get_unchecked(begin..end) };
 
         unsafe {
-            // SAFETY: As said in the top level comment of the function,
-            // buffer length == self.n
+            // SAFETY: By this function's safety contract, `buffer.len() == self.n`, and `s` is a
+            // single row of length `self.n`.
             core::hint::assert_unchecked(buffer.len() == s.len());
         }
 
         buffer.copy_from_slice(s);
 
-        self.pop();
+        // SAFETY: The caller guarantees a matching `Self::push`, so popping the row we just
+        // copied removes a row that was actually pushed.
+        unsafe { self.pop() };
 
         // SAFETY: We just copied the data from the vector, and since we
         // expect after the `Self::push` call that the returned buffer is
@@ -80,19 +86,27 @@ impl StackArena {
         })
     }
 
-    /// SAFETY: This function should only be called after [`Self::push`]
-    pub fn pop(&mut self) {
-        // SAFETY: Since the inner type of the vector is trivial
-        // we can just set the length to be the current one - self.n
+    /// Remove the most recently pushed row from the arena.
+    ///
+    /// # Safety
+    ///
+    /// This function must only be called after a matching [`Self::push`], so that there are at
+    /// least `self.n` elements to remove.
+    pub unsafe fn pop(&mut self) {
+        // SAFETY: The inner type (`MaybeUninit<usize>`) is trivial, so no drop glue is skipped,
+        // and the caller guarantees a matching `push`, so `self.data.len() >= self.n`.
         unsafe { self.data.set_len(self.data.len() - self.n) }
     }
 }
 
-/// SAFETY: `old` and `new` must have the same length, and be >= 1
+/// Compute one row of the Levenshtein edit-distance table.
 ///
-/// SAFETY: `key` length + 1 == `new` or `old` length
+/// # Safety
+///
+/// - `old` and `new` must have the same length, which must be >= 1.
+/// - `key.len() + 1` must equal the length of `old` (and therefore `new`).
 #[inline]
-pub(crate) fn edit_dist(
+pub(crate) unsafe fn edit_dist(
     key: &[u8],
     c: u8,
     old: &[usize],
@@ -100,7 +114,7 @@ pub(crate) fn edit_dist(
     max_edit_dist: usize,
 ) -> bool {
     unsafe {
-        // SAFETY: Covered by the top level comment
+        // SAFETY: Guaranteed by this function's safety contract.
         core::hint::assert_unchecked(old.len() == new.len());
         core::hint::assert_unchecked(!old.is_empty());
         core::hint::assert_unchecked(key.len() + 1 == old.len());
@@ -183,7 +197,9 @@ trait FuzzySearch<K: AsBytes, V, const PREFIX_LEN: usize> {
         let (prefix, _) = unsafe { self.read_full_prefix(*old_row.first().unwrap_unchecked()) };
         let mut keep = true;
         for k in prefix {
-            keep &= edit_dist(key, *k, old_row, new_row, max_edit_dist);
+            // SAFETY: `old_row` and `new_row` are the search's two arena rows; both have length
+            // `key.len() + 1` (>= 1), satisfying `edit_dist`'s contract.
+            keep &= unsafe { edit_dist(key, *k, old_row, new_row, max_edit_dist) };
             // SAFETY: We know that `old_row` length == `new_row` length
             unsafe { swap(old_row, new_row) };
         }
@@ -211,10 +227,13 @@ where
 
         for (k, node) in self.iter() {
             let new_row = arena.push();
-            if edit_dist(key, k, old_row, new_row, max_edit_dist) {
+            // SAFETY: The arena's `n` is `key.len() + 1`, so the freshly pushed `new_row` and
+            // `old_row` both have length `key.len() + 1` (>= 1), satisfying `edit_dist`.
+            if unsafe { edit_dist(key, k, old_row, new_row, max_edit_dist) } {
                 nodes_to_search.push(node);
             } else {
-                arena.pop();
+                // SAFETY: We called `arena.push()` immediately above, so this is a matching pop.
+                unsafe { arena.pop() };
             }
         }
         false
@@ -239,7 +258,9 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
         // length of the already examined bytes of the key
         let remaining_key = unsafe { self.key_ref().as_bytes().get_unchecked(current_len..) };
         for k in remaining_key {
-            edit_dist(key, *k, old_row, new_row, max_edit_dist);
+            // SAFETY: `old_row` and `new_row` are the search's two arena rows; both have length
+            // `key.len() + 1` (>= 1), satisfying `edit_dist`'s contract.
+            unsafe { edit_dist(key, *k, old_row, new_row, max_edit_dist) };
             // SAFETY: We know that `old_row` length == `new_row` length
             unsafe { swap(old_row, new_row) };
         }
@@ -314,10 +335,13 @@ macro_rules! gen_iter {
                 let mut old_row = self.old_row.as_mut();
                 let mut new_row = self.new_row.as_mut();
 
-                while let (Some(node), Some(old_row)) = (
-                    self.nodes_to_search.pop(),
-                    self.arena.pop_copy(&mut old_row),
-                ) {
+                // SAFETY: The arena and `nodes_to_search` are pushed in tandem (each searched
+                // node has a matching pushed row, starting with the initial row pushed in
+                // `new`), so `pop_copy` is only ever reached after a matching `push`. `old_row`
+                // is `self.old_row`, whose length equals the arena's `n`.
+                while let (Some(node), Some(old_row)) = (self.nodes_to_search.pop(), unsafe {
+                    self.arena.pop_copy(&mut old_row)
+                }) {
                     match_concrete_node_ptr!(match (node.to_node_ptr()) {
                         InnerNode(inner_ptr) => {
                             // SAFETY: Since `Self` holds a mutable/shared reference
