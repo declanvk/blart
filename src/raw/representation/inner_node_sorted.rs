@@ -339,9 +339,6 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 
         let mut child_index = 0;
         for key in keys {
-            // Might be able to remove this `allow` once we bump the MSRV again. I'm not
-            // sure which version exactly (in between 1.82 and 1.88) has the fix.
-            #[allow(clippy::comparison_chain)]
             if key_fragment < *key {
                 return WritePoint::Shift(child_index);
             } else if key_fragment == *key {

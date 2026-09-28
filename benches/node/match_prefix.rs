@@ -50,7 +50,7 @@ fn bench(c: &mut Criterion) {
     macro_rules! generate_benches {
         (single_bench $match_func:ident $b:ident $node:ident $key:ident $($current_depth:literal)?) => {
             $b.iter(|| std::hint::black_box(
-                #[allow(unused_unsafe, unused_comparisons)]
+                #[expect(unused_unsafe, unused_comparisons)]
                 unsafe {
                     // SAFETY: covered by assert
                     $(

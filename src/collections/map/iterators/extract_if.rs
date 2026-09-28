@@ -545,7 +545,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[allow(clippy::reversed_empty_ranges)]
+    #[expect(clippy::reversed_empty_ranges)]
     fn inverted_range() {
         let mut map: TreeMap<i32, i32> = (0..10).map(|i| (i, i)).collect();
         let _ = map.extract_if(5..2, |_, _| true);

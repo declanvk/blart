@@ -24,10 +24,11 @@ use crate::{
 #[repr(align(8))]
 pub(super) struct OpaqueValue;
 
-/// An opaque pointer to a [`Node`].
+/// An opaque pointer to a tree node.
 ///
-/// Could be any one of the [`NodeType`]s, need to perform check on the runtime
-/// type and then cast to a [`NodePtr`].
+/// It could point to any one of the concrete node representations; use
+/// [`OpaqueNodePtr::node_type`] to check the runtime node type and then cast to
+/// a concrete node pointer.
 #[repr(transparent)]
 pub struct OpaqueNodePtr<K, V, const PREFIX_LEN: usize>(
     TaggedPointer<OpaqueValue, 3>,
@@ -81,8 +82,8 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
         OpaqueNodePtr(tagged_ptr, PhantomData)
     }
 
-    /// Return `true` if this Node_ pointer points to the specified concrete
-    /// [`NodeType`].
+    /// Return `true` if this node pointer points to the specified concrete node
+    /// type `N`.
     pub fn is<N: Node<PREFIX_LEN>>(&self) -> bool {
         self.0.to_data() == usize::from(N::TYPE as u8)
     }

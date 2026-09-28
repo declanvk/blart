@@ -20,7 +20,7 @@ fn tree_from_keys<K: AsBytes>(keys: impl IntoIterator<Item = K>) -> TreeMap<K, u
     tree
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn get_first_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
 ) -> &K {
@@ -57,14 +57,14 @@ pub fn get_middle_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     last_key.expect("tree is non-empty")
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn get_last_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
 ) -> &K {
     tree.last_key_value().unwrap().0
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn select_zipfian_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
     num_elements: usize,
@@ -80,7 +80,7 @@ pub fn select_zipfian_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
         .collect()
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn remove_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     tree: &mut TreeMap<K, V, PREFIX_LEN>,
     keys: Vec<&K>,
@@ -94,14 +94,14 @@ pub fn remove_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     output
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn skewed_tree() -> &'static TreeMap<Box<[u8]>, usize> {
     static TREE: OnceLock<TreeMap<Box<[u8]>, usize>> = OnceLock::new();
 
     TREE.get_or_init(|| tree_from_keys(generate_keys_skewed(256 * 32)))
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn dense_fixed_length_key_tree() -> &'static TreeMap<[u8; 2], usize> {
     static TREE: OnceLock<TreeMap<[u8; 2], usize>> = OnceLock::new();
 
@@ -112,7 +112,7 @@ pub fn dense_fixed_length_key_tree() -> &'static TreeMap<[u8; 2], usize> {
 //     tree_from_keys(generate_key_fixed_length([63; 3]))
 // }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn sparse_fixed_length_key_tree() -> &'static TreeMap<[u8; 16], usize> {
     static TREE: OnceLock<TreeMap<[u8; 16], usize>> = OnceLock::new();
 

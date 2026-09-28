@@ -10,8 +10,8 @@ use std::collections::{hash_map::Entry, HashMap};
 use crate::{
     allocator::Allocator,
     raw::{
-        visitor::{Visitable, Visitor},
-        InnerNode, LeafNode, NodePtr, NodeType, OpaqueNodePtr, OptionalLeafPtr,
+        visitor::{InnerNodeKind, Visitable, Visitor},
+        InnerNode, LeafNode, NodePtr, OpaqueNodePtr, OptionalLeafPtr,
     },
     AsBytes, TreeMap,
 };
@@ -54,10 +54,8 @@ pub enum MalformedTreeError<K, V, const PREFIX_LEN: usize> {
     WrongChildrenCount {
         /// The key prefix identifying the inner node
         key_prefix: KeyPrefix,
-        /// The type of the inner node (`InnerNode4`, `InnerNode16`, etc)
-        ///
-        /// This field is guaranteed not to be [`NodeType::Leaf`]
-        inner_node_type: NodeType,
+        /// The kind of the inner node (`Node4`, `Node16`, etc).
+        inner_node_type: InnerNodeKind,
         /// The number of children found at the inner node
         num_children: usize,
     },
@@ -195,7 +193,7 @@ where
                     "Found an inner node of type [{inner_node_type:?}] at location \
                      [{key_prefix:?}] that had the wrong number of children! Expected children in \
                      range [{:?}], but found [{num_children}] children",
-                    inner_node_type.capacity_range(),
+                    inner_node_type.to_node_type().capacity_range(),
                 )
             },
             MalformedTreeError::PrefixMismatch {
@@ -502,7 +500,8 @@ where
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::WrongChildrenCount {
                 key_prefix: current_key_prefix,
-                inner_node_type: N::TYPE,
+                inner_node_type: InnerNodeKind::from_node_type(N::TYPE)
+                    .expect("visit_inner_node is only ever called for inner node types"),
                 num_children,
             });
         }
@@ -791,7 +790,7 @@ mod tests {
                 num_children,
             } => {
                 assert_eq!(key_prefix, []);
-                assert_eq!(inner_node_type, NodeType::Node16);
+                assert_eq!(inner_node_type, InnerNodeKind::Node16);
                 assert_eq!(num_children, 2);
             },
             _ => {

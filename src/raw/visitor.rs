@@ -14,13 +14,49 @@ pub use well_formed::*;
 
 use super::{
     ConcreteNodePtr, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node,
-    NodePtr, OpaqueNodePtr,
+    NodePtr, NodeType, OpaqueNodePtr,
 };
 use crate::raw::{match_concrete_node_ptr, InnerNode, InnerNodeCommon};
 
+/// The kind of an inner node in the tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum InnerNodeKind {
+    /// Node that references between 2 and 4 children.
+    Node4,
+    /// Node that references between 5 and 16 children.
+    Node16,
+    /// Node that references between 17 and 48 children.
+    Node48,
+    /// Node that references between 49 and 256 children.
+    Node256,
+}
+
+impl InnerNodeKind {
+    /// Convert a [`NodeType`] into an [`InnerNodeKind`], returning `None` for [`NodeType::Leaf`].
+    pub(crate) fn from_node_type(node_type: NodeType) -> Option<Self> {
+        Some(match node_type {
+            NodeType::Node4 => InnerNodeKind::Node4,
+            NodeType::Node16 => InnerNodeKind::Node16,
+            NodeType::Node48 => InnerNodeKind::Node48,
+            NodeType::Node256 => InnerNodeKind::Node256,
+            NodeType::Leaf => return None,
+        })
+    }
+
+    /// Convert into [`NodeType`].
+    pub(crate) fn to_node_type(self) -> NodeType {
+        match self {
+            InnerNodeKind::Node4 => NodeType::Node4,
+            InnerNodeKind::Node16 => NodeType::Node16,
+            InnerNodeKind::Node48 => NodeType::Node48,
+            InnerNodeKind::Node256 => NodeType::Node256,
+        }
+    }
+}
+
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.
-pub trait Visitable<K, T, const PREFIX_LEN: usize> {
+pub(crate) trait Visitable<K, T, const PREFIX_LEN: usize> {
     /// This function provides the default traversal behavior for the
     /// implementing type.
     ///
@@ -140,7 +176,7 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for LeafNode<K, 
 
 /// The `Visitor` trait allows creating new operations on the radix tree by
 /// overriding specific handling methods for each of the node types.
-pub trait Visitor<K, V, const PREFIX_LEN: usize>: Sized {
+pub(crate) trait Visitor<K, V, const PREFIX_LEN: usize>: Sized {
     /// The type of value that the visitor produces.
     type Output;
 
