@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
  - Update MSRV to `1.90`
+ - Within the visitor module, replaced some uses of `NodeType` (which is now private) with a new enum that only contains variants for inner node kinds called `InnerNodeKind`.
 
 ### Removed
  - Removed the unsound `OrderedBytes` implementations for `Path` and `PathBuf`.
+ - Made the `Visitor`, `Visitable`, and `TreeStatsCollector::collect_ptr` items all private.
 
 ## [0.6.0] - 2026-09-21
 

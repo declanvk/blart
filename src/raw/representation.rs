@@ -217,6 +217,7 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ExplicitMismatch<K, V, PREFIX
 #[derive(Debug)]
 pub struct PessimisticMismatch {
     /// How many bytes were matched
+    #[expect(dead_code)]
     pub matched_bytes: usize,
     /// Value of the byte that made it not match.
     ///
@@ -589,6 +590,7 @@ where
 {
     /// Add the first child, transitioning the builder to the [`HasOneChild`]
     /// state.
+    #[cfg_attr(not(test), expect(dead_code))]
     pub fn write_child(
         mut self,
         key_byte: u8,
@@ -608,6 +610,7 @@ where
 {
     /// Add the second child, transitioning the builder to the [`HasChild`]
     /// state and enabling [`build`][InnerNodeBuilder::build].
+    #[cfg_attr(not(test), expect(dead_code))]
     pub fn write_child(
         mut self,
         key_byte: u8,
@@ -675,6 +678,7 @@ where
     N: InnerNodeCommon<K, V, PREFIX_LEN>,
 {
     /// Add another child to the node being built.
+    #[cfg_attr(not(test), expect(dead_code))]
     pub fn write_child(mut self, key_byte: u8, child: OpaqueNodePtr<K, V, PREFIX_LEN>) -> Self {
         self.node.write_child(key_byte, child);
         self
@@ -696,6 +700,7 @@ impl<K, V, const PREFIX_LEN: usize>
     /// # Safety
     /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
     ///   is done previously to the call of this function)
+    #[expect(dead_code)]
     pub unsafe fn write_child_unchecked(
         mut self,
         key_byte: u8,

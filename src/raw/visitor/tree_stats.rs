@@ -1,10 +1,13 @@
 use alloc::collections::BTreeMap;
-use core::{fmt, ops::Add};
+use core::{
+    fmt,
+    ops::{Add, Index},
+};
 
 use crate::{
     allocator::Allocator,
-    raw::{InnerNode, LeafNode, NodeType, OpaqueNodePtr},
-    visitor::{Visitable, Visitor},
+    raw::{InnerNode, LeafNode, OpaqueNodePtr},
+    visitor::{InnerNodeKind, Visitable, Visitor},
     AsBytes, TreeMap,
 };
 
@@ -33,7 +36,7 @@ impl TreeStatsCollector {
     ///  - `root` must be a pointer to a well formed tree.
     ///  - This function cannot be called concurrently with any mutating operation on `root` or any
     ///    child node of `root`. This function will read to all children in the given tree.
-    pub unsafe fn collect_ptr<K: AsBytes, V, const PREFIX_LEN: usize>(
+    pub(crate) unsafe fn collect_ptr<K: AsBytes, V, const PREFIX_LEN: usize>(
         root: &OpaqueNodePtr<K, V, PREFIX_LEN>,
     ) -> TreeStats {
         let mut collector = TreeStatsCollector {
@@ -172,22 +175,22 @@ impl Add for LeafStats {
     }
 }
 
-/// A mapping from [`NodeType`] to [`InnerNodeStats`] that has a fixed debug
-/// ordering, following the [`Ord`] implementation of [`NodeType`].
+/// A mapping from [`InnerNodeKind`] to [`InnerNodeStats`] that has a fixed debug
+/// ordering, following the [`Ord`] implementation of [`InnerNodeKind`].
 #[derive(Clone, PartialEq, Eq, Default)]
-pub struct FixedOrderNodeStats(BTreeMap<NodeType, InnerNodeStats>);
+pub struct FixedOrderNodeStats(BTreeMap<InnerNodeKind, InnerNodeStats>);
 
 impl FixedOrderNodeStats {
-    /// Lookup the inner node stats for a specific node type.
-    pub fn get(&self, node_type: NodeType) -> Option<&InnerNodeStats> {
-        self.0.get(&node_type)
+    /// Lookup the inner node stats for a specific inner node kind.
+    pub fn get(&self, node_kind: InnerNodeKind) -> Option<&InnerNodeStats> {
+        self.0.get(&node_kind)
     }
 }
 
-impl core::ops::Index<NodeType> for FixedOrderNodeStats {
+impl Index<InnerNodeKind> for FixedOrderNodeStats {
     type Output = InnerNodeStats;
 
-    fn index(&self, index: NodeType) -> &Self::Output {
+    fn index(&self, index: InnerNodeKind) -> &Self::Output {
         self.get(index).unwrap()
     }
 }
@@ -201,14 +204,13 @@ impl fmt::Debug for FixedOrderNodeStats {
 /// Collection of stats about the number of nodes types present in a tree
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TreeStats {
-    /// Stats for [`InnerNode`]s
+    /// Stats for the inner nodes, grouped by [`InnerNodeKind`].
     pub inner_node: FixedOrderNodeStats,
 
     /// Stats for the whole tree
     pub tree: InnerNodeStats,
 
-    /// Number of [`LeafNode`]s present in the
-    /// tree.
+    /// Number of leaf nodes present in the tree.
     pub leaf: LeafStats,
 }
 
@@ -244,10 +246,12 @@ where
         N: InnerNode<PREFIX_LEN, Key = K, Value = V> + Visitable<K, V, PREFIX_LEN>,
     {
         t.super_visit_with(self);
+        let node_kind = InnerNodeKind::from_node_type(N::TYPE)
+            .expect("visit_inner_node is only ever called for inner node types");
         self.current
             .inner_node
             .0
-            .entry(N::TYPE)
+            .entry(node_kind)
             .or_default()
             .aggregate_data(t);
         self.current.tree.aggregate_data(t);
@@ -332,28 +336,28 @@ mod tests {
     fn unsorted_node_stats() -> FixedOrderNodeStats {
         FixedOrderNodeStats(BTreeMap::from([
             (
-                NodeType::Node256,
+                InnerNodeKind::Node256,
                 InnerNodeStats {
                     count: 256,
                     ..Default::default()
                 },
             ),
             (
-                NodeType::Node4,
+                InnerNodeKind::Node4,
                 InnerNodeStats {
                     count: 4,
                     ..Default::default()
                 },
             ),
             (
-                NodeType::Node48,
+                InnerNodeKind::Node48,
                 InnerNodeStats {
                     count: 48,
                     ..Default::default()
                 },
             ),
             (
-                NodeType::Node16,
+                InnerNodeKind::Node16,
                 InnerNodeStats {
                     count: 16,
                     ..Default::default()
@@ -376,15 +380,31 @@ mod tests {
     fn fixed_order_node_stats_get_and_index() {
         let stats = unsorted_node_stats();
 
-        assert_eq!(stats.get(NodeType::Node4).unwrap().count, 4);
-        assert_eq!(stats[NodeType::Node256].count, 256);
-        assert!(stats.get(NodeType::Leaf).is_none());
+        assert_eq!(stats.get(InnerNodeKind::Node4).unwrap().count, 4);
+        assert_eq!(stats[InnerNodeKind::Node256].count, 256);
+
+        // A kind that is absent from the map returns `None`.
+        let partial = FixedOrderNodeStats(BTreeMap::from([(
+            InnerNodeKind::Node4,
+            InnerNodeStats {
+                count: 4,
+                ..Default::default()
+            },
+        )]));
+        assert!(partial.get(InnerNodeKind::Node256).is_none());
     }
 
     #[test]
     #[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
     fn fixed_order_node_stats_index_missing_node_type() {
-        let _ = unsorted_node_stats()[NodeType::Leaf];
+        let partial = FixedOrderNodeStats(BTreeMap::from([(
+            InnerNodeKind::Node4,
+            InnerNodeStats {
+                count: 4,
+                ..Default::default()
+            },
+        )]));
+        let _ = partial[InnerNodeKind::Node256];
     }
 
     #[test]
@@ -657,7 +677,7 @@ mod tests {
 
     #[test]
     fn tree_with_node48_and_node256() {
-        use NodeType::*;
+        use InnerNodeKind::*;
 
         let mut tree: TreeMap<Vec<u8>, u8> = TreeMap::new();
         // This will create a Node4, then grow to Node16, then to
