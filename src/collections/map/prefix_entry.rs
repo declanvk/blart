@@ -49,8 +49,8 @@ where
     /// Gets a reference to the underlying value if there is only a singular
     /// underlying entry.
     pub fn get(&self) -> Option<&V> {
-        // SAFETY: This is safe because `Self` has a mutable reference
-        // so it's safe to generate a shared reference from this mutable reference
+        // SAFETY: This is safe because `Self` has a shared reference
+        // so it's safe to generate a shared reference from this shared reference
         unsafe { self.get_leaf().map(|f| f.as_value_ref()) }
     }
 
@@ -58,7 +58,7 @@ where
     /// singular underlying entry.
     pub fn get_mut(&mut self) -> Option<&mut V> {
         // SAFETY: This is safe because `Self` has a mutable reference
-        // so it's safe to generate a shared reference from this mutable reference
+        // so it's safe to generate a mutable reference from this mutable reference
         unsafe { self.get_leaf().map(|f| f.as_value_mut()) }
     }
 
@@ -83,7 +83,7 @@ where
     /// Returns an iterator over all key value pairs that would be erased upon
     /// insertion.
     pub fn iter(&self) -> SubtreeIter<'_, K, V, PREFIX_LEN, A> {
-        // SAFETY: this is safe since we have an exclusive reference to the tree
+        // SAFETY: this is safe since we have a shared reference to the tree
         // containing this node, this iterator may only live for the lifetime of the
         // reference given to self. Otherwise it is possible to mutate the tree
         // using this entry while the iterator can still be used, causing

@@ -690,16 +690,16 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         Q: AsBytes + ?Sized,
     {
         if let Some(state) = &self.state {
-            // SAFETY: Since we have an immutable reference to the `TreeMap` object, that
-            // means there can only exist other immutable references aside from this one,
-            // and no mutable references. That means that no mutating operations can occur
-            // on the root node or any child of the root node.
+            // SAFETY: Since we have a mutable reference to the `TreeMap` object, that
+            // means there cannot exist any other reference (mutable or immutable) to the
+            // same `TreeMap`. Which means that no other mutating operations could be
+            // happening during the `prefix_search_unchecked` call.
             let search_result = unsafe { prefix_search_unchecked(state.root, key.as_bytes())? };
 
-            // SAFETY: The lifetime chosen the value reference is bounded by the lifetime of
-            // the immutable reference to the `TreeMap`. The memory of the value will not be
-            // mutated since it is only owned by the `TreeMap` and there can only be other
-            // immutable references at this time (no mutable references to the `TreeMap`).
+            // SAFETY: The lifetime chosen for the value reference is bounded by the lifetime
+            // of the mutable reference to the `TreeMap`. The value pointed to by the returned
+            // mutable reference will not be accessed (read or written) through any other
+            // pointer because of the existing mutable reference on the `TreeMap`.
             let (key, value) = unsafe { search_result.as_key_ref_value_mut() };
             Some((key, value))
         } else {

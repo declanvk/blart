@@ -44,6 +44,33 @@ impl NonMaxIndex {
     pub const fn get(&self) -> u8 {
         self.0.get() ^ u8::MAX
     }
+
+    /// Reinterpret the child-index array as an array of `u8`.
+    #[cfg(feature = "nightly")]
+    pub fn transmute_child_indices_to_u8<const N: usize>(
+        child_indices: &[Option<Self>; N],
+    ) -> &[u8; N] {
+        use core::mem;
+
+        const {
+            assert!(
+                mem::size_of::<Option<Self>>() == mem::size_of::<u8>(),
+                "Option<NonMaxIndex> must be the same size as u8 for this transmute",
+            );
+            assert!(
+                mem::align_of::<Option<Self>>() == mem::align_of::<u8>(),
+                "Option<NonMaxIndex> must have the same alignment as u8 for this transmute",
+            );
+        }
+
+        // SAFETY:
+        //  - `NonMaxIndex` is a `repr(transparent)` wrapper around `NonZeroU8`, so
+        //    `Option<NonMaxIndex>` is guaranteed to use the zero-niche.
+        //  - The const block ensures that we're transmuting like-sized and aligned types
+        //  - There are no APIs to convert back from a `usize` to a `NonMaxIndex`, this function is
+        //    only exposing the inner value
+        unsafe { mem::transmute(child_indices) }
+    }
 }
 
 impl Default for NonMaxIndex {

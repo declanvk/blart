@@ -29,6 +29,16 @@ pub use mapped::*;
 ///
 /// The primary purpose of this trait is to allow different types to be used as
 /// keys on the [`crate::TreeMap`] and `TreeSet` types.
+///
+/// # Determinism
+///
+/// Implementations of this trait must implement `as_bytes` deterministically.
+/// [`TreeMap`][crate::TreeMap] and [`TreeSet`][crate::TreeSet] rely on this property for
+/// correctness, but not soundness. It is a logic error to implement `as_bytes`
+/// non-deterministically.
+///
+/// Deterministically in this case means that any two calls of `as_bytes` on the same value must
+/// return the same result.
 pub trait AsBytes {
     /// View the current value as a byte array.
     fn as_bytes(&self) -> &[u8];
@@ -251,12 +261,6 @@ impl AsBytes for Path {
     }
 }
 
-// SAFETY: This trait is safe to implement because the lexicographic
-// ordering of bytes and `Ord` implementation are the same
-#[cfg(any(unix, target_os = "wasi"))]
-#[cfg(feature = "std")]
-unsafe impl OrderedBytes for Path {}
-
 #[cfg(any(unix, target_os = "wasi"))]
 #[cfg(feature = "std")]
 impl AsBytes for PathBuf {
@@ -265,11 +269,8 @@ impl AsBytes for PathBuf {
     }
 }
 
-// SAFETY: This trait is safe to implement because the lexicographic
-// ordering of bytes and `Ord` implementation are the same
-#[cfg(any(unix, target_os = "wasi"))]
-#[cfg(feature = "std")]
-unsafe impl OrderedBytes for PathBuf {}
+// `Path` and `PathBuf` cannot implement `OrderedBytes` because `Path`'s `Ord` implementation
+// compares component-by-component, it does not match the ordering of the raw bytes.
 
 impl<B> AsBytes for Cow<'_, B>
 where
@@ -571,6 +572,65 @@ mod tests {
                 <IoSliceMut as AsBytes>::as_bytes(&IoSliceMut::new(&mut buffer)),
                 b"hello world"
             )
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[cfg(any(unix, target_os = "wasi"))]
+    const ORDERING_SAMPLES: &[&[u8]] = &[
+        b"",
+        b"a",
+        b"ab",
+        b"abc",
+        b"b",
+        b"hell",
+        b"hello",
+        b"a/b",
+        b"a/b/",
+        b"a.b",
+        b"\x00",
+        b"\x00\x01",
+        b"\x7f",
+        b"\x80",
+        b"\xff",
+        b"\xff\x00",
+    ];
+
+    #[cfg(feature = "std")]
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn os_str_ordering_matches_byte_ordering() {
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStrExt;
+        #[cfg(target_os = "wasi")]
+        use std::os::wasi::ffi::OsStrExt;
+
+        for &left in ORDERING_SAMPLES {
+            for &right in ORDERING_SAMPLES {
+                let left_os = OsStr::from_bytes(left);
+                let right_os = OsStr::from_bytes(right);
+                let expected = left.cmp(right);
+
+                assert_eq!(
+                    left_os.cmp(right_os),
+                    expected,
+                    "OsStr `Ord` diverged from byte ordering for {left:?} vs {right:?}",
+                );
+                assert_eq!(
+                    <OsStr as AsBytes>::as_bytes(left_os)
+                        .cmp(<OsStr as AsBytes>::as_bytes(right_os)),
+                    expected,
+                );
+
+                let left_string: OsString = left_os.to_os_string();
+                let right_string: OsString = right_os.to_os_string();
+                assert_eq!(left_string.cmp(&right_string), expected);
+                assert_eq!(
+                    <OsString as AsBytes>::as_bytes(&left_string)
+                        .cmp(<OsString as AsBytes>::as_bytes(&right_string)),
+                    expected,
+                );
+            }
         }
     }
 }
