@@ -132,6 +132,30 @@ impl<K, V, const PREFIX_LEN: usize> OpaqueNodePtr<K, V, PREFIX_LEN> {
     pub(crate) unsafe fn header_ref_unchecked<'h>(self) -> &'h Header<PREFIX_LEN> {
         unsafe { self.0.to_ptr().cast::<Header<PREFIX_LEN>>().as_ref() }
     }
+
+    /// Reinterpret an optional array of node pointers as an array of `usize`.
+    #[cfg(feature = "nightly")]
+    pub(crate) fn transmute_child_pointers_to_usize<const N: usize>(
+        child_pointers: &[Option<Self>; N],
+    ) -> &[usize; N] {
+        const {
+            assert!(
+                mem::size_of::<Option<Self>>() == mem::size_of::<usize>(),
+                "Option<OpaqueNodePtr> must be the same size as usize for this transmute",
+            );
+            assert!(
+                mem::align_of::<Option<Self>>() == mem::align_of::<usize>(),
+                "Option<OpaqueNodePtr> must have the same alignment as usize for this transmute",
+            );
+        }
+
+        // SAFETY:
+        //  - `OpaqueNodePtr` is couple layers of `repr(transparent)` over a `NonNull`
+        //  - So `Option<OpaqueNodePtr>` uses the null-pointer niche and `None` should be all zeros
+        //  - The const block above ensures that we're not cast unlike sizes or alignments
+        //  - There are no APIs to convert a usize back to an `Option<OpaqueNodePtr>
+        unsafe { mem::transmute(child_pointers) }
+    }
 }
 
 macro_rules! impl_concrete_node_ptr {

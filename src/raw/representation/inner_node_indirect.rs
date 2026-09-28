@@ -304,12 +304,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        // SAFETY: Since `NonMaxIndex` is repr(transparent) is safe to transmute it to a
-        // u8. Since we're also working with `Option<NonMaxIndex>`, which is underneath
-        // actually `Option<NonZeroU8>`, we know that the value representing `None` will
-        // be `0`. That way we can check for non-zero values to see where `Some(...)`
-        // indices are.
-        let child_indices: &[u8; 256] = unsafe { mem::transmute(&self.child_indices) };
+        let child_indices = NonMaxIndex::transmute_child_indices_to_u8(&self.child_indices);
         let empty = u8x64::splat(0);
         let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
             .simd_eq(empty)
@@ -373,12 +368,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        // SAFETY: Since `NonMaxIndex` is repr(transparent) is safe to transmute it to a
-        // u8. Since we're also working with `Option<NonMaxIndex>`, which is underneath
-        // actually `Option<NonZeroU8>`, we know that the value representing `None` will
-        // be `0`. That way we can check for non-zero values to see where `Some(...)`
-        // indices are.
-        let child_indices: &[u8; 256] = unsafe { mem::transmute(&self.child_indices) };
+        let child_indices = NonMaxIndex::transmute_child_indices_to_u8(&self.child_indices);
         let empty = u8x64::splat(0);
         let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
             .simd_eq(empty)

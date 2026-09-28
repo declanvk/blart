@@ -180,10 +180,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        // SAFETY: Due to niche optimization Option<NonNull> has the same
-        // size as NonNull and NonNull has the same size as usize
-        // so it's safe to transmute
-        let child_pointers: &[usize; 256] = unsafe { core::mem::transmute(&self.child_pointers) };
+        let child_pointers = OpaqueNodePtr::transmute_child_pointers_to_usize(&self.child_pointers);
         let empty = usizex64::splat(0);
         let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
             .simd_eq(empty)
@@ -234,10 +231,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        // SAFETY: Due to niche optimization Option<NonNull> has the same
-        // size as NonNull and NonNull has the same size as usize
-        // so it's safe to transmute
-        let child_pointers: &[usize; 256] = unsafe { core::mem::transmute(&self.child_pointers) };
+        let child_pointers = OpaqueNodePtr::transmute_child_pointers_to_usize(&self.child_pointers);
         let empty = usizex64::splat(0);
         let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
             .simd_eq(empty)
