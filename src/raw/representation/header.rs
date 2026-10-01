@@ -155,16 +155,21 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         depth: usize,
         leaf_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
     ) {
-        self.prefix_len -= len as u32;
-
-        // SAFETY: Since have a mutable reference
-        // is safe to create a shared reference from it
+        // PANIC SAFETY: Read the `as_bytes` before anything else so an adversarial impl won't
+        // corrupt anything.
+        // SAFETY: Since have a mutable reference to a piece of the trie is safe to create a shared
+        // reference, since the mutable reference would necessary block any other concurrent mutable
+        // ref. The lifetime is also bounded to just this function.
         let leaf_key = unsafe { leaf_ptr.as_key_ref().as_bytes() };
 
+        let new_prefix_len = self.prefix_len - len as u32;
+        let new_capped_prefix_len = (new_prefix_len as usize).min(PREFIX_LEN);
         let begin = depth + len;
-        let end = begin + self.capped_prefix_len();
-        let len = end - begin;
+        let end = begin + new_capped_prefix_len;
+        let copy_len = end - begin;
 
+        // PANIC SAFETY: An adversarial impl might(?) also be able to trigger this assert, so put
+        // all writes after this point.
         assert!(
             end <= leaf_key.len(),
             "leaf key slice end [{end}] must not exceed leaf key length [{}]; leaf must be a \
@@ -173,7 +178,8 @@ impl<const PREFIX_LEN: usize> Header<PREFIX_LEN> {
         );
 
         let leaf_key = &leaf_key[begin..end];
-        self.prefix[..len].copy_from_slice(leaf_key)
+        self.prefix[..copy_len].copy_from_slice(leaf_key);
+        self.prefix_len = new_prefix_len;
     }
 }
 
@@ -225,5 +231,45 @@ mod tests {
         assert_eq!(h.prefix_len(), 8);
 
         h.ltrim_by(10);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn ltrim_by_with_leaf_panic_leaves_header_unchanged() {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        use crate::{
+            allocator::Global,
+            raw::{LeafNode, NodePtr},
+        };
+
+        // A prefix with implicit bytes (prefix_len 20 > PREFIX_LEN 16), which is the
+        // situation in which the `_with_leaf` variant is used.
+        let original_prefix = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let mut header = Header::<16>::new(&original_prefix, 20);
+        assert_eq!(header.prefix_len(), 20);
+        assert_eq!(header.read_prefix(), &original_prefix);
+
+        // This key is far too short
+        let leaf_ptr =
+            NodePtr::allocate_node_ptr(LeafNode::with_no_siblings([0u8; 4], ()), &Global);
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            // SAFETY: This test has exclusive access to both the header and the leaf, so
+            // there is no concurrent read or modification of either.
+            unsafe { header.ltrim_by_with_leaf(2, 3, leaf_ptr) };
+        }));
+
+        assert!(
+            result.is_err(),
+            "ltrim_by_with_leaf should have panicked on the too-short leaf key"
+        );
+
+        assert_eq!(header.prefix_len(), 20);
+        assert_eq!(header.read_prefix(), &original_prefix);
+
+        // SAFETY: `leaf_ptr` was allocated just above with `Global` and is deallocated
+        // exactly once here.
+        let _ = unsafe { NodePtr::deallocate_node_ptr(leaf_ptr, &Global) };
     }
 }

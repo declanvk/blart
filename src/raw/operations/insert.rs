@@ -330,10 +330,9 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 mismatch,
                 mismatched_inner_node_ptr,
             } => {
-                // SAFETY: The lifetime of the header reference is restricted to this block and
-                // within the block no other access occurs. The requirements of
-                // the "no concurrent (read or write) access" is also enforced by the
-                // `apply` caller requirements.
+                // SAFETY: The lifetime of the returned bytes is restricted to the uses below and
+                // no other access occurs. The requirements of the "no concurrent (read or write)
+                // access" is enforced because we have the owned `K`.
                 let key_bytes = key.as_bytes();
 
                 // The `key_bytes` is generated via a fresh call to `AsBytes::as_bytes` and there
@@ -343,10 +342,9 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 // `new_key_bytes_used + mismatch.matched_bytes` could be OOB
                 let key_byte = key_bytes[key_bytes_used + mismatch.matched_bytes];
 
-                let new_leaf_pointer =
-                    NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), alloc);
-                let new_leaf_pointer_opaque = new_leaf_pointer.to_opaque();
-
+                // Read the matched portion of the mismatched node's prefix into a new N4 builder.
+                // This must happen before the prefix is trimmed below, because trimming removes
+                // those bytes from the mismatched node's header.
                 let n4_builder = {
                     // SAFETY: The `header` pointer is bounded to this block and must be pointing to
                     // an existing inner node.
@@ -358,6 +356,45 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     let prefix = &prefix[..prefix.len().min(mismatch.matched_bytes)];
                     InnerNode4::builder(prefix, mismatch.matched_bytes)
                 };
+
+                // Trim the mismatched node's prefix down to the portion below the split point.
+                //
+                // PANIC SAFETY: The `ltrim_by_with_leaf` can panic if the `leaf_ptr`'s key
+                // `as_bytes` panics, so we're going to modify the header up front
+                // (the `ltrim_...` function also has some internal checks to prevent corruption on
+                // panic). This way the rest of the function can proceed without
+                // threat of panic or corruption/leak of memory (we ignore allocation failure).
+                {
+                    // Scope header mutation so that the mutable reference is held for the minimum
+                    // time required
+
+                    // SAFETY: We hold a mutable reference to the tree, so creating a mutable
+                    // reference to a header within the tree is safe. We also know for certain that
+                    // this is an inner node pointer, because mismatch prefix can only apply to an
+                    // inner node.
+                    let header = unsafe { mismatched_inner_node_ptr.header_mut_unchecked() };
+
+                    // In this case we trim the current prefix, by skipping the matched bytes + 1
+                    // This + 1 is due to that one extra byte is used as key in the new node, so
+                    // we also need to remove it from the prefix
+                    let shrink_len = mismatch.matched_bytes + 1;
+                    match mismatch.leaf_ptr {
+                        Some(leaf_ptr) => {
+                            // SAFETY: This function is not called concurrently with any other read
+                            // of modify because we hold a mutable reference to the overall tree.
+                            unsafe {
+                                header.ltrim_by_with_leaf(shrink_len, key_bytes_used, leaf_ptr)
+                            }
+                        },
+                        None => {
+                            header.ltrim_by(shrink_len);
+                        },
+                    }
+                }
+
+                let new_leaf_pointer =
+                    NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), alloc);
+                let new_leaf_pointer_opaque = new_leaf_pointer.to_opaque();
 
                 let new_n4 = if mismatch.prefix_byte < key_byte {
                     // SAFETY: The `write_child_unchecked` are safe because we know the builder
@@ -401,34 +438,6 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
 
                     new_n4
                 };
-
-                {
-                    // Scope header mutation so that the mutable reference is held for the minimum
-                    // time required
-
-                    // SAFETY: We hold a mutable reference to the tree, so creating a mutable
-                    // reference to a header within the tree is safe. We also know for certain that
-                    // this is an inner node pointer, because mismatch prefix can only apply to an
-                    // inner node.
-                    let header = unsafe { mismatched_inner_node_ptr.header_mut_unchecked() };
-
-                    // In this case we trim the current prefix, by skipping the matched bytes + 1
-                    // This + 1 is due to that one extra byte is used as key in the new node, so
-                    // we also need to remove it from the prefix
-                    let shrink_len = mismatch.matched_bytes + 1;
-                    match mismatch.leaf_ptr {
-                        Some(leaf_ptr) => {
-                            // SAFETY: This function is not called concurrently with any other read
-                            // of modify because we hold a mutable reference to the overall tree.
-                            unsafe {
-                                header.ltrim_by_with_leaf(shrink_len, key_bytes_used, leaf_ptr)
-                            }
-                        },
-                        None => {
-                            header.ltrim_by(shrink_len);
-                        },
-                    }
-                }
 
                 (
                     NodePtr::allocate_node_ptr(new_n4, alloc).to_opaque(),
@@ -822,9 +831,9 @@ impl<K, V, const PREFIX_LEN: usize> OverwritePoint<K, V, PREFIX_LEN> {
                         } else {
                             // Safety: covered by parents parent function doc comment.
                             let next_node = unsafe { leaf.as_mut() }.next;
-                            if let Some(previous_node) = next_node {
+                            if let Some(next_node) = next_node {
                                 // Safety: covered by parents parent function doc comment.
-                                unsafe { previous_node.as_mut() }.previous = Some(overwrite_leaf);
+                                unsafe { next_node.as_mut() }.previous = Some(overwrite_leaf);
                             }
                             // Safety: covered by parents parent function doc comment.
                             unsafe { overwrite_leaf.as_mut() }.next = next_node;
