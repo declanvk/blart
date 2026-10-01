@@ -1,0 +1,346 @@
+callgrind::bench_clone_group::bench_clone with_prefixes:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    20890322|20947665             (-0.27374%) [-1.00274x]
+  L1 Hits:                         27173877|27193767             (-0.07314%) [-1.00073x]
+  LL Hits:                            52188|52192                (-0.00766%) [-1.00008x]
+  RAM Hits:                           52759|52757                (+0.00379%) [+1.00004x]
+  Total read+write:                27278824|27298716             (-0.07287%) [-1.00073x]
+  Estimated Cycles:                29281382|29301222             (-0.06771%) [-1.00068x]
+callgrind::bench_clone_group::bench_clone dictionary:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    24016525|23946084             (+0.29417%) [+1.00294x]
+  L1 Hits:                         31555765|31389816             (+0.52867%) [+1.00529x]
+  LL Hits:                            61501|61938                (-0.70554%) [-1.00711x]
+  RAM Hits:                           60457|60786                (-0.54124%) [-1.00544x]
+  Total read+write:                31677723|31512540             (+0.52418%) [+1.00524x]
+  Estimated Cycles:                33979265|33827016             (+0.45008%) [+1.00450x]
+callgrind::bench_lookup_group::bench_lookup_single first_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         167|157                  (+6.36943%) [+1.06369x]
+  L1 Hits:                              182|170                  (+7.05882%) [+1.07059x]
+  LL Hits:                                4|5                    (-20.0000%) [-1.25000x]
+  RAM Hits:                              18|17                   (+5.88235%) [+1.05882x]
+  Total read+write:                     204|192                  (+6.25000%) [+1.06250x]
+  Estimated Cycles:                     832|790                  (+5.31646%) [+1.05316x]
+callgrind::bench_lookup_group::bench_lookup_single last_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         401|219                  (+83.1050%) [+1.83105x]
+  L1 Hits:                              452|245                  (+84.4898%) [+1.84490x]
+  LL Hits:                                0|0                    (No change)
+  RAM Hits:                              21|20                   (+5.00000%) [+1.05000x]
+  Total read+write:                     473|265                  (+78.4906%) [+1.78491x]
+  Estimated Cycles:                    1187|945                  (+25.6085%) [+1.25608x]
+callgrind::bench_lookup_group::bench_lookup_multiple dictionary:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                      441658|404059               (+9.30532%) [+1.09305x]
+  L1 Hits:                           521743|477320               (+9.30675%) [+1.09307x]
+  LL Hits:                              589|598                  (-1.50502%) [-1.01528x]
+  RAM Hits:                              37|36                   (+2.77778%) [+1.02778x]
+  Total read+write:                  522369|477954               (+9.29274%) [+1.09293x]
+  Estimated Cycles:                  525983|481570               (+9.22254%) [+1.09223x]
+callgrind::bench_remove_group::bench_remove_single first_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         572|552                  (+3.62319%) [+1.03623x]
+  L1 Hits:                              718|703                  (+2.13371%) [+1.02134x]
+  LL Hits:                               11|9                    (+22.2222%) [+1.22222x]
+  RAM Hits:                              46|38                   (+21.0526%) [+1.21053x]
+  Total read+write:                     775|750                  (+3.33333%) [+1.03333x]
+  Estimated Cycles:                    2383|2078                 (+14.6776%) [+1.14678x]
+callgrind::bench_remove_group::bench_remove_single last_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         729|548                  (+33.0292%) [+1.33029x]
+  L1 Hits:                              880|683                  (+28.8433%) [+1.28843x]
+  LL Hits:                                3|1                    (+200.000%) [+3.00000x]
+  RAM Hits:                              51|43                   (+18.6047%) [+1.18605x]
+  Total read+write:                     934|727                  (+28.4732%) [+1.28473x]
+  Estimated Cycles:                    2680|2193                 (+22.2070%) [+1.22207x]
+callgrind::bench_remove_group::bench_remove_multiple dictionary:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                      460816|450814               (+2.21865%) [+1.02219x]
+  L1 Hits:                           586827|577602               (+1.59712%) [+1.01597x]
+  LL Hits:                              931|1111                 (-16.2016%) [-1.19334x]
+  RAM Hits:                             106|200                  (-47.0000%) [-1.88679x]
+  Total read+write:                  587864|578913               (+1.54617%) [+1.01546x]
+  Estimated Cycles:                  595192|590157               (+0.85316%) [+1.00853x]
+callgrind::bench_insert_group::bench_insert_single first_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         531|860                  (-38.2558%) [-1.61959x]
+  L1 Hits:                              772|1178                 (-34.4652%) [-1.52591x]
+  LL Hits:                                5|8                    (-37.5000%) [-1.60000x]
+  RAM Hits:                               4|8                    (-50.0000%) [-2.00000x]
+  Total read+write:                     781|1194                 (-34.5896%) [-1.52881x]
+  Estimated Cycles:                     937|1498                 (-37.4499%) [-1.59872x]
+callgrind::bench_insert_group::bench_insert_single last_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                        1131|945                  (+19.6825%) [+1.19683x]
+  L1 Hits:                             1497|1281                 (+16.8618%) [+1.16862x]
+  LL Hits:                                9|8                    (+12.5000%) [+1.12500x]
+  RAM Hits:                              10|15                   (-33.3333%) [-1.50000x]
+  Total read+write:                    1516|1304                 (+16.2577%) [+1.16258x]
+  Estimated Cycles:                    1892|1846                 (+2.49187%) [+1.02492x]
+callgrind::bench_insert_group::bench_insert_multiple dictionary:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                          22|22                   (No change)
+  L1 Hits:                               43|43                   (No change)
+  LL Hits:                                0|0                    (No change)
+  RAM Hits:                               2|2                    (No change)
+  Total read+write:                      45|45                   (No change)
+  Estimated Cycles:                     113|113                  (No change)
+callgrind::bench_insert_group::bench_bulk_insert dictionary:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    37715786|34628406             (+8.91574%) [+1.08916x]
+  L1 Hits:                         49898661|46394695             (+7.55251%) [+1.07553x]
+  LL Hits:                           126421|127287               (-0.68035%) [-1.00685x]
+  RAM Hits:                            1103|1286                 (-14.2302%) [-1.16591x]
+  Total read+write:                50026185|46523268             (+7.52939%) [+1.07529x]
+  Estimated Cycles:                50569371|47076140             (+7.42039%) [+1.07420x]
+callgrind::bench_insert_group::bench_bulk_insert dense_fixed_length:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    55014227|52685370             (+4.42031%) [+1.04420x]
+  L1 Hits:                         71256198|68918868             (+3.39142%) [+1.03391x]
+  LL Hits:                            66268|66227                (+0.06191%) [+1.00062x]
+  RAM Hits:                             179|162                  (+10.4938%) [+1.10494x]
+  Total read+write:                71322645|68985257             (+3.38824%) [+1.03388x]
+  Estimated Cycles:                71593803|69255673             (+3.37608%) [+1.03376x]
+callgrind::bench_insert_group::bench_bulk_insert sparse_fixed_length:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    68201649|67546493             (+0.96993%) [+1.00970x]
+  L1 Hits:                         92485842|90946085             (+1.69304%) [+1.01693x]
+  LL Hits:                           204910|204906               (+0.00195%) [+1.00002x]
+  RAM Hits:                           25343|25348                (-0.01973%) [-1.00020x]
+  Total read+write:                92716095|91176339             (+1.68877%) [+1.01689x]
+  Estimated Cycles:                94397397|92857795             (+1.65802%) [+1.01658x]
+callgrind::bench_insert_group::bench_bulk_insert skewed:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                   251181071|251115537            (+0.02610%) [+1.00026x]
+  L1 Hits:                        324465390|324350722            (+0.03535%) [+1.00035x]
+  LL Hits:                             6057|6043                 (+0.23167%) [+1.00232x]
+  RAM Hits:                          548701|548697               (+0.00073%) [+1.00001x]
+  Total read+write:               325020148|324905462            (+0.03530%) [+1.00035x]
+  Estimated Cycles:               343700210|343585332            (+0.03344%) [+1.00033x]
+callgrind::bench_insert_group::bench_bulk_insert with_prefixes:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    40550647|40057103             (+1.23210%) [+1.01232x]
+  L1 Hits:                         53973113|53410635             (+1.05312%) [+1.01053x]
+  LL Hits:                           102774|102770               (+0.00389%) [+1.00004x]
+  RAM Hits:                            1291|1283                 (+0.62354%) [+1.00624x]
+  Total read+write:                54077178|53514688             (+1.05109%) [+1.01051x]
+  Estimated Cycles:                54532168|53969390             (+1.04277%) [+1.01043x]
+callgrind::bench_insert_group::bench_from_iter dictionary:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    37715786|34628406             (+8.91574%) [+1.08916x]
+  L1 Hits:                         49898658|46394694             (+7.55251%) [+1.07553x]
+  LL Hits:                           126422|127287               (-0.67957%) [-1.00684x]
+  RAM Hits:                            1105|1287                 (-14.1414%) [-1.16471x]
+  Total read+write:                50026185|46523268             (+7.52939%) [+1.07529x]
+  Estimated Cycles:                50569443|47076174             (+7.42046%) [+1.07420x]
+callgrind::bench_insert_group::bench_from_iter dense_fixed_length:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    55014227|52685372             (+4.42031%) [+1.04420x]
+  L1 Hits:                         71256199|68918870             (+3.39142%) [+1.03391x]
+  LL Hits:                            66267|66227                (+0.06040%) [+1.00060x]
+  RAM Hits:                             179|162                  (+10.4938%) [+1.10494x]
+  Total read+write:                71322645|68985259             (+3.38824%) [+1.03388x]
+  Estimated Cycles:                71593799|69255675             (+3.37608%) [+1.03376x]
+callgrind::bench_insert_group::bench_from_iter sparse_fixed_length:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    68201649|67546493             (+0.96993%) [+1.00970x]
+  L1 Hits:                         92485842|90946086             (+1.69304%) [+1.01693x]
+  LL Hits:                           204910|204906               (+0.00195%) [+1.00002x]
+  RAM Hits:                           25343|25347                (-0.01578%) [-1.00016x]
+  Total read+write:                92716095|91176339             (+1.68877%) [+1.01689x]
+  Estimated Cycles:                94397397|92857761             (+1.65806%) [+1.01658x]
+callgrind::bench_insert_group::bench_from_iter skewed:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                   251181071|251115537            (+0.02610%) [+1.00026x]
+  L1 Hits:                        324465391|324350723            (+0.03535%) [+1.00035x]
+  LL Hits:                             6057|6043                 (+0.23167%) [+1.00232x]
+  RAM Hits:                          548700|548696               (+0.00073%) [+1.00001x]
+  Total read+write:               325020148|324905462            (+0.03530%) [+1.00035x]
+  Estimated Cycles:               343700176|343585298            (+0.03344%) [+1.00033x]
+callgrind::bench_insert_group::bench_from_iter with_prefixes:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    40550647|40057103             (+1.23210%) [+1.01232x]
+  L1 Hits:                         53973111|53410636             (+1.05311%) [+1.01053x]
+  LL Hits:                           102776|102769               (+0.00681%) [+1.00007x]
+  RAM Hits:                            1291|1283                 (+0.62354%) [+1.00624x]
+  Total read+write:                54077178|53514688             (+1.05109%) [+1.01051x]
+  Estimated Cycles:                54532176|53969386             (+1.04279%) [+1.01043x]
+callgrind::bench_iterator_group::bench_full_iterator dictionary:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                      163847|163847               (No change)
+  L1 Hits:                           163852|163852               (No change)
+  LL Hits:                            32768|32768                (No change)
+  RAM Hits:                               2|2                    (No change)
+  Total read+write:                  196622|196622               (No change)
+  Estimated Cycles:                  327762|327762               (No change)
+callgrind::bench_iterator_group::bench_prefix_iterator empty:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                      164009|163954               (+0.03355%) [+1.00034x]
+  L1 Hits:                           164047|163994               (+0.03232%) [+1.00032x]
+  LL Hits:                            32772|32770                (+0.00610%) [+1.00006x]
+  RAM Hits:                              16|11                   (+45.4545%) [+1.45455x]
+  Total read+write:                  196835|196775               (+0.03049%) [+1.00030x]
+  Estimated Cycles:                  328467|328229               (+0.07251%) [+1.00073x]
+callgrind::bench_iterator_group::bench_prefix_iterator specific_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         485|299                  (+62.2074%) [+1.62207x]
+  L1 Hits:                              575|365                  (+57.5342%) [+1.57534x]
+  LL Hits:                                0|0                    (No change)
+  RAM Hits:                              24|21                   (+14.2857%) [+1.14286x]
+  Total read+write:                     599|386                  (+55.1813%) [+1.55181x]
+  Estimated Cycles:                    1415|1100                 (+28.6364%) [+1.28636x]
+callgrind::bench_iterator_group::bench_prefix_iterator random_partial:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         597|211                  (+182.938%) [+2.82938x]
+  L1 Hits:                              695|245                  (+183.673%) [+2.83673x]
+  LL Hits:                               15|13                   (+15.3846%) [+1.15385x]
+  RAM Hits:                              20|15                   (+33.3333%) [+1.33333x]
+  Total read+write:                     730|273                  (+167.399%) [+2.67399x]
+  Estimated Cycles:                    1470|835                  (+76.0479%) [+1.76048x]
+callgrind::bench_iterator_group::bench_fuzzy_iterator zero:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                        3028|4790                 (-36.7850%) [-1.58190x]
+  L1 Hits:                             4292|6308                 (-31.9594%) [-1.46971x]
+  LL Hits:                                2|4                    (-50.0000%) [-2.00000x]
+  RAM Hits:                              39|36                   (+8.33333%) [+1.08333x]
+  Total read+write:                    4333|6348                 (-31.7423%) [-1.46504x]
+  Estimated Cycles:                    5667|7588                 (-25.3163%) [-1.33898x]
+callgrind::bench_iterator_group::bench_fuzzy_iterator specific_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    27729243|27895384             (-0.59559%) [-1.00599x]
+  L1 Hits:                         36810282|36998299             (-0.50818%) [-1.00511x]
+  LL Hits:                            60443|60693                (-0.41191%) [-1.00414x]
+  RAM Hits:                             239|249                  (-4.01606%) [-1.04184x]
+  Total read+write:                36870964|37059241             (-0.50804%) [-1.00511x]
+  Estimated Cycles:                37120862|37310479             (-0.50821%) [-1.00511x]
+callgrind::bench_iterator_group::bench_range_iterator full:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                      163964|163964               (No change)
+  L1 Hits:                           164020|164023               (-0.00183%) [-1.00002x]
+  LL Hits:                            32769|32769                (No change)
+  RAM Hits:                              14|11                   (+27.2727%) [+1.27273x]
+  Total read+write:                  196803|196803               (No change)
+  Estimated Cycles:                  328355|328253               (+0.03107%) [+1.00031x]
+callgrind::bench_iterator_group::bench_range_iterator specific_key:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                        1187|878                  (+35.1936%) [+1.35194x]
+  L1 Hits:                             1437|1085                 (+32.4424%) [+1.32442x]
+  LL Hits:                               17|21                   (-19.0476%) [-1.23529x]
+  RAM Hits:                              31|28                   (+10.7143%) [+1.10714x]
+  Total read+write:                    1485|1134                 (+30.9524%) [+1.30952x]
+  Estimated Cycles:                    2607|2170                 (+20.1382%) [+1.20138x]
+callgrind::bench_iterator_group::bench_range_iterator middle_third:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                       55751|55581                (+0.30586%) [+1.00306x]
+  L1 Hits:                            55982|55793                (+0.33875%) [+1.00339x]
+  LL Hits:                            10950|10950                (No change)
+  RAM Hits:                              37|33                   (+12.1212%) [+1.12121x]
+  Total read+write:                   66969|66776                (+0.28903%) [+1.00289x]
+  Estimated Cycles:                  112027|111698               (+0.29454%) [+1.00295x]
+callgrind::bench_modifying_group::bench_retain all:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         134|134                  (No change)
+  L1 Hits:                              189|195                  (-3.07692%) [-1.03175x]
+  LL Hits:                                1|1                    (No change)
+  RAM Hits:                              18|12                   (+50.0000%) [+1.50000x]
+  Total read+write:                     208|208                  (No change)
+  Estimated Cycles:                     824|620                  (+32.9032%) [+1.32903x]
+callgrind::bench_modifying_group::bench_retain half:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                     2096896|2096896              (No change)
+  L1 Hits:                          2965107|2965099              (+0.00027%) [+1.00000x]
+  LL Hits:                               64|76                   (-15.7895%) [-1.18750x]
+  RAM Hits:                              20|16                   (+25.0000%) [+1.25000x]
+  Total read+write:                 2965191|2965191              (No change)
+  Estimated Cycles:                 2966127|2966039              (+0.00297%) [+1.00003x]
+callgrind::bench_modifying_group::bench_retain none:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                     4194054|4194054              (No change)
+  L1 Hits:                          5865014|5865002              (+0.00020%) [+1.00000x]
+  LL Hits:                              132|147                  (-10.2041%) [-1.11364x]
+  RAM Hits:                              22|19                   (+15.7895%) [+1.15789x]
+  Total read+write:                 5865168|5865168              (No change)
+  Estimated Cycles:                 5866444|5866402              (+0.00072%) [+1.00001x]
+callgrind::bench_modifying_group::bench_append no_overlap:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                     1456325|1472786              (-1.11768%) [-1.01130x]
+  L1 Hits:                          1993706|2009515              (-0.78671%) [-1.00793x]
+  LL Hits:                             2178|2179                 (-0.04589%) [-1.00046x]
+  RAM Hits:                             770|815                  (-5.52147%) [-1.05844x]
+  Total read+write:                 1996654|2012509              (-0.78782%) [-1.00794x]
+  Estimated Cycles:                 2031546|2048935              (-0.84868%) [-1.00856x]
+callgrind::bench_modifying_group::bench_append overlap:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                     1141628|1158100              (-1.42233%) [-1.01443x]
+  L1 Hits:                          1602172|1615436              (-0.82108%) [-1.00828x]
+  LL Hits:                             2699|2699                 (No change)
+  RAM Hits:                             770|814                  (-5.40541%) [-1.05714x]
+  Total read+write:                 1605641|1618949              (-0.82201%) [-1.00829x]
+  Estimated Cycles:                 1642617|1657421              (-0.89319%) [-1.00901x]
+callgrind::bench_modifying_group::bench_split_off dictionary:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         127|127                  (No change)
+  L1 Hits:                              179|185                  (-3.24324%) [-1.03352x]
+  LL Hits:                                9|7                    (+28.5714%) [+1.28571x]
+  RAM Hits:                              15|11                   (+36.3636%) [+1.36364x]
+  Total read+write:                     203|203                  (No change)
+  Estimated Cycles:                     749|605                  (+23.8017%) [+1.23802x]
+callgrind::bench_modifying_group::bench_split_off dense_fixed_length:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                          97|97                   (No change)
+  L1 Hits:                              146|147                  (-0.68027%) [-1.00685x]
+  LL Hits:                                7|6                    (+16.6667%) [+1.16667x]
+  RAM Hits:                              11|11                   (No change)
+  Total read+write:                     164|164                  (No change)
+  Estimated Cycles:                     566|562                  (+0.71174%) [+1.00712x]
+callgrind::bench_modifying_group::bench_split_off sparse_fixed_length:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    55995738|55602407             (+0.70740%) [+1.00707x]
+  L1 Hits:                         73987313|73118955             (+1.18760%) [+1.01188x]
+  LL Hits:                               36|37                   (-2.70270%) [-1.02778x]
+  RAM Hits:                           96034|96032                (+0.00208%) [+1.00002x]
+  Total read+write:                74083383|73215024             (+1.18604%) [+1.01186x]
+  Estimated Cycles:                77348683|76480260             (+1.13549%) [+1.01135x]
+callgrind::bench_modifying_group::bench_split_off skewed:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         120|120                  (No change)
+  L1 Hits:                              170|169                  (+0.59172%) [+1.00592x]
+  LL Hits:                                2|3                    (-33.3333%) [-1.50000x]
+  RAM Hits:                              22|22                   (No change)
+  Total read+write:                     194|194                  (No change)
+  Estimated Cycles:                     950|954                  (-0.41929%) [-1.00421x]
+callgrind::bench_modifying_group::bench_split_off with_prefixes:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                         123|123                  (No change)
+  L1 Hits:                              178|178                  (No change)
+  LL Hits:                               10|9                    (+11.1111%) [+1.11111x]
+  RAM Hits:                              11|12                   (-8.33333%) [-1.09091x]
+  Total read+write:                     199|199                  (No change)
+  Estimated Cycles:                     613|643                  (-4.66563%) [-1.04894x]
+callgrind::bench_modifying_group::bench_extract_if all:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    22248277|22653636             (-1.78938%) [-1.01822x]
+  L1 Hits:                         29768830|30288270             (-1.71499%) [-1.01745x]
+  LL Hits:                            61456|62626                (-1.86823%) [-1.01904x]
+  RAM Hits:                             126|162                  (-22.2222%) [-1.28571x]
+  Total read+write:                29830412|30351058             (-1.71541%) [-1.01745x]
+  Estimated Cycles:                30080520|30607070             (-1.72035%) [-1.01750x]
+callgrind::bench_modifying_group::bench_extract_if half:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                    15421465|13104290             (+17.6826%) [+1.17683x]
+  L1 Hits:                         19769801|17133236             (+15.3886%) [+1.15389x]
+  LL Hits:                            59515|60057                (-0.90248%) [-1.00911x]
+  RAM Hits:                             105|156                  (-32.6923%) [-1.48571x]
+  Total read+write:                19829421|17193449             (+15.3313%) [+1.15331x]
+  Estimated Cycles:                20071051|17438981             (+15.0930%) [+1.15093x]
+callgrind::bench_modifying_group::bench_extract_if none:...
+  Baselines:                        bd8bfd0|dc7b2c6
+  Instructions:                      131218|131218               (No change)
+  L1 Hits:                           131284|131289               (-0.00381%) [-1.00004x]
+  LL Hits:                            32767|32767                (No change)
+  RAM Hits:                              20|15                   (+33.3333%) [+1.33333x]
+  Total read+write:                  164071|164071               (No change)
+  Estimated Cycles:                  295819|295649               (+0.05750%) [+1.00058x]
+
+Gungraun result: Ok. 43 without regressions; 0 regressed; 0 filtered; 43 benchmarks finished in 0.01220s
