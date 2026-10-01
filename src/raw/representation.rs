@@ -901,37 +901,40 @@ mod tests {
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn node_sizes() {
-        const DEFAULT_PREFIX_LEN: usize = 10;
-        assert_eq!(mem::size_of::<Header<DEFAULT_PREFIX_LEN>>(), 16);
+        const DEFAULT_PREFIX_LEN: usize = 6;
+        // prefix_len (4 bytes) + num_children (2 bytes) + prefix (6 bytes) = 12
+        assert_eq!(mem::size_of::<Header<DEFAULT_PREFIX_LEN>>(), 12);
 
-        const EXPECTED_HEADER_SIZE: usize = DEFAULT_PREFIX_LEN.next_multiple_of(4) + 8;
-        assert_eq!(EXPECTED_HEADER_SIZE, 20);
-
+        // header: 12 bytes
         // key map: 4 * (1 byte) = 4 bytes
         // child map: 4 * (8 bytes (on 64-bit platform)) = 32
         //
-        // 4 bytes of padding are inserted after the `keys` field to align the field to
-        // an 8 byte boundary.
+        // The header and keys fill exactly 16 bytes, so no padding is needed
+        // before the child map.
         assert_eq!(
             mem::size_of::<InnerNode4<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
-            EXPECTED_HEADER_SIZE + 36
+            48
         );
+        // header: 12 bytes
         // key map: 16 * (1 byte) = 16 bytes
+        // 4 bytes of padding to align the child map to an 8 byte boundary
         // child map: 16 * (8 bytes (on 64-bit platform)) = 128
         assert_eq!(
             mem::size_of::<InnerNode16<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
-            EXPECTED_HEADER_SIZE + 140
+            160
         );
-        // key map: 256 * (1 byte) = 256 bytes
+        // header: 12 bytes + 4 bytes of padding
         // child map: 48 * (8 bytes (on 64-bit platform)) = 384
+        // key map: 256 * (1 byte) = 256 bytes
         assert_eq!(
             mem::size_of::<InnerNode48<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
-            EXPECTED_HEADER_SIZE + 636
+            656
         );
+        // header: 12 bytes + 4 bytes of padding
         // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
         assert_eq!(
             mem::size_of::<InnerNodeDirect<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
-            EXPECTED_HEADER_SIZE + 2044
+            2064
         );
 
         // Assert that pointer is expected size and has non-null optimization
