@@ -159,8 +159,35 @@ fn delete_one_entry_n16_remains() {
 }
 
 #[test]
-fn delete_one_entry_n48_shrinks() {
+fn delete_one_entry_n32_shrinks() {
     let entries_it = (1..=17).map(|value| (Box::<[u8]>::from(&[1, 2, 3, value, 5, 6][..]), value));
+
+    let mut root: OpaqueNodePtr<Box<[u8]>, u8, 16> = setup_tree_from_entries(entries_it);
+
+    assert_eq!(root.node_type(), NodeType::Node32);
+
+    unsafe {
+        let delete_result = search_for_delete_point(root, [1, 2, 3, 9, 5, 6].as_ref())
+            .unwrap()
+            .apply(root, &Global);
+
+        assert_ne!(delete_result.new_root.unwrap(), root);
+        assert_eq!(delete_result.deleted_leaf.value_ref(), &9);
+        assert_eq!(
+            delete_result.deleted_leaf.key_ref().as_ref(),
+            &[1, 2, 3, 9, 5, 6]
+        );
+
+        root = delete_result.new_root.unwrap();
+        assert_eq!(root.node_type(), NodeType::Node16);
+
+        deallocate_tree(root, &Global);
+    }
+}
+
+#[test]
+fn delete_one_entry_n48_shrinks() {
+    let entries_it = (1..=33).map(|value| (Box::<[u8]>::from(&[1, 2, 3, value, 5, 6][..]), value));
 
     let mut root: OpaqueNodePtr<Box<[u8]>, u8, 16> = setup_tree_from_entries(entries_it);
 
@@ -179,7 +206,7 @@ fn delete_one_entry_n48_shrinks() {
         );
 
         root = delete_result.new_root.unwrap();
-        assert_eq!(root.node_type(), NodeType::Node16);
+        assert_eq!(root.node_type(), NodeType::Node32);
 
         deallocate_tree(root, &Global);
     }

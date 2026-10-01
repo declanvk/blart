@@ -35,13 +35,15 @@ pub enum NodeType {
     /// Node that references between 2 and 4 children
     Node4 = 0b000,
     /// Node that references between 5 and 16 children
-    Node16 = 0b001, // 0b001
-    /// Node that references between 17 and 48 children
-    Node48 = 0b010, // 0b010
+    Node16 = 0b001,
+    /// Node that references between 17 and 32 children
+    Node32 = 0b010,
+    /// Node that references between 33 and 48 children
+    Node48 = 0b011,
     /// Node that references between 49 and 256 children
-    Node256 = 0b011, // 0b011
+    Node256 = 0b100,
     /// Node that contains a single value
-    Leaf = 0b100, // 0b100
+    Leaf = 0b101,
 }
 
 impl NodeType {
@@ -72,7 +74,8 @@ impl NodeType {
         match self {
             NodeType::Node4 => 2..=4,
             NodeType::Node16 => 5..=16,
-            NodeType::Node48 => 17..=48,
+            NodeType::Node32 => 17..=32,
+            NodeType::Node48 => 33..=48,
             NodeType::Node256 => 49..=256,
             NodeType::Leaf => 0..=0,
         }
@@ -923,6 +926,14 @@ mod tests {
             mem::size_of::<InnerNode16<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
             160
         );
+        // header: 12 bytes
+        // key map: 32 * (1 byte) = 32 bytes
+        // 4 bytes of padding to align the child map to an 8 byte boundary
+        // child map: 32 * (8 bytes (on 64-bit platform)) = 256
+        assert_eq!(
+            mem::size_of::<InnerNode32<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
+            304
+        );
         // header: 12 bytes + 4 bytes of padding
         // child map: 48 * (8 bytes (on 64-bit platform)) = 384
         // key map: 256 * (1 byte) = 256 bytes
@@ -952,6 +963,7 @@ mod tests {
     fn node_alignment() {
         assert_eq!(mem::align_of::<InnerNode4<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(), 8);
+        assert_eq!(mem::align_of::<InnerNode32<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<InnerNode48<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<InnerNodeDirect<Box<[u8]>, u8, 16>>(), 8);
         assert_eq!(mem::align_of::<LeafNode<Box<[u8]>, u8, 16>>(), 8);
@@ -963,6 +975,10 @@ mod tests {
         );
         assert_eq!(
             mem::align_of::<InnerNode16<Box<[u8]>, u8, 16>>(),
+            mem::align_of::<OpaqueValue>()
+        );
+        assert_eq!(
+            mem::align_of::<InnerNode32<Box<[u8]>, u8, 16>>(),
             mem::align_of::<OpaqueValue>()
         );
         assert_eq!(

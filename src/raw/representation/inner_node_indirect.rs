@@ -10,7 +10,7 @@ use core::{
 use self::index::NonMaxIndex;
 use crate::{
     raw::{
-        representation::assert_valid_range_bounds, Header, InnerNode, InnerNode16, InnerNodeCommon,
+        representation::assert_valid_range_bounds, Header, InnerNode, InnerNode32, InnerNodeCommon,
         InnerNodeDirect, InnerNodeSorted, LeafNode, Node, NodeType, OpaqueNodePtr,
     },
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
@@ -65,7 +65,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
 
         for (index, key) in keys.iter().copied().enumerate() {
             // SAFETY: This `try_from` will not panic because index is guaranteed to
-            // be 15 or less because of the length of the `InnerNode16.keys` array.
+            // be 31 or less because of the length of the `InnerNode32.keys` array.
             child_indices[usize::from(key)] =
                 Some(unsafe { NonMaxIndex::try_from(index).unwrap_unchecked() });
         }
@@ -458,7 +458,7 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode48<K, V, PREFI
 
 impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, PREFIX_LEN> {
     type GrownNode = InnerNodeDirect<K, V, PREFIX_LEN>;
-    type ShrunkNode = InnerNode16<K, V, PREFIX_LEN>;
+    type ShrunkNode = InnerNode32<K, V, PREFIX_LEN>;
 
     fn grow(&self) -> Self::GrownNode {
         self.into()
@@ -588,10 +588,10 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "Cannot shrink a InnerNodeIndirect when it has more than 16 children. \
-                      Currently has [17] children."]
+    #[should_panic = "Cannot shrink a InnerNodeIndirect when it has more than 32 children. \
+                      Currently has [33] children."]
     fn shrink_too_many_children_panic() {
-        inner_node_shrink_test::<16, InnerNode48<Box<[u8]>, (), 16>>(17);
+        inner_node_shrink_test::<16, InnerNode48<Box<[u8]>, (), 16>>(33);
     }
 
     #[test]

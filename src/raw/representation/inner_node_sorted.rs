@@ -1,7 +1,7 @@
 #[cfg(feature = "nightly")]
 use core::simd::{
     cmp::{SimdPartialEq, SimdPartialOrd},
-    u8x16,
+    u8x16, u8x32,
 };
 use core::{
     fmt,
@@ -250,8 +250,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
         #[cfg(feature = "nightly")]
         {
-            if SIZE == 16 {
-                self.n16_lookup_child_index(key_fragment)
+            if SIZE == 16 || SIZE == 32 {
+                self.simd_lookup_child_index(key_fragment)
             } else {
                 self.default_lookup_child_index(key_fragment)
             }
@@ -274,18 +274,48 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
         None
     }
 
+    /// Compare `key_fragment` against all the initialized key bytes at once,
+    /// returning a bitmask with bit `i` set if the comparison holds for
+    /// `keys[i]`.
+    ///
+    /// If `less_than` is true, the comparison is `key_fragment < keys[i]`,
+    /// otherwise it is `key_fragment == keys[i]`.
+    ///
+    /// # Panics
+    ///  - Panics if `SIZE` is not 16 or 32.
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
-    fn n16_lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        assert_eq!(SIZE, 16);
-        // This part is unfortunate, but seems like the most straightforward way to go
-        // from a `[u8; SIZE]` to `[u8; 16]` when we know `SIZE == 16`.
-        let keys = <[u8; 16]>::try_from(&self.keys[..]).unwrap();
-        let cmp = u8x16::splat(key_fragment)
-            .simd_eq(u8x16::from_array(keys))
-            .to_bitmask() as u32;
-        let mask = (1u32 << self.header.num_children()) - 1;
-        let bitfield = cmp & mask;
+    fn simd_key_bitmask(&self, key_fragment: u8, less_than: bool) -> u64 {
+        let cmp = match SIZE {
+            16 => {
+                let keys = u8x16::from_slice(&self.keys);
+                let splat = u8x16::splat(key_fragment);
+                if less_than {
+                    splat.simd_lt(keys).to_bitmask()
+                } else {
+                    splat.simd_eq(keys).to_bitmask()
+                }
+            },
+            32 => {
+                let keys = u8x32::from_slice(&self.keys);
+                let splat = u8x32::splat(key_fragment);
+                if less_than {
+                    splat.simd_lt(keys).to_bitmask()
+                } else {
+                    splat.simd_eq(keys).to_bitmask()
+                }
+            },
+            _ => unreachable!("SIMD key search is only implemented for SIZE 16 or 32"),
+        };
+        // `num_children <= SIZE <= 32`, so this shift cannot overflow
+        let mask = (1u64 << self.header.num_children()) - 1;
+        cmp & mask
+    }
+
+    #[cfg(feature = "nightly")]
+    #[cfg_attr(test, mutants::skip)]
+    fn simd_lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
+        let bitfield = self.simd_key_bitmask(key_fragment, false);
         if bitfield != 0 {
             Some(bitfield.trailing_zeros() as usize)
         } else {
@@ -297,8 +327,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     fn find_write_point(&self, key_fragment: u8) -> WritePoint {
         #[cfg(feature = "nightly")]
         {
-            if SIZE == 16 {
-                self.n16_find_write_point(key_fragment)
+            if SIZE == 16 || SIZE == 32 {
+                self.simd_find_write_point(key_fragment)
             } else {
                 self.default_find_write_point(key_fragment)
             }
@@ -311,19 +341,11 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 
     #[cfg(feature = "nightly")]
     #[cfg_attr(test, mutants::skip)]
-    fn n16_find_write_point(&self, key_fragment: u8) -> WritePoint {
-        match self.lookup_child_index(key_fragment) {
+    fn simd_find_write_point(&self, key_fragment: u8) -> WritePoint {
+        match self.simd_lookup_child_index(key_fragment) {
             Some(child_index) => WritePoint::Existing(child_index),
             None => {
-                assert_eq!(SIZE, 16);
-                // This part is unfortunate, but seems like the most straightforward way to go
-                // from a `[u8; SIZE]` to `[u8; 16]` when we know `SIZE == 16`.
-                let keys = <[u8; 16]>::try_from(&self.keys[..]).unwrap();
-                let cmp = u8x16::splat(key_fragment)
-                    .simd_lt(u8x16::from_array(keys))
-                    .to_bitmask() as u32;
-                let mask = (1u32 << self.header.num_children()) - 1;
-                let bitfield = cmp & mask;
+                let bitfield = self.simd_key_bitmask(key_fragment, true);
                 if bitfield != 0 {
                     WritePoint::Shift(bitfield.trailing_zeros() as usize)
                 } else {
@@ -596,8 +618,31 @@ impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode16<K, V, PREFI
 }
 
 impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode16<K, V, PREFIX_LEN> {
-    type GrownNode = InnerNode48<K, V, PREFIX_LEN>;
+    type GrownNode = InnerNode32<K, V, PREFIX_LEN>;
     type ShrunkNode = InnerNode4<K, V, PREFIX_LEN>;
+
+    fn grow(&self) -> Self::GrownNode {
+        self.change_block_size()
+    }
+
+    fn shrink(&self) -> Self::ShrunkNode {
+        self.change_block_size()
+    }
+}
+
+/// Node that references between 17 and 32 children
+pub type InnerNode32<K, V, const PREFIX_LEN: usize> = InnerNodeSorted<K, V, PREFIX_LEN, 32>;
+
+impl<K, V, const PREFIX_LEN: usize> Node<PREFIX_LEN> for InnerNode32<K, V, PREFIX_LEN> {
+    type Key = K;
+    type Value = V;
+
+    const TYPE: NodeType = NodeType::Node32;
+}
+
+impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode32<K, V, PREFIX_LEN> {
+    type GrownNode = InnerNode48<K, V, PREFIX_LEN>;
+    type ShrunkNode = InnerNode16<K, V, PREFIX_LEN>;
 
     fn grow(&self) -> Self::GrownNode {
         self.into()
@@ -731,25 +776,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "Node must be full to grow to node 48"]
-    fn node16_grow_panic() {
-        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
-        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
-        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
-        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
-        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
-        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
-
-        let n16 = InnerNode16::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(123, l2_ptr)
-            .write_child(1, l3_ptr)
-            .build();
-
-        let _n48 = n16.grow();
-    }
-
-    #[test]
     fn node16_grow() {
         let mut leaves: Vec<LeafNode<Box<[u8]>, (), 16>> = (0..16)
             .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
@@ -767,10 +793,10 @@ mod tests {
             n16.write_child(i * 2, v[usize::from(i)]);
         }
 
-        let n48 = n16.grow();
+        let n32 = n16.grow();
 
         for i in 0..16 {
-            assert_eq!(n48.lookup_child(i * 2), Some(v[i as usize]));
+            assert_eq!(n32.lookup_child(i * 2), Some(v[i as usize]));
         }
     }
 
@@ -789,6 +815,145 @@ mod tests {
     #[test]
     fn node16_min_max() {
         inner_node_min_max_test::<16, InnerNode16<Box<[u8]>, (), 16>>(16);
+    }
+
+    #[test]
+    fn node32_lookup() {
+        let mut l1 = LeafNode::with_no_siblings(Box::from([]), ());
+        let mut l2 = LeafNode::with_no_siblings(Box::from([]), ());
+        let mut l3 = LeafNode::with_no_siblings(Box::from([]), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        let n = InnerNode32::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(123, l2_ptr)
+            .write_child(1, l3_ptr)
+            .build();
+
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n.lookup_child(4), None);
+    }
+
+    #[test]
+    fn node32_write_child() {
+        inner_node_write_child_test::<16, InnerNode32<Box<[u8]>, (), 16>>(32)
+    }
+
+    #[test]
+    fn node32_remove_child() {
+        inner_node_remove_child_test::<16, InnerNode32<Box<[u8]>, (), 16>>(32)
+    }
+
+    #[test]
+    #[should_panic]
+    fn node32_write_child_full_panic() {
+        inner_node_write_child_test::<16, InnerNode32<Box<[u8]>, (), 16>>(33);
+    }
+
+    #[test]
+    fn node32_write_child_reverse_order() {
+        // Writing in descending order forces every write to shift the existing
+        // children, which exercises the "less than" search over all key slots
+        // (including the upper half of the 32 slots).
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), 16>> = (0..32)
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
+        let v: Vec<_> = leaves
+            .iter_mut()
+            .map(|l| NodePtr::from(l).to_opaque())
+            .collect();
+
+        let mut n32 = InnerNode32::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(250, v[31])
+            .write_child(240, v[30])
+            .build();
+        for i in (0..30u8).rev() {
+            n32.write_child(i * 8 + 1, v[usize::from(i)]);
+        }
+
+        assert_eq!(n32.header.num_children(), 32);
+        let keys: Vec<u8> = n32.iter().map(|(key, _)| key).collect();
+        let mut sorted_keys = keys.clone();
+        sorted_keys.sort_unstable();
+        assert_eq!(keys, sorted_keys);
+
+        for i in 0..30u8 {
+            assert_eq!(n32.lookup_child(i * 8 + 1), Some(v[usize::from(i)]));
+            assert_eq!(n32.lookup_child(i * 8 + 2), None);
+        }
+        assert_eq!(n32.lookup_child(240), Some(v[30]));
+        assert_eq!(n32.lookup_child(250), Some(v[31]));
+
+        let upper: Vec<u8> = n32.range(200..=250).map(|(key, _)| key).collect();
+        assert_eq!(upper, [201, 209, 217, 225, 233, 240, 250]);
+
+        // Overwriting an existing key in the upper half must not add a child
+        n32.write_child(250, v[0]);
+        assert_eq!(n32.header.num_children(), 32);
+        assert_eq!(n32.lookup_child(250), Some(v[0]));
+    }
+
+    #[test]
+    #[should_panic = "Node must be full to grow to node 48"]
+    fn node32_grow_panic() {
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        let n32 = InnerNode32::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(3, l1_ptr)
+            .write_child(123, l2_ptr)
+            .write_child(1, l3_ptr)
+            .build();
+
+        let _n48 = n32.grow();
+    }
+
+    #[test]
+    fn node32_grow() {
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), 16>> = (0..32)
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
+        let v: Vec<_> = leaves
+            .iter_mut()
+            .map(|l| NodePtr::from(l).to_opaque())
+            .collect();
+
+        let mut n32 = InnerNode32::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .write_child(0, v[0])
+            .write_child(2, v[1])
+            .build();
+        for i in 2..32u8 {
+            n32.write_child(i * 2, v[usize::from(i)]);
+        }
+
+        let n48 = n32.grow();
+
+        for i in 0..32 {
+            assert_eq!(n48.lookup_child(i * 2), Some(v[i as usize]));
+        }
+    }
+
+    #[test]
+    fn node32_shrink() {
+        inner_node_shrink_test::<16, InnerNode32<Box<[u8]>, (), 16>>(16);
+    }
+
+    #[test]
+    #[should_panic = "Cannot change InnerNodeSorted<32> to size 16 when it has more than 16 \
+                      children. Currently has [17] children."]
+    fn node32_shrink_too_many_children_panic() {
+        inner_node_shrink_test::<16, InnerNode32<Box<[u8]>, (), 16>>(17);
+    }
+
+    #[test]
+    fn node32_min_max() {
+        inner_node_min_max_test::<16, InnerNode32<Box<[u8]>, (), 16>>(32);
     }
 
     fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {

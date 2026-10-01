@@ -12,7 +12,8 @@ use core::{
 use crate::{
     allocator::{do_alloc, Allocator},
     raw::{
-        Header, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node, NodeType,
+        Header, InnerNode16, InnerNode32, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node,
+        NodeType,
     },
     tagged_pointer::TaggedPointer,
 };
@@ -347,6 +348,7 @@ macro_rules! impl_concrete_node_ptr {
 impl_concrete_node_ptr!(
     Node4 InnerNode4<K, V, PREFIX_LEN>;
     Node16 InnerNode16<K, V, PREFIX_LEN>;
+    Node32 InnerNode32<K, V, PREFIX_LEN>;
     Node48 InnerNode48<K, V, PREFIX_LEN>;
     Node256 InnerNodeDirect<K, V, PREFIX_LEN>;
 );

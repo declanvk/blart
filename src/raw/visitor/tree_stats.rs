@@ -363,6 +363,13 @@ mod tests {
                     ..Default::default()
                 },
             ),
+            (
+                InnerNodeKind::Node32,
+                InnerNodeStats {
+                    count: 32,
+                    ..Default::default()
+                },
+            ),
         ]))
     }
 
@@ -371,9 +378,10 @@ mod tests {
         let debug = format!("{:?}", unsorted_node_stats());
         let node4 = debug.find("Node4:").unwrap();
         let node16 = debug.find("Node16:").unwrap();
+        let node32 = debug.find("Node32:").unwrap();
         let node48 = debug.find("Node48:").unwrap();
         let node256 = debug.find("Node256:").unwrap();
-        assert!(node4 < node16 && node16 < node48 && node48 < node256);
+        assert!(node4 < node16 && node16 < node32 && node32 < node48 && node48 < node256);
     }
 
     #[test]
@@ -452,6 +460,16 @@ mod tests {
                         max_prefix_len_bytes: 0,
                         mem_usage: 0,
                     },
+                    Node32: InnerNodeStats {
+                        count: 32,
+                        total_slots: 0,
+                        sum_slots: 0,
+                        total_header_bytes: 0,
+                        sum_prefix_len_bytes: 0,
+                        sum_capped_prefix_len_bytes: 0,
+                        max_prefix_len_bytes: 0,
+                        mem_usage: 0,
+                    },
                     Node48: InnerNodeStats {
                         count: 48,
                         total_slots: 0,
@@ -499,6 +517,7 @@ mod tests {
             % used slots (0-1):                0.25000
             Node4 size:                        Some(0) bytes
             Node16 size:                       Some(0) bytes
+            Node32 size:                       Some(0) bytes
             Node48 size:                       Some(0) bytes
             Node256 size:                      Some(0) bytes
             max prefix length:                 9 bytes"#]]
@@ -681,23 +700,36 @@ mod tests {
 
         let mut tree: TreeMap<Vec<u8>, u8> = TreeMap::new();
         // This will create a Node4, then grow to Node16, then to
-        // Node48
-        for i in 0u8..48 {
+        // Node32
+        for i in 0u8..32 {
             tree.try_insert(vec![i], i).unwrap();
         }
         let stats = TreeStatsCollector::collect(&tree).unwrap();
         assert!(stats.inner_node.get(Node4).is_none());
         assert!(stats.inner_node.get(Node16).is_none());
+        assert_eq!(stats.inner_node[Node32].count, 1);
+        assert!(stats.inner_node.get(Node48).is_none());
+        assert!(stats.inner_node.get(Node256).is_none());
+
+        // This will grow the Node32 to a Node48
+        for i in 32u8..48 {
+            tree.try_insert(vec![i], i).unwrap();
+        }
+        let stats = TreeStatsCollector::collect(&tree).unwrap();
+        assert!(stats.inner_node.get(Node4).is_none());
+        assert!(stats.inner_node.get(Node16).is_none());
+        assert!(stats.inner_node.get(Node32).is_none());
         assert_eq!(stats.inner_node[Node48].count, 1);
         assert!(stats.inner_node.get(Node256).is_none());
 
-        // This will grow the Node32 to a Node64 to a Node256
-        for i in 32u8..255 {
+        // This will grow the Node48 to a Node256
+        for i in 48u8..255 {
             tree.try_insert(vec![i], i).unwrap();
         }
         let stats = TreeStatsCollector::collect(&tree).unwrap();
         assert!(stats.inner_node.get(Node4).is_none());
         assert!(stats.inner_node.get(Node16).is_none());
+        assert!(stats.inner_node.get(Node32).is_none());
         assert!(stats.inner_node.get(Node48).is_none());
         assert_eq!(stats.inner_node[Node256].count, 1);
     }

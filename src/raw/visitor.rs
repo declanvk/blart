@@ -13,8 +13,8 @@ pub use tree_stats::*;
 pub use well_formed::*;
 
 use super::{
-    ConcreteNodePtr, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node,
-    NodePtr, NodeType, OpaqueNodePtr,
+    ConcreteNodePtr, InnerNode16, InnerNode32, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode,
+    Node, NodePtr, NodeType, OpaqueNodePtr,
 };
 use crate::raw::{match_concrete_node_ptr, InnerNode, InnerNodeCommon};
 
@@ -25,7 +25,9 @@ pub enum InnerNodeKind {
     Node4,
     /// Node that references between 5 and 16 children.
     Node16,
-    /// Node that references between 17 and 48 children.
+    /// Node that references between 17 and 32 children.
+    Node32,
+    /// Node that references between 33 and 48 children.
     Node48,
     /// Node that references between 49 and 256 children.
     Node256,
@@ -37,6 +39,7 @@ impl InnerNodeKind {
         Some(match node_type {
             NodeType::Node4 => InnerNodeKind::Node4,
             NodeType::Node16 => InnerNodeKind::Node16,
+            NodeType::Node32 => InnerNodeKind::Node32,
             NodeType::Node48 => InnerNodeKind::Node48,
             NodeType::Node256 => InnerNodeKind::Node256,
             NodeType::Leaf => return None,
@@ -48,6 +51,7 @@ impl InnerNodeKind {
         match self {
             InnerNodeKind::Node4 => NodeType::Node4,
             InnerNodeKind::Node16 => NodeType::Node16,
+            InnerNodeKind::Node32 => NodeType::Node32,
             InnerNodeKind::Node48 => NodeType::Node48,
             InnerNodeKind::Node256 => NodeType::Node256,
         }
@@ -133,6 +137,16 @@ impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode4<K
 }
 
 impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode16<K, T, PREFIX_LEN> {
+    fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
+        combine_inner_node_child_output(self.iter(), visitor)
+    }
+
+    fn visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_inner_node(self)
+    }
+}
+
+impl<K, T, const PREFIX_LEN: usize> Visitable<K, T, PREFIX_LEN> for InnerNode32<K, T, PREFIX_LEN> {
     fn super_visit_with<V: Visitor<K, T, PREFIX_LEN>>(&self, visitor: &mut V) -> V::Output {
         combine_inner_node_child_output(self.iter(), visitor)
     }

@@ -155,7 +155,7 @@ fn get_stats<K: AsBytes, V>(tree: &TreeMap<K, V>) -> TreeStats {
 fn test_fuzzy_search_node48() {
     let mut tree: TreeMap<Box<[u8]>, u32> = TreeMap::new();
     // Insert enough keys with a common prefix to likely create an InnerNode48
-    for i in 0u8..30 {
+    for i in 0u8..40 {
         let key = vec![0, 0, i];
         tree.try_insert(Box::from(key), i as u32).unwrap();
     }
