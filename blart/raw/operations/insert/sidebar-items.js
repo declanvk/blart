@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["InsertKind","InsertParentNodeChange","PrefixInsertPoint"],"fn":["parent_write_child","search_for_insert_point","search_for_prefix_insert_point","test_prefix_identify_insert"],"struct":["InsertPoint","InsertPrefixError","InsertResult","OverwritePoint","PrefixInsertResult"],"type":["SearchControlFlow"]};
