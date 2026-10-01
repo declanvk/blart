@@ -36,7 +36,7 @@ pub use prefix_entry::*;
 
 /// This is the default number of bytes that are used in each inner node for
 /// storing key prefixes.
-pub const DEFAULT_PREFIX_LEN: usize = 16;
+pub const DEFAULT_PREFIX_LEN: usize = 10;
 
 /// An ordered map based on an adaptive radix tree.
 pub struct TreeMap<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global> {

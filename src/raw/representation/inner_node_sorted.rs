@@ -40,17 +40,17 @@ enum WritePoint {
 pub struct InnerNodeSorted<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     /// The common node fields.
     pub header: Header<PREFIX_LEN>,
-    /// An array that contains the child data.
-    ///
-    /// This array will only be initialized for the first `header.num_children`
-    /// values.
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
     /// An array that contains single key bytes in the same index as the
     /// `child_pointers` array contains the matching child tree.
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
     pub keys: [u8; SIZE],
+    /// An array that contains the child data.
+    ///
+    /// This array will only be initialized for the first `header.num_children`
+    /// values.
+    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
 }
 
 impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, V, PREFIX_LEN>>
