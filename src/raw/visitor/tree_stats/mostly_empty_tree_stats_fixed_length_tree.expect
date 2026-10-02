@@ -26,4 +26,11 @@ TreeStats {
         sum_key_bytes: 64,
         mem_usage: 512,
     },
+    path_kind_visits: [
+        64,
+        0,
+        0,
+        0,
+    ],
+    max_depth: 4,
 }

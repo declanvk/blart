@@ -22,13 +22,13 @@ use crate::raw::{match_concrete_node_ptr, InnerNode, InnerNodeCommon};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum InnerNodeKind {
     /// Node that references between 2 and 4 children.
-    Node4,
+    Node4 = 0,
     /// Node that references between 5 and 16 children.
-    Node16,
+    Node16 = 1,
     /// Node that references between 17 and 48 children.
-    Node48,
+    Node48 = 2,
     /// Node that references between 49 and 256 children.
-    Node256,
+    Node256 = 3,
 }
 
 impl InnerNodeKind {

@@ -1,4 +1,4 @@
-use alloc::collections::BTreeMap;
+use alloc::{collections::BTreeMap, vec::Vec};
 use core::{
     fmt,
     ops::{Add, Index},
@@ -16,6 +16,7 @@ use crate::{
 #[derive(Debug)]
 pub struct TreeStatsCollector {
     current: TreeStats,
+    path: Vec<InnerNodeKind>,
 }
 
 impl TreeStatsCollector {
@@ -41,6 +42,7 @@ impl TreeStatsCollector {
     ) -> TreeStats {
         let mut collector = TreeStatsCollector {
             current: TreeStats::default(),
+            path: Vec::new(),
         };
 
         root.visit_with(&mut collector);
@@ -212,6 +214,13 @@ pub struct TreeStats {
 
     /// Number of leaf nodes present in the tree.
     pub leaf: LeafStats,
+
+    /// Sum over all leaves of the number of inner nodes of each kind on the
+    /// root-to-leaf path, indexed by [Node4, Node16, Node48, Node256].
+    pub path_kind_visits: [usize; 4],
+
+    /// Max root-to-leaf inner node depth
+    pub max_depth: usize,
 }
 
 impl TreeStats {
@@ -245,9 +254,11 @@ where
     where
         N: InnerNode<PREFIX_LEN, Key = K, Value = V> + Visitable<K, V, PREFIX_LEN>,
     {
-        t.super_visit_with(self);
         let node_kind = InnerNodeKind::from_node_type(N::TYPE)
             .expect("visit_inner_node is only ever called for inner node types");
+        self.path.push(node_kind);
+        t.super_visit_with(self);
+        self.path.pop();
         self.current
             .inner_node
             .0
@@ -259,6 +270,10 @@ where
 
     fn visit_leaf(&mut self, t: &LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
         self.current.leaf.count += 1;
+        self.current.max_depth = self.current.max_depth.max(self.path.len());
+        for kind in &self.path {
+            self.current.path_kind_visits[*kind as usize] += 1;
+        }
         self.current.leaf.sum_key_bytes += t.key_ref().as_bytes().len();
         self.current.leaf.mem_usage += core::mem::size_of_val(t);
     }
@@ -427,6 +442,8 @@ mod tests {
                 sum_key_bytes: 400,
                 mem_usage: 2000,
             },
+            max_depth: 0,
+            path_kind_visits: [0; 4],
         };
 
         expect![[r#"
@@ -488,6 +505,13 @@ mod tests {
                     sum_key_bytes: 400,
                     mem_usage: 2000,
                 },
+                path_kind_visits: [
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+                max_depth: 0,
             }
             memory usage (inner nodes):        5000 bytes
             memory usage (inner nodes + leaf): 7000 bytes

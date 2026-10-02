@@ -1,0 +1,11 @@
+[package]
+name = "chase"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+rand = "0.9"
+[profile.release]
+debug = false
+codegen-units = 1
+
+[workspace]
