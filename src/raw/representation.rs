@@ -696,55 +696,6 @@ where
     }
 }
 
-impl<K, V, const PREFIX_LEN: usize>
-    InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, NoChild>
-{
-    /// Add the first child to the node without bounds check or order.
-    ///
-    /// This function transitions the builder to the [`HasOneChild`] state.
-    ///
-    /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
-    ///   is done previously to the call of this function)
-    pub unsafe fn write_child_unchecked(
-        mut self,
-        key_byte: u8,
-        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasOneChild> {
-        // SAFETY: Covered by function safety requirements
-        unsafe { self.node.write_child_unchecked(key_byte, child) };
-        InnerNodeBuilder {
-            node: self.node,
-            _state: PhantomData,
-        }
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize>
-    InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasOneChild>
-{
-    /// Add the second child to the node without bounds check or order.
-    ///
-    /// This function transitions the builder to the [`HasChild`] state and
-    /// enabling [`build`][InnerNodeBuilder::build].
-    ///
-    /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
-    ///   is done previously to the call of this function)
-    pub unsafe fn write_child_unchecked(
-        mut self,
-        key_byte: u8,
-        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasChild> {
-        // SAFETY: Covered by function safety requirements
-        unsafe { self.node.write_child_unchecked(key_byte, child) };
-        InnerNodeBuilder {
-            node: self.node,
-            _state: PhantomData,
-        }
-    }
-}
-
 impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasChild>
 where
     N: InnerNodeCommon<K, V, PREFIX_LEN>,
@@ -771,7 +722,7 @@ impl<K, V, const PREFIX_LEN: usize>
     /// # Safety
     /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
     ///   is done previously to the call of this function)
-    #[expect(dead_code)]
+    #[cfg_attr(not(feature = "_internal"), expect(dead_code))]
     pub unsafe fn write_child_unchecked(
         mut self,
         key_byte: u8,

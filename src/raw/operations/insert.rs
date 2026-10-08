@@ -384,15 +384,10 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 let new_leaf_pointer_opaque = new_leaf_pointer.to_opaque();
 
                 let new_n4 = if mismatch.prefix_byte < key_byte {
-                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
-                    // starts empty and we're adding 2 children (out of a capacity of 4)
-                    // in the correct sorted order (given by the if-else condition).
-                    let new_n4 = unsafe {
-                        n4_builder
-                            .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr)
-                            .write_child_unchecked(key_byte, new_leaf_pointer_opaque)
-                            .build()
-                    };
+                    let new_n4 = n4_builder
+                        .write_child(mismatch.prefix_byte, mismatched_inner_node_ptr)
+                        .write_child(key_byte, new_leaf_pointer_opaque)
+                        .build();
 
                     // SAFETY: There are no concurrent modifications, the `apply` safety doc
                     // covers this
@@ -404,15 +399,10 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
 
                     new_n4
                 } else {
-                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
-                    // starts empty and we're adding 2 children (out of a capacity of 4)
-                    // in the correct sorted order (given by the if-else condition).
-                    let new_n4 = unsafe {
-                        n4_builder
-                            .write_child_unchecked(key_byte, new_leaf_pointer_opaque)
-                            .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr)
-                            .build()
-                    };
+                    let new_n4 = n4_builder
+                        .write_child(key_byte, new_leaf_pointer_opaque)
+                        .write_child(mismatch.prefix_byte, mismatched_inner_node_ptr)
+                        .build();
 
                     // SAFETY: There are no concurrent modifications, the `apply` safety doc
                     // covers this
@@ -476,18 +466,10 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), alloc);
 
                 let new_n4 = if leaf_node_key_byte < new_leaf_node_key_byte {
-                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
-                    // starts empty and we're adding 2 children (out of a capacity of 4)
-                    // in the correct sorted order (given by the if-else condition).
-                    let new_n4 = unsafe {
-                        n4_builder
-                            .write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque())
-                            .write_child_unchecked(
-                                new_leaf_node_key_byte,
-                                new_leaf_node_pointer.to_opaque(),
-                            )
-                            .build()
-                    };
+                    let new_n4 = n4_builder
+                        .write_child(leaf_node_key_byte, leaf_node_ptr.to_opaque())
+                        .write_child(new_leaf_node_key_byte, new_leaf_node_pointer.to_opaque())
+                        .build();
 
                     // SAFETY: There is no concurrent modification of the new leaf node, the
                     // existing leaf node, or its siblings because of the safety requirements of
@@ -496,18 +478,10 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
 
                     new_n4
                 } else {
-                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
-                    // starts empty and we're adding 2 children (out of a capacity of 4)
-                    // in the correct sorted order (given by the if-else condition).
-                    let new_n4 = unsafe {
-                        n4_builder
-                            .write_child_unchecked(
-                                new_leaf_node_key_byte,
-                                new_leaf_node_pointer.to_opaque(),
-                            )
-                            .write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque())
-                            .build()
-                    };
+                    let new_n4 = n4_builder
+                        .write_child(new_leaf_node_key_byte, new_leaf_node_pointer.to_opaque())
+                        .write_child(leaf_node_key_byte, leaf_node_ptr.to_opaque())
+                        .build();
 
                     // SAFETY: There is no concurrent modification of the new leaf node, the
                     // existing leaf node, or its siblings because of the safety requirements of
