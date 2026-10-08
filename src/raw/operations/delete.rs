@@ -1,11 +1,10 @@
 use core::fmt;
 
-use super::PrefixMatchBehavior;
 use crate::{
     allocator::Allocator,
     raw::{
-        match_concrete_node_ptr, operations::lookup, InnerNode, InnerNodeCommon, LeafNode, NodePtr,
-        OpaqueNodePtr, TreePath, TreePathSearch,
+        match_concrete_node_ptr, optimistic_descent, Descent, DescentEnd, InnerNode,
+        InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr, TreePath, TreePathSearch,
     },
     AsBytes,
 };
@@ -317,51 +316,40 @@ pub unsafe fn search_for_delete_point<K, V, const PREFIX_LEN: usize>(
 where
     K: AsBytes,
 {
-    let mut path = TreePathSearch::default();
-    let mut current_node = root;
-    let mut current_depth = 0;
-    let mut prefix_match_state = PrefixMatchBehavior::default();
+    // SAFETY: Covered by the safety requirements of this function
+    let Descent {
+        end,
+        depth,
+        unverified_from,
+        path,
+        ..
+    } = unsafe { optimistic_descent::<_, _, _, TreePathSearch<_, _, _>>(root, key_bytes) };
 
-    loop {
-        let next_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
-            InnerNode(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety requirement on the
-                // containing function
-                lookup::check_prefix_lookup_child(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut prefix_match_state,
-                )
-            },
-            LeafNode(leaf_node_ptr) => {
-                // SAFETY: The created reference doesn't escape the block and there are no
-                // concurrent mutable references.
-                let leaf = unsafe { leaf_node_ptr.as_ref() };
+    // If the search stopped at an inner node, then the key is not in the tree,
+    // whether or not the skipped prefix bytes match
+    let DescentEnd::Leaf(leaf_node_ptr) = end else {
+        return None;
+    };
 
-                // Specifically we are matching the leaf node stored key against the full search
-                // key to confirm that it is the right value.
-                if prefix_match_state.matches_leaf_key(leaf, key_bytes, current_depth) {
-                    return Some(DeletePoint {
-                        path: path.finish(),
-                        leaf_node_ptr,
-                    });
-                } else {
-                    return None;
-                }
-            },
-        })?;
+    // SAFETY: The created reference doesn't escape the function and there are no
+    // concurrent mutable references.
+    let leaf_bytes = unsafe { leaf_node_ptr.as_key_ref() }.as_bytes();
 
-        debug_assert!(
-            current_depth > 0,
-            "for a non-leaf node, there should be some amount of key"
-        );
+    // Specifically we are matching the leaf node stored key against the full search
+    // key to confirm that it is the right value. All key bytes before this point
+    // have been compared on the way to the leaf.
+    let compare_from = unverified_from
+        .unwrap_or(depth)
+        .min(leaf_bytes.len())
+        .min(key_bytes.len());
 
-        // This should not panic because the current_depth will be greater than zero
-        let last_key_byte = key_bytes[current_depth - 1];
-
-        path.visit_inner_node(current_node, last_key_byte);
-        current_node = next_node;
+    if leaf_bytes[compare_from..] == key_bytes[compare_from..] {
+        Some(DeletePoint {
+            path: path.finish(),
+            leaf_node_ptr,
+        })
+    } else {
+        None
     }
 }
 

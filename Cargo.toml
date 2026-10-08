@@ -6,6 +6,7 @@ name = "blart"
 version = "0.6.0"
 description = "An implementation of an adaptive radix tree packaged as a BTreeMap replacement"
 repository = "https://github.com/declanvk/blart"
+# TODO: upgrade to 2024 edition
 edition = "2021"
 license = "MIT OR Apache-2.0"
 keywords = ["tree", "map", "collection", "radix-tree"]

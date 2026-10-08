@@ -219,6 +219,7 @@ pub struct PrefixMatch {
 /// This struct represents a successful match against a prefix using the
 /// [`InnerNodeCommon::attempt_pessimistic_match_prefix`] function.
 #[derive(Debug)]
+#[cfg_attr(not(feature = "_internal"), expect(dead_code))]
 pub struct AttemptOptimisticPrefixMatch {
     /// How many bytes were matched
     pub matched_bytes: usize,
@@ -309,9 +310,10 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ExplicitMismatch<K, V, PREFIX
 /// Represents a prefix mismatch when looking only at the prefix content present
 /// in an [`InnerNode`] header.
 #[derive(Debug)]
+#[cfg_attr(not(feature = "_internal"), expect(dead_code))]
 pub struct PessimisticMismatch {
     /// How many bytes were matched
-    #[expect(dead_code)]
+    #[cfg_attr(not(feature = "_internal"), expect(dead_code))]
     pub matched_bytes: usize,
     /// Value of the byte that made it not match.
     ///
@@ -332,6 +334,7 @@ impl From<OptimisticMismatch> for PessimisticMismatch {
 /// Represents a prefix mismatch when looking only at the prefix content present
 /// in an [`InnerNode`] header.
 #[derive(Debug)]
+#[cfg_attr(not(feature = "_internal"), expect(dead_code))]
 pub struct OptimisticMismatch {
     /// How many bytes were matched
     pub matched_bytes: usize,
@@ -423,6 +426,7 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
     /// This function returns an error if there is a mismatch between the
     /// partial stored prefix and the given truncated key.
     #[inline]
+    #[cfg_attr(not(feature = "_internal"), expect(dead_code))]
     fn optimistic_match_prefix(
         &self,
         truncated_key: &[u8],
@@ -461,6 +465,7 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
     /// This function returns an error if there is a mismatch between the given
     /// truncated key and the stored (implicit or full) prefix.
     #[inline]
+    #[cfg_attr(not(feature = "_internal"), expect(dead_code))]
     fn attempt_pessimistic_match_prefix(
         &self,
         truncated_key: &[u8],

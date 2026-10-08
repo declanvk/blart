@@ -1,19 +1,16 @@
 //! This module contains types and functions relating to iterating over a
 //! range of the [`TreeMap`].
 
-use core::{
-    cmp::Ordering,
-    fmt,
-    iter::FusedIterator,
-    ops::{Bound, ControlFlow},
-};
+use core::{cmp::Ordering, fmt, iter::FusedIterator, ops::Bound};
 
 use crate::{
     allocator::{Allocator, Global},
     map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
     raw::{
-        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, ExplicitMismatch, InnerNode,
-        LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, RawIterator,
+        any_leaf, leaf_common_prefix_len, locate_skipped_mismatch, match_concrete_node_ptr,
+        maximum_unchecked, minimum_unchecked, optimistic_descent, verify_skipped_prefixes, Descent,
+        DescentEnd, InnerNode, LeafNode, NoPath, NodePtr, OpaqueNodePtr, RawIterator,
+        SkippedPrefixMismatch,
     },
     AsBytes, TreeMap,
 };
@@ -97,7 +94,34 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for TerminatingNodeSearchResult<K
     }
 }
 
+/// Convert a mismatch inside a prefix skipped by the descent into a search
+/// result for the inner node which contains the mismatch.
+///
+/// # Safety
+///  - This function cannot be called concurrently with any mutating operation on the trie.
+unsafe fn skipped_mismatch_result<K: AsBytes, V, const PREFIX_LEN: usize>(
+    mismatch: SkippedPrefixMismatch<K, V, PREFIX_LEN, NoPath>,
+    key_bytes: &[u8],
+) -> TerminatingNodeSearchResult<K, V, PREFIX_LEN> {
+    // SAFETY: Covered by the safety requirements of this function
+    let leaf_bytes = unsafe { mismatch.leaf_ptr.as_key_ref() }.as_bytes();
+
+    // The leaf has the full prefix of the node in its key, and the mismatch is
+    // always inside the key, so this compares the first differing byte of the
+    // node prefix and the key
+    TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+        node_ptr: mismatch.node,
+        current_depth: mismatch.node_depth,
+        reason: InnerNodeSearchResultReason::PrefixMismatch,
+        node_prefix_comparison_to_search_key_segment: leaf_bytes[mismatch.mismatch_depth]
+            .cmp(&key_bytes[mismatch.mismatch_depth]),
+    })
+}
+
 /// Find the node (inner or leaf) that is identified by the given bytestring.
+///
+/// This uses an [`optimistic_descent`], which skips inner node prefixes longer
+/// than `PREFIX_LEN`, and then checks the skipped bytes against a single leaf.
 ///
 /// # Safety
 ///
@@ -108,133 +132,127 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
 ) -> TerminatingNodeSearchResult<K, V, PREFIX_LEN> {
-    /// This function will search some key bytes at a specific depth in the
-    /// given inner node, returning different results depending on if the search
-    /// terminated or needs to continue down the trie.
-    ///
-    /// If this function returns [`ControlFlow::Continue`] then the search
-    /// continues down the trie, otherwise it terminates at this inner node.
-    ///
-    /// # Safety
-    ///
-    /// Callers must guarantee that there is no concurrent mutation of the given
-    /// inner node for the duration of this function.
-    unsafe fn check_prefix_lookup_child<K, V, N, const PREFIX_LEN: usize>(
-        inner_ptr: NodePtr<PREFIX_LEN, N>,
-        key_bytes: &[u8],
-        current_depth: &mut usize,
-    ) -> ControlFlow<InnerNodeSearchResult<K, V, PREFIX_LEN>, OpaqueNodePtr<K, V, PREFIX_LEN>>
-    where
-        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-        K: AsBytes,
-    {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `check_prefix_lookup_child` function.
-        let inner_node = unsafe { inner_ptr.as_ref() };
+    // SAFETY: Covered by the safety requirements of this function
+    let Descent {
+        end,
+        node,
+        depth,
+        unverified_from,
+        ..
+    } = unsafe { optimistic_descent::<_, _, _, NoPath>(root, key_bytes) };
 
-        assert!(*current_depth <= key_bytes.len());
-        // SAFETY: The condition that "`current_depth` must be less than or equal to
-        // `key.len()`" is checked via assertion just above.
-        // TODO: Figure out a better reasoning for this safety condition, I think it
-        // should be possible just via reasoning through the range lookup
-        // process (without needing an assert).
-        let match_prefix = unsafe { inner_node.match_full_prefix(key_bytes, *current_depth) };
-        match match_prefix {
-            Err(ExplicitMismatch {
-                matched_bytes,
-                node_prefix_comparison_to_search_key_segment,
-                ..
-            }) => {
-                // We report a prefix mismatch if the prefix is longer that the remaining
-                // portion of the key bytes. However, in the context of the
-                // `InnerNodeSearchResultReason` running out of bytes is really a different
-                // thing than a mismatch. We should only report mismatch as the reason if there
-                // was an actual byte difference.
-                let reason = if matched_bytes == key_bytes[*current_depth..].len() {
-                    InnerNodeSearchResultReason::InsufficientBytes
+    // Check the skipped prefix bytes (if any) up to `verified_depth` against a
+    // leaf in the subtree of `node`. Returns the corrected search result if the
+    // key differs from the trie in a skipped prefix.
+    let verify = |verified_depth: usize| {
+        let unverified_from = unverified_from?;
+        // SAFETY: Covered by the safety requirements of this function
+        let mismatch = unsafe {
+            verify_skipped_prefixes::<_, _, _, NoPath>(
+                root,
+                key_bytes,
+                unverified_from,
+                verified_depth,
+                any_leaf(node),
+            )
+        }?;
+        // SAFETY: Covered by the safety requirements of this function
+        Some(unsafe { skipped_mismatch_result(mismatch, key_bytes) })
+    };
+
+    match end {
+        DescentEnd::Leaf(leaf_ptr) => {
+            // SAFETY: The shared reference is bounded to this block and there are no
+            // concurrent modifications, by the safety conditions of this function.
+            let leaf_node = unsafe { leaf_ptr.as_ref() };
+
+            let leaf_key_comparison_to_search_key = match unverified_from {
+                None => leaf_node.compare_full_key(key_bytes),
+                Some(_) => {
+                    let leaf_bytes = leaf_node.key_ref().as_bytes();
+                    let common_len =
+                        leaf_common_prefix_len(leaf_bytes, key_bytes, depth, unverified_from);
+
+                    if common_len < depth {
+                        // The key differs from the trie in a skipped prefix, so this leaf
+                        // is not necessarily next to the key in the ordering
+                        //
+                        // SAFETY: Covered by the safety requirements of this function
+                        return unsafe {
+                            skipped_mismatch_result(
+                                locate_skipped_mismatch::<_, _, _, NoPath>(
+                                    root, key_bytes, common_len, leaf_ptr,
+                                ),
+                                key_bytes,
+                            )
+                        };
+                    }
+
+                    // Lexicographic comparison, starting from the first differing byte
+                    match (leaf_bytes.get(common_len), key_bytes.get(common_len)) {
+                        (Some(leaf_byte), Some(key_byte)) => leaf_byte.cmp(key_byte),
+                        (leaf_byte, key_byte) => leaf_byte.is_some().cmp(&key_byte.is_some()),
+                    }
+                },
+            };
+
+            TerminatingNodeSearchResult::Leaf {
+                leaf_ptr,
+                leaf_key_comparison_to_search_key,
+            }
+        },
+        DescentEnd::MissingChild => {
+            if let Some(result) = verify(depth) {
+                return result;
+            }
+
+            TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+                node_ptr: node,
+                current_depth: depth,
+                reason: InnerNodeSearchResultReason::MissingChild,
+                node_prefix_comparison_to_search_key_segment: Ordering::Equal,
+            })
+        },
+        DescentEnd::KeyExhausted => {
+            if let Some(result) = verify(key_bytes.len()) {
+                return result;
+            }
+
+            // SAFETY: `node` is an inner node when the key is exhausted, and there are no
+            // concurrent modifications, by the safety conditions of this function.
+            let prefix_len = unsafe { node.header_ref_unchecked() }.prefix_len();
+
+            TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+                node_ptr: node,
+                current_depth: depth,
+                reason: InnerNodeSearchResultReason::InsufficientBytes,
+                // If the key ends inside the prefix, then the prefix is longer than the
+                // matching key segment
+                node_prefix_comparison_to_search_key_segment: if key_bytes.len()
+                    < depth + prefix_len
+                {
+                    Ordering::Greater
                 } else {
-                    InnerNodeSearchResultReason::PrefixMismatch
-                };
+                    Ordering::Equal
+                },
+            })
+        },
+        DescentEnd::PrefixMismatch {
+            matched_bytes,
+            prefix_byte,
+        } => {
+            if let Some(result) = verify(depth) {
+                return result;
+            }
 
-                ControlFlow::Break(InnerNodeSearchResult {
-                    node_ptr: inner_ptr.to_opaque(),
-                    current_depth: *current_depth,
-                    reason,
-                    node_prefix_comparison_to_search_key_segment,
-                })
-            },
-            Ok(PrefixMatch { matched_bytes }) => {
-                // Since the prefix matched, advance the depth by the size of the prefix
-                *current_depth += matched_bytes;
-
-                let next_key_fragment = if *current_depth < key_bytes.len() {
-                    key_bytes[*current_depth]
-                } else {
-                    // the key has insufficient bytes, it is a prefix of an existing key. Thus, the
-                    // key must not exist in the tree by the requirements of the insert function
-                    // (any key in the tree must not be the prefix of any other key in the tree)
-                    return ControlFlow::Break(InnerNodeSearchResult {
-                        node_ptr: inner_ptr.to_opaque(),
-                        current_depth: *current_depth,
-                        reason: InnerNodeSearchResultReason::InsufficientBytes,
-                        node_prefix_comparison_to_search_key_segment: Ordering::Equal,
-                    });
-                };
-
-                let child_lookup = inner_node.lookup_child(next_key_fragment);
-
-                match child_lookup {
-                    Some(child_ptr) => {
-                        // Since the prefix matched and it found a child, advance the depth by 1
-                        // more key byte
-                        *current_depth += 1;
-                        ControlFlow::Continue(child_ptr)
-                    },
-                    None => ControlFlow::Break(InnerNodeSearchResult {
-                        node_ptr: inner_ptr.to_opaque(),
-                        current_depth: *current_depth,
-                        reason: InnerNodeSearchResultReason::MissingChild,
-                        node_prefix_comparison_to_search_key_segment: Ordering::Equal,
-                    }),
-                }
-            },
-        }
-    }
-
-    let mut current_node = root;
-    let mut current_depth = 0;
-
-    loop {
-        let next_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
-            InnerNode(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety documentation on the
-                // containing function
-                check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
-            },
-            LeafNode(leaf_ptr) => {
-                // SAFETY: The shared reference is bounded to this block and there are no
-                // concurrent modifications, by the safety conditions of this function.
-                let leaf_node = unsafe { leaf_ptr.as_ref() };
-
-                let leaf_key_comparison_to_search_key = leaf_node.compare_full_key(key_bytes);
-
-                return TerminatingNodeSearchResult::Leaf {
-                    leaf_ptr,
-                    leaf_key_comparison_to_search_key,
-                };
-            },
-        });
-
-        match next_node {
-            ControlFlow::Continue(next_node) => {
-                current_node = next_node;
-            },
-            ControlFlow::Break(reason) => {
-                return TerminatingNodeSearchResult::InnerNode(reason);
-            },
-        }
+            TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+                node_ptr: node,
+                current_depth: depth,
+                reason: InnerNodeSearchResultReason::PrefixMismatch,
+                node_prefix_comparison_to_search_key_segment: prefix_byte
+                    .cmp(&key_bytes[depth + matched_bytes]),
+            })
+        },
     }
 }
 
@@ -1327,5 +1345,165 @@ mod tests {
         // The range should contain all elements in the tree because the range start is
         // less than all the keys in the tree.
         assert_eq!(contents, (0..=64).collect::<Vec<_>>());
+    }
+
+    /// Build a tree with a small `PREFIX_LEN` from keys which share long runs of
+    /// bytes, so that most inner nodes have prefixes which are skipped by the
+    /// search. Then check range and prefix iterators, point lookups, and removes
+    /// against a [`BTreeMap`] model, for search keys which diverge from the tree
+    /// at random depths.
+    fn range_and_prefix_with_long_shared_runs<const PREFIX_LEN: usize>(seed: u64) {
+        use alloc::collections::BTreeMap;
+
+        // xorshift, to keep this test deterministic without a dependency
+        let mut state = seed;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+
+        let base: Vec<u8> = (0..40).map(|_| (next() % 3) as u8).collect();
+        let mut tree = TreeMap::<Box<[u8]>, usize, PREFIX_LEN>::with_prefix_len();
+        let mut model = BTreeMap::<Box<[u8]>, usize>::new();
+        let mut keys: Vec<Vec<u8>> = Vec::new();
+
+        let num_keys = if cfg!(miri) { 40 } else { 200 };
+        for value in 0..num_keys {
+            let mut key = if keys.is_empty() || next() % 4 == 0 {
+                base.clone()
+            } else {
+                keys[(next() % keys.len() as u64) as usize].clone()
+            };
+            let idx = (next() % key.len() as u64) as usize;
+            key[idx] = (next() % 3) as u8;
+            let key: Box<[u8]> = key.into_boxed_slice();
+            if tree.try_insert(key.clone(), value).is_ok() {
+                model.insert(key.clone(), value);
+                keys.push(key.into_vec());
+            }
+        }
+
+        // Search keys derived from the tree keys, which diverge at random depths
+        let mut make_query = || -> Box<[u8]> {
+            let mut query = keys[(next() % keys.len() as u64) as usize].clone();
+            match next() % 4 {
+                0 => {},
+                1 => {
+                    let idx = (next() % query.len() as u64) as usize;
+                    query[idx] = (next() % 4) as u8;
+                },
+                2 => query.truncate((next() % (query.len() as u64 + 1)) as usize),
+                _ => query.push((next() % 4) as u8),
+            }
+            query.into_boxed_slice()
+        };
+
+        let num_queries = if cfg!(miri) { 40 } else { 400 };
+        for _ in 0..num_queries {
+            let query = make_query();
+            let q: &[u8] = &query;
+
+            assert!(
+                tree.range::<[u8], _>((Bound::Included(q), Bound::Unbounded))
+                    .take(3)
+                    .eq(model
+                        .range::<[u8], _>((Bound::Included(q), Bound::Unbounded))
+                        .take(3)),
+                "range {q:?}.. PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+            assert!(
+                tree.range::<[u8], _>((Bound::Excluded(q), Bound::Unbounded))
+                    .take(3)
+                    .eq(model
+                        .range::<[u8], _>((Bound::Excluded(q), Bound::Unbounded))
+                        .take(3)),
+                "range ({q:?}).. PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+            assert!(
+                tree.range::<[u8], _>((Bound::Unbounded, Bound::Included(q)))
+                    .rev()
+                    .take(3)
+                    .eq(model
+                        .range::<[u8], _>((Bound::Unbounded, Bound::Included(q)))
+                        .rev()
+                        .take(3)),
+                "range ..={q:?} PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+            assert!(
+                tree.range::<[u8], _>((Bound::Unbounded, Bound::Excluded(q)))
+                    .rev()
+                    .take(3)
+                    .eq(model
+                        .range::<[u8], _>((Bound::Unbounded, Bound::Excluded(q)))
+                        .rev()
+                        .take(3)),
+                "range ..{q:?} PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+
+            let other = make_query();
+            let (low, high) = if query <= other {
+                (&query, &other)
+            } else {
+                (&other, &query)
+            };
+            let (low, high): (&[u8], &[u8]) = (low, high);
+            assert!(
+                tree.range::<[u8], _>((Bound::Included(low), Bound::Included(high)))
+                    .eq(model.range::<[u8], _>((Bound::Included(low), Bound::Included(high)))),
+                "range {low:?}..={high:?} PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+
+            assert!(
+                tree.prefix(q)
+                    .eq(model.iter().filter(|(key, _)| key.starts_with(q))),
+                "prefix {q:?} PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+
+            // Point lookups use the same search, so check them here as well
+            assert_eq!(
+                tree.get(q),
+                model.get(q),
+                "get {q:?} PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+            assert_eq!(
+                tree.prefix_get_key_value(q),
+                model.iter().find(|(key, _)| q.starts_with(key)),
+                "prefix_get {q:?} PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+        }
+
+        // Remove keys with the same kind of search keys, some of which will not be
+        // in the tree
+        for _ in 0..num_queries {
+            let query = make_query();
+            let q: &[u8] = &query;
+            assert_eq!(
+                tree.remove(q),
+                model.remove(q),
+                "remove {q:?} PREFIX_LEN {PREFIX_LEN}, seed {seed}"
+            );
+            crate::visitor::WellFormedChecker::check(&tree).unwrap_or_else(|err| {
+                panic!(
+                    "tree malformed after removing {q:?}, PREFIX_LEN {PREFIX_LEN}, seed {seed}: \
+                     {err}"
+                )
+            });
+        }
+        assert!(tree.iter().eq(model.iter()));
+    }
+
+    #[test]
+    fn range_and_prefix_with_long_shared_runs_small_prefix_len() {
+        let num_seeds = if cfg!(miri) { 1 } else { 8 };
+        for seed in 1..=num_seeds {
+            range_and_prefix_with_long_shared_runs::<0>(seed);
+            range_and_prefix_with_long_shared_runs::<1>(seed);
+            range_and_prefix_with_long_shared_runs::<2>(seed);
+            range_and_prefix_with_long_shared_runs::<4>(seed);
+            range_and_prefix_with_long_shared_runs::<8>(seed);
+            range_and_prefix_with_long_shared_runs::<16>(seed);
+        }
     }
 }

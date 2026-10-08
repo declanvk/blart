@@ -4,7 +4,7 @@ use blart::TreeMap;
 use criterion::{criterion_group, measurement::Measurement, BatchSize, BenchmarkGroup, Criterion};
 use rand::{rngs::SmallRng, seq::IndexedRandom, SeedableRng};
 
-use crate::common::{dictionary_words, url_keys};
+use crate::common::{dictionary_words, prefix_queries, range_queries, url_keys};
 
 const NUM_SEARCHES: usize = 5_000;
 
@@ -37,6 +37,20 @@ fn bench_keys<M: Measurement, const PREFIX_LEN: usize>(
         )
     });
 
+    group.bench_function("prefix_insert", |b| {
+        b.iter_batched(
+            || keys.clone(),
+            |keys| {
+                let mut tree = TreeMap::<CString, usize, PREFIX_LEN>::with_prefix_len();
+                for (idx, key) in keys.into_iter().enumerate() {
+                    tree.prefix_insert(key, idx);
+                }
+                tree
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("insert_existing", |b| {
         b.iter_batched(
             || (tree.clone(), searches.clone()),
@@ -48,6 +62,28 @@ fn bench_keys<M: Measurement, const PREFIX_LEN: usize>(
             },
             BatchSize::LargeInput,
         )
+    });
+
+    let ranges = range_queries(&keys, NUM_SEARCHES);
+    group.bench_function("range_short", |b| {
+        b.iter(|| {
+            for key in &ranges {
+                for entry in tree.range::<CString, _>(key..).take(4) {
+                    std::hint::black_box(entry);
+                }
+            }
+        })
+    });
+
+    let prefixes = prefix_queries(&keys, NUM_SEARCHES);
+    group.bench_function("prefix_short", |b| {
+        b.iter(|| {
+            for prefix in &prefixes {
+                for entry in tree.prefix(prefix).take(4) {
+                    std::hint::black_box(entry);
+                }
+            }
+        })
     });
 
     group.bench_function("get", |b| {

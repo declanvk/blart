@@ -191,3 +191,54 @@ pub fn url_tree() -> &'static TreeMap<CString, usize> {
 
     TREE.get_or_init(|| tree_from_keys(url_keys(20_000)))
 }
+
+#[allow(dead_code)]
+pub fn dictionary_words() -> Vec<CString> {
+    DICTIONARY
+        .split('\n')
+        .filter(|s| !s.is_empty())
+        .map(|s| CString::new(s).unwrap())
+        .collect()
+}
+
+/// Select `num_queries` search keys for range queries from `keys`. Half of them
+/// are existing keys, the other half have one byte changed so that they likely
+/// diverge from the tree somewhere in the middle of the key.
+#[allow(dead_code)]
+pub fn range_queries(keys: &[CString], num_queries: usize) -> Vec<CString> {
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0x5EA7C4);
+    (0..num_queries)
+        .map(|idx| {
+            let key = &keys[rng.random_range(0..keys.len())];
+            if idx % 2 == 0 {
+                return key.clone();
+            }
+            let mut bytes = key.as_bytes().to_vec();
+            let pos = rng.random_range(bytes.len() / 4..bytes.len());
+            bytes[pos] = if bytes[pos] == b'~' {
+                b'!'
+            } else {
+                bytes[pos] + 1
+            };
+            CString::new(bytes).unwrap()
+        })
+        .collect()
+}
+
+/// Select `num_queries` prefixes for prefix queries from `keys`. Each is a
+/// truncated existing key, and half of them have one byte changed.
+#[allow(dead_code)]
+pub fn prefix_queries(keys: &[CString], num_queries: usize) -> Vec<Vec<u8>> {
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0x9EF1C5);
+    (0..num_queries)
+        .map(|idx| {
+            let key = keys[rng.random_range(0..keys.len())].as_bytes();
+            let mut bytes = key[..rng.random_range(1..=key.len())].to_vec();
+            if idx % 2 == 1 {
+                let pos = rng.random_range(0..bytes.len());
+                bytes[pos] = bytes[pos].wrapping_add(1);
+            }
+            bytes
+        })
+        .collect()
+}

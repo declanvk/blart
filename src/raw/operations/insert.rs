@@ -1,15 +1,16 @@
 use alloc::boxed::Box;
-use core::{error::Error, fmt, marker::PhantomData, ops::ControlFlow};
+use core::{error::Error, fmt, marker::PhantomData};
 
 use crate::{
     allocator::Allocator,
     raw::{
-        any_subtree_leaf, deallocate_tree, longest_common_prefix_len, match_concrete_node_ptr,
-        maximum_unchecked, minimum_unchecked, ExplicitMismatch, InnerNode, InnerNode4,
-        InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, Sibling, TreePath,
-        TreePathSearch,
+        any_leaf, deallocate_tree, leaf_common_prefix_len, locate_skipped_mismatch,
+        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, optimistic_descent,
+        verify_skipped_prefixes, Descent, DescentEnd, ExplicitMismatch, InnerNode, InnerNode4,
+        InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr, Sibling, SkippedPrefixMismatch,
+        TreePath, TreePathSearch,
     },
-    rust_nightly_apis::{likely, unlikely},
+    rust_nightly_apis::unlikely,
     AsBytes,
 };
 
@@ -119,6 +120,44 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InsertPoint<K, V, PREFIX_LEN>
             .field("root", &self.root)
             .finish()
     }
+}
+
+/// Write a new child node to an inner node at the specified key byte.
+///
+/// # Panics
+/// Panics if the node pointer given is not an inner node.
+///
+/// # Safety
+///
+///  - This function must not be called concurrently with and other read or modification of the
+///    trie.
+unsafe fn parent_write_child<K: AsBytes, V, const PREFIX_LEN: usize>(
+    parent_inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    key_byte: u8,
+    new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+) {
+    fn write_inner_node<K: AsBytes, V, N, const PREFIX_LEN: usize>(
+        parent_inner_node: NodePtr<PREFIX_LEN, N>,
+        key_byte: u8,
+        new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) where
+        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
+    {
+        // SAFETY: The lifetime produced from this is bounded to this scope and does not
+        // escape. Further, no other code mutates the node referenced, which is further
+        // enforced the "no concurrent reads or writes" requirement on the
+        // `maximum_unchecked` function.
+        let parent_node = unsafe { parent_inner_node.as_mut() };
+
+        parent_node.write_child(key_byte, new_child);
+    }
+
+    match_concrete_node_ptr!(match (parent_inner_node.to_node_ptr()) {
+        InnerNode(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
+        LeafNode(_leaf) => {
+            unreachable!("A leaf pointer cannot be the parent of another node");
+        },
+    })
 }
 
 impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
@@ -881,58 +920,69 @@ fn capped_prefix<const PREFIX_LEN: usize>(bytes: &[u8]) -> [u8; PREFIX_LEN] {
     prefix
 }
 
-type SearchControlFlow<K, V, const PREFIX_LEN: usize> =
-    ControlFlow<ExplicitMismatch<K, V, PREFIX_LEN>, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>;
+impl<K: AsBytes, V, const PREFIX_LEN: usize>
+    SkippedPrefixMismatch<K, V, PREFIX_LEN, TreePathSearch<K, V, PREFIX_LEN>>
+{
+    /// Convert this mismatch into an insert point which splits the prefix of
+    /// the mismatched inner node.
+    ///
+    /// # Safety
+    ///  - This function cannot be called concurrently with any mutating operation on the trie.
+    unsafe fn into_insert_point(
+        self,
+        root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+        key_bytes: &[u8],
+    ) -> InsertPoint<K, V, PREFIX_LEN> {
+        InsertPoint {
+            key_bytes_used: self.node_depth,
+            insert_kind: InsertKind::MismatchPrefix {
+                // SAFETY: Covered by the safety requirements of this function
+                mismatch: unsafe { self.explicit_mismatch(key_bytes) },
+                mismatched_inner_node_ptr: self.node,
+                key_byte: key_bytes[self.mismatch_depth],
+            },
+            path: self.path.finish(),
+            root,
+        }
+    }
+}
 
-/// Check that the given inner node's prefix matches the relevant subslice of
-/// the given key.
+/// Check the prefix bytes skipped by the descent against `leaf_ptr`, if any
+/// were skipped. Returns the corrected insert point if the key differs from the
+/// trie inside a skipped prefix.
 ///
 /// # Safety
-///  - This function cannot be called concurrently to any writes of the `root` node or any child
-///    node of `root`. This function will arbitrarily read to any child in the given tree.
-///  - `current_depth` must be less than or equal to `key.len()`
-#[inline]
-unsafe fn test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
-    inner_ptr: NodePtr<PREFIX_LEN, N>,
-    key: &[u8],
-    current_depth: &mut usize,
-) -> Result<SearchControlFlow<K, V, PREFIX_LEN>, InsertPrefixError>
-where
-    N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-    K: AsBytes,
-{
-    // SAFETY: The lifetime produced from this is bounded to this scope and does not
-    // escape. Further, no other code mutates the node referenced, which is further
-    // enforced the "no concurrent reads or writes" requirement on the
-    // `search_unchecked` function.
-    let inner_node = unsafe { inner_ptr.as_ref() };
-    // SAFETY: Covered by caller safety requirements on `current_depth` and
-    // `key.len()`
-    let match_prefix = unsafe { inner_node.match_full_prefix(key, *current_depth) };
-    match match_prefix {
-        Err(mismatch) => Ok(ControlFlow::Break(mismatch)),
-        Ok(PrefixMatch { matched_bytes }) => {
-            // Since the prefix matched, advance the depth by the size of the prefix
-            *current_depth += matched_bytes;
-
-            if likely!(*current_depth < key.len()) {
-                let next_key_fragment = key[*current_depth];
-                Ok(ControlFlow::Continue(
-                    inner_node.lookup_child(next_key_fragment),
-                ))
-            } else {
-                // then the key has insufficient bytes to be unique. It must be
-                // a prefix of an existing key
-                Err(InsertPrefixError {
-                    byte_repr: key.into(),
-                })
-            }
-        },
-    }
+///  - This function cannot be called concurrently with any mutating operation on `root` or any
+///    child node of `root`.
+#[inline(always)]
+unsafe fn verify_insert_descent<K: AsBytes, V, const PREFIX_LEN: usize>(
+    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    key_bytes: &[u8],
+    unverified_from: Option<usize>,
+    verified_depth: usize,
+    leaf_ptr: impl FnOnce() -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
+) -> Option<InsertPoint<K, V, PREFIX_LEN>> {
+    let unverified_from = unverified_from?;
+    // SAFETY: Covered by the safety requirements of this function
+    let mismatch = unsafe {
+        verify_skipped_prefixes::<_, _, _, TreePathSearch<_, _, _>>(
+            root,
+            key_bytes,
+            unverified_from,
+            verified_depth,
+            leaf_ptr(),
+        )
+    }?;
+    // SAFETY: Covered by the safety requirements of this function
+    Some(unsafe { mismatch.into_insert_point(root, key_bytes) })
 }
 
 /// Perform an iterative search for the insert point for the given key,
 /// starting at the given root node.
+///
+/// Implicit prefix bytes (the part of an inner node prefix longer than
+/// `PREFIX_LEN`) are skipped during the search and checked once against a leaf
+/// at the end, see [`optimistic_descent`].
 ///
 /// # Safety
 ///  - This function cannot be called concurrently to any writes of the `root` node or any child
@@ -947,223 +997,149 @@ pub unsafe fn search_for_insert_point<K, V, const PREFIX_LEN: usize>(
 where
     K: AsBytes,
 {
-    let mut path = TreePathSearch::default();
-    let mut current_node = root;
-    let mut current_depth = 0;
-    // The depth of the first prefix byte which was skipped by the search, if any
-    let mut unverified_from = None;
+    // SAFETY: Covered by the safety requirements of this function
+    let Descent {
+        end,
+        node,
+        depth,
+        unverified_from,
+        path,
+    } = unsafe { optimistic_descent::<_, _, _, TreePathSearch<_, _, _>>(root, key_bytes) };
 
-    loop {
-        // SAFETY (covering all `optimistic_test_prefix_identify_insert` function calls):
-        //  1. Concurrent read/write overed by caller safety requirements
-        //  2. `current_depth` can never be greater than `key_bytes.len()` because of loop invariant
-        //     assertion
-        assert!(current_depth <= key_bytes.len());
+    match end {
+        DescentEnd::Leaf(leaf_node_ptr) => {
+            // SAFETY: Covered by the safety requirements of this function
+            let leaf_node = unsafe { leaf_node_ptr.as_ref() };
+            let leaf_bytes = leaf_node.key_ref().as_bytes();
 
-        let lookup_result = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
-            InnerNode(inner_ptr) => unsafe {
-                // SAFETY: comment and assert at top of loop
-                optimistic_test_prefix_identify_insert(
-                    inner_ptr,
-                    key_bytes,
-                    &mut current_depth,
-                    &mut unverified_from,
-                )
-            },
-            LeafNode(leaf_node_ptr) => {
-                // SAFETY: function safety comment covers
-                let leaf_node = unsafe { leaf_node_ptr.as_ref() };
-                let leaf_bytes = leaf_node.key_ref().as_bytes();
+            if leaf_bytes == key_bytes {
+                return Ok(InsertPoint {
+                    key_bytes_used: depth,
+                    path: path.finish(),
+                    insert_kind: InsertKind::Exact { leaf_node_ptr },
+                    root,
+                });
+            }
 
-                if leaf_bytes == key_bytes {
-                    return Ok(InsertPoint {
-                        key_bytes_used: current_depth,
-                        path: path.finish(),
-                        insert_kind: InsertKind::Exact { leaf_node_ptr },
+            // Comparing from the first skipped byte checks the skipped bytes and finds
+            // the split point in a single pass
+            let new_key_bytes_used =
+                leaf_common_prefix_len(leaf_bytes, key_bytes, depth, unverified_from);
+
+            if unlikely!(new_key_bytes_used < depth) {
+                // The key differs from the trie inside a skipped prefix
+                //
+                // SAFETY: Covered by the safety requirements of this function
+                return Ok(unsafe {
+                    locate_skipped_mismatch::<_, _, _, TreePathSearch<_, _, _>>(
                         root,
-                    });
-                }
-
-                // The `leaf_bytes` is generated via a fresh call to `AsBytes::as_bytes` and there
-                // is no safety contract that the `AsByte` impl must always return the same content
-                // on each call. This means that we can't `assert_unchecked` to elide bounds
-                // checking on these indexing calls because the `current_depth`/`unverified_from`
-                // could be OOB
-                let new_key_bytes_used = match unverified_from {
-                    None => {
-                        current_depth
-                            + leaf_bytes[current_depth..]
-                                .iter()
-                                .zip(key_bytes[current_depth..].iter())
-                                .take_while(|(k1, k2)| k1 == k2)
-                                .count()
-                    },
-                    Some(unverified_from) => {
-                        // Compare from the first skipped byte, which checks the skipped bytes
-                        // and finds the split point in a single pass
-                        let new_key_bytes_used = unverified_from
-                            + longest_common_prefix_len(
-                                &leaf_bytes[unverified_from..],
-                                &key_bytes[unverified_from..],
-                            );
-
-                        if unlikely!(new_key_bytes_used < current_depth) {
-                            // The key differs from the leaf inside a skipped prefix
-                            //
-                            // SAFETY: Covered by the safety requirements of this function
-                            return unsafe {
-                                mismatch_in_skipped_prefix(
-                                    root,
-                                    key_bytes,
-                                    new_key_bytes_used,
-                                    leaf_node_ptr,
-                                )
-                            };
-                        }
-
-                        new_key_bytes_used
-                    },
-                };
-
-                if unlikely!(
-                    new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len()
-                ) {
-                    // then the key has insufficient bytes to be unique. It must be
-                    // a prefix of an existing key OR an existing key is a prefix of it
-                    return Err(InsertPrefixError {
-                        byte_repr: key_bytes.into(),
-                    });
-                }
-
-                return Ok(InsertPoint {
-                    key_bytes_used: current_depth,
-                    path: path.finish(),
-                    insert_kind: InsertKind::SplitLeaf {
-                        leaf_node_ptr,
+                        key_bytes,
                         new_key_bytes_used,
-                        leaf_key_byte: leaf_bytes[new_key_bytes_used],
-                        new_key_byte: key_bytes[new_key_bytes_used],
-                        prefix: capped_prefix(&key_bytes[current_depth..new_key_bytes_used]),
-                    },
-                    root,
+                        leaf_node_ptr,
+                    )
+                    .into_insert_point(root, key_bytes)
                 });
-            },
-        });
+            }
 
-        let lookup_result = match lookup_result {
-            Ok(lookup_result) => lookup_result,
-            Err(err) => {
-                if let Some(unverified_from) = unverified_from {
-                    // SAFETY: Covered by the safety requirements of this function
-                    let result = unsafe {
-                        check_skipped_prefix_bytes(
-                            root,
-                            key_bytes,
-                            unverified_from,
-                            current_depth,
-                            any_leaf(current_node),
-                        )
-                    };
-                    if let Some(result) = result {
-                        return result;
-                    }
-                }
-
-                return Err(err);
-            },
-        };
-
-        match lookup_result {
-            ControlFlow::Continue(next_child_node) => {
-                match next_child_node {
-                    Some(next_child_node) => {
-                        let byte = key_bytes[current_depth];
-                        path.visit_inner_node(current_node, byte);
-                        current_node = next_child_node;
-                        // Increment by a single byte
-                        current_depth += 1;
-                    },
-                    None => {
-                        if let Some(unverified_from) = unverified_from {
-                            // SAFETY: Covered by the safety requirements of this function
-                            let result = unsafe {
-                                check_skipped_prefix_bytes(
-                                    root,
-                                    key_bytes,
-                                    unverified_from,
-                                    current_depth,
-                                    any_leaf(current_node),
-                                )
-                            };
-                            if let Some(result) = result {
-                                return result;
-                            }
-                        }
-
-                        return Ok(InsertPoint {
-                            key_bytes_used: current_depth,
-                            insert_kind: InsertKind::IntoExisting {
-                                inner_node_ptr: current_node,
-                                key_byte: key_bytes[current_depth],
-                            },
-                            path: path.finish(),
-                            root,
-                        });
-                    },
-                }
-            },
-            ControlFlow::Break(mismatch) => {
-                if let Some(unverified_from) = unverified_from {
-                    // SAFETY: Covered by the safety requirements of this function
-                    if let Some(result) = unsafe {
-                        check_skipped_prefix_bytes(
-                            root,
-                            key_bytes,
-                            unverified_from,
-                            current_depth,
-                            match mismatch.leaf_ptr {
-                                Some(leaf_ptr) => leaf_ptr,
-                                None => any_leaf(current_node),
-                            },
-                        )
-                    } {
-                        return result;
-                    }
-                }
-
-                if unlikely!((current_depth + mismatch.matched_bytes) >= key_bytes.len()) {
-                    // then the key has insufficient bytes to be unique. It must be
-                    // a prefix of an existing key
-
-                    return Err(InsertPrefixError {
-                        byte_repr: key_bytes.into(),
-                    });
-                }
-
-                return Ok(InsertPoint {
-                    key_bytes_used: current_depth,
-                    insert_kind: InsertKind::MismatchPrefix {
-                        mismatch,
-                        mismatched_inner_node_ptr: current_node,
-                        key_byte: key_bytes[current_depth + mismatch.matched_bytes],
-                    },
-                    path: path.finish(),
-                    root,
+            if unlikely!(
+                new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len()
+            ) {
+                // then the key has insufficient bytes to be unique. It must be
+                // a prefix of an existing key OR an existing key is a prefix of it
+                return Err(InsertPrefixError {
+                    byte_repr: key_bytes.into(),
                 });
-            },
-        };
+            }
+
+            Ok(InsertPoint {
+                key_bytes_used: depth,
+                path: path.finish(),
+                insert_kind: InsertKind::SplitLeaf {
+                    leaf_node_ptr,
+                    new_key_bytes_used,
+                    leaf_key_byte: leaf_bytes[new_key_bytes_used],
+                    new_key_byte: key_bytes[new_key_bytes_used],
+                    prefix: capped_prefix(&key_bytes[depth..new_key_bytes_used]),
+                },
+                root,
+            })
+        },
+        DescentEnd::MissingChild => {
+            // SAFETY: Covered by the safety requirements of this function
+            if let Some(insert_point) = unsafe {
+                verify_insert_descent(root, key_bytes, unverified_from, depth, || any_leaf(node))
+            } {
+                return Ok(insert_point);
+            }
+
+            Ok(InsertPoint {
+                key_bytes_used: depth,
+                insert_kind: InsertKind::IntoExisting {
+                    inner_node_ptr: node,
+                    key_byte: key_bytes[depth],
+                },
+                path: path.finish(),
+                root,
+            })
+        },
+        DescentEnd::KeyExhausted => {
+            // SAFETY: Covered by the safety requirements of this function
+            if let Some(insert_point) = unsafe {
+                verify_insert_descent(root, key_bytes, unverified_from, key_bytes.len(), || {
+                    any_leaf(node)
+                })
+            } {
+                return Ok(insert_point);
+            }
+
+            // then the key has insufficient bytes to be unique. It must be
+            // a prefix of an existing key
+            Err(InsertPrefixError {
+                byte_repr: key_bytes.into(),
+            })
+        },
+        DescentEnd::PrefixMismatch {
+            matched_bytes,
+            prefix_byte,
+        } => {
+            // SAFETY: Covered by the safety requirements of this function
+            if let Some(insert_point) = unsafe {
+                verify_insert_descent(root, key_bytes, unverified_from, depth, || any_leaf(node))
+            } {
+                return Ok(insert_point);
+            }
+
+            Ok(InsertPoint {
+                key_bytes_used: depth,
+                insert_kind: InsertKind::MismatchPrefix {
+                    mismatch: ExplicitMismatch {
+                        matched_bytes,
+                        prefix_byte,
+                        // The prefix is stored in the header, so no leaf is needed to restore it
+                        leaf_ptr: None,
+                        node_prefix_comparison_to_search_key_segment: prefix_byte
+                            .cmp(&key_bytes[depth + matched_bytes]),
+                    },
+                    mismatched_inner_node_ptr: node,
+                    key_byte: key_bytes[depth + matched_bytes],
+                },
+                path: path.finish(),
+                root,
+            })
+        },
     }
 }
 
-/// Perform an iterative search for the insert point for the given key,
+/// Perform an iterative search for the prefix insert point for the given key,
 /// starting at the given root node.
+///
+/// Unlike [`search_for_insert_point`], if the key is a prefix of existing keys
+/// (or an existing key is a prefix of it), this returns an overwrite point
+/// instead of an error.
 ///
 /// # Safety
 ///  - This function cannot be called concurrently to any writes of the `root` node or any child
 ///    node of `root`. This function will arbitrarily read to any child in the given tree.
-///
-/// # Errors
-///  - If the given `key` is a prefix of an existing key, this function will return an error.
 pub unsafe fn search_for_prefix_insert_point<K, V, const PREFIX_LEN: usize>(
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
@@ -1171,418 +1147,139 @@ pub unsafe fn search_for_prefix_insert_point<K, V, const PREFIX_LEN: usize>(
 where
     K: AsBytes,
 {
-    let mut path = TreePathSearch::default();
-    let mut current_node = root;
-    let mut current_depth = 0;
+    // SAFETY: Covered by the safety requirements of this function
+    let Descent {
+        end,
+        node,
+        depth,
+        unverified_from,
+        path,
+    } = unsafe { optimistic_descent::<_, _, _, TreePathSearch<_, _, _>>(root, key_bytes) };
 
-    loop {
-        // SAFETY (covering all `test_prefix_identify_insert` function calls):
-        //  1. Concurrent read/write overed by caller safety requirements
-        //  2. `current_depth` can never be greater than `key_bytes.len()` because of loop invariant
-        //     assertion
-        assert!(current_depth <= key_bytes.len());
-
-        let lookup_result = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
-            InnerNode(inner_ptr) => unsafe {
-                // SAFETY: comment and assert at top of loop
-                test_prefix_identify_insert(inner_ptr, key_bytes, &mut current_depth)
-            },
-            LeafNode(leaf_node_ptr) => {
-                // SAFETY: function safety comment covers
-                let leaf_node = unsafe { leaf_node_ptr.as_ref() };
-                let leaf_bytes = leaf_node.key_ref().as_bytes();
-
-                if leaf_bytes == key_bytes {
-                    return PrefixInsertPoint::InsertPoint(InsertPoint {
-                        key_bytes_used: current_depth,
-                        path: path.finish(),
-                        insert_kind: InsertKind::Exact { leaf_node_ptr },
-                        root,
-                    });
-                }
-
-                // The `leaf_bytes` is generated via a fresh call to `AsBytes::as_bytes` and there
-                // is no safety contract that the `AsByte` impl must always return the same content
-                // on each call. This means that we can't `assert_unchecked` to
-                // elide bounds checking on this indexing call because the
-                // `current_depth` could be OOB
-                let prefix_size = leaf_bytes[current_depth..]
-                    .iter()
-                    .zip(key_bytes[current_depth..].iter())
-                    .take_while(|(k1, k2)| k1 == k2)
-                    .count();
-
-                let new_key_bytes_used = current_depth + prefix_size;
-
-                if new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len() {
-                    // then the key has insufficient bytes to be unique. It must be
-                    // a prefix of an existing key OR an existing key is a prefix of it
-                    return PrefixInsertPoint::OverwritePoint(OverwritePoint {
-                        key_bytes_used: current_depth,
-                        path: path.finish(),
-                        overwrite_point: leaf_node_ptr.to_opaque(),
-                        root,
-                    });
-                }
-
-                return PrefixInsertPoint::InsertPoint(InsertPoint {
-                    key_bytes_used: current_depth,
-                    path: path.finish(),
-                    insert_kind: InsertKind::SplitLeaf {
-                        leaf_node_ptr,
-                        new_key_bytes_used,
-                        leaf_key_byte: leaf_bytes[new_key_bytes_used],
-                        new_key_byte: key_bytes[new_key_bytes_used],
-                        prefix: capped_prefix(&key_bytes[current_depth..new_key_bytes_used]),
-                    },
-                    root,
-                });
-            },
-        });
-
-        let lookup_result = match lookup_result {
-            Ok(value) => value,
-            Err(_inner_node_ptr) => {
-                return PrefixInsertPoint::OverwritePoint(OverwritePoint {
-                    key_bytes_used: current_depth.saturating_sub(1),
-                    path: path.finish(),
-                    overwrite_point: current_node,
-                    root,
-                });
-            },
-        };
-
-        match lookup_result {
-            ControlFlow::Continue(next_child_node) => {
-                match next_child_node {
-                    Some(next_child_node) => {
-                        let byte = key_bytes[current_depth];
-                        path.visit_inner_node(current_node, byte);
-                        current_node = next_child_node;
-                        // Increment by a single byte
-                        current_depth += 1;
-                    },
-                    None => {
-                        return PrefixInsertPoint::InsertPoint(InsertPoint {
-                            key_bytes_used: current_depth,
-                            insert_kind: InsertKind::IntoExisting {
-                                inner_node_ptr: current_node,
-                                key_byte: key_bytes[current_depth],
-                            },
-                            path: path.finish(),
-                            root,
-                        });
-                    },
-                }
-            },
-            ControlFlow::Break(mismatch) => {
-                if (current_depth + mismatch.matched_bytes) >= key_bytes.len() {
-                    // then the key has insufficient bytes to be unique. It must be
-                    // a prefix of an existing key
-
-                    return PrefixInsertPoint::OverwritePoint(OverwritePoint {
-                        key_bytes_used: current_depth,
-                        path: path.finish(),
-                        overwrite_point: current_node,
-                        root,
-                    });
-                }
-
-                return PrefixInsertPoint::InsertPoint(InsertPoint {
-                    key_bytes_used: current_depth,
-                    insert_kind: InsertKind::MismatchPrefix {
-                        mismatch,
-                        mismatched_inner_node_ptr: current_node,
-                        key_byte: key_bytes[current_depth + mismatch.matched_bytes],
-                    },
-                    path: path.finish(),
-                    root,
-                });
-            },
-        };
-    }
-}
-
-/// Write a new child node to an inner node at the specified key byte.
-///
-/// # Panics
-/// Panics if the node pointer given is not an inner node.
-///
-/// # Safety
-///
-///  - This function must not be called concurrently with and other read or modification of the
-///    trie.
-unsafe fn parent_write_child<K: AsBytes, V, const PREFIX_LEN: usize>(
-    parent_inner_node: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    key_byte: u8,
-    new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-) {
-    fn write_inner_node<K: AsBytes, V, N, const PREFIX_LEN: usize>(
-        parent_inner_node: NodePtr<PREFIX_LEN, N>,
-        key_byte: u8,
-        new_child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) where
-        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-    {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `maximum_unchecked` function.
-        let parent_node = unsafe { parent_inner_node.as_mut() };
-
-        parent_node.write_child(key_byte, new_child);
-    }
-
-    match_concrete_node_ptr!(match (parent_inner_node.to_node_ptr()) {
-        InnerNode(inner_ptr) => write_inner_node(inner_ptr, key_byte, new_child),
-        LeafNode(_leaf) => {
-            unreachable!("A leaf pointer cannot be the parent of another node");
-        },
-    })
-}
-
-/// For the given inner node, check the node prefix, then lookup the child based on the search
-/// depth.
-///
-/// Unlike [`test_prefix_identify_insert`], this function does not compare prefixes that are longer
-/// than `PREFIX_LEN` (the ones with implicit bytes not stored in the node header). Instead, it
-/// skips the whole prefix and records the depth of the first skipped byte in `unverified_from`. The
-/// caller must check the skipped bytes against a leaf of the subtree once the search terminates,
-/// see [`check_skipped_prefix_bytes`].
-///
-/// # Safety
-///  - This function cannot be called concurrently to any writes of the `root` node or any child
-///    node of `root`. This function will arbitrarily read to any child in the given tree.
-///  - `current_depth` must be less than or equal to `key.len()`
-#[inline(always)]
-unsafe fn optimistic_test_prefix_identify_insert<K, V, N, const PREFIX_LEN: usize>(
-    inner_ptr: NodePtr<PREFIX_LEN, N>,
-    key: &[u8],
-    current_depth: &mut usize,
-    unverified_from: &mut Option<usize>,
-) -> Result<SearchControlFlow<K, V, PREFIX_LEN>, InsertPrefixError>
-where
-    N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-    K: AsBytes,
-{
-    // SAFETY: The lifetime produced from this is bounded to this scope and does not
-    // escape. Further, no other code mutates the node referenced, which is further
-    // enforced the "no concurrent reads or writes" requirement on the
-    // `search_for_insert_point` function.
-    let inner_node = unsafe { inner_ptr.as_ref() };
-    let header = inner_node.header();
-    let prefix_len = header.prefix_len();
-
-    if unlikely!(prefix_len > PREFIX_LEN) {
-        if unlikely!(key.len() - *current_depth <= prefix_len) {
-            // The key ends inside the prefix (or right at the end of it), so there is no child
-            // to continue the search with. The full prefix is needed to figure out whether the
-            // key is a prefix of an existing key or there is a mismatch.
-            //
+    match end {
+        DescentEnd::Leaf(leaf_node_ptr) => {
             // SAFETY: Covered by the safety requirements of this function
-            return unsafe { test_prefix_identify_insert(inner_ptr, key, current_depth) };
-        }
+            let leaf_node = unsafe { leaf_node_ptr.as_ref() };
+            let leaf_bytes = leaf_node.key_ref().as_bytes();
 
-        // Skip the whole prefix, it is checked once the search terminates
-        unverified_from.get_or_insert(*current_depth);
-        *current_depth += prefix_len;
+            if leaf_bytes == key_bytes {
+                return PrefixInsertPoint::InsertPoint(InsertPoint {
+                    key_bytes_used: depth,
+                    path: path.finish(),
+                    insert_kind: InsertKind::Exact { leaf_node_ptr },
+                    root,
+                });
+            }
 
-        // `key.len() > current_depth` by the check above
-        let next_key_fragment = key[*current_depth];
-        return Ok(ControlFlow::Continue(
-            inner_node.lookup_child(next_key_fragment),
-        ));
-    }
+            let new_key_bytes_used =
+                leaf_common_prefix_len(leaf_bytes, key_bytes, depth, unverified_from);
 
-    // The whole prefix is stored in the header, so it can be compared directly
-    let prefix = header.read_prefix();
-    let key_segment = &key[*current_depth..];
-    let matched_bytes = prefix
-        .iter()
-        .zip(key_segment)
-        .take_while(|(a, b)| **a == **b)
-        .count();
-
-    if matched_bytes < prefix.len() {
-        return Ok(ControlFlow::Break(ExplicitMismatch::new(
-            prefix,
-            key_segment,
-            matched_bytes,
-            None,
-        )));
-    }
-
-    // Since the prefix matched, advance the depth by the size of the prefix
-    *current_depth += matched_bytes;
-
-    if likely!(*current_depth < key.len()) {
-        let next_key_fragment = key[*current_depth];
-        Ok(ControlFlow::Continue(
-            inner_node.lookup_child(next_key_fragment),
-        ))
-    } else {
-        // then the key has insufficient bytes to be unique. It must be
-        // a prefix of an existing key
-        Err(InsertPrefixError {
-            byte_repr: key.into(),
-        })
-    }
-}
-
-/// Return any leaf in the subtree rooted at `node`, or `node` itself if it is a
-/// leaf.
-///
-/// # Safety
-///  - This function cannot be called concurrently with any mutating operation on `node` or any
-///    child node of `node`.
-unsafe fn any_leaf<K, V, const PREFIX_LEN: usize>(
-    node: OpaqueNodePtr<K, V, PREFIX_LEN>,
-) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>> {
-    match_concrete_node_ptr!(match (node.to_node_ptr()) {
-        // SAFETY: Covered by the safety requirements of this function
-        InnerNode(inner_ptr) => unsafe { any_subtree_leaf(inner_ptr.as_ref()) },
-        LeafNode(leaf_ptr) => leaf_ptr,
-    })
-}
-
-/// Check the prefix bytes that were skipped by the optimistic search (from
-/// `unverified_from` up to `verified_depth`) against the key of `leaf_ptr`.
-///
-/// The leaf must be a descendant of the node where the search terminated, so it
-/// shares all the prefix bytes on the search path.
-///
-/// Returns `None` if the skipped bytes all match, so the result of the
-/// optimistic search is correct. Otherwise returns the corrected search result.
-///
-/// # Safety
-///  - This function cannot be called concurrently to any writes of the `root` node or any child
-///    node of `root`.
-#[inline(never)]
-unsafe fn check_skipped_prefix_bytes<K, V, const PREFIX_LEN: usize>(
-    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    key_bytes: &[u8],
-    unverified_from: usize,
-    verified_depth: usize,
-    leaf_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
-) -> Option<Result<InsertPoint<K, V, PREFIX_LEN>, InsertPrefixError>>
-where
-    K: AsBytes,
-{
-    // SAFETY: Covered by the safety requirements of this function
-    let leaf_bytes = unsafe { leaf_ptr.as_key_ref() }.as_bytes();
-
-    debug_assert_eq!(
-        leaf_bytes.get(..unverified_from),
-        key_bytes.get(..unverified_from),
-        "leaf must be a descendant of the node where the search terminated, so it must match the \
-         search key on all the bytes already verified by the descent"
-    );
-
-    let first_mismatch = unverified_from
-        + longest_common_prefix_len(
-            &leaf_bytes[unverified_from..verified_depth],
-            &key_bytes[unverified_from..verified_depth],
-        );
-
-    if first_mismatch >= verified_depth {
-        None
-    } else {
-        // SAFETY: Covered by the safety requirements of this function
-        Some(unsafe { mismatch_in_skipped_prefix(root, key_bytes, first_mismatch, leaf_ptr) })
-    }
-}
-
-/// Walk from the root of the trie to find the insert point for a key which failed the optimistic
-/// insert path.
-///
-/// The `mismatch_depth` should lead the search to the prefix of an inner node, where the prefix
-/// will differ from the corresponding portion of the key found at `leaf_ptr`.
-///
-/// # Safety
-///  - This function cannot be called concurrently to any writes of the `root` node or any child
-///    node of `root`.
-unsafe fn mismatch_in_skipped_prefix<K, V, const PREFIX_LEN: usize>(
-    root: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    key_bytes: &[u8],
-    mismatch_depth: usize,
-    leaf_ptr: NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>,
-) -> Result<InsertPoint<K, V, PREFIX_LEN>, InsertPrefixError>
-where
-    K: AsBytes,
-{
-    let mut path = TreePathSearch::default();
-    let mut current_node = root;
-    let mut current_depth = 0;
-
-    loop {
-        let next_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
-            InnerNode(inner_ptr) => {
-                // SAFETY: The reference is bounded to this block and there are no concurrent
-                // writes, covered by the safety requirements of this function
-                let inner_node = unsafe { inner_ptr.as_ref() };
-                let prefix_len = inner_node.header().prefix_len();
-                if mismatch_depth < current_depth + prefix_len {
-                    None
-                } else {
-                    current_depth += prefix_len;
-                    Some(
-                        inner_node
-                            .lookup_child(key_bytes[current_depth])
-                            .expect("child must exist, it was found by the optimistic search"),
+            if unlikely!(new_key_bytes_used < depth) {
+                // The key differs from the trie inside a skipped prefix
+                //
+                // SAFETY: Covered by the safety requirements of this function
+                return PrefixInsertPoint::InsertPoint(unsafe {
+                    locate_skipped_mismatch::<_, _, _, TreePathSearch<_, _, _>>(
+                        root,
+                        key_bytes,
+                        new_key_bytes_used,
+                        leaf_node_ptr,
                     )
-                }
-            },
-            LeafNode(_leaf_ptr) => {
-                unreachable!("the mismatch must be inside the prefix of an inner node")
-            },
-        });
+                    .into_insert_point(root, key_bytes)
+                });
+            }
 
-        match next_node {
-            Some(next_node) => {
-                path.visit_inner_node(current_node, key_bytes[current_depth]);
-                current_node = next_node;
-                current_depth += 1;
-            },
-            None => break,
-        }
-    }
+            if new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len() {
+                // then the key has insufficient bytes to be unique. It must be
+                // a prefix of an existing key OR an existing key is a prefix of it
+                return PrefixInsertPoint::OverwritePoint(OverwritePoint {
+                    key_bytes_used: depth,
+                    path: path.finish(),
+                    overwrite_point: node,
+                    root,
+                });
+            }
 
-    assert!(
-        mismatch_depth >= current_depth,
-        "mismatch must be inside a skipped prefix, the `AsBytes` impl is not deterministic"
-    );
-
-    if unlikely!(mismatch_depth >= key_bytes.len()) {
-        // then the key has insufficient bytes to be unique. It must be
-        // a prefix of an existing key
-        return Err(InsertPrefixError {
-            byte_repr: key_bytes.into(),
-        });
-    }
-
-    // SAFETY: Covered by the safety requirements of this function
-    let leaf_bytes = unsafe { leaf_ptr.as_key_ref() }.as_bytes();
-
-    // SAFETY: `current_node` is an inner node, since the loop above only stops at
-    // an inner node. There are no concurrent writes, covered by the safety
-    // requirements of this function.
-    let prefix_len = unsafe { current_node.header_ref_unchecked() }.prefix_len();
-
-    Ok(InsertPoint {
-        key_bytes_used: current_depth,
-        insert_kind: InsertKind::MismatchPrefix {
-            mismatch: ExplicitMismatch::new(
-                &leaf_bytes[current_depth..],
-                &key_bytes[current_depth..],
-                mismatch_depth - current_depth,
-                (prefix_len > PREFIX_LEN).then_some(leaf_ptr),
-            ),
-            mismatched_inner_node_ptr: current_node,
-            key_byte: key_bytes[mismatch_depth],
+            PrefixInsertPoint::InsertPoint(InsertPoint {
+                key_bytes_used: depth,
+                path: path.finish(),
+                insert_kind: InsertKind::SplitLeaf {
+                    leaf_node_ptr,
+                    new_key_bytes_used,
+                    leaf_key_byte: leaf_bytes[new_key_bytes_used],
+                    new_key_byte: key_bytes[new_key_bytes_used],
+                    prefix: capped_prefix(&key_bytes[depth..new_key_bytes_used]),
+                },
+                root,
+            })
         },
-        path: path.finish(),
-        root,
-    })
+        DescentEnd::MissingChild => {
+            // SAFETY: Covered by the safety requirements of this function
+            if let Some(insert_point) = unsafe {
+                verify_insert_descent(root, key_bytes, unverified_from, depth, || any_leaf(node))
+            } {
+                return PrefixInsertPoint::InsertPoint(insert_point);
+            }
+
+            PrefixInsertPoint::InsertPoint(InsertPoint {
+                key_bytes_used: depth,
+                insert_kind: InsertKind::IntoExisting {
+                    inner_node_ptr: node,
+                    key_byte: key_bytes[depth],
+                },
+                path: path.finish(),
+                root,
+            })
+        },
+        DescentEnd::KeyExhausted => {
+            // SAFETY: Covered by the safety requirements of this function
+            if let Some(insert_point) = unsafe {
+                verify_insert_descent(root, key_bytes, unverified_from, key_bytes.len(), || {
+                    any_leaf(node)
+                })
+            } {
+                return PrefixInsertPoint::InsertPoint(insert_point);
+            }
+
+            // The key is a prefix of all the keys in the subtree of this node, so the
+            // whole subtree is overwritten
+            PrefixInsertPoint::OverwritePoint(OverwritePoint {
+                key_bytes_used: depth,
+                path: path.finish(),
+                overwrite_point: node,
+                root,
+            })
+        },
+        DescentEnd::PrefixMismatch {
+            matched_bytes,
+            prefix_byte,
+        } => {
+            // SAFETY: Covered by the safety requirements of this function
+            if let Some(insert_point) = unsafe {
+                verify_insert_descent(root, key_bytes, unverified_from, depth, || any_leaf(node))
+            } {
+                return PrefixInsertPoint::InsertPoint(insert_point);
+            }
+
+            PrefixInsertPoint::InsertPoint(InsertPoint {
+                key_bytes_used: depth,
+                insert_kind: InsertKind::MismatchPrefix {
+                    mismatch: ExplicitMismatch {
+                        matched_bytes,
+                        prefix_byte,
+                        // The prefix is stored in the header, so no leaf is needed to restore it
+                        leaf_ptr: None,
+                        node_prefix_comparison_to_search_key_segment: prefix_byte
+                            .cmp(&key_bytes[depth + matched_bytes]),
+                    },
+                    mismatched_inner_node_ptr: node,
+                    key_byte: key_bytes[depth + matched_bytes],
+                },
+                path: path.finish(),
+                root,
+            })
+        },
+    }
 }
 
 #[cfg(test)]

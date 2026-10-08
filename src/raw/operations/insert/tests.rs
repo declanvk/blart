@@ -409,6 +409,10 @@ fn insert_keys_with_long_shared_runs_small_prefix_len() {
     }
 }
 
+/// Insert keys which share long runs of bytes into a tree with a small
+/// `PREFIX_LEN`, so that most inner nodes have implicit prefix bytes that the
+/// insert search skips. Uses both `try_insert` and `prefix_insert`, and checks
+/// the result against a [`BTreeMap`] model.
 #[cfg(not(miri))]
 fn insert_keys_with_long_shared_runs<const PREFIX_LEN: usize>(seed: u64) {
     let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
@@ -440,25 +444,42 @@ fn insert_keys_with_long_shared_runs<const PREFIX_LEN: usize>(seed: u64) {
         }
         let key: Box<[u8]> = key.into_boxed_slice();
 
-        let expect_prefix_error = model.keys().any(|existing| {
-            existing != &key && (existing.starts_with(&key) || key.starts_with(existing))
-        });
+        if next() % 4 == 0 {
+            // `prefix_insert` removes all keys which are a prefix of the new key or the
+            // other way around, then inserts the new key
+            tree.prefix_insert(key.clone(), value);
+            model.retain(|existing, _| !(existing.starts_with(&key) || key.starts_with(existing)));
+            model.insert(key.clone(), value);
+            keys.push(key.clone());
+            assert_eq!(
+                tree.len(),
+                model.len(),
+                "length mismatch after prefix insert of {key:?}, PREFIX_LEN {PREFIX_LEN}, seed \
+                 {seed}"
+            );
+        } else {
+            let expect_prefix_error = model.keys().any(|existing| {
+                existing != &key && (existing.starts_with(&key) || key.starts_with(existing))
+            });
 
-        match tree.try_insert(key.clone(), value) {
-            Ok(old_value) => {
-                assert!(
-                    !expect_prefix_error,
-                    "expected prefix error for key {key:?}, PREFIX_LEN {PREFIX_LEN}, seed {seed}"
-                );
-                assert_eq!(old_value, model.insert(key.clone(), value));
-                keys.push(key.clone());
-            },
-            Err(_) => {
-                assert!(
-                    expect_prefix_error,
-                    "unexpected prefix error for key {key:?}, PREFIX_LEN {PREFIX_LEN}, seed {seed}"
-                );
-            },
+            match tree.try_insert(key.clone(), value) {
+                Ok(old_value) => {
+                    assert!(
+                        !expect_prefix_error,
+                        "expected prefix error for key {key:?}, PREFIX_LEN {PREFIX_LEN}, seed \
+                         {seed}"
+                    );
+                    assert_eq!(old_value, model.insert(key.clone(), value));
+                    keys.push(key.clone());
+                },
+                Err(_) => {
+                    assert!(
+                        expect_prefix_error,
+                        "unexpected prefix error for key {key:?}, PREFIX_LEN {PREFIX_LEN}, seed \
+                         {seed}"
+                    );
+                },
+            }
         }
 
         WellFormedChecker::check(&tree).unwrap_or_else(|err| {
