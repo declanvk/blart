@@ -19,4 +19,5 @@ criterion_main!(
     tree::generated_insert::bench_generated_insert_group,
     tree::int_keys::bench_int_keys_group,
     tree::iter::bench_iter_group,
+    tree::long_prefix::bench_long_prefix_group,
 );

@@ -241,6 +241,53 @@ pub struct ExplicitMismatch<K, V, const PREFIX_LEN: usize> {
     pub node_prefix_comparison_to_search_key_segment: Ordering,
 }
 
+impl<K, V, const PREFIX_LEN: usize> PartialEq for ExplicitMismatch<K, V, PREFIX_LEN> {
+    fn eq(&self, other: &Self) -> bool {
+        self.matched_bytes == other.matched_bytes
+            && self.prefix_byte == other.prefix_byte
+            && self.leaf_ptr == other.leaf_ptr
+            && self.node_prefix_comparison_to_search_key_segment
+                == other.node_prefix_comparison_to_search_key_segment
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> ExplicitMismatch<K, V, PREFIX_LEN> {
+    /// Build the mismatch for a node prefix which differs from the search key segment at
+    /// `matched_bytes`.
+    ///
+    /// `key_segment` is a portion of the key bytes, starting at the depth where `prefix` starts.
+    /// `matched_bytes` is the number of common leading bytes between `prefix` and `key_segment`.
+    ///
+    /// # Panics
+    /// If `matched_bytes` is not less than `prefix.len()`.
+    pub fn new(
+        prefix: &[u8],
+        key_segment: &[u8],
+        matched_bytes: usize,
+        leaf_ptr: OptionalLeafPtr<K, V, PREFIX_LEN>,
+    ) -> Self {
+        let prefix_byte = prefix[matched_bytes];
+
+        let node_prefix_comparison_to_search_key_segment = match key_segment.get(matched_bytes) {
+            Some(key_byte) => prefix_byte.cmp(key_byte),
+            None => Ordering::Greater,
+        };
+
+        debug_assert_ne!(
+            node_prefix_comparison_to_search_key_segment,
+            Ordering::Equal,
+            "if there was a mismatch, the prefix must not be equal"
+        );
+
+        Self {
+            matched_bytes,
+            prefix_byte,
+            leaf_ptr,
+            node_prefix_comparison_to_search_key_segment,
+        }
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize> Clone for ExplicitMismatch<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
         *self
@@ -482,7 +529,7 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
 
         let matched_bytes = if leaf_ptr.is_some() {
             // The prefix was reconstructed from a leaf, so it is longer than `PREFIX_LEN`
-            long_common_prefix_len(prefix, &key[current_depth..])
+            longest_common_prefix_len(prefix, &key[current_depth..])
         } else {
             prefix
                 .iter()
@@ -491,22 +538,12 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
                 .count()
         };
         if matched_bytes < prefix.len() {
-            let upper_bound = (current_depth + prefix.len()).min(key.len());
-            let key_segment = &key[current_depth..upper_bound];
-            let node_prefix_comparison_to_search_key_segment = prefix.cmp(key_segment);
-
-            debug_assert_ne!(
-                node_prefix_comparison_to_search_key_segment,
-                Ordering::Equal,
-                "if there was a mismatch, the prefix must not be equal"
-            );
-
-            Err(ExplicitMismatch {
+            Err(ExplicitMismatch::new(
+                prefix,
+                &key[current_depth..],
                 matched_bytes,
-                prefix_byte: prefix[matched_bytes],
                 leaf_ptr,
-                node_prefix_comparison_to_search_key_segment,
-            })
+            ))
         } else {
             Ok(PrefixMatch { matched_bytes })
         }
@@ -889,7 +926,7 @@ fn assert_valid_range_bounds(bound: &impl RangeBounds<u8>) {
 
 /// Returns the number of leading bytes that are equal in `a` and `b`.
 #[inline(never)]
-fn long_common_prefix_len(a: &[u8], b: &[u8]) -> usize {
+pub(crate) fn longest_common_prefix_len(a: &[u8], b: &[u8]) -> usize {
     let len = a.len().min(b.len());
     let (a, b) = (&a[..len], &b[..len]);
 
@@ -920,7 +957,7 @@ fn long_common_prefix_len(a: &[u8], b: &[u8]) -> usize {
 ///  - This function cannot be called concurrently with any mutating operation on `root` or any
 ///    child node of `root`. This function will arbitrarily read to any child in the given tree.
 #[inline]
-unsafe fn any_subtree_leaf<N, K, V, const PREFIX_LEN: usize>(
+pub(crate) unsafe fn any_subtree_leaf<N, K, V, const PREFIX_LEN: usize>(
     root: &N,
 ) -> NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>
 where
@@ -949,7 +986,7 @@ mod tests {
     use crate::rust_nightly_apis::ptr::const_addr;
 
     #[test]
-    fn long_common_prefix_len_matches_bytewise() {
+    fn longest_common_prefix_len_matches_bytewise() {
         fn bytewise(a: &[u8], b: &[u8]) -> usize {
             a.iter().zip(b).take_while(|(a, b)| a == b).count()
         }
@@ -957,16 +994,16 @@ mod tests {
         let base: Vec<u8> = (0..40u8).collect();
         for len in 0..base.len() {
             // Identical inputs, and inputs of different lengths
-            assert_eq!(long_common_prefix_len(&base[..len], &base[..len]), len);
-            assert_eq!(long_common_prefix_len(&base[..len], &base), len);
-            assert_eq!(long_common_prefix_len(&base, &base[..len]), len);
+            assert_eq!(longest_common_prefix_len(&base[..len], &base[..len]), len);
+            assert_eq!(longest_common_prefix_len(&base[..len], &base), len);
+            assert_eq!(longest_common_prefix_len(&base, &base[..len]), len);
 
             // Mismatch at every position
             let mut other = base.clone();
             other[len] ^= 0xFF;
-            assert_eq!(long_common_prefix_len(&base, &other), len);
+            assert_eq!(longest_common_prefix_len(&base, &other), len);
             assert_eq!(
-                long_common_prefix_len(&base, &other),
+                longest_common_prefix_len(&base, &other),
                 bytewise(&base, &other)
             );
         }

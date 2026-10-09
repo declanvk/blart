@@ -162,8 +162,12 @@ pub unsafe fn clone_unchecked<
         let mut header = inner.header().clone();
         header.reset_num_children();
         let new_node = N::from_header(header);
+
         // At this point the header records 0 children, but has a copy of the prefix
-        // from the original node There are no child pointers in the node
+        // from the original node There are no child pointers in the node.
+        // FIXME: This point in the algorithm is a bit problematic because it creates an inner node
+        // with 0 children, while there are places throughout other operations which have invariants
+        // that there are always at least 2 children per inner node.
 
         let new_node_ptr = NodePtr::allocate_node_ptr(new_node, alloc);
 

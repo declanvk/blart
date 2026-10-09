@@ -11,7 +11,7 @@ use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
 use crate::common::{
     dense_fixed_length_key_tree, dictionary_tree, get_middle_key, sample_keys, sample_ranges,
-    skewed_tree, sparse_fixed_length_key_tree, with_prefixes_tree, SAMPLE_SEED,
+    skewed_tree, sparse_fixed_length_key_tree, url_tree, with_prefixes_tree, SAMPLE_SEED,
 };
 
 #[macro_use]
@@ -236,6 +236,8 @@ fn bulk_insert_setup<K: AsBytes + Clone, V: Clone>(
 #[bench::skewed_shuffled(bulk_insert_setup(skewed_tree(), true))]
 #[bench::with_prefixes_sorted(bulk_insert_setup(with_prefixes_tree(), false))]
 #[bench::with_prefixes_shuffled(bulk_insert_setup(with_prefixes_tree(), true))]
+#[bench::urls_sorted(bulk_insert_setup(url_tree(), false))]
+#[bench::urls_shuffled(bulk_insert_setup(url_tree(), true))]
 fn bench_from_iter<K: NoPrefixesBytes, V>(entries: Vec<(K, V)>) -> TreeMap<K, V> {
     measure!(TreeMap::from_iter(entries))
 }
@@ -251,6 +253,8 @@ fn bench_from_iter<K: NoPrefixesBytes, V>(entries: Vec<(K, V)>) -> TreeMap<K, V>
 #[bench::skewed_shuffled(bulk_insert_setup(skewed_tree(), true))]
 #[bench::with_prefixes_sorted(bulk_insert_setup(with_prefixes_tree(), false))]
 #[bench::with_prefixes_shuffled(bulk_insert_setup(with_prefixes_tree(), true))]
+#[bench::urls_sorted(bulk_insert_setup(url_tree(), false))]
+#[bench::urls_shuffled(bulk_insert_setup(url_tree(), true))]
 fn bench_from_vec<K: NoPrefixesBytes, V>(entries: Vec<(K, V)>) -> TreeMap<K, V> {
     measure!(TreeMap::from(entries))
 }

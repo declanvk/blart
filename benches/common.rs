@@ -8,7 +8,7 @@ use blart::{
     AsBytes, TreeMap,
 };
 use rand::{
-    rngs::StdRng,
+    rngs::{SmallRng, StdRng},
     seq::{IndexedRandom, SliceRandom},
     Rng, SeedableRng,
 };
@@ -152,4 +152,42 @@ pub fn dictionary_tree() -> &'static TreeMap<CString, usize> {
             .map(swap)
             .collect()
     })
+}
+
+/// Generate URL-like keys which share long common segments, so that many inner
+/// nodes have prefixes longer than the default `PREFIX_LEN`.
+///
+/// The keys are returned in a random (but deterministic) order.
+pub fn url_keys(num_keys: usize) -> Vec<CString> {
+    const BUCKETS: &[&str] = &[
+        "production-user-uploads-us-east-1",
+        "production-user-uploads-us-west-2",
+        "production-user-uploads-eu-central-1",
+        "staging-user-uploads-us-east-1",
+        "staging-user-uploads-eu-central-1",
+        "analytics-exports-us-east-1",
+    ];
+
+    let mut rng = SmallRng::seed_from_u64(0xB1A27);
+    (0..num_keys)
+        .map(|idx| {
+            let bucket = BUCKETS[rng.random_range(0..BUCKETS.len())];
+            let year = rng.random_range(2020..2025);
+            let month = rng.random_range(1..=12);
+            let day = rng.random_range(1..=28);
+            let id: u32 = rng.random();
+            CString::new(format!(
+                "https://storage.example-cloud-provider.com/buckets/{bucket}/objects/{year}/\
+                 {month:02}/{day:02}/{id:08x}-{idx}-thumbnail.jpeg"
+            ))
+            .unwrap()
+        })
+        .collect()
+}
+
+#[allow(dead_code)]
+pub fn url_tree() -> &'static TreeMap<CString, usize> {
+    static TREE: OnceLock<TreeMap<CString, usize>> = OnceLock::new();
+
+    TREE.get_or_init(|| tree_from_keys(url_keys(20_000)))
 }
