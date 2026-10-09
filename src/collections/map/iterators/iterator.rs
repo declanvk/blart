@@ -8,8 +8,14 @@ use crate::{
 };
 
 macro_rules! gen_iter {
-    ($name:ident, $tree:ty, $ret:ty, $op:ident) => {
-        /// An iterator over all the `LeafNode`s
+    (
+        $(#[$meta:meta])*
+        $name:ident,
+        $tree:ty,
+        $ret:ty,
+        $op:ident
+    ) => {
+        $(#[$meta])*
         pub struct $name<
             'a,
             K,
@@ -104,11 +110,32 @@ macro_rules! gen_iter {
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
 gen_iter!(
+    /// An iterator over the entries of a [TreeMap].
+    ///
+    /// This `struct` is created by the [`TreeMap::iter`] method or the [`into_iter`] method on a
+    /// reference of a [TreeMap] (provided by the [`IntoIterator`] trait). See its documentation for
+    /// more.
+    ///
+    /// [`into_iter`]: IntoIterator::into_iter
+    /// [`IntoIterator`]: core::iter::IntoIterator
     Iter,
     &'a TreeMap<K, V, PREFIX_LEN, A>,
     (&'a K, &'a V),
     as_key_value_ref
 );
+
+impl<K, V, const PREFIX_LEN: usize, A> Clone for Iter<'_, K, V, PREFIX_LEN, A>
+where
+    A: Allocator,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner,
+            size: self.size,
+            _tree: self._tree,
+        }
+    }
+}
 
 // SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
 // and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
@@ -133,6 +160,14 @@ where
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
+    /// A mutable iterator over the entries of a [TreeMap].
+    ///
+    /// This `struct` is created by the [`TreeMap::iter_mut`] method or the [`into_iter`] method on a
+    /// mutable reference of a [TreeMap] (provided by the [`IntoIterator`] trait). See its
+    /// documentation for more.
+    ///
+    /// [`into_iter`]: IntoIterator::into_iter
+    /// [`IntoIterator`]: core::iter::IntoIterator
     IterMut,
     &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     (&'a K, &'a mut V),
@@ -166,7 +201,27 @@ where
 
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
-gen_iter!(Keys, &'a TreeMap<K, V, PREFIX_LEN, A>, &'a K, as_key_ref);
+gen_iter!(
+    /// An iterator over the keys of a [`TreeMap`].
+    ///
+    /// This `struct` is created by the [`TreeMap::keys`] method. See its documentation for more.
+    Keys,
+    &'a TreeMap<K, V, PREFIX_LEN, A>,
+    &'a K, as_key_ref
+);
+
+impl<K, V, const PREFIX_LEN: usize, A> Clone for Keys<'_, K, V, PREFIX_LEN, A>
+where
+    A: Allocator,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner,
+            size: self.size,
+            _tree: self._tree,
+        }
+    }
+}
 
 // SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
 // and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
@@ -191,11 +246,27 @@ where
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
 gen_iter!(
+    /// An iterator over the values of a [`TreeMap`].
+    ///
+    /// This `struct` is created by the [`TreeMap::values`] method. See its documentation for more.
     Values,
     &'a TreeMap<K, V, PREFIX_LEN, A>,
     &'a V,
     as_value_ref
 );
+
+impl<K, V, const PREFIX_LEN: usize, A> Clone for Values<'_, K, V, PREFIX_LEN, A>
+where
+    A: Allocator,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner,
+            size: self.size,
+            _tree: self._tree,
+        }
+    }
+}
 
 // SAFETY: This iterator holds a shared reference to the underlying `TreeMap`
 // and thus can be moved across threads if the `TreeMap<K, V>: Sync`.
@@ -220,6 +291,9 @@ where
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
+    /// A mutable iterator over the values of a [`TreeMap`].
+    ///
+    /// This `struct` is created by the [`TreeMap::values_mut`] method. See its documentation for more.
     ValuesMut,
     &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     &'a mut V,
@@ -317,6 +391,30 @@ mod tests {
 
         values_mut_is_send::<[u8; 3], usize, Global>();
         values_mut_is_sync::<[u8; 3], usize, Global>();
+    }
+
+    #[test]
+    fn iterators_are_clone() {
+        struct A;
+        fn is_clone<T: Clone>() {}
+
+        fn iter_is_clone<'a, K: 'a, V: 'a, A: Allocator + 'a>() {
+            is_clone::<Iter<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        iter_is_clone::<A, A, Global>();
+
+        fn keys_is_clone<'a, K: 'a, V: 'a, A: Allocator + 'a>() {
+            is_clone::<Keys<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        keys_is_clone::<A, A, Global>();
+
+        fn values_is_clone<'a, K: 'a, V: 'a, A: Allocator + 'a>() {
+            is_clone::<Values<'a, K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        values_is_clone::<A, A, Global>();
     }
 
     #[test]
