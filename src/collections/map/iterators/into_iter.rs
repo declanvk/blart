@@ -46,6 +46,22 @@ where
 {
 }
 
+impl<K, V, A, const PREFIX_LEN: usize> Clone for IntoIter<K, V, PREFIX_LEN, A>
+where
+    K: Clone,
+    V: Clone,
+    A: Clone + Allocator,
+{
+    fn clone(&self) -> Self {
+        Self {
+            // SAFETY: we own the tree
+            inner: unsafe { self.inner.clone_leaves(&self.alloc) },
+            size: self.size,
+            alloc: self.alloc.clone(),
+        }
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize, A: Allocator> Drop for IntoIter<K, V, PREFIX_LEN, A> {
     fn drop(&mut self) {
         // SAFETY:
@@ -160,6 +176,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for IntoIter<K, 
 ///
 /// This `struct` is created by the [`crate::TreeMap::into_keys`] method on
 /// [`TreeMap`]. See its documentation for more.
+#[derive(Clone)]
 pub struct IntoKeys<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global>(
     IntoIter<K, V, PREFIX_LEN, A>,
 );
@@ -203,6 +220,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for IntoKeys<K, 
 /// See its documentation for more.
 ///
 /// [`into_values`]: crate::TreeMap::into_values
+#[derive(Clone)]
 pub struct IntoValues<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global>(
     IntoIter<K, V, PREFIX_LEN, A>,
 );
@@ -245,7 +263,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator
 
 #[cfg(test)]
 mod tests {
-    use alloc::sync::Arc;
+    use alloc::{sync::Arc, vec::Vec};
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
@@ -288,6 +306,29 @@ mod tests {
 
         into_values_is_send::<[u8; 3], usize, Global>();
         into_values_is_sync::<[u8; 3], usize, Global>();
+    }
+
+    #[test]
+    fn iterators_are_clone() {
+        fn is_clone<T: Clone>() {}
+
+        fn into_iter_is_clone<'a, K: Clone + 'a, V: Clone + 'a, A: Allocator + Clone + 'a>() {
+            is_clone::<IntoIter<K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        into_iter_is_clone::<Vec<u8>, Vec<usize>, Global>();
+
+        fn into_keys_is_clone<'a, K: Clone + 'a, V: Clone + 'a, A: Allocator + Clone + 'a>() {
+            is_clone::<IntoKeys<K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        into_keys_is_clone::<Vec<u8>, Vec<usize>, Global>();
+
+        fn into_values_is_clone<'a, K: Clone + 'a, V: Clone + 'a, A: Allocator + Clone + 'a>() {
+            is_clone::<IntoValues<K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        into_values_is_clone::<Vec<u8>, Vec<usize>, Global>();
     }
 
     #[derive(Debug)]
