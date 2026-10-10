@@ -1,6 +1,7 @@
 use core::fmt;
 
 use super::{LeafNode, NodePtr};
+use crate::allocator::Allocator;
 
 type LeafPtr<K, V, const PREFIX_LEN: usize> = NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>;
 
@@ -134,5 +135,42 @@ impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN> {
                 Some(next_back)
             },
         }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN>
+where
+    K: Clone,
+    V: Clone,
+{
+    /// Clones all leaves.
+    ///
+    /// # Safety
+    ///
+    /// This function must not be called concurrently with any modification on
+    /// the tree since it will use shared references on the leaves.
+    pub unsafe fn clone_leaves(&self, alloc: &impl Allocator) -> Self {
+        let mut copy = *self;
+        let mut raw: Option<RawIteratorInner<_, _, _>> = None;
+        // SAFETY: copy is owned and no concurrent access happens here
+        while let Some(cur) = unsafe { copy.next() } {
+            let new =
+                NodePtr::allocate_node_ptr(unsafe { cur.as_ref() }.clone_without_siblings(), alloc);
+            if let Some(raw) = raw.as_mut() {
+                // SAFETY: new is unique here
+                let new_mut = unsafe { new.as_mut() };
+                // SAFETY: raw.end is unique here
+                let prev_mut = unsafe { raw.end.as_mut() };
+                prev_mut.next = Some(new);
+                new_mut.previous = Some(raw.end);
+                raw.end = new;
+            } else {
+                raw = Some(RawIteratorInner {
+                    start: new,
+                    end: new,
+                });
+            }
+        }
+        Self { state: raw }
     }
 }
