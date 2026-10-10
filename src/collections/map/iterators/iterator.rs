@@ -110,11 +110,11 @@ macro_rules! gen_iter {
 // SAFETY: Since we hold a shared reference is safe to
 // create a shared reference to the leaf
 gen_iter!(
-    /// An iterator over the entries of a [TreeMap].
+    /// An iterator over the entries of a [`TreeMap`].
     ///
     /// This `struct` is created by the [`TreeMap::iter`] method or the [`into_iter`] method on a
-    /// reference of a [TreeMap] (provided by the [`IntoIterator`] trait). See its documentation for
-    /// more.
+    /// reference of a [`TreeMap`] (provided by the [`IntoIterator`] trait). See its documentation
+    /// for more.
     ///
     /// [`into_iter`]: IntoIterator::into_iter
     /// [`IntoIterator`]: core::iter::IntoIterator
@@ -160,10 +160,10 @@ where
 // SAFETY: Since we hold a mutable reference is safe to
 // create a mutable reference to the leaf
 gen_iter!(
-    /// A mutable iterator over the entries of a [TreeMap].
+    /// A mutable iterator over the entries of a [`TreeMap`].
     ///
-    /// This `struct` is created by the [`TreeMap::iter_mut`] method or the [`into_iter`] method on a
-    /// mutable reference of a [TreeMap] (provided by the [`IntoIterator`] trait). See its
+    /// This `struct` is created by the [`TreeMap::iter_mut`] method or the [`into_iter`] method on
+    /// a mutable reference of a [`TreeMap`] (provided by the [`IntoIterator`] trait). See its
     /// documentation for more.
     ///
     /// [`into_iter`]: IntoIterator::into_iter
@@ -207,7 +207,8 @@ gen_iter!(
     /// This `struct` is created by the [`TreeMap::keys`] method. See its documentation for more.
     Keys,
     &'a TreeMap<K, V, PREFIX_LEN, A>,
-    &'a K, as_key_ref
+    &'a K,
+    as_key_ref
 );
 
 impl<K, V, const PREFIX_LEN: usize, A> Clone for Keys<'_, K, V, PREFIX_LEN, A>
@@ -293,7 +294,8 @@ where
 gen_iter!(
     /// A mutable iterator over the values of a [`TreeMap`].
     ///
-    /// This `struct` is created by the [`TreeMap::values_mut`] method. See its documentation for more.
+    /// This `struct` is created by the [`TreeMap::values_mut`] method. See its documentation for
+    /// more.
     ValuesMut,
     &'a mut TreeMap<K, V, PREFIX_LEN, A>,
     &'a mut V,
@@ -326,7 +328,7 @@ mod tests {
     use alloc::{boxed::Box, vec::Vec};
 
     use super::*;
-    use crate::{testing::generate_key_fixed_length, TreeMap};
+    use crate::{testing::generate_key_fixed_length, Mapped, ToIBE, TreeMap};
 
     #[test]
     fn iterators_are_send_sync() {
@@ -415,6 +417,24 @@ mod tests {
         }
 
         values_is_clone::<A, A, Global>();
+    }
+
+    #[test]
+    fn iter_clone() {
+        let map = TreeMap::<Mapped<ToIBE, _>, _, 4>::from_iter([
+            (Mapped::new(1), 2),
+            (Mapped::new(3), 4),
+            (Mapped::new(5), 6),
+        ]);
+        let mut iter = map.iter();
+        assert_eq!(iter.next(), Some((&Mapped::new(1), &2)));
+        let mut iter_clone = iter.clone();
+        assert_eq!(iter.next(), Some((&Mapped::new(3), &4)));
+        assert_eq!(iter.next(), Some((&Mapped::new(5), &6)));
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter_clone.next(), Some((&Mapped::new(3), &4)));
+        assert_eq!(iter_clone.next(), Some((&Mapped::new(5), &6)));
+        assert_eq!(iter_clone.next(), None);
     }
 
     #[test]
