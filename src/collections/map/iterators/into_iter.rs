@@ -46,6 +46,22 @@ where
 {
 }
 
+impl<K, V, A, const PREFIX_LEN: usize> Clone for IntoIter<K, V, PREFIX_LEN, A>
+where
+    K: Clone,
+    V: Clone,
+    A: Clone + Allocator,
+{
+    fn clone(&self) -> Self {
+        Self {
+            // SAFETY: A shared reference to the tree means there is no concurrent modification
+            inner: unsafe { self.inner.clone_leaves(&self.alloc) },
+            size: self.size,
+            alloc: self.alloc.clone(),
+        }
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize, A: Allocator> Drop for IntoIter<K, V, PREFIX_LEN, A> {
     fn drop(&mut self) {
         // SAFETY:
@@ -160,6 +176,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for IntoIter<K, 
 ///
 /// This `struct` is created by the [`crate::TreeMap::into_keys`] method on
 /// [`TreeMap`]. See its documentation for more.
+#[derive(Clone)]
 pub struct IntoKeys<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global>(
     IntoIter<K, V, PREFIX_LEN, A>,
 );
@@ -203,6 +220,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator for IntoKeys<K, 
 /// See its documentation for more.
 ///
 /// [`into_values`]: crate::TreeMap::into_values
+#[derive(Clone)]
 pub struct IntoValues<K, V, const PREFIX_LEN: usize = DEFAULT_PREFIX_LEN, A: Allocator = Global>(
     IntoIter<K, V, PREFIX_LEN, A>,
 );
@@ -245,7 +263,7 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> FusedIterator
 
 #[cfg(test)]
 mod tests {
-    use alloc::sync::Arc;
+    use alloc::{string::ToString, sync::Arc, vec::Vec};
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
@@ -288,6 +306,73 @@ mod tests {
 
         into_values_is_send::<[u8; 3], usize, Global>();
         into_values_is_sync::<[u8; 3], usize, Global>();
+    }
+
+    #[test]
+    fn iterators_are_clone() {
+        fn is_clone<T: Clone>() {}
+
+        fn into_iter_is_clone<'a, K: Clone + 'a, V: Clone + 'a, A: Allocator + Clone + 'a>() {
+            is_clone::<IntoIter<K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        into_iter_is_clone::<Vec<u8>, Vec<usize>, Global>();
+
+        fn into_keys_is_clone<'a, K: Clone + 'a, V: Clone + 'a, A: Allocator + Clone + 'a>() {
+            is_clone::<IntoKeys<K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        into_keys_is_clone::<Vec<u8>, Vec<usize>, Global>();
+
+        fn into_values_is_clone<'a, K: Clone + 'a, V: Clone + 'a, A: Allocator + Clone + 'a>() {
+            is_clone::<IntoValues<K, V, DEFAULT_PREFIX_LEN, A>>();
+        }
+
+        into_values_is_clone::<Vec<u8>, Vec<usize>, Global>();
+    }
+
+    #[test]
+    fn into_iter_clone() {
+        let mut map = TreeMap::new();
+        for value in [
+            ("a".to_string(), 1),
+            ("b".to_string(), 2),
+            ("c".to_string(), 3),
+        ] {
+            map.try_insert(value.0, value.1).unwrap();
+        }
+        let mut into_iter = map.into_iter();
+        assert_eq!(into_iter.next(), Some(("a".to_string(), 1)));
+        let mut into_iter_clone = into_iter.clone();
+        assert_eq!(into_iter.next(), Some(("b".to_string(), 2)));
+        assert_eq!(into_iter.next(), Some(("c".to_string(), 3)));
+        assert_eq!(into_iter.next(), None);
+
+        assert_eq!(into_iter_clone.next(), Some(("b".to_string(), 2)));
+        assert_eq!(into_iter_clone.next(), Some(("c".to_string(), 3)));
+        assert_eq!(into_iter_clone.next(), None);
+    }
+
+    #[test]
+    fn into_iter_clone_back() {
+        let mut map = TreeMap::new();
+        for value in [
+            ("a".to_string(), 1),
+            ("b".to_string(), 2),
+            ("c".to_string(), 3),
+        ] {
+            map.try_insert(value.0, value.1).unwrap();
+        }
+        let mut into_iter = map.into_iter();
+        assert_eq!(into_iter.next_back(), Some(("c".to_string(), 3)));
+        let mut into_iter_clone = into_iter.clone();
+        assert_eq!(into_iter.next_back(), Some(("b".to_string(), 2)));
+        assert_eq!(into_iter.next_back(), Some(("a".to_string(), 1)));
+        assert_eq!(into_iter.next_back(), None);
+
+        assert_eq!(into_iter_clone.next_back(), Some(("b".to_string(), 2)));
+        assert_eq!(into_iter_clone.next_back(), Some(("a".to_string(), 1)));
+        assert_eq!(into_iter_clone.next_back(), None);
     }
 
     #[derive(Debug)]

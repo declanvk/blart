@@ -1,6 +1,7 @@
 use core::fmt;
 
 use super::{LeafNode, NodePtr};
+use crate::allocator::Allocator;
 
 type LeafPtr<K, V, const PREFIX_LEN: usize> = NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>;
 
@@ -134,5 +135,65 @@ impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN> {
                 Some(next_back)
             },
         }
+    }
+}
+
+impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN>
+where
+    K: Clone,
+    V: Clone,
+{
+    /// Clones all leaves.
+    ///
+    /// # Safety
+    ///
+    /// This function must not be called concurrently with any modification on
+    /// the tree since it will use shared references on the leaves.
+    pub unsafe fn clone_leaves(&self, alloc: &impl Allocator) -> Self {
+        struct DropGuard<'a, K, V, const PREFIX_LEN: usize, A: Allocator> {
+            raw: Option<RawIteratorInner<K, V, PREFIX_LEN>>,
+            alloc: &'a A,
+        }
+
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> DropGuard<'a, K, V, PREFIX_LEN, A> {
+            fn into_raw(mut self) -> Option<RawIteratorInner<K, V, PREFIX_LEN>> {
+                self.raw.take()
+            }
+        }
+
+        impl<'a, K, V, const PREFIX_LEN: usize, A: Allocator> Drop for DropGuard<'a, K, V, PREFIX_LEN, A> {
+            fn drop(&mut self) {
+                let mut iter = RawIterator { state: self.raw };
+                // SAFETY: these values have successfully been cloned, and we still own them
+                while let Some(value) = unsafe { iter.next() } {
+                    // SAFETY: value was just allocated using `self.alloc`
+                    let _ = unsafe { NodePtr::deallocate_node_ptr(value, self.alloc) }.into_entry();
+                }
+            }
+        }
+        let mut copy = *self;
+        let mut guard: DropGuard<_, _, _, _> = DropGuard { raw: None, alloc };
+        // SAFETY: see function preconditions
+        while let Some(cur) = unsafe { copy.next() } {
+            let new =
+                NodePtr::allocate_node_ptr(unsafe { cur.as_ref() }.clone_without_siblings(), alloc);
+            if let Some(raw) = guard.raw.as_mut() {
+                // SAFETY: new is unique here
+                let new_mut = unsafe { new.as_mut() };
+                // SAFETY: raw.end is unique here
+                let prev_mut = unsafe { raw.end.as_mut() };
+                prev_mut.next = Some(new);
+                new_mut.previous = Some(raw.end);
+                raw.end = new;
+            } else {
+                guard.raw = Some(RawIteratorInner {
+                    start: new,
+                    end: new,
+                });
+            }
+        }
+        // defuse the DropGuard!
+        let raw = guard.into_raw();
+        Self { state: raw }
     }
 }
