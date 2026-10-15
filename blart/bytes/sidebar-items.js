@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":[["as_bytes_for_integer_arrays",1],["as_bytes_for_integer_like_types",1]],"mod":["mapped"],"trait":["AsBytes","NoPrefixesBytes","OrderedBytes"]};
