@@ -1,9 +1,9 @@
-use std::{borrow::Borrow, ops::RangeBounds};
+use std::{borrow::Borrow, hint::black_box, ops::RangeBounds};
 
 use blart::{AsBytes, NoPrefixesBytes, TreeMap};
 use gungraun::{
-    library_benchmark, library_benchmark_group, main, Callgrind, LibraryBenchmarkConfig,
-    OutputFormat,
+    client_requests::callgrind, library_benchmark, library_benchmark_group, main, Callgrind,
+    EntryPoint, LibraryBenchmarkConfig, OutputFormat,
 };
 
 use crate::common::{
@@ -14,13 +14,28 @@ use crate::common::{
 #[macro_use]
 mod common;
 
+/// Run `f` with callgrind instrumentation and event collection turned on.
+///
+/// Both are off at the start of the benchmark (see `config`), and these client
+/// requests turn them on and off around the measured code.
+macro_rules! measure {
+    ($e:expr) => {{
+        callgrind::start_instrumentation();
+        callgrind::toggle_collect();
+        let result = black_box($e);
+        callgrind::toggle_collect();
+        callgrind::stop_instrumentation();
+        result
+    }};
+}
+
 // CLONE
 
 #[library_benchmark]
 #[bench::with_prefixes(with_prefixes_tree())]
 #[bench::dictionary(dictionary_tree())]
 fn bench_clone<K: AsBytes + Clone, V: Clone>(tree: &TreeMap<K, V>) -> TreeMap<K, V> {
-    tree.clone()
+    measure!(tree.clone())
 }
 
 library_benchmark_group!(name = bench_clone_group; benchmarks = bench_clone);
@@ -31,15 +46,17 @@ library_benchmark_group!(name = bench_clone_group; benchmarks = bench_clone);
 #[bench::first_key(dictionary_tree(), get_first_key(dictionary_tree()))]
 #[bench::last_key(dictionary_tree(), get_last_key(dictionary_tree()))]
 fn bench_lookup_single<'a, K: AsBytes, V>(tree: &'a TreeMap<K, V>, key: &K) -> &'a V {
-    tree.get(key).unwrap()
+    measure!(tree.get(key).unwrap())
 }
 
 #[library_benchmark]
 #[bench::dictionary(dictionary_tree(), select_zipfian_keys(dictionary_tree(), 2048))]
 fn bench_lookup_multiple<K: AsBytes, V>(tree: &TreeMap<K, V>, keys: Vec<&K>) {
-    for key in keys {
-        let _ = std::hint::black_box(tree.get(key).unwrap());
-    }
+    measure!({
+        for key in keys {
+            let _ = black_box(tree.get(key).unwrap());
+        }
+    })
 }
 
 library_benchmark_group!(name = bench_lookup_group; benchmarks = bench_lookup_single, bench_lookup_multiple);
@@ -53,16 +70,18 @@ fn bench_remove_single<K: AsBytes, V>(
     mut tree: TreeMap<K, V>,
     key: &K,
 ) -> (Option<V>, TreeMap<K, V>) {
-    (tree.remove(key), tree)
+    measure!((tree.remove(key), tree))
 }
 
 #[library_benchmark]
 #[bench::dictionary(dictionary_tree().clone(), select_zipfian_keys(dictionary_tree(), 2048))]
 fn bench_remove_multiple<K: AsBytes, V>(mut tree: TreeMap<K, V>, keys: Vec<&K>) -> TreeMap<K, V> {
-    for key in keys {
-        let _ = std::hint::black_box(tree.remove(key));
-    }
-    tree
+    measure!({
+        for key in keys {
+            let _ = black_box(tree.remove(key));
+        }
+        tree
+    })
 }
 
 library_benchmark_group!(name = bench_remove_group; benchmarks = bench_remove_single, bench_remove_multiple);
@@ -84,7 +103,7 @@ fn insert_single_setup<K: AsBytes + Clone, V: Clone>(
 fn bench_insert_single<K: AsBytes, V: Default>(
     (mut tree, key): (TreeMap<K, V>, K),
 ) -> (Option<V>, TreeMap<K, V>) {
-    (tree.try_insert(key, V::default()).ok().flatten(), tree)
+    measure!((tree.try_insert(key, V::default()).ok().flatten(), tree))
 }
 
 fn insert_multiple_setup<K: AsBytes + Clone, V: Clone>(
@@ -108,10 +127,12 @@ fn insert_multiple_setup<K: AsBytes + Clone, V: Clone>(
 fn bench_insert_multiple<K: AsBytes, V: Default>(
     (mut tree, keys): (TreeMap<K, V>, Vec<K>),
 ) -> TreeMap<K, V> {
-    for key in keys {
-        let _ = std::hint::black_box(tree.try_insert(key, V::default()).ok().flatten());
-    }
-    tree
+    measure!({
+        for key in keys {
+            let _ = black_box(tree.try_insert(key, V::default()).ok().flatten());
+        }
+        tree
+    })
 }
 
 // This seems like a tricky and possibly unsafe thing to do. We can statically
@@ -159,7 +180,7 @@ fn bulk_insert_setup<K: AsBytes + Clone, V: Clone>(
 #[bench::skewed(bulk_insert_setup(skewed_tree()))]
 #[bench::with_prefixes(bulk_insert_setup(with_prefixes_tree()))]
 fn bench_from_iter<K: NoPrefixesBytes, V>(keys: Vec<(K, V)>) -> TreeMap<K, V> {
-    TreeMap::from_iter(keys)
+    measure!(TreeMap::from_iter(keys))
 }
 
 #[library_benchmark]
@@ -169,7 +190,7 @@ fn bench_from_iter<K: NoPrefixesBytes, V>(keys: Vec<(K, V)>) -> TreeMap<K, V> {
 #[bench::skewed(bulk_insert_setup(skewed_tree()))]
 #[bench::with_prefixes(bulk_insert_setup(with_prefixes_tree()))]
 fn bench_bulk_insert<K: NoPrefixesBytes, V>(keys: Vec<(K, V)>) -> TreeMap<K, V> {
-    TreeMap::from(keys)
+    measure!(TreeMap::from(keys))
 }
 
 library_benchmark_group!(name = bench_insert_group; benchmarks = bench_insert_single, bench_insert_multiple, bench_bulk_insert, bench_from_iter);
@@ -179,7 +200,7 @@ library_benchmark_group!(name = bench_insert_group; benchmarks = bench_insert_si
 #[library_benchmark]
 #[bench::dictionary(dictionary_tree())]
 fn bench_full_iterator<K: AsBytes, V>(tree: &TreeMap<K, V>) -> bool {
-    tree.iter().count() == tree.len()
+    measure!(tree.iter().count() == tree.len())
 }
 
 fn truncate_half_slice<T>(b: &[T]) -> &[T] {
@@ -191,7 +212,7 @@ fn truncate_half_slice<T>(b: &[T]) -> &[T] {
 #[bench::specific_key(dictionary_tree(), get_last_key(dictionary_tree()).as_bytes())]
 #[bench::random_partial(dictionary_tree(), truncate_half_slice(get_middle_key(dictionary_tree(), 1, 1).as_bytes()))]
 fn bench_prefix_iterator<K: AsBytes, V>(tree: &TreeMap<K, V>, prefix: &[u8]) -> bool {
-    tree.prefix(prefix).count() <= tree.len()
+    measure!(tree.prefix(prefix).count() <= tree.len())
 }
 
 #[library_benchmark]
@@ -202,7 +223,7 @@ fn bench_fuzzy_iterator<K: AsBytes + Borrow<Q>, V, Q: AsBytes + ?Sized>(
     key: &Q,
     edit_distance: usize,
 ) -> bool {
-    tree.fuzzy(key, edit_distance).count() <= tree.len()
+    measure!(tree.fuzzy(key, edit_distance).count() <= tree.len())
 }
 
 #[library_benchmark]
@@ -210,7 +231,7 @@ fn bench_fuzzy_iterator<K: AsBytes + Borrow<Q>, V, Q: AsBytes + ?Sized>(
 #[bench::specific_key(dictionary_tree(), get_middle_key(dictionary_tree(), 1, 1)..=get_middle_key(dictionary_tree(), 1, 1))]
 #[bench::middle_third(dictionary_tree(), get_middle_key(dictionary_tree(), 1, 2)..get_middle_key(dictionary_tree(), 2, 1))]
 fn bench_range_iterator<K: AsBytes, V, R: RangeBounds<K>>(tree: &TreeMap<K, V>, range: R) -> bool {
-    tree.range(range).count() <= tree.len()
+    measure!(tree.range(range).count() <= tree.len())
 }
 
 library_benchmark_group!(name = bench_iterator_group; benchmarks = bench_full_iterator, bench_prefix_iterator, bench_fuzzy_iterator, bench_range_iterator);
@@ -222,19 +243,21 @@ library_benchmark_group!(name = bench_iterator_group; benchmarks = bench_full_it
 #[bench::half(dictionary_tree().clone(), "half")]
 #[bench::none(dictionary_tree().clone(), "none")]
 fn bench_retain<K: AsBytes, V>(mut tree: TreeMap<K, V>, mode: &str) -> TreeMap<K, V> {
-    match mode {
-        "all" => tree.retain(|_, _| true),
-        "half" => {
-            let mut i = 0;
-            tree.retain(|_, _| {
-                i += 1;
-                i % 2 == 0
-            })
-        },
-        "none" => tree.retain(|_, _| false),
-        _ => unreachable!(),
-    }
-    tree
+    measure!({
+        match mode {
+            "all" => tree.retain(|_, _| true),
+            "half" => {
+                let mut i = 0;
+                tree.retain(|_, _| {
+                    i += 1;
+                    i % 2 == 0
+                })
+            },
+            "none" => tree.retain(|_, _| false),
+            _ => unreachable!(),
+        }
+        tree
+    })
 }
 
 fn u128_tree(range: std::ops::Range<u128>) -> TreeMap<u128, usize> {
@@ -248,8 +271,10 @@ fn bench_append(
     mut tree1: TreeMap<u128, usize>,
     mut tree2: TreeMap<u128, usize>,
 ) -> (TreeMap<u128, usize>, TreeMap<u128, usize>) {
-    tree1.append(&mut tree2);
-    (tree1, tree2)
+    measure!({
+        tree1.append(&mut tree2);
+        (tree1, tree2)
+    })
 }
 
 // We have a lot of benchmarks on split_off because its one of the only ways to
@@ -271,9 +296,11 @@ where
     K: AsBytes + Borrow<K> + Clone,
     V: Clone,
 {
-    let new_tree = tree.split_off(key);
+    measure!({
+        let new_tree = tree.split_off(key);
 
-    (tree, new_tree)
+        (tree, new_tree)
+    })
 }
 
 #[library_benchmark]
@@ -284,20 +311,22 @@ fn bench_extract_if<K: AsBytes, V>(
     mut tree: TreeMap<K, V>,
     mode: &str,
 ) -> (Vec<(K, V)>, TreeMap<K, V>) {
-    let extracted: Vec<_> = match mode {
-        "all" => tree.extract_if(.., |_, _| true).collect(),
-        "half" => {
-            let mut i = 0;
-            tree.extract_if(.., |_, _| {
-                i += 1;
-                i % 2 == 0
-            })
-            .collect()
-        },
-        "none" => tree.extract_if(.., |_, _| false).collect(),
-        _ => unreachable!(),
-    };
-    (extracted, tree)
+    measure!({
+        let extracted: Vec<_> = match mode {
+            "all" => tree.extract_if(.., |_, _| true).collect(),
+            "half" => {
+                let mut i = 0;
+                tree.extract_if(.., |_, _| {
+                    i += 1;
+                    i % 2 == 0
+                })
+                .collect()
+            },
+            "none" => tree.extract_if(.., |_, _| false).collect(),
+            _ => unreachable!(),
+        };
+        (extracted, tree)
+    })
 }
 
 library_benchmark_group!(
@@ -310,7 +339,20 @@ library_benchmark_group!(
 fn config() -> LibraryBenchmarkConfig {
     let mut output = OutputFormat::default();
     output.truncate_description(Some(0));
-    let tool = Callgrind::default();
+    let mut tool = Callgrind::default();
+    // We're disabling the entry point because we want to have precise control over when
+    // *collection* and *instrumentation* start. Callgrind separates collection (whether events are
+    // counted) from instrumentation (whether code runs under the simulator at all). Collection
+    // requires instrumentation to work, otherwise we would use the default `EntryPoint` and just
+    // append the `--instr-atstart=no`.
+    //
+    // One effect of this is that the simulated cache doesn't see setup any more, so each
+    // `measure!` starts with a cold cache, which affects the L1/LL/RAM benchmark numbers.
+    //
+    // Reference:
+    // <https://gungraun.github.io/gungraun/latest/html/benchmarks/library_benchmarks/custom_entry_point.html>
+    tool.entry_point(EntryPoint::None)
+        .args(["--collect-atstart=no", "--instr-atstart=no"]);
     let mut c = LibraryBenchmarkConfig::default();
     c.output_format(output);
     c.tool(tool);
