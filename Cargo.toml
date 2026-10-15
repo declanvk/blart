@@ -51,7 +51,7 @@ rand = "0.9.1"
 # Need to enable the `testing` feature for unit and integration tests
 blart = { path = ".", features = ["testing"] }
 expect-test = "1.5.1"
-gungraun = "0.19.4"
+gungraun = { version = "0.19.4", features = ["client_requests"] }
 
 [[bench]]
 name = "criterion"
