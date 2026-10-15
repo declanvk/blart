@@ -7,7 +7,11 @@ use blart::{
     },
     AsBytes, TreeMap,
 };
-use rand::{prelude::Distribution, SeedableRng};
+use rand::{
+    rngs::StdRng,
+    seq::{IndexedRandom, SliceRandom},
+    Rng, SeedableRng,
+};
 
 static DICTIONARY: &str = include_str!("data/medium-dict.txt");
 
@@ -18,13 +22,6 @@ fn tree_from_keys<K: AsBytes>(keys: impl IntoIterator<Item = K>) -> TreeMap<K, u
     }
 
     tree
-}
-
-#[cfg_attr(not(test), expect(dead_code))]
-pub fn get_first_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
-    tree: &TreeMap<K, V, PREFIX_LEN>,
-) -> &K {
-    tree.first_key_value().unwrap().0
 }
 
 pub fn get_middle_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
@@ -57,41 +54,45 @@ pub fn get_middle_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
     last_key.expect("tree is non-empty")
 }
 
+/// Seed for every random choice the benchmarks make, so that runs are
+/// comparable.
 #[cfg_attr(not(test), expect(dead_code))]
-pub fn get_last_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
-    tree: &TreeMap<K, V, PREFIX_LEN>,
-) -> &K {
-    tree.last_key_value().unwrap().0
-}
+pub const SAMPLE_SEED: u64 = 0x5EED_B1A7;
 
+/// Choose `num_elements` randomly-selected distinct keys from `tree`.
 #[cfg_attr(not(test), expect(dead_code))]
-pub fn select_zipfian_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
+pub fn sample_keys<K: AsBytes, V, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
     num_elements: usize,
 ) -> Vec<&K> {
     let keys = tree.keys().collect::<Vec<_>>();
-    let distr = rand_distr::Zipf::new(tree.len() as f64, 1.78).unwrap();
-    let mut rng = rand::rngs::StdRng::from_seed([128; 32]);
-
-    distr
-        .map(move |idx| keys[idx as usize])
-        .sample_iter(&mut rng)
-        .take(num_elements)
-        .collect()
+    assert!(num_elements <= keys.len());
+    let mut rng = StdRng::seed_from_u64(SAMPLE_SEED);
+    let mut sample: Vec<_> = keys
+        .choose_multiple(&mut rng, num_elements)
+        .copied()
+        .collect();
+    sample.shuffle(&mut rng);
+    sample
 }
 
-#[expect(dead_code)]
-pub fn remove_keys<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
-    tree: &mut TreeMap<K, V, PREFIX_LEN>,
-    keys: Vec<&K>,
-) -> Vec<(K, V)> {
-    let output = Vec::with_capacity(keys.len());
-
-    for key in keys {
-        let _ = tree.remove(key);
-    }
-
-    output
+/// Choose `num_ranges` ranges of `range_len` consecutive keys from `tree`,
+/// returned as `(start, end)` pairs for a half-open `start..end` range.
+#[cfg_attr(not(test), expect(dead_code))]
+pub fn sample_ranges<K: AsBytes, V, const PREFIX_LEN: usize>(
+    tree: &TreeMap<K, V, PREFIX_LEN>,
+    num_ranges: usize,
+    range_len: usize,
+) -> Vec<(&K, &K)> {
+    let keys = tree.keys().collect::<Vec<_>>();
+    assert!(range_len < keys.len());
+    let mut rng = StdRng::seed_from_u64(SAMPLE_SEED);
+    (0..num_ranges)
+        .map(|_| {
+            let start = rng.random_range(0..keys.len() - range_len);
+            (keys[start], keys[start + range_len])
+        })
+        .collect()
 }
 
 #[cfg_attr(not(test), expect(dead_code))]

@@ -46,7 +46,6 @@ criterion = "0.5.1"
 dhat = "0.3.3"
 bumpalo = { version = "3.16.0", features = ["allocator-api2"] }
 mutants = "0.0.3"
-rand_distr = "0.5.1"
 rand = "0.9.1"
 # Need to enable the `testing` feature for unit and integration tests
 blart = { path = ".", features = ["testing"] }
