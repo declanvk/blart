@@ -6,27 +6,27 @@ use blart::{
     },
     TreeMap,
 };
-use criterion::{criterion_group, measurement::Measurement, BenchmarkGroup, Criterion};
+use criterion::{criterion_group, measurement::Measurement, BenchmarkGroup, Criterion, Throughput};
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
 fn run_benchmarks<M: Measurement>(
     group: &mut BenchmarkGroup<M>,
     key_vec: &[Box<[u8]>],
     map: &TreeMap<Box<[u8]>, usize>,
 ) {
-    let (first_key, middle_key, last_key) = (
-        Box::from(key_vec[0].as_ref()),
-        Box::from(key_vec[key_vec.len() / 2].as_ref()),
-        Box::from(key_vec[key_vec.len() - 1].as_ref()),
-    );
-    group.bench_function("search/first_key", |b| {
-        b.iter(|| map.get(&first_key).unwrap())
+    // Look up every key, in a random order, so the result does not depend on
+    // the path to one particular key.
+    let mut search_keys: Vec<&[u8]> = key_vec.iter().map(AsRef::as_ref).collect();
+    search_keys.shuffle(&mut StdRng::seed_from_u64(69420));
+    group.throughput(Throughput::Elements(search_keys.len() as u64));
+    group.bench_function("search/all_keys", |b| {
+        b.iter(|| {
+            for key in &search_keys {
+                std::hint::black_box(map.get(*key).unwrap());
+            }
+        })
     });
-    group.bench_function("search/middle_key", |b| {
-        b.iter(|| map.get(&middle_key).unwrap())
-    });
-    group.bench_function("search/last_key", |b| {
-        b.iter(|| map.get(&last_key).unwrap())
-    });
+    group.throughput(Throughput::Elements(1));
     group.bench_function("minimum", |b| b.iter(|| map.first_key_value().unwrap()));
     group.bench_function("maximum", |b| b.iter(|| map.last_key_value().unwrap()));
 
@@ -59,19 +59,19 @@ fn setup_tree_run_benches_cleanup(
 }
 
 fn bench(c: &mut Criterion) {
-    // number of keys = 256
+    // number of keys = 255
     setup_tree_run_benches_cleanup(
         c,
         generate_keys_skewed(u8::MAX as usize),
         "generated_get/skewed",
     );
-    // number of keys = 256
+    // number of keys = 6561 (3^8)
     setup_tree_run_benches_cleanup(
         c,
         generate_key_fixed_length([2; 8]).map(Box::from),
         "generated_get/fixed_length",
     );
-    // number of keys = 256
+    // number of keys = 6561 (3^8), with two prefixes expanded
     setup_tree_run_benches_cleanup(
         c,
         generate_key_with_prefix(
