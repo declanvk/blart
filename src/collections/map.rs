@@ -19,9 +19,10 @@ use crate::{
     raw::{
         clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
         maximum_unchecked, minimum_unchecked, prefix_search_unchecked, search_for_delete_point,
-        search_for_insert_point, search_for_prefix_insert_point, search_unchecked, CloneResult,
-        DeletePoint, DeleteResult, InsertKind, InsertPoint, InsertPrefixError, InsertResult,
-        LeafNode, NodePtr, OpaqueNodePtr, PrefixInsertPoint, RawIterator,
+        search_for_insert_point, search_for_prefix_insert_point, search_unchecked,
+        split_off_unchecked, CloneResult, DeletePoint, DeleteResult, InsertKind, InsertPoint,
+        InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, PrefixInsertPoint,
+        RawIterator, SplitOffResult,
     },
     rust_nightly_apis::hasher_write_length_prefix,
     AsBytes, NoPrefixesBytes,
@@ -1508,22 +1509,89 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         Q: AsBytes + ?Sized,
         A: Clone,
     {
-        // TODO(opt): Optimize this by doing a tree search to find split point and then
-        // cutting the tree. This should save time versus reconstructing a whole new
-        // tree
+        match &mut self.state {
+            Some(state) => {
+                let key_bytes = split_key.as_bytes();
+                // SAFETY: We hold a mutable reference to the tree, so there is no other access to
+                // it, and every node was allocated with `self.alloc`. `state.root` is replaced by
+                // the roots in the result below.
+                let split_off_result =
+                    unsafe { split_off_unchecked(state.root, key_bytes, &self.alloc) };
 
-        let mut new_tree = TreeMap::with_prefix_len_in(self.alloc.clone());
+                match split_off_result {
+                    SplitOffResult::NormalSplit {
+                        less_than_root,
+                        less_than_root_max_leaf,
+                        greater_than_or_equal_root,
+                        greater_than_or_equal_min_leaf,
+                    } => {
+                        state.root = less_than_root;
+                        let prev_max_leaf = state.max_leaf;
+                        state.max_leaf = less_than_root_max_leaf;
+                        let prev_num_entries = self.num_entries;
+                        self.num_entries = {
+                            // TODO(opt): is there a way we can optimize finding the new number of
+                            // entries? Maybe try to figure out which side is smaller and only scan
+                            // that specific side?
 
-        for (key, value) in
-            self.extract_if(.., |key, _| split_key.as_bytes() <= key.borrow().as_bytes())
-        {
-            // PANIC SAFETY: This will not panic because the property of any existing tree
-            // containing no keys that are prefixes of any other key holds when the tree is
-            // split into any portion.
-            let _ = new_tree.try_insert(key, value).unwrap();
+                            let mut count = 0;
+                            // SAFETY: Both leaves are in the less than tree, which we have
+                            // exclusive access to. `state.min_leaf` is the minimum leaf of that
+                            // tree, so it is before or equal to `less_than_root_max_leaf`.
+                            let mut iter = unsafe {
+                                RawIterator::new(state.min_leaf, less_than_root_max_leaf)
+                            };
+                            // SAFETY: The tree is not modified while iterating
+                            while unsafe { iter.next() }.is_some() {
+                                count += 1;
+                            }
+                            count
+                        };
+
+                        TreeMap {
+                            num_entries: prev_num_entries - self.num_entries,
+                            state: Some(NonEmptyTree {
+                                root: greater_than_or_equal_root,
+                                min_leaf: greater_than_or_equal_min_leaf,
+                                max_leaf: prev_max_leaf,
+                            }),
+                            alloc: self.alloc.clone(),
+                        }
+                    },
+                    SplitOffResult::OnlyLessThan { less_than_root } => {
+                        // This assignment is pretty much redundant, but nice because it emphasizes
+                        // that the elements left in the current tree are all less than the split
+                        // key.
+                        state.root = less_than_root;
+
+                        TreeMap::with_prefix_len_in(self.alloc.clone())
+                    },
+                    SplitOffResult::OnlyGreaterThanOrEqual {
+                        greater_than_or_equal_root,
+                    } => {
+                        // This case means that whole contents of the tree are greater than or equal
+                        // to the split key, so everything gets moved over to the new tree and the
+                        // current tree is rendered empty.
+
+                        let new_tree = TreeMap {
+                            alloc: self.alloc.clone(),
+                            num_entries: self.num_entries,
+                            state: Some(NonEmptyTree {
+                                root: greater_than_or_equal_root,
+                                min_leaf: state.min_leaf,
+                                max_leaf: state.max_leaf,
+                            }),
+                        };
+
+                        self.state = None;
+                        self.num_entries = 0;
+
+                        new_tree
+                    },
+                }
+            },
+            None => TreeMap::with_prefix_len_in(self.alloc.clone()),
         }
-
-        new_tree
     }
 
     /// Creates an iterator that visits elements (key-value pairs) in the
@@ -2234,6 +2302,7 @@ mod tests {
             generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
             PrefixExpansion,
         },
+        visitor::WellFormedChecker,
         TreeMap,
     };
 
@@ -2918,7 +2987,7 @@ mod tests {
 
         assert_eq!(tree.len(), 160);
 
-        let _ = crate::visitor::WellFormedChecker::check(&tree).unwrap();
+        let _ = WellFormedChecker::check(&tree).unwrap();
     }
 
     #[test]
@@ -2977,6 +3046,8 @@ mod tests {
 
         assert_eq!(map.len(), 32);
         assert_eq!(after.len(), 32);
+        let _ = WellFormedChecker::check(&map).unwrap();
+        let _ = WellFormedChecker::check(&after).unwrap();
 
         assert!(map.into_values().eq(0..32));
         assert!(after.into_values().eq(32..64));
@@ -2994,6 +3065,8 @@ mod tests {
 
         assert_eq!(map.len(), 32);
         assert_eq!(after.len(), 31);
+        let _ = WellFormedChecker::check(&map).unwrap();
+        let _ = WellFormedChecker::check(&after).unwrap();
 
         assert!(map.into_values().eq(0..32));
         assert!(after.into_values().eq(33..64));
@@ -3011,6 +3084,8 @@ mod tests {
 
         assert!(map.is_empty());
         assert_eq!(split_all.len(), 64);
+        let _ = WellFormedChecker::check(&map).unwrap();
+        let _ = WellFormedChecker::check(&split_all).unwrap();
         assert!(split_all.values().copied().eq(0..64));
 
         // One after the last key
@@ -3018,7 +3093,110 @@ mod tests {
 
         assert_eq!(split_all.len(), 64);
         assert!(split_none.is_empty());
+        let _ = WellFormedChecker::check(&split_all).unwrap();
+        let _ = WellFormedChecker::check(&split_none).unwrap();
         assert!(split_all.values().copied().eq(0..64));
+    }
+
+    #[test]
+    fn tree_map_split_off_implicit_prefix_bytes() {
+        let mut map = TreeMap::<_, _, 0>::with_prefix_len();
+        for (value, key) in generate_key_with_prefix(
+            [3, 3, 3],
+            [PrefixExpansion {
+                base_index: 0,
+                expanded_length: 4,
+            }],
+        )
+        .enumerate()
+        {
+            let _ = map.try_insert(key, value).unwrap();
+        }
+        let num_entries = map.len();
+
+        // Splits between subtrees with long implicit prefixes, then inside one of them
+        let mut after = map.split_off([2u8, 2, 2, 2, 0, 0].as_slice());
+        let last = after.split_off([3u8, 3, 3, 3, 1, 2].as_slice());
+
+        assert_eq!(map.len() + after.len() + last.len(), num_entries);
+        for tree in [&map, &after, &last] {
+            let _ = WellFormedChecker::check(tree).unwrap();
+        }
+
+        assert!(map
+            .keys()
+            .all(|key| key.as_ref() < [2u8, 2, 2, 2, 0, 0].as_slice()));
+        assert!(after.keys().all(|key| {
+            [2u8, 2, 2, 2, 0, 0].as_slice() <= key.as_ref()
+                && key.as_ref() < [3u8, 3, 3, 3, 1, 2].as_slice()
+        }));
+        assert!(last
+            .keys()
+            .all(|key| [3u8, 3, 3, 3, 1, 2].as_slice() <= key.as_ref()));
+        assert!(!map.is_empty() && !after.is_empty() && !last.is_empty());
+    }
+
+    #[test]
+    fn tree_map_split_off_panicking_as_bytes_leaves_tree_intact() {
+        use std::{
+            panic::{catch_unwind, AssertUnwindSafe},
+            sync::atomic::{AtomicBool, Ordering},
+        };
+
+        static PANIC_IN_AS_BYTES: AtomicBool = AtomicBool::new(false);
+
+        #[derive(Debug)]
+        struct PanicKey(Box<[u8]>);
+
+        impl AsBytes for PanicKey {
+            fn as_bytes(&self) -> &[u8] {
+                assert!(
+                    !PANIC_IN_AS_BYTES.load(Ordering::Relaxed),
+                    "boom: PanicKey::as_bytes called"
+                );
+                &self.0
+            }
+        }
+
+        impl Borrow<[u8]> for PanicKey {
+            fn borrow(&self) -> &[u8] {
+                &self.0
+            }
+        }
+
+        // `split_off` reads key bytes from the leaves before it modifies any nodes, so a panic
+        // there must leave the original tree untouched.
+        fn check<const PREFIX_LEN: usize>() {
+            let keys: Vec<Box<[u8]>> = generate_key_with_prefix(
+                [3, 3],
+                [PrefixExpansion {
+                    base_index: 0,
+                    expanded_length: 3,
+                }],
+            )
+            .collect();
+
+            let mut map = TreeMap::<PanicKey, usize, PREFIX_LEN>::with_prefix_len();
+            for (value, key) in keys.iter().enumerate() {
+                let _ = map.try_insert(PanicKey(key.clone()), value).unwrap();
+            }
+
+            // Splitting at an existing key means the search reaches a leaf and reads its key
+            let split_key = keys[keys.len() / 2].clone();
+            PANIC_IN_AS_BYTES.store(true, Ordering::Relaxed);
+            let result = catch_unwind(AssertUnwindSafe(|| map.split_off(split_key.as_ref())));
+            PANIC_IN_AS_BYTES.store(false, Ordering::Relaxed);
+
+            assert!(result.is_err(), "split_off should have panicked");
+            assert_eq!(map.len(), keys.len());
+            assert!(map.keys().map(|key| &key.0).eq(keys.iter()));
+            let _ = WellFormedChecker::check(&map).unwrap();
+        }
+
+        check::<16>();
+        // With no prefix capacity, inner node prefixes are read from a leaf key, so the panic
+        // happens while searching
+        check::<0>();
     }
 
     #[test]

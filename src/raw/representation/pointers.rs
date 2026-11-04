@@ -305,6 +305,15 @@ macro_rules! impl_concrete_node_ptr {
         }
         pub(crate) use match_concrete_inner_node_ptr;
 
+        impl<K, V, const PREFIX_LEN: usize> ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
+            /// TODO
+            pub(crate) fn to_opaque(self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
+                match_concrete_inner_node_ptr!(match (self) {
+                    InnerNode(inner_node_ptr) => inner_node_ptr.to_opaque(),
+                })
+            }
+        }
+
         impl<K, V, const PREFIX_LEN: usize> Copy for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {}
 
         impl<K, V, const PREFIX_LEN: usize> Clone for ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
