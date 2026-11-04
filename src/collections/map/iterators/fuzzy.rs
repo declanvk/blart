@@ -252,11 +252,15 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> FuzzySearch<K, V, PREFIX_LEN>
         _nodes_to_search: &mut Vec<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         max_edit_dist: usize,
     ) -> bool {
+        // The first value of `old_row` is the number of key bytes examined on the path to this leaf
         let current_len = old_row[0];
-        // SAFETY: Since the `old_row` holds the current edit distance
-        // it's by construction that the first value of the buffer is the
-        // length of the already examined bytes of the key
-        let remaining_key = unsafe { self.key_ref().as_bytes().get_unchecked(current_len..) };
+        // Previously we had a `get_unchecked` here that could be exploited to do an out of bounds
+        // access. Thats because the `AsBytes::as_bytes` could be adversarial and return a different
+        // set of bytes than originally, at a different length than `current_len. Using `get`
+        // downgrades the issue to just be the same as a not matching key.
+        let Some(remaining_key) = self.key_ref().as_bytes().get(current_len..) else {
+            return false;
+        };
         for k in remaining_key {
             // SAFETY: `old_row` and `new_row` are the search's two arena rows; both have length
             // `key.len() + 1` (>= 1), satisfying `edit_dist`'s contract.

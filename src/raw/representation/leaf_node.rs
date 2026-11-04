@@ -57,10 +57,6 @@ where
                 this.next.is_none(),
                 "next ptr should be None on insert into linked list"
             );
-            debug_assert!(
-                previous_sibling.key.as_bytes() < this.key.as_bytes(),
-                "sibling must be ordered before this leaf in the trie"
-            );
         }
 
         this.previous = Some(previous_sibling_ptr);
@@ -99,10 +95,6 @@ where
                 this.next.is_none(),
                 "next ptr should be None on insert into linked list"
             );
-            debug_assert!(
-                this.key.as_bytes() < next_sibling.key.as_bytes(),
-                "this leaf must be ordered before sibling in the trie"
-            );
         }
 
         this.previous = next_sibling.previous;
@@ -125,7 +117,7 @@ where
     /// This function requires that no other operation is concurrently modifying
     /// or reading the `this_ptr` leaf node and the sibling leaf nodes of the
     /// `old_leaf`.
-    pub unsafe fn replace(this_ptr: NodePtr<PREFIX_LEN, Self>, old_leaf: &mut Self, force: bool) {
+    pub unsafe fn replace(this_ptr: NodePtr<PREFIX_LEN, Self>, old_leaf: &mut Self) {
         // SAFETY: Covered by safety doc of this function
         let this = unsafe { this_ptr.as_mut() };
 
@@ -138,13 +130,6 @@ where
                 this.next.is_none(),
                 "next ptr should be None on insert into linked list"
             );
-            if !force {
-                debug_assert_eq!(
-                    this.key.as_bytes(),
-                    old_leaf.key.as_bytes(),
-                    "To replace a node, the key must be exactly the same"
-                );
-            }
         }
 
         this.next = old_leaf.next;

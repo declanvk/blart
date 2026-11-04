@@ -57,7 +57,16 @@ impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN> {
     /// pointers.
     ///
     /// # Safety
-    /// `start` must be before or equal to `end` in the linked list order.
+    /// `start` and `end` must be leaves of the same linked list, and must stay valid for as long
+    /// as the iterator is used.
+    ///
+    /// For correct results `start` should be before or equal to `end` in the linked list order.
+    /// This is not required for memory safety. If `start` is after `end`, then
+    /// [`next`][Self::next] and [`next_back`][Self::next_back] move away from each other, so no
+    /// leaf is returned twice, and whichever reaches the end of the list first panics. Callers
+    /// that order `start` and `end` by comparing [`AsBytes::as_bytes`][crate::AsBytes::as_bytes]
+    /// output depend on this, because an inconsistent implementation can make that comparison
+    /// wrong.
     pub unsafe fn new(start: LeafPtr<K, V, PREFIX_LEN>, end: LeafPtr<K, V, PREFIX_LEN>) -> Self {
         Self {
             state: Some(RawIteratorInner { start, end }),
@@ -91,9 +100,9 @@ impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN> {
                     // SAFETY: Covered by function safety doc
                     let start_leaf = unsafe { start.as_ref() };
 
-                    // PANIC SAFETY: We can unwrap here because `is_singleton` implies that `start`
-                    // and `end` are different, which also implies that `start` does not point to
-                    // the last/maximum leaf
+                    // PANIC SAFETY: `start` and `end` are different, and `start` is before `end`,
+                    // so `start` is not the last leaf. If the caller passed `start` after `end`
+                    // this can panic, which is the intended outcome (see `RawIterator::new`).
                     *start = start_leaf.next.unwrap();
                 }
 
@@ -125,10 +134,9 @@ impl<K, V, const PREFIX_LEN: usize> RawIterator<K, V, PREFIX_LEN> {
                     // SAFETY: Covered by function safety doc
                     let end_leaf = unsafe { end.as_ref() };
 
-                    // PANIC SAFETY: We can unwrap here because `is_singleton` implies that `start`
-                    // and `end` are different, which also implies that `end` does not point to
-                    // the last/maximum leaf. The safety requirements of `RawIterator::new` also
-                    // require that `start` is before or equal to `end` in the linked list order.
+                    // PANIC SAFETY: `start` and `end` are different, and `start` is before `end`,
+                    // so `end` is not the first leaf. If the caller passed `start` after `end`
+                    // this can panic, which is the intended outcome (see `RawIterator::new`).
                     *end = end_leaf.previous.unwrap();
                 }
 

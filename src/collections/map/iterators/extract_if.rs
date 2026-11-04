@@ -95,9 +95,10 @@ where
         Self {
             tree,
             pred,
-            // SAFETY: `start` is guaranteed to be less than or equal to `end` in the iteration
-            // order because of the check we do on the bytes of the resolved leaf pointers, just
-            // above this line
+            // SAFETY: `start` and `end` are both leaves of this tree. The byte comparison above
+            // means `start` is before or equal to `end`, as long as `AsBytes` is deterministic. If
+            // it isn't deterministic, then the iterator may return unspecified results and may
+            // panic, which is okay.
             inner: unsafe { RawIterator::new(start, end) },
         }
     }
@@ -135,6 +136,18 @@ where
             search_for_delete_point(state.root, leaf_node.key_ref().as_bytes())
                 .expect("the delete point must be present in the tree if we're iterating over it")
         };
+
+        // This guards against adversarial `AsBytes` implementation. The `as_bytes` call above could
+        // have returned a different set of bytes than expected and found a different leaf node
+        // delete point. Before we actually do the delete, we need to confirm that its
+        // actually the same leaf. Otherwise, we could delete a leaf the iterator is still pointing
+        // to (or yet to point to) then end up accessing freed memory.
+        assert_eq!(
+            delete_point.leaf_node_ptr, leaf_ptr,
+            "searching for the current leaf by its key found a different leaf, the key's \
+             `AsBytes` implementation is not consistent"
+        );
+
         // SAFETY: There are no outstanding pointers (besides leaf min/max which are
         // already fixed by `apply_delete_pointer`).
         let delete_result = unsafe { self.tree.apply_delete_point(delete_point) };

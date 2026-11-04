@@ -87,7 +87,8 @@ pub enum MalformedTreeError<K, V, const PREFIX_LEN: usize> {
     /// There is a leaf node which has incorrect values for either the
     /// `previous` or `next` sibling pointers.
     WrongSiblingLinks {
-        /// The key bytes of the broken leaf node
+        /// The key bytes of the broken leaf node. This is empty if the error came
+        /// from [`WellFormedChecker::check_without_ordering`].
         leaf_key: Vec<u8>,
         /// The expected `previous` pointer value
         expected_previous: OptionalLeafPtr<K, V, PREFIX_LEN>,
@@ -339,6 +340,8 @@ impl<K: AsBytes, V, const PREFIX_LEN: usize> Error for MalformedTreeError<K, V, 
 /// `Ok(())`.
 #[derive(Debug)]
 pub struct WellFormedChecker<K, V, const PREFIX_LEN: usize> {
+    /// If `false`, skip every check that calls [`AsBytes::as_bytes`].
+    check_keys: bool,
     current_key_prefix: Vec<u8>,
     seen_nodes: HashMap<OpaqueNodePtr<K, V, PREFIX_LEN>, KeyPrefix>,
     seen_leaf_nodes: Vec<NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>>,
@@ -356,12 +359,37 @@ where
     pub fn check<A: Allocator>(
         tree: &TreeMap<K, V, PREFIX_LEN, A>,
     ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
+        Self::check_inner(tree, true)
+    }
+
+    /// Traverse the given tree and check that it is well-formed, without calling
+    /// [`AsBytes::as_bytes`]. Returns the number of leaf nodes in the tree.
+    ///
+    /// This checks #1, #2, and the linked list part of #4 from the
+    /// [`WellFormedChecker`] docs, but it skips #3 and the parts of #4 that require calling
+    /// `as_bytes`.
+    ///
+    /// The purpose of this version is to check trees whose key may have an implementation of
+    /// `AsBytes` which is adversarial (not deterministic, see the [`AsBytes`] docs).
+    ///
+    /// # Errors
+    ///  - Returns an error if the given tree is not structurally well-formed.
+    pub fn check_without_ordering<A: Allocator>(
+        tree: &TreeMap<K, V, PREFIX_LEN, A>,
+    ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
+        Self::check_inner(tree, false)
+    }
+
+    fn check_inner<A: Allocator>(
+        tree: &TreeMap<K, V, PREFIX_LEN, A>,
+        check_keys: bool,
+    ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
         tree.state
             .as_ref()
             .map(|state| {
                 // SAFETY: Since we get a reference to the TreeMap, we know no
                 // mutation can happen to any of the nodes
-                unsafe { Self::check_tree(state.root) }
+                unsafe { Self::check_tree_inner(state.root, check_keys) }
             })
             .unwrap_or_else(|| {
                 if tree.is_empty() {
@@ -384,7 +412,22 @@ where
     pub(crate) unsafe fn check_tree(
         tree: OpaqueNodePtr<K, V, PREFIX_LEN>,
     ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
+        // SAFETY: Covered by function safety doc
+        unsafe { Self::check_tree_inner(tree, true) }
+    }
+
+    /// See [`check_tree`][Self::check_tree], `check_keys` controls whether to
+    /// run the checks that call [`AsBytes::as_bytes`].
+    ///
+    /// # Safety
+    ///  - For the duration of this function, the given node and all its children nodes must not be
+    ///    mutated.
+    unsafe fn check_tree_inner(
+        tree: OpaqueNodePtr<K, V, PREFIX_LEN>,
+        check_keys: bool,
+    ) -> Result<WellFormedTreeStats, MalformedTreeError<K, V, PREFIX_LEN>> {
         let mut visitor = WellFormedChecker {
+            check_keys,
             current_key_prefix: vec![],
             seen_nodes: HashMap::new(),
             seen_leaf_nodes: vec![],
@@ -423,7 +466,11 @@ where
 
             if leaf.previous != expected_previous || leaf.next != expected_next {
                 return Err(MalformedTreeError::WrongSiblingLinks {
-                    leaf_key: leaf.key_ref().as_bytes().to_vec(),
+                    leaf_key: if self.check_keys {
+                        leaf.key_ref().as_bytes().to_vec()
+                    } else {
+                        Vec::new()
+                    },
                     expected_previous,
                     expected_next,
                     actual_previous: leaf.previous,
@@ -447,8 +494,15 @@ where
         // update running key prefix with inner node partial prefix
         // TODO: Fix this, here the we should return the full reconstructed prefix if
         // prefix len > PREFIX_LEN
-        self.current_key_prefix
-            .extend(inner_node.read_full_prefix(original_key_prefix_len).0);
+        if self.check_keys {
+            self.current_key_prefix
+                .extend(inner_node.read_full_prefix(original_key_prefix_len).0);
+        } else {
+            // A prefix longer than `PREFIX_LEN` is read from a leaf key, so only use the stored
+            // bytes. The prefix is only used to label nodes in errors.
+            self.current_key_prefix
+                .extend(inner_node.header().read_prefix());
+        }
 
         // SAFETY: The `child_it` does not live beyond the following loop and will not
         // overlap with any mutating access or operation, which is guaranteed by the
@@ -572,6 +626,15 @@ where
     }
 
     fn visit_leaf(&mut self, t: &super::LeafNode<K, V, PREFIX_LEN>) -> Self::Output {
+        let leaf_stats = WellFormedTreeStats {
+            num_inner: 0,
+            num_leaf: 1,
+        };
+
+        if !self.check_keys {
+            return Ok(leaf_stats);
+        }
+
         if !t.key_ref().as_bytes().starts_with(&self.current_key_prefix) {
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::PrefixMismatch {
@@ -606,10 +669,7 @@ where
             }
         }
 
-        Ok(WellFormedTreeStats {
-            num_inner: 0,
-            num_leaf: 1,
-        })
+        Ok(leaf_stats)
     }
 }
 
@@ -797,6 +857,72 @@ mod tests {
                 panic!("expected a WrongChildrenCount error")
             },
         }
+
+        // The structural check also catches this
+        let structure_result = unsafe { WellFormedChecker::check_tree_inner(root, false) };
+        assert!(
+            matches!(
+                structure_result,
+                Err(MalformedTreeError::WrongChildrenCount {
+                    num_children: 2,
+                    ..
+                })
+            ),
+            "{structure_result:?}"
+        );
+    }
+
+    #[test]
+    fn check_structure_ignores_inconsistent_keys() {
+        use core::cell::Cell;
+
+        use crate::AsBytes;
+
+        /// Returns `alt` once `flipped` is set
+        struct FlipKey {
+            normal: [u8; 2],
+            alt: [u8; 2],
+            flipped: Cell<bool>,
+        }
+
+        impl AsBytes for FlipKey {
+            fn as_bytes(&self) -> &[u8] {
+                if self.flipped.get() {
+                    &self.alt
+                } else {
+                    &self.normal
+                }
+            }
+        }
+
+        let mut tree: TreeMap<FlipKey, u32> = TreeMap::new();
+        for (i, (normal, alt)) in [([1, 1], [1, 1]), ([1, 2], [9, 9]), ([2, 0], [2, 0])]
+            .into_iter()
+            .enumerate()
+        {
+            tree.try_insert(
+                FlipKey {
+                    normal,
+                    alt,
+                    flipped: Cell::new(false),
+                },
+                i as u32,
+            )
+            .unwrap();
+        }
+        assert!(WellFormedChecker::check(&tree).is_ok());
+
+        for key in tree.keys() {
+            key.flipped.set(true);
+        }
+
+        assert!(matches!(
+            WellFormedChecker::check(&tree),
+            Err(MalformedTreeError::PrefixMismatch { .. })
+        ));
+        let stats = WellFormedChecker::check_without_ordering(&tree).unwrap();
+        assert_eq!(stats.num_leaf, 3);
+        assert_eq!(stats.num_inner, 2);
     }
 
     #[test]

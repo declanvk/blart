@@ -1136,6 +1136,11 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     /// ensures that the given key type will never be a prefix of an existing
     /// value.
     ///
+    /// # Panics
+    ///
+    /// This function may panic if the key type's [`AsBytes`] implementation is
+    /// not deterministic.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -1153,8 +1158,12 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
     where
         K: NoPrefixesBytes,
     {
-        // This will never fail because of the safety contract of `NoPrefixesBytes`
-        unsafe { self.try_insert(key, value).unwrap_unchecked() }
+        // `NoPrefixesBytes` means this only fails if `AsBytes` returned inconsistent bytes, which
+        // can make the search see a stored key as a prefix of the new key. That must not be UB.
+        match self.try_insert(key, value) {
+            Ok(old_value) => old_value,
+            Err(_) => inconsistent_no_prefixes_bytes(),
+        }
     }
 
     /// Inserts a key-value pair into the map.
@@ -1949,13 +1958,27 @@ impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
 
     /// Gets the given key’s corresponding entry in the map for in-place
     /// manipulation.
+    ///
+    /// # Panics
+    ///
+    /// This function may panic if the key type's [`AsBytes`] implementation is
+    /// not deterministic.
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V, PREFIX_LEN, A>
     where
         K: NoPrefixesBytes,
     {
-        // This will never fail because of the safety contract of `NoPrefixesBytes`
-        unsafe { self.try_entry(key).unwrap_unchecked() }
+        // See the comment in `insert`
+        match self.try_entry(key) {
+            Ok(entry) => entry,
+            Err(_) => inconsistent_no_prefixes_bytes(),
+        }
     }
+}
+
+#[cold]
+#[inline(never)]
+fn inconsistent_no_prefixes_bytes() -> ! {
+    panic!("`NoPrefixesBytes` key was found to be a prefix, `AsBytes` impl is inconsistent")
 }
 
 impl<K, V, const PREFIX_LEN: usize, A: Allocator> Drop for TreeMap<K, V, PREFIX_LEN, A> {
