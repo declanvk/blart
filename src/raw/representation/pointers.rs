@@ -226,9 +226,9 @@ macro_rules! impl_concrete_node_ptr {
             ) => {
                 match $match_e {
                     $(
-                        ConcreteNodePtr::$variant($inner_node_i) => $inner_node_e,
+                        crate::raw::ConcreteNodePtr::$variant($inner_node_i) => $inner_node_e,
                     )+
-                    ConcreteNodePtr::LeafNode($leaf_i) => $leaf_e,
+                    crate::raw::ConcreteNodePtr::LeafNode($leaf_i) => $leaf_e,
                 }
 
             };

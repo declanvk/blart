@@ -4,8 +4,8 @@ use super::PrefixMatchBehavior;
 use crate::{
     allocator::Allocator,
     raw::{
-        match_concrete_node_ptr, operations::lookup, ConcreteNodePtr, InnerNode, InnerNodeCommon,
-        LeafNode, NodePtr, OpaqueNodePtr, TreePath, TreePathSearch,
+        match_concrete_node_ptr, operations::lookup, InnerNode, InnerNodeCommon, LeafNode, NodePtr,
+        OpaqueNodePtr, TreePath, TreePathSearch,
     },
     AsBytes,
 };

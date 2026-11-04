@@ -10,7 +10,7 @@ use std::collections::{hash_map::Entry, HashMap};
 use crate::{
     allocator::Allocator,
     raw::{
-        visitor::{InnerNodeKind, Visitable, Visitor},
+        visitor::{InnerNodeType, Visitable, Visitor},
         InnerNode, LeafNode, NodePtr, OpaqueNodePtr, OptionalLeafPtr,
     },
     AsBytes, TreeMap,
@@ -55,7 +55,7 @@ pub enum MalformedTreeError<K, V, const PREFIX_LEN: usize> {
         /// The key prefix identifying the inner node
         key_prefix: KeyPrefix,
         /// The kind of the inner node (`Node4`, `Node16`, etc).
-        inner_node_type: InnerNodeKind,
+        inner_node_type: InnerNodeType,
         /// The number of children found at the inner node
         num_children: usize,
     },
@@ -500,7 +500,7 @@ where
             let current_key_prefix: KeyPrefix = self.current_key_prefix.as_slice().into();
             return Err(MalformedTreeError::WrongChildrenCount {
                 key_prefix: current_key_prefix,
-                inner_node_type: InnerNodeKind::from_node_type(N::TYPE)
+                inner_node_type: InnerNodeType::from_node_type(N::TYPE)
                     .expect("visit_inner_node is only ever called for inner node types"),
                 num_children,
             });
@@ -790,7 +790,7 @@ mod tests {
                 num_children,
             } => {
                 assert_eq!(key_prefix, []);
-                assert_eq!(inner_node_type, InnerNodeKind::Node16);
+                assert_eq!(inner_node_type, InnerNodeType::Node16);
                 assert_eq!(num_children, 2);
             },
             _ => {

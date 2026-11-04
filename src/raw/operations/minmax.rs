@@ -1,6 +1,4 @@
-use crate::raw::{
-    match_concrete_node_ptr, ConcreteNodePtr, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr,
-};
+use crate::raw::{match_concrete_node_ptr, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr};
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///

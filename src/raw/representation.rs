@@ -79,6 +79,42 @@ impl NodeType {
     }
 }
 
+/// The kind of an inner node in the tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum InnerNodeType {
+    /// Node that references between 2 and 4 children.
+    Node4,
+    /// Node that references between 5 and 16 children.
+    Node16,
+    /// Node that references between 17 and 48 children.
+    Node48,
+    /// Node that references between 49 and 256 children.
+    Node256,
+}
+
+impl InnerNodeType {
+    /// Convert a [`NodeType`] into an [`InnerNodeType`], returning `None` for [`NodeType::Leaf`].
+    pub(crate) const fn from_node_type(node_type: NodeType) -> Option<Self> {
+        Some(match node_type {
+            NodeType::Node4 => InnerNodeType::Node4,
+            NodeType::Node16 => InnerNodeType::Node16,
+            NodeType::Node48 => InnerNodeType::Node48,
+            NodeType::Node256 => InnerNodeType::Node256,
+            NodeType::Leaf => return None,
+        })
+    }
+
+    /// Convert into [`NodeType`].
+    pub(crate) const fn to_node_type(self) -> NodeType {
+        match self {
+            InnerNodeType::Node4 => NodeType::Node4,
+            InnerNodeType::Node16 => NodeType::Node16,
+            InnerNodeType::Node48 => NodeType::Node48,
+            InnerNodeType::Node256 => NodeType::Node256,
+        }
+    }
+}
+
 pub(crate) mod private {
     /// This trait is used to seal other traits, such that they cannot be
     /// implemented outside of the crate.

@@ -12,47 +12,11 @@ pub use tree_stats::*;
 #[cfg(feature = "std")]
 pub use well_formed::*;
 
+pub use super::InnerNodeType;
 use super::{
-    ConcreteNodePtr, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node,
-    NodePtr, NodeType, OpaqueNodePtr,
+    InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node, NodePtr, OpaqueNodePtr,
 };
 use crate::raw::{match_concrete_node_ptr, InnerNode, InnerNodeCommon};
-
-/// The kind of an inner node in the tree.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum InnerNodeKind {
-    /// Node that references between 2 and 4 children.
-    Node4,
-    /// Node that references between 5 and 16 children.
-    Node16,
-    /// Node that references between 17 and 48 children.
-    Node48,
-    /// Node that references between 49 and 256 children.
-    Node256,
-}
-
-impl InnerNodeKind {
-    /// Convert a [`NodeType`] into an [`InnerNodeKind`], returning `None` for [`NodeType::Leaf`].
-    pub(crate) fn from_node_type(node_type: NodeType) -> Option<Self> {
-        Some(match node_type {
-            NodeType::Node4 => InnerNodeKind::Node4,
-            NodeType::Node16 => InnerNodeKind::Node16,
-            NodeType::Node48 => InnerNodeKind::Node48,
-            NodeType::Node256 => InnerNodeKind::Node256,
-            NodeType::Leaf => return None,
-        })
-    }
-
-    /// Convert into [`NodeType`].
-    pub(crate) fn to_node_type(self) -> NodeType {
-        match self {
-            InnerNodeKind::Node4 => NodeType::Node4,
-            InnerNodeKind::Node16 => NodeType::Node16,
-            InnerNodeKind::Node48 => NodeType::Node48,
-            InnerNodeKind::Node256 => NodeType::Node256,
-        }
-    }
-}
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.
