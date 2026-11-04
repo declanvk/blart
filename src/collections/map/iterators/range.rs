@@ -12,8 +12,8 @@ use crate::{
     allocator::{Allocator, Global},
     map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
     raw::{
-        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, ConcreteNodePtr,
-        ExplicitMismatch, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, RawIterator,
+        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, ExplicitMismatch, InnerNode,
+        LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, RawIterator,
     },
     AsBytes, TreeMap,
 };

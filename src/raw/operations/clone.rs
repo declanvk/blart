@@ -6,8 +6,7 @@ use crate::{
     allocator::Allocator,
     raw::{
         deallocate_tree, match_concrete_inner_node_ptr, match_concrete_node_ptr,
-        ConcreteInnerNodePtr, ConcreteNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr,
-        OpaqueNodePtr,
+        ConcreteInnerNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr, OpaqueNodePtr,
     },
     AsBytes,
 };

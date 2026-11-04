@@ -58,7 +58,7 @@ mod inner {
 #[cfg(not(any(feature = "nightly", feature = "allocator-api2")))]
 mod inner {
     use alloc::alloc::{alloc, dealloc, Layout};
-    use core::ptr::NonNull;
+    use core::{num::NonZeroUsize, ptr::NonNull};
 
     #[expect(clippy::missing_safety_doc)] // not exposed outside of this crate
     pub unsafe trait Allocator {
@@ -87,7 +87,9 @@ mod inner {
             if layout.size() == 0 {
                 // SAFETY: `Layout::align` is always a non-zero power of two, so
                 // the pointer is non-null and correctly aligned.
-                return Ok(unsafe { NonNull::new_unchecked(layout.align() as *mut u8) });
+                return Ok(NonNull::without_provenance(unsafe {
+                    NonZeroUsize::new_unchecked(layout.align())
+                }));
             }
 
             // SAFETY: Layout has a non-zero size (we just checked)

@@ -4,7 +4,7 @@ use core::{iter::FusedIterator, mem::MaybeUninit};
 use crate::{
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
-    raw::{match_concrete_node_ptr, ConcreteNodePtr, InnerNode, LeafNode, OpaqueNodePtr},
+    raw::{match_concrete_node_ptr, InnerNode, LeafNode, OpaqueNodePtr},
     AsBytes, TreeMap,
 };
 

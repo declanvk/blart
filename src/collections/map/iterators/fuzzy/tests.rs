@@ -2,7 +2,10 @@ use alloc::ffi::CString;
 
 use super::*;
 use crate::{
-    raw::visitor::{InnerNodeKind, TreeStats, TreeStatsCollector},
+    raw::{
+        visitor::{TreeStats, TreeStatsCollector},
+        InnerNodeType,
+    },
     AsBytes, TreeMap,
 };
 
@@ -163,7 +166,7 @@ fn test_fuzzy_search_node48() {
     // Check that we indeed have a Node48 to make the test meaningful
     let stats = get_stats(&tree);
     assert!(
-        stats.inner_node[InnerNodeKind::Node48].count > 0,
+        stats.inner_node[InnerNodeType::Node48].count > 0,
         "Test requires at least one Node48"
     );
 
@@ -190,7 +193,7 @@ fn test_fuzzy_search_node256() {
 
     let stats = get_stats(&tree);
     assert!(
-        stats.inner_node[InnerNodeKind::Node256].count > 0,
+        stats.inner_node[InnerNodeType::Node256].count > 0,
         "Test requires at least one Node256"
     );
 
