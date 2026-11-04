@@ -1,5 +1,6 @@
 //! This module contains definitions of pointers types used in the tree.
 
+use alloc::alloc::handle_alloc_error;
 use core::{
     alloc::Layout,
     fmt,
@@ -369,14 +370,12 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
 
     /// Allocate the given [`Node`] on the [`alloc::alloc::Global`] heap and
     /// return a [`NodePtr`] that wrap the raw pointer.
-    ///
-    /// # Panics
-    /// This function will panic if the underlying allocate function returns an
-    /// error.
     pub fn allocate_node_ptr(node: N, alloc: &impl Allocator) -> Self {
         let layout = Layout::new::<mem::MaybeUninit<N>>();
-        let mut ptr: NonNull<mem::MaybeUninit<N>> =
-            do_alloc(alloc, layout).expect("memory is infinite").cast();
+        let mut ptr: NonNull<mem::MaybeUninit<N>> = match do_alloc(alloc, layout) {
+            Ok(ptr) => ptr.cast(),
+            Err(()) => handle_alloc_error(layout),
+        };
 
         // SAFETY: The pointer from [`Box::into_raw`] is non-null, aligned, and valid
         // for reads and writes of the [`Node`] `N`.
