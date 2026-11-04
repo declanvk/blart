@@ -1,3 +1,5 @@
+//! Fuzz the `TreeMap` API with randomly generated keys.
+
 #![no_main]
 #![feature(btree_entry_insert)]
 
@@ -13,110 +15,29 @@ use blart::{
     visitor::WellFormedChecker,
     TreeMap,
 };
-use libfuzzer_sys::arbitrary::{self, Arbitrary};
 
-#[derive(Arbitrary, Debug)]
-enum EntryAction {
-    AndModify(Option<Box<EntryAction>>),
-    InsertEntry(Option<OccupiedEntryAction>),
-    OrDefault,
-    OrInsert,
-    OrInsertWith,
-    OrInsertWithKey,
-}
+mod common;
 
-#[derive(Arbitrary, Debug)]
-enum PrefixEntryAction {
-    InsertEntry(Option<OccupiedEntryAction>),
-    OrDefault,
-    OrInsert,
-    OrInsertWith,
-    OrInsertWithKey,
-}
+use common::{Action, EntryAction, OccupiedEntryAction, PrefixEntryAction, RangeBound};
 
-#[derive(Arbitrary, Debug)]
-enum OccupiedEntryAction {
-    Insert,
-    Remove,
-}
-
-#[derive(Arbitrary, Debug)]
-enum RetainKind {
-    All,
-    None,
-    Half,
-}
-
-#[derive(Arbitrary, Debug)]
-enum RangeBound {
-    Unbounded,
-    Included(Box<[u8]>),
-    Excluded(Box<[u8]>),
-}
-
-impl RangeBound {
-    fn as_bound(&self) -> Bound<&[u8]> {
-        match self {
-            RangeBound::Unbounded => Bound::Unbounded,
-            RangeBound::Included(k) => Bound::Included(k.as_ref()),
-            RangeBound::Excluded(k) => Bound::Excluded(k.as_ref()),
-        }
-    }
-
-    fn key_bytes(&self) -> Option<&[u8]> {
-        match self {
-            RangeBound::Unbounded => None,
-            RangeBound::Included(k) | RangeBound::Excluded(k) => Some(k.as_ref()),
-        }
+/// Return true if the range would not cause a panic in `BTreeMap::range`.
+fn range_is_valid<K: Ord>(start: &RangeBound<K>, end: &RangeBound<K>) -> bool {
+    match (start, end) {
+        (RangeBound::Included(s), RangeBound::Included(e)) => s <= e,
+        (
+            RangeBound::Included(s) | RangeBound::Excluded(s),
+            RangeBound::Included(e) | RangeBound::Excluded(e),
+        ) => s < e,
+        _ => true,
     }
 }
 
-fn range_is_valid(start: &RangeBound, end: &RangeBound) -> bool {
-    match (start.key_bytes(), end.key_bytes()) {
-        (None, _) | (_, None) => true,
-        (Some(s), Some(e)) => {
-            s < e
-                || (s == e
-                    && matches!(
-                        (start, end),
-                        (RangeBound::Included(_), RangeBound::Included(_))
-                    ))
-        },
-    }
-}
-
-#[derive(Arbitrary, Debug)]
-enum Action {
-    Clear,
-    ContainsKey(Box<[u8]>),
-    GetMinimum,
-    PopMinimum,
-    GetMaximum,
-    PopMaximum,
-    GetKey(Box<[u8]>),
-    GetPrefixKey(Box<[u8]>),
-    CheckLen,
-    CheckIter,
-    Remove(Box<[u8]>),
-    RemovePrefix(Box<[u8]>),
-    TryInsert(Box<[u8]>),
-    TryInsertMany(Box<[u8]>, u8),
-    PrefixInsert(Box<[u8]>),
-    Clone,
-    Hash,
-    Entry(EntryAction, Box<[u8]>),
-    PrefixEntry(PrefixEntryAction, Box<[u8]>),
-    Fuzzy(Box<[u8]>),
-    Prefix(Box<[u8]>),
-    IntoIter { take_front: usize, take_back: usize },
-    Range(RangeBound, RangeBound),
-    Retain(RetainKind),
-    SplitOff(Box<[u8]>),
-}
-
-libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
+libfuzzer_sys::fuzz_target!(|actions: Vec<Action<Box<[u8]>>>| {
     let mut tree = TreeMap::<Box<[u8]>, u32>::new();
     let mut oracle = BTreeMap::<Box<[u8]>, u32>::new();
+    // The second tree holds the result of `SplitOff`, and can be swapped with the first
+    let mut other_tree = TreeMap::<Box<[u8]>, u32>::new();
+    let mut other_oracle = BTreeMap::<Box<[u8]>, u32>::new();
     let mut next_value = 0;
 
     for action in actions {
@@ -314,7 +235,10 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
             },
             Action::Range(start, end) => {
                 if range_is_valid(&start, &end) {
-                    let bounds = (start.as_bound(), end.as_bound());
+                    let bounds = (
+                        start.as_bound().map(|key| key.as_ref()),
+                        end.as_bound().map(|key| key.as_ref()),
+                    );
                     let tree_result: Vec<_> = tree.range::<[u8], _>(bounds).collect();
                     let oracle_result: Vec<_> = oracle.range::<[u8], _>(bounds).collect();
                     assert_eq!(
@@ -347,27 +271,19 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                 assert!(front_count <= take_front);
                 assert!(back_count <= take_back);
             },
-            Action::Retain(kind) => match kind {
-                RetainKind::All => {
-                    tree.retain(|_, _| true);
-                    oracle.retain(|_, _| true);
-                },
-                RetainKind::None => {
-                    tree.retain(|_, _| false);
-                    oracle.retain(|_, _| false);
-                },
-                RetainKind::Half => {
-                    let mut i = 0;
-                    tree.retain(|_, _| {
-                        i += 1;
-                        i % 2 == 0
-                    });
-                    i = 0;
-                    oracle.retain(|_, _| {
-                        i += 1;
-                        i % 2 == 0
-                    });
-                },
+            Action::ExtractIf(start, end, kind) => {
+                if range_is_valid(&start, &end) {
+                    let bounds = (start.as_bound(), end.as_bound());
+                    let tree_extracted: Vec<_> =
+                        tree.extract_if(bounds, kind.predicate()).collect();
+                    let oracle_extracted: Vec<_> =
+                        oracle.extract_if(bounds, kind.predicate()).collect();
+                    assert_eq!(tree_extracted, oracle_extracted);
+                }
+            },
+            Action::Retain(kind) => {
+                tree.retain(kind.predicate());
+                oracle.retain(kind.predicate());
             },
             Action::SplitOff(split_key) => {
                 let tree_removed = tree.split_off(&split_key);
@@ -379,6 +295,13 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action>| {
                     tree,
                     oracle
                 );
+
+                other_tree = tree_removed;
+                other_oracle = oracle_removed;
+            },
+            Action::SwapTrees => {
+                mem::swap(&mut tree, &mut other_tree);
+                mem::swap(&mut oracle, &mut other_oracle);
             },
         }
 

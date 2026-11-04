@@ -82,7 +82,10 @@ I think this is useful because we're doing some pointer times with our tagged po
 To run the fuzzer I use the command:
 
 ```bash
+# runs the fuzzer with normal key operations
 cargo +nightly fuzz run -j 8 -s address tree_map_api -- -max_len=32768 -max_total_time=3600 && cargo +nightly fuzz cmin tree_map_api
+# runs the fuzzer with adversarial key operations
+cargo +nightly fuzz run -j 8 -s address adversarial_as_bytes -- -max_len=32768 -max_total_time=3600 && cargo +nightly fuzz cmin adversarial_as_bytes
 ```
 
 This will run the fuzzer for a total of 3600 seconds (1 hour), using 8 jobs (half of the total number of cores on my dev box), and using the address sanitizer. The `cmin` command is used to compact the corpus after generating new entries.
