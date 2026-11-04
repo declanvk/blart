@@ -49,6 +49,7 @@ pub trait AsBytes {
 ///
 /// # Safety
 ///  - This trait can only be implemented if the above condition holds.
+// TODO: Convert this to a safe trait in the next breaking release, no `unsafe` code relies on it
 pub unsafe trait NoPrefixesBytes: AsBytes {}
 
 /// This trait is used to mark types where the lexicographic ordering of their
@@ -57,6 +58,7 @@ pub unsafe trait NoPrefixesBytes: AsBytes {}
 ///
 /// # Safety
 ///  - This trait can only be implemented if the above condition holds.
+// TODO: Convert this to a safe trait in the next breaking release, no `unsafe` code relies on it
 pub unsafe trait OrderedBytes: AsBytes + Ord {}
 
 macro_rules! as_bytes_for_integer_like_types {

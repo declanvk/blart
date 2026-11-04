@@ -857,6 +857,7 @@ impl<K, V, const PREFIX_LEN: usize> TreePathSearch<K, V, PREFIX_LEN> {
 
     /// Complete the tree search and return a [`TreePath`] which has the parent
     /// + grandparent information.
+    #[inline]
     pub fn finish(self) -> TreePath<K, V, PREFIX_LEN> {
         match (self.current_grandparent, self.current_parent) {
             (None, None) => TreePath::Root,

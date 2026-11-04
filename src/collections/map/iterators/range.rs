@@ -599,9 +599,10 @@ macro_rules! implement_range_iter {
 
                 Self {
                     _tree: tree,
-                    // SAFETY: `start` is guaranteed to be less than or equal to `end` in the iteration
-                    // order because of the check we do on the bytes of the resolved leaf pointers, just
-                    // above this line
+                    // SAFETY: `start` and `end` are both leaves of this tree. The byte comparison above
+                    // means `start` is before or equal to `end`, as long as `AsBytes` is deterministic.
+                    // If the `AsBytes` impl is adversarial, the comparison may be wrong and the iterator
+                    // can return unspecified results and may panic, but it won't ever cause UB.
                     inner: unsafe { RawIterator::new(start, end) },
                 }
             }
