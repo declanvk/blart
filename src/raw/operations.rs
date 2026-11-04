@@ -17,3 +17,6 @@ pub(crate) use deallocate::*;
 
 mod clone;
 pub(crate) use clone::*;
+
+mod split_off;
+pub(crate) use split_off::*;

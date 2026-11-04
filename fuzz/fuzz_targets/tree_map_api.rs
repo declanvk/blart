@@ -295,6 +295,9 @@ libfuzzer_sys::fuzz_target!(|actions: Vec<Action<Box<[u8]>>>| {
                     tree,
                     oracle
                 );
+                assert_eq!(tree_removed.len(), oracle_removed.len());
+                let _ = WellFormedChecker::check(&tree_removed)
+                    .expect("split off tree should be well-formed");
 
                 other_tree = tree_removed;
                 other_oracle = oracle_removed;

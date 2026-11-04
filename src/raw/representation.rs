@@ -113,6 +113,21 @@ impl InnerNodeType {
             InnerNodeType::Node256 => NodeType::Node256,
         }
     }
+
+    /// Return the smallest [`InnerNode`] [`NodeType`] which can hold the
+    /// given number of children.
+    ///
+    /// # Panics
+    ///  - Panics if `num_children` is greater than 256
+    pub(crate) const fn inner_node_type_for(num_children: usize) -> Self {
+        match num_children {
+            0..=4 => InnerNodeType::Node4,
+            5..=16 => InnerNodeType::Node16,
+            17..=48 => InnerNodeType::Node48,
+            49..=256 => InnerNodeType::Node256,
+            _ => panic!("inner nodes cannot hold more than 256 children"),
+        }
+    }
 }
 
 pub(crate) mod private {
@@ -626,7 +641,6 @@ where
 {
     /// Add the first child, transitioning the builder to the [`HasOneChild`]
     /// state.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn write_child(
         mut self,
         key_byte: u8,
@@ -646,7 +660,6 @@ where
 {
     /// Add the second child, transitioning the builder to the [`HasChild`]
     /// state and enabling [`build`][InnerNodeBuilder::build].
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn write_child(
         mut self,
         key_byte: u8,
@@ -714,7 +727,6 @@ where
     N: InnerNodeCommon<K, V, PREFIX_LEN>,
 {
     /// Add another child to the node being built.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn write_child(mut self, key_byte: u8, child: OpaqueNodePtr<K, V, PREFIX_LEN>) -> Self {
         self.node.write_child(key_byte, child);
         self
@@ -980,6 +992,28 @@ mod tests {
             mem::size_of::<OpaqueNodePtr<Box<[u8]>, (), DEFAULT_PREFIX_LEN>>(),
             8
         );
+    }
+
+    #[test]
+    fn inner_node_type_for() {
+        for node_type in [
+            InnerNodeType::Node4,
+            InnerNodeType::Node16,
+            InnerNodeType::Node48,
+            InnerNodeType::Node256,
+        ] {
+            for num_children in node_type.to_node_type().capacity_range() {
+                assert_eq!(InnerNodeType::inner_node_type_for(num_children), node_type);
+            }
+        }
+        assert_eq!(InnerNodeType::inner_node_type_for(0), InnerNodeType::Node4);
+        assert_eq!(InnerNodeType::inner_node_type_for(1), InnerNodeType::Node4);
+    }
+
+    #[test]
+    #[should_panic]
+    fn inner_node_type_for_too_many_children_panic() {
+        InnerNodeType::inner_node_type_for(257);
     }
 
     #[test]
