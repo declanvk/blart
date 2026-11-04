@@ -30,3 +30,9 @@ doc = false
 [profile.release]
 rustflags = ["-C", "target-cpu=native", "-Z", "tune-cpu=native"]
 debug-assertions = true
+
+[[bin]]
+name = "adversarial_as_bytes"
+path = "fuzz_targets/adversarial_as_bytes.rs"
+test = false
+doc = false
