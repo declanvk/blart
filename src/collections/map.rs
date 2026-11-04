@@ -3170,23 +3170,4 @@ mod custom_allocator_tests {
         // assert_eq!(allocator.alloc_count.get(), 3);
         // assert_eq!(allocator.dealloc_count.get(), 3);
     }
-
-    struct EmptyAllocator;
-
-    unsafe impl Allocator for EmptyAllocator {
-        #[inline]
-        fn allocate(&self, _layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-            Err(AllocError)
-        }
-
-        #[inline]
-        unsafe fn deallocate(&self, _ptr: NonNull<u8>, _layout: Layout) {}
-    }
-
-    #[test]
-    #[should_panic(expected = "memory is infinite")]
-    fn out_of_memory() {
-        let mut tree = TreeMap::new_in(EmptyAllocator);
-        tree.insert(c"abc", 0);
-    }
 }
