@@ -377,6 +377,19 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         }
     }
 
+    fn append_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>) {
+        let num_children = self.header.num_children();
+        assert!(num_children < SIZE, "node is full");
+        assert!(
+            num_children == 0 || self.keys[num_children - 1] < key_fragment,
+            "appended key fragment [{key_fragment}] must be greater than the existing key \
+             fragments"
+        );
+        // SAFETY: The assert above checks that the node is not full, so the write is in bounds.
+        // The second assert keeps the keys in sorted order.
+        unsafe { self.write_child_unchecked(key_fragment, child_pointer) };
+    }
+
     fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let num_children = self.header.num_children();
         let write_point = self.find_write_point(key_fragment);
@@ -637,6 +650,40 @@ mod tests {
             .build();
 
         assert_eq!(n.lookup_child(123), Some(l2_ptr));
+    }
+
+    #[test]
+    fn node4_append_child() {
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l3 = LeafNode::with_no_siblings(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+        let l3_ptr = NodePtr::from(&mut l3).to_opaque();
+
+        let n = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .append_child(1, l3_ptr)
+            .append_child(3, l1_ptr)
+            .append_child(123, l2_ptr)
+            .build();
+
+        assert_eq!(&n.keys[..n.header.num_children()], &[1, 3, 123]);
+        assert_eq!(n.lookup_child(3), Some(l1_ptr));
+        assert_eq!(n.lookup_child(123), Some(l2_ptr));
+        assert_eq!(n.lookup_child(1), Some(l3_ptr));
+    }
+
+    #[test]
+    #[should_panic = "must be greater than the existing key fragments"]
+    fn node4_append_child_out_of_order_panic() {
+        let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
+        let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
+        let l1_ptr = NodePtr::from(&mut l1).to_opaque();
+        let l2_ptr = NodePtr::from(&mut l2).to_opaque();
+
+        let _ = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
+            .append_child(3, l1_ptr)
+            .append_child(1, l2_ptr);
     }
 
     #[test]

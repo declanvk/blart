@@ -77,6 +77,35 @@ impl NodeType {
             NodeType::Leaf => 0..=0,
         }
     }
+
+    /// Return the [`NodeType`] corresponding to the given number of children of
+    /// an inner node.
+    ///
+    /// This function will never return [`NodeType::Leaf`].
+    ///
+    /// # Panics
+    ///  - If the number of children is less than 2
+    ///  - If the number of children is greater than 256
+    pub const fn type_for_num_children(num_children: usize) -> Self {
+        assert!(
+            num_children >= 2,
+            "Less than 2 children makes no sense in the context of this radix tree"
+        );
+        assert!(
+            num_children <= 256,
+            "More than 256 children makes no sense in the context of a byte-oriented radix tree"
+        );
+
+        if num_children <= *NodeType::Node4.capacity_range().end() {
+            NodeType::Node4
+        } else if num_children <= *NodeType::Node16.capacity_range().end() {
+            NodeType::Node16
+        } else if num_children <= *NodeType::Node48.capacity_range().end() {
+            NodeType::Node48
+        } else {
+            NodeType::Node256
+        }
+    }
 }
 
 /// The kind of an inner node in the tree.
@@ -345,6 +374,20 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
     /// # Panics
     ///  - Panics when the node is full.
     fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>);
+
+    /// Write a child pointer whose key fragment is greater than the key
+    /// fragments of all existing children in this inner node.
+    ///
+    /// Node types that keep their children sorted can append the child without
+    /// searching for the write position. The default implementation calls
+    /// [`InnerNodeCommon::write_child`].
+    ///
+    /// # Panics
+    ///  - Panics when the node is full.
+    ///  - May panic if the key fragment is not greater than all existing key fragments.
+    fn append_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>) {
+        self.write_child(key_fragment, child_pointer);
+    }
 
     /// Attempt to remove a child pointer at the key fragment from this inner
     /// node.
@@ -652,6 +695,20 @@ where
             _state: PhantomData,
         }
     }
+
+    /// Add the first child using [`InnerNodeCommon::append_child`],
+    /// transitioning the builder to the [`HasOneChild`] state.
+    pub fn append_child(
+        mut self,
+        key_byte: u8,
+        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasOneChild> {
+        self.node.append_child(key_byte, child);
+        InnerNodeBuilder {
+            node: self.node,
+            _state: PhantomData,
+        }
+    }
 }
 
 impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasOneChild>
@@ -666,6 +723,21 @@ where
         child: OpaqueNodePtr<K, V, PREFIX_LEN>,
     ) -> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasChild> {
         self.node.write_child(key_byte, child);
+        InnerNodeBuilder {
+            node: self.node,
+            _state: PhantomData,
+        }
+    }
+
+    /// Add the second child using [`InnerNodeCommon::append_child`],
+    /// transitioning the builder to the [`HasChild`] state and enabling
+    /// [`build`][InnerNodeBuilder::build].
+    pub fn append_child(
+        mut self,
+        key_byte: u8,
+        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
+    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasChild> {
+        self.node.append_child(key_byte, child);
         InnerNodeBuilder {
             node: self.node,
             _state: PhantomData,
@@ -729,6 +801,13 @@ where
     /// Add another child to the node being built.
     pub fn write_child(mut self, key_byte: u8, child: OpaqueNodePtr<K, V, PREFIX_LEN>) -> Self {
         self.node.write_child(key_byte, child);
+        self
+    }
+
+    /// Add another child to the node being built using
+    /// [`InnerNodeCommon::append_child`].
+    pub fn append_child(mut self, key_byte: u8, child: OpaqueNodePtr<K, V, PREFIX_LEN>) -> Self {
+        self.node.append_child(key_byte, child);
         self
     }
 

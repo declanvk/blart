@@ -20,3 +20,6 @@ pub(crate) use clone::*;
 
 mod split_off;
 pub(crate) use split_off::*;
+
+mod bulk_insert;
+pub(crate) use bulk_insert::*;
