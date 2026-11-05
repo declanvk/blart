@@ -1529,23 +1529,32 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
                         let prev_max_leaf = state.max_leaf;
                         state.max_leaf = less_than_root_max_leaf;
                         let prev_num_entries = self.num_entries;
+                        // Count the entries in the smaller tree by walking out from the split point
+                        // in both directions at once, so this takes time proportional to the
+                        // smaller tree. The leaf list was cut between the two trees, so each walk
+                        // stops at the end of its own tree.
                         self.num_entries = {
-                            // TODO(opt): is there a way we can optimize finding the new number of
-                            // entries? Maybe try to figure out which side is smaller and only scan
-                            // that specific side?
-
+                            let mut left_cursor = Some(less_than_root_max_leaf);
+                            let mut right_cursor = Some(greater_than_or_equal_min_leaf);
                             let mut count = 0;
-                            // SAFETY: Both leaves are in the less than tree, which we have
-                            // exclusive access to. `state.min_leaf` is the minimum leaf of that
-                            // tree, so it is before or equal to `less_than_root_max_leaf`.
-                            let mut iter = unsafe {
-                                RawIterator::new(state.min_leaf, less_than_root_max_leaf)
-                            };
-                            // SAFETY: The tree is not modified while iterating
-                            while unsafe { iter.next() }.is_some() {
-                                count += 1;
+                            loop {
+                                match (left_cursor, right_cursor) {
+                                    // The left walk finished first, `count` is the left size.
+                                    (None, _) => break count,
+                                    // The right walk finished first, `count` is the right size.
+                                    (_, None) => break prev_num_entries - count,
+                                    (Some(left_leaf), Some(right_leaf)) => {
+                                        // SAFETY: Both leaves are in trees we have exclusive
+                                        // access to, and the trees are not modified while these
+                                        // references are live.
+                                        unsafe {
+                                            left_cursor = left_leaf.as_ref().previous;
+                                            right_cursor = right_leaf.as_ref().next;
+                                        }
+                                        count += 1;
+                                    },
+                                }
                             }
-                            count
                         };
 
                         TreeMap {
