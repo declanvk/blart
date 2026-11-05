@@ -9,13 +9,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased] - ReleaseDate
 
+### Added
+ - `WellFormedChecker::check_without_ordering` checks the tree well-formed-ness, but doesn't check the `K::as_bytes` ordering at all.
+
 ### Changed
  - Update MSRV to `1.90`
  - Within the visitor module, replaced some uses of `NodeType` (which is now private) with a new enum that only contains variants for inner node kinds called `InnerNodeKind`.
+ - Optimized the `TreeMap::split_off` function so that now it splits "in place", instead of creating a whole new tree and removing the necessary entries from the old tree. This is much faster, using about 96-98% fewer instructions in the project's benchmarks.
+ - `TreeMap::{insert, entry}` may now panic if the key type's `AsBytes` implementation is not deterministic.
 
 ### Removed
  - Removed the unsound `OrderedBytes` implementations for `Path` and `PathBuf`.
  - Made the `Visitor`, `Visitable`, and `TreeStatsCollector::collect_ptr` items all private.
+
+### Fixed
+ - Fixed undefined behavior that a non-determinisitic `AsBytes` implementation could trigger from safe code in `TreeMap::{insert, entry, fuzzy, extract_if}`.
 
 ## [0.6.0] - 2026-09-21
 
