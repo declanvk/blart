@@ -18,12 +18,12 @@ use crate::{
     AsBytes, NoPrefixesBytes,
     allocator::{Allocator, Global},
     raw::{
-        CloneResult, DeletePoint, DeleteResult, InsertKind, InsertPoint, InsertPrefixError,
-        InsertResult, LeafNode, NodePtr, OpaqueNodePtr, PrefixInsertPoint, RawIterator,
-        SplitOffResult, clone_unchecked, deallocate_tree, find_maximum_to_delete,
-        find_minimum_to_delete, maximum_unchecked, minimum_unchecked, prefix_search_unchecked,
-        search_for_delete_point, search_for_insert_point, search_for_prefix_insert_point,
-        search_unchecked, split_off_unchecked,
+        BulkInsertOutput, CloneResult, DeletePoint, DeleteResult, InsertKind, InsertPoint,
+        InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, PrefixInsertPoint,
+        RawIterator, SplitOffResult, bulk_insert, clone_unchecked, deallocate_tree,
+        find_maximum_to_delete, find_minimum_to_delete, maximum_unchecked, minimum_unchecked,
+        prefix_search_unchecked, search_for_delete_point, search_for_insert_point,
+        search_for_prefix_insert_point, search_unchecked, split_off_unchecked,
     },
     rust_nightly_apis::hasher_write_length_prefix,
 };
@@ -2139,16 +2139,69 @@ where
     }
 }
 
+#[inline]
+fn from_container_no_prefix_bytes<K, V, const PREFIX_LEN: usize>(
+    mut entries: impl AsMut<[(K, V)]> + IntoIterator<Item = (K, V)>,
+) -> TreeMap<K, V, PREFIX_LEN>
+where
+    K: NoPrefixesBytes,
+{
+    let alloc = Global;
+    let entries_slice = entries.as_mut();
+    if entries_slice.is_empty() {
+        return TreeMap::with_prefix_len_in(alloc);
+    }
+
+    // Sorting is the most expensive part of a bulk insert, and inserting the
+    // entries one at a time is faster than sorting and then bulk inserting. So
+    // only use a bulk insert if the entries are already sorted.
+    if !entries_slice.is_sorted_by(|(a, _), (b, _)| a.as_bytes() <= b.as_bytes()) {
+        let mut map = TreeMap::with_prefix_len_in(alloc);
+        for (key, value) in entries {
+            let _ = map.insert(key, value);
+        }
+        return map;
+    }
+
+    let (state, num_entries) = {
+        // Duplicate keys are allowed here, `bulk_insert` keeps the last entry for
+        // each key.
+        let BulkInsertOutput {
+            root,
+            min_leaf,
+            max_leaf,
+            num_entries,
+        } = bulk_insert(entries, &alloc).expect(
+            "with NoPrefixesBytes bound we can assume no key is a prefix of a different key",
+        );
+
+        (
+            Some(NonEmptyTree {
+                root,
+                min_leaf,
+                max_leaf,
+            }),
+            num_entries,
+        )
+    };
+
+    TreeMap {
+        state,
+        num_entries,
+        alloc,
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize, const N: usize> From<[(K, V); N]> for TreeMap<K, V, PREFIX_LEN>
 where
     K: NoPrefixesBytes,
 {
     fn from(arr: [(K, V); N]) -> Self {
-        let mut map = TreeMap::with_prefix_len();
-        for (key, value) in arr {
-            let _ = map.insert(key, value);
+        if arr.is_empty() {
+            return TreeMap::with_prefix_len();
         }
-        map
+
+        from_container_no_prefix_bytes(arr)
     }
 }
 
@@ -2157,11 +2210,11 @@ where
     K: NoPrefixesBytes,
 {
     fn from(arr: Vec<(K, V)>) -> Self {
-        let mut map = TreeMap::with_prefix_len();
-        for (key, value) in arr {
-            let _ = map.insert(key, value);
+        if arr.is_empty() {
+            return TreeMap::with_prefix_len();
         }
-        map
+
+        from_container_no_prefix_bytes(arr)
     }
 }
 
