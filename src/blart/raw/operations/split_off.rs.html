@@ -1,0 +1,1000 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/raw/operations/split_off.rs`."><title>split_off.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-020b02a2.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="blart" data-themes="" data-resource-suffix="" data-rustdoc-version="1.101.0-nightly (249c1e4e3 2026-11-05)" data-channel="nightly" data-search-js="search-835b9732.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-9b351432.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-b2682d9c.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-101b5a15.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">blart/raw/operations/</div>split_off.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>core::{
+<a href=#3 id=3 data-nosnippet>3</a>    cmp::Ordering,
+<a href=#4 id=4 data-nosnippet>4</a>    fmt,
+<a href=#5 id=5 data-nosnippet>5</a>    ops::{Bound, ControlFlow},
+<a href=#6 id=6 data-nosnippet>6</a>};
+<a href=#7 id=7 data-nosnippet>7</a>
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use crate</span>::{
+<a href=#9 id=9 data-nosnippet>9</a>    AsBytes, OpaqueNodePtr,
+<a href=#10 id=10 data-nosnippet>10</a>    allocator::Allocator,
+<a href=#11 id=11 data-nosnippet>11</a>    raw::{
+<a href=#12 id=12 data-nosnippet>12</a>        ConcreteInnerNodePtr, InnerNode, InnerNode4, InnerNode16, InnerNode48, InnerNodeCommon,
+<a href=#13 id=13 data-nosnippet>13</a>        InnerNodeDirect, InnerNodeType, LeafNode, NodePtr, PrefixMatch,
+<a href=#14 id=14 data-nosnippet>14</a>        match_concrete_inner_node_ptr, match_concrete_node_ptr,
+<a href=#15 id=15 data-nosnippet>15</a>        operations::{maximum_unchecked, minimum_unchecked},
+<a href=#16 id=16 data-nosnippet>16</a>    },
+<a href=#17 id=17 data-nosnippet>17</a>};
+<a href=#18 id=18 data-nosnippet>18</a>
+<a href=#19 id=19 data-nosnippet>19</a><span class="doccomment">/// Split the tree rooted by `root` into two at the given `key_bytes`.
+<a href=#20 id=20 data-nosnippet>20</a>///
+<a href=#21 id=21 data-nosnippet>21</a>/// The keys less than `key_bytes` end up in one tree, and the keys greater than or equal to
+<a href=#22 id=22 data-nosnippet>22</a>/// `key_bytes` end up in the other.
+<a href=#23 id=23 data-nosnippet>23</a>///
+<a href=#24 id=24 data-nosnippet>24</a>/// The split happens in three phases:
+<a href=#25 id=25 data-nosnippet>25</a>///  1. Search for `key_bytes` from the root, recording every inner node on the path and which of
+<a href=#26 id=26 data-nosnippet>26</a>///     its children are to the left and right of the path (see [`collect_split_point_nodes`]). The
+<a href=#27 id=27 data-nosnippet>27</a>///     search stops at one of the following:
+<a href=#28 id=28 data-nosnippet>28</a>///     - a leaf, which goes to the left if its key is less than `key_bytes` and to the right
+<a href=#29 id=29 data-nosnippet>29</a>///       otherwise.
+<a href=#30 id=30 data-nosnippet>30</a>///     - an inner node whose prefix does not match `key_bytes`. The whole node goes to the left or
+<a href=#31 id=31 data-nosnippet>31</a>///       right depending on how its prefix compares to `key_bytes`.
+<a href=#32 id=32 data-nosnippet>32</a>///     - an inner node with no child for the next key byte, which is split at that key byte.
+<a href=#33 id=33 data-nosnippet>33</a>///  2. Cut the leaf linked list between the maximum leaf on the left and the minimum leaf on the
+<a href=#34 id=34 data-nosnippet>34</a>///     right. If one side is empty, return the tree unchanged instead.
+<a href=#35 id=35 data-nosnippet>35</a>///  3. Walk back up the path, splitting each inner node into a left and right node (see
+<a href=#36 id=36 data-nosnippet>36</a>///     [`split_ancestor`]).
+<a href=#37 id=37 data-nosnippet>37</a>///
+<a href=#38 id=38 data-nosnippet>38</a>/// Leaf nodes are never split, each one is moved whole to one of the two trees. When an inner node
+<a href=#39 id=39 data-nosnippet>39</a>/// is split, its allocation is reused for one side if the number of children on that side fits the
+<a href=#40 id=40 data-nosnippet>40</a>///  node type, otherwise a new node of the right size is allocated. If a side has only one child,
+<a href=#41 id=41 data-nosnippet>41</a>/// that level of the tree is collapsed into the child, by prepending the inner node's prefix and
+<a href=#42 id=42 data-nosnippet>42</a>/// key byte to the child's prefix. Inner nodes that are not reused are deallocated.
+<a href=#43 id=43 data-nosnippet>43</a>///
+<a href=#44 id=44 data-nosnippet>44</a>/// # Safety
+<a href=#45 id=45 data-nosnippet>45</a>///  - `root` must be the root of a well-formed tree, and every node of the tree must have been
+<a href=#46 id=46 data-nosnippet>46</a>///    allocated with `alloc`.
+<a href=#47 id=47 data-nosnippet>47</a>///  - This function requires exclusive access to the tree, no other operation may read or write any
+<a href=#48 id=48 data-nosnippet>48</a>///    node of the tree for the duration of this function.
+<a href=#49 id=49 data-nosnippet>49</a>///  - After this function returns, `root` must not be used except through the root pointers in the
+<a href=#50 id=50 data-nosnippet>50</a>///    returned [`SplitOffResult`]. For a [`SplitOffResult::NormalSplit`], some of the inner nodes
+<a href=#51 id=51 data-nosnippet>51</a>///    on the path to the split point have been modified or deallocated.
+<a href=#52 id=52 data-nosnippet>52</a>///
+<a href=#53 id=53 data-nosnippet>53</a>/// # Panics
+<a href=#54 id=54 data-nosnippet>54</a>///
+<a href=#55 id=55 data-nosnippet>55</a>/// This function calls [`AsBytes::as_bytes`] on keys in the tree, which may panic. Those calls all
+<a href=#56 id=56 data-nosnippet>56</a>/// happen before the tree is modified, so a panic leaves the tree unchanged.
+<a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">pub unsafe fn </span>split_off_unchecked&lt;K: AsBytes, V, A: Allocator, <span class="kw">const </span>PREFIX_LEN: usize&gt;(
+<a href=#58 id=58 data-nosnippet>58</a>    root: OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#59 id=59 data-nosnippet>59</a>    key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#60 id=60 data-nosnippet>60</a>    alloc: <span class="kw-2">&amp;</span>A,
+<a href=#61 id=61 data-nosnippet>61</a>) -&gt; SplitOffResult&lt;K, V, PREFIX_LEN&gt; {
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span>CollectSplitPointResult { path, terminal } = <span class="kw">unsafe </span>{
+<a href=#63 id=63 data-nosnippet>63</a>        <span class="comment">// SAFETY: There is no concurrent mutation of the tree, covered by the safety requirements
+<a href=#64 id=64 data-nosnippet>64</a>        // of this function
+<a href=#65 id=65 data-nosnippet>65</a>        </span>collect_split_point_nodes(root, key_bytes)
+<a href=#66 id=66 data-nosnippet>66</a>    };
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="comment">// Find the leaves on either side of the split before making any further changes, since we can
+<a href=#69 id=69 data-nosnippet>69</a>    // figure out whether to return early based on these leaves.
+<a href=#70 id=70 data-nosnippet>70</a>    //
+<a href=#71 id=71 data-nosnippet>71</a>    // SAFETY: The tree has not been modified yet and there is no concurrent mutation, covered by
+<a href=#72 id=72 data-nosnippet>72</a>    // the safety requirements of this function
+<a href=#73 id=73 data-nosnippet>73</a>    </span><span class="kw">let </span>(max_left, min_right) = <span class="kw">unsafe </span>{ find_split_boundary(<span class="kw-2">&amp;</span>terminal) };
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">let </span>(max_left, min_right) = <span class="kw">match </span>(max_left, min_right) {
+<a href=#75 id=75 data-nosnippet>75</a>        (<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="kw">_</span>)) =&gt; {
+<a href=#76 id=76 data-nosnippet>76</a>            <span class="kw">return </span>SplitOffResult::OnlyGreaterThanOrEqual {
+<a href=#77 id=77 data-nosnippet>77</a>                greater_than_or_equal_root: root,
+<a href=#78 id=78 data-nosnippet>78</a>            };
+<a href=#79 id=79 data-nosnippet>79</a>        },
+<a href=#80 id=80 data-nosnippet>80</a>        (<span class="prelude-val">Some</span>(<span class="kw">_</span>), <span class="prelude-val">None</span>) =&gt; {
+<a href=#81 id=81 data-nosnippet>81</a>            <span class="kw">return </span>SplitOffResult::OnlyLessThan {
+<a href=#82 id=82 data-nosnippet>82</a>                less_than_root: root,
+<a href=#83 id=83 data-nosnippet>83</a>            };
+<a href=#84 id=84 data-nosnippet>84</a>        },
+<a href=#85 id=85 data-nosnippet>85</a>        (<span class="prelude-val">Some</span>(max_left), <span class="prelude-val">Some</span>(min_right)) =&gt; (max_left, min_right),
+<a href=#86 id=86 data-nosnippet>86</a>        (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) =&gt; <span class="macro">unreachable!</span>(<span class="string">"the tree contains at least one leaf"</span>),
+<a href=#87 id=87 data-nosnippet>87</a>    };
+<a href=#88 id=88 data-nosnippet>88</a>
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="comment">// Cut the linked list between the two trees
+<a href=#90 id=90 data-nosnippet>90</a>    //
+<a href=#91 id=91 data-nosnippet>91</a>    // SAFETY: We have exclusive access to the tree, covered by the safety requirements of this
+<a href=#92 id=92 data-nosnippet>92</a>    // function. `max_left` and `min_right` are different leaves, and each mutable reference only
+<a href=#93 id=93 data-nosnippet>93</a>    // lasts for its own statement.
+<a href=#94 id=94 data-nosnippet>94</a>    </span><span class="kw">unsafe </span>{
+<a href=#95 id=95 data-nosnippet>95</a>        max_left.as_mut().next = <span class="prelude-val">None</span>;
+<a href=#96 id=96 data-nosnippet>96</a>        min_right.as_mut().previous = <span class="prelude-val">None</span>;
+<a href=#97 id=97 data-nosnippet>97</a>    }
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>left, <span class="kw-2">mut </span>right) = <span class="kw">match </span>terminal {
+<a href=#100 id=100 data-nosnippet>100</a>        CollectSplitPointTerminal::Leaf {
+<a href=#101 id=101 data-nosnippet>101</a>            leaf_ptr,
+<a href=#102 id=102 data-nosnippet>102</a>            ordering_to_split_key,
+<a href=#103 id=103 data-nosnippet>103</a>        } =&gt; <span class="kw">match </span>ordering_to_split_key {
+<a href=#104 id=104 data-nosnippet>104</a>            Ordering::Less =&gt; (<span class="prelude-val">Some</span>(leaf_ptr.to_opaque()), <span class="prelude-val">None</span>),
+<a href=#105 id=105 data-nosnippet>105</a>            Ordering::Equal | Ordering::Greater =&gt; (<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(leaf_ptr.to_opaque())),
+<a href=#106 id=106 data-nosnippet>106</a>        },
+<a href=#107 id=107 data-nosnippet>107</a>        CollectSplitPointTerminal::InnerNodePrefixMismatch {
+<a href=#108 id=108 data-nosnippet>108</a>            inner_node,
+<a href=#109 id=109 data-nosnippet>109</a>            ordering_to_split_key,
+<a href=#110 id=110 data-nosnippet>110</a>        } =&gt; <span class="kw">match </span>ordering_to_split_key {
+<a href=#111 id=111 data-nosnippet>111</a>            Ordering::Less =&gt; (<span class="prelude-val">Some</span>(inner_node.to_opaque()), <span class="prelude-val">None</span>),
+<a href=#112 id=112 data-nosnippet>112</a>            Ordering::Equal | Ordering::Greater =&gt; (<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(inner_node.to_opaque())),
+<a href=#113 id=113 data-nosnippet>113</a>        },
+<a href=#114 id=114 data-nosnippet>114</a>        CollectSplitPointTerminal::InnerNodeMissingChild(inner_node_path_elem) =&gt; {
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="comment">// SAFETY: We have exclusive access to the tree and every node was allocated with
+<a href=#116 id=116 data-nosnippet>116</a>            // `alloc`, covered by the safety requirements of this function. The element was just
+<a href=#117 id=117 data-nosnippet>117</a>            // built by `collect_split_point_nodes` and the tree has not been restructured since
+<a href=#118 id=118 data-nosnippet>118</a>            // (only the leaf linked list was cut), so it satisfies the `InnerNodePathElem`
+<a href=#119 id=119 data-nosnippet>119</a>            // invariants. There is no child on the path, so no slot in the inner node is stale,
+<a href=#120 id=120 data-nosnippet>120</a>            // and the children are exactly `left_children` plus `right_children`.
+<a href=#121 id=121 data-nosnippet>121</a>            </span><span class="kw">let </span>InnerNodeSplit { left, right, pos } =
+<a href=#122 id=122 data-nosnippet>122</a>                <span class="kw">unsafe </span>{ inner_node_path_elem.split(key_bytes, <span class="prelude-val">None</span>, alloc) };
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a>            <span class="comment">// SAFETY: We have exclusive access to the tree. `split` puts each child of the inner
+<a href=#125 id=125 data-nosnippet>125</a>            // node on exactly one side, and the inner node itself was either reused for a `Many`
+<a href=#126 id=126 data-nosnippet>126</a>            // side or deallocated, so nothing else accesses a singleton child during this call.
+<a href=#127 id=127 data-nosnippet>127</a>            // `pos` came from a prefix match against `key_bytes`, so its prefix range is in
+<a href=#128 id=128 data-nosnippet>128</a>            // bounds.
+<a href=#129 id=129 data-nosnippet>129</a>            </span><span class="kw">unsafe </span>{
+<a href=#130 id=130 data-nosnippet>130</a>                (
+<a href=#131 id=131 data-nosnippet>131</a>                    left.into_opaque(key_bytes, <span class="kw-2">&amp;</span>pos),
+<a href=#132 id=132 data-nosnippet>132</a>                    right.into_opaque(key_bytes, <span class="kw-2">&amp;</span>pos),
+<a href=#133 id=133 data-nosnippet>133</a>                )
+<a href=#134 id=134 data-nosnippet>134</a>            }
+<a href=#135 id=135 data-nosnippet>135</a>        },
+<a href=#136 id=136 data-nosnippet>136</a>    };
+<a href=#137 id=137 data-nosnippet>137</a>
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">for </span>elem <span class="kw">in </span>path.into_iter().rev() {
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="comment">// SAFETY: We have exclusive access to the tree and every node was allocated with `alloc`,
+<a href=#140 id=140 data-nosnippet>140</a>        // covered by the safety requirements of this function. `elem` was built by
+<a href=#141 id=141 data-nosnippet>141</a>        // `collect_split_point_nodes`, and its inner node has not been modified since, because
+<a href=#142 id=142 data-nosnippet>142</a>        // the path is processed from the deepest element up and each split only touches its own
+<a href=#143 id=143 data-nosnippet>143</a>        // inner node and the halves of its child. `left` and `right` are the halves of the path
+<a href=#144 id=144 data-nosnippet>144</a>        // child of `elem`: on the first iteration they come from the terminal, and afterwards
+<a href=#145 id=145 data-nosnippet>145</a>        // from splitting the element one level deeper, which is the path child of this one.
+<a href=#146 id=146 data-nosnippet>146</a>        </span>(left, right) = <span class="kw">unsafe </span>{ split_ancestor(key_bytes, left, right, elem, alloc) };
+<a href=#147 id=147 data-nosnippet>147</a>    }
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">match </span>(left, right) {
+<a href=#150 id=150 data-nosnippet>150</a>        (<span class="prelude-val">Some</span>(less_than_root), <span class="prelude-val">Some</span>(greater_than_or_equal_root)) =&gt; SplitOffResult::NormalSplit {
+<a href=#151 id=151 data-nosnippet>151</a>            less_than_root,
+<a href=#152 id=152 data-nosnippet>152</a>            less_than_root_max_leaf: max_left,
+<a href=#153 id=153 data-nosnippet>153</a>            greater_than_or_equal_root,
+<a href=#154 id=154 data-nosnippet>154</a>            greater_than_or_equal_min_leaf: min_right,
+<a href=#155 id=155 data-nosnippet>155</a>        },
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(<span class="string">"both sides of the split must be non-empty"</span>),
+<a href=#157 id=157 data-nosnippet>157</a>    }
+<a href=#158 id=158 data-nosnippet>158</a>}
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a><span class="doccomment">/// The result of [`split_off_unchecked`].
+<a href=#161 id=161 data-nosnippet>161</a></span><span class="kw">pub enum </span>SplitOffResult&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; {
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="doccomment">/// The tree had keys on both sides of the split, and was split into two trees.
+<a href=#163 id=163 data-nosnippet>163</a>    ///
+<a href=#164 id=164 data-nosnippet>164</a>    /// The leaf linked list was cut between `less_than_root_max_leaf` and
+<a href=#165 id=165 data-nosnippet>165</a>    /// `greater_than_or_equal_min_leaf`. The minimum leaf of the original tree is now the minimum
+<a href=#166 id=166 data-nosnippet>166</a>    /// leaf of the less than tree, and the maximum leaf of the original tree is now the maximum
+<a href=#167 id=167 data-nosnippet>167</a>    /// leaf of the greater than or equal tree.
+<a href=#168 id=168 data-nosnippet>168</a>    </span>NormalSplit {
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="doccomment">/// The root of the tree with all keys less than the split key
+<a href=#170 id=170 data-nosnippet>170</a>        </span>less_than_root: OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="doccomment">/// The maximum leaf of the less than tree
+<a href=#172 id=172 data-nosnippet>172</a>        </span>less_than_root_max_leaf: NodePtr&lt;PREFIX_LEN, LeafNode&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="doccomment">/// The root of the tree with all keys greater than or equal to the split key
+<a href=#174 id=174 data-nosnippet>174</a>        </span>greater_than_or_equal_root: OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="doccomment">/// The minimum leaf of the greater than or equal tree
+<a href=#176 id=176 data-nosnippet>176</a>        </span>greater_than_or_equal_min_leaf: NodePtr&lt;PREFIX_LEN, LeafNode&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#177 id=177 data-nosnippet>177</a>    },
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="doccomment">/// Every key in the tree is less than the split key, so the tree was not modified.
+<a href=#179 id=179 data-nosnippet>179</a>    </span>OnlyLessThan {
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="doccomment">/// The root of the original tree
+<a href=#181 id=181 data-nosnippet>181</a>        </span>less_than_root: OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#182 id=182 data-nosnippet>182</a>    },
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="doccomment">/// Every key in the tree is greater than or equal to the split key, so the tree was not
+<a href=#184 id=184 data-nosnippet>184</a>    /// modified.
+<a href=#185 id=185 data-nosnippet>185</a>    </span>OnlyGreaterThanOrEqual {
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="doccomment">/// The root of the original tree
+<a href=#187 id=187 data-nosnippet>187</a>        </span>greater_than_or_equal_root: OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#188 id=188 data-nosnippet>188</a>    },
+<a href=#189 id=189 data-nosnippet>189</a>}
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a><span class="kw">impl</span>&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; fmt::Debug <span class="kw">for </span>SplitOffResult&lt;K, V, PREFIX_LEN&gt; {
+<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#194 id=194 data-nosnippet>194</a>            <span class="self">Self</span>::NormalSplit {
+<a href=#195 id=195 data-nosnippet>195</a>                less_than_root,
+<a href=#196 id=196 data-nosnippet>196</a>                less_than_root_max_leaf,
+<a href=#197 id=197 data-nosnippet>197</a>                greater_than_or_equal_root,
+<a href=#198 id=198 data-nosnippet>198</a>                greater_than_or_equal_min_leaf,
+<a href=#199 id=199 data-nosnippet>199</a>            } =&gt; f
+<a href=#200 id=200 data-nosnippet>200</a>                .debug_struct(<span class="string">"NormalSplit"</span>)
+<a href=#201 id=201 data-nosnippet>201</a>                .field(<span class="string">"less_than_root"</span>, less_than_root)
+<a href=#202 id=202 data-nosnippet>202</a>                .field(<span class="string">"less_than_root_max_leaf"</span>, less_than_root_max_leaf)
+<a href=#203 id=203 data-nosnippet>203</a>                .field(<span class="string">"greater_than_or_equal_root"</span>, greater_than_or_equal_root)
+<a href=#204 id=204 data-nosnippet>204</a>                .field(
+<a href=#205 id=205 data-nosnippet>205</a>                    <span class="string">"greater_than_or_equal_min_leaf"</span>,
+<a href=#206 id=206 data-nosnippet>206</a>                    greater_than_or_equal_min_leaf,
+<a href=#207 id=207 data-nosnippet>207</a>                )
+<a href=#208 id=208 data-nosnippet>208</a>                .finish(),
+<a href=#209 id=209 data-nosnippet>209</a>            <span class="self">Self</span>::OnlyLessThan { less_than_root } =&gt; f
+<a href=#210 id=210 data-nosnippet>210</a>                .debug_struct(<span class="string">"OnlyLessThan"</span>)
+<a href=#211 id=211 data-nosnippet>211</a>                .field(<span class="string">"less_than_root"</span>, less_than_root)
+<a href=#212 id=212 data-nosnippet>212</a>                .finish(),
+<a href=#213 id=213 data-nosnippet>213</a>            <span class="self">Self</span>::OnlyGreaterThanOrEqual {
+<a href=#214 id=214 data-nosnippet>214</a>                greater_than_or_equal_root,
+<a href=#215 id=215 data-nosnippet>215</a>            } =&gt; f
+<a href=#216 id=216 data-nosnippet>216</a>                .debug_struct(<span class="string">"OnlyGreaterThanOrEqual"</span>)
+<a href=#217 id=217 data-nosnippet>217</a>                .field(<span class="string">"greater_than_or_equal_root"</span>, greater_than_or_equal_root)
+<a href=#218 id=218 data-nosnippet>218</a>                .finish(),
+<a href=#219 id=219 data-nosnippet>219</a>        }
+<a href=#220 id=220 data-nosnippet>220</a>    }
+<a href=#221 id=221 data-nosnippet>221</a>}
+<a href=#222 id=222 data-nosnippet>222</a>
+<a href=#223 id=223 data-nosnippet>223</a><span class="doccomment">/// Search for `key_bytes` from `root`, and collect the inner nodes on the path along with the node
+<a href=#224 id=224 data-nosnippet>224</a>/// where the search stopped.
+<a href=#225 id=225 data-nosnippet>225</a>///
+<a href=#226 id=226 data-nosnippet>226</a>/// For each inner node on the path, the children are partitioned into those with a key byte less
+<a href=#227 id=227 data-nosnippet>227</a>/// than the path's key byte (the left) and those with a greater key byte (the right). The child on
+<a href=#228 id=228 data-nosnippet>228</a>/// the path is in neither.
+<a href=#229 id=229 data-nosnippet>229</a>///
+<a href=#230 id=230 data-nosnippet>230</a>/// This function does not modify the tree.
+<a href=#231 id=231 data-nosnippet>231</a>///
+<a href=#232 id=232 data-nosnippet>232</a>/// # Safety
+<a href=#233 id=233 data-nosnippet>233</a>///  - This function cannot be called concurrently with any mutating operation on `root` or any
+<a href=#234 id=234 data-nosnippet>234</a>///    child node of `root`.
+<a href=#235 id=235 data-nosnippet>235</a></span><span class="kw">unsafe fn </span>collect_split_point_nodes&lt;K: AsBytes, V, <span class="kw">const </span>PREFIX_LEN: usize&gt;(
+<a href=#236 id=236 data-nosnippet>236</a>    root: OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#237 id=237 data-nosnippet>237</a>    key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#238 id=238 data-nosnippet>238</a>) -&gt; CollectSplitPointResult&lt;K, V, PREFIX_LEN&gt; {
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="doccomment">/// Match the prefix of an inner node and look up the child for the next key byte. Returns the
+<a href=#240 id=240 data-nosnippet>240</a>    /// child to continue the search with, or the terminal if the search stops at this node.
+<a href=#241 id=241 data-nosnippet>241</a>    ///
+<a href=#242 id=242 data-nosnippet>242</a>    /// On return, `*current_depth` is still less than or equal to `key_bytes.len()`. When this
+<a href=#243 id=243 data-nosnippet>243</a>    /// returns [`ControlFlow::Continue`], `*current_depth` has advanced past the node's prefix and
+<a href=#244 id=244 data-nosnippet>244</a>    /// the key byte of the returned child.
+<a href=#245 id=245 data-nosnippet>245</a>    ///
+<a href=#246 id=246 data-nosnippet>246</a>    /// # Safety
+<a href=#247 id=247 data-nosnippet>247</a>    ///  - `inner_node_ptr` must point to a live inner node of type `N`, which is the root of a
+<a href=#248 id=248 data-nosnippet>248</a>    ///    well-formed subtree (every node reachable from it is live).
+<a href=#249 id=249 data-nosnippet>249</a>    ///  - This function cannot be called concurrently with any mutating operation on the node at
+<a href=#250 id=250 data-nosnippet>250</a>    ///    `inner_node_ptr` or any of its descendants.
+<a href=#251 id=251 data-nosnippet>251</a>    ///  - `*current_depth` must be less than or equal to `key_bytes.len()`.
+<a href=#252 id=252 data-nosnippet>252</a>    </span><span class="kw">unsafe fn </span>visit_inner_node&lt;K, V, N, <span class="kw">const </span>PREFIX_LEN: usize&gt;(
+<a href=#253 id=253 data-nosnippet>253</a>        inner_node_ptr: NodePtr&lt;PREFIX_LEN, N&gt;,
+<a href=#254 id=254 data-nosnippet>254</a>        key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#255 id=255 data-nosnippet>255</a>        path: <span class="kw-2">&amp;mut </span>Vec&lt;InnerNodePathElem&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#256 id=256 data-nosnippet>256</a>        current_depth: <span class="kw-2">&amp;mut </span>usize,
+<a href=#257 id=257 data-nosnippet>257</a>    ) -&gt; ControlFlow&lt;CollectSplitPointTerminal&lt;K, V, PREFIX_LEN&gt;, OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;&gt;
+<a href=#258 id=258 data-nosnippet>258</a>    <span class="kw">where
+<a href=#259 id=259 data-nosnippet>259</a>        </span>N: InnerNode&lt;PREFIX_LEN, Key = K, Value = V&gt;,
+<a href=#260 id=260 data-nosnippet>260</a>        K: AsBytes,
+<a href=#261 id=261 data-nosnippet>261</a>        NodePtr&lt;PREFIX_LEN, N&gt;: Into&lt;ConcreteInnerNodePtr&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#262 id=262 data-nosnippet>262</a>    {
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="comment">// SAFETY: `inner_node_ptr` points to a live node with no concurrent mutation, covered by
+<a href=#264 id=264 data-nosnippet>264</a>        // the safety requirements of this function. The reference does not outlive this function.
+<a href=#265 id=265 data-nosnippet>265</a>        </span><span class="kw">let </span>inner_node = <span class="kw">unsafe </span>{ inner_node_ptr.as_ref() };
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span>depth_at_prefix_start = <span class="kw-2">*</span>current_depth;
+<a href=#268 id=268 data-nosnippet>268</a>
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="comment">// SAFETY: `depth_at_prefix_start &lt;= key_bytes.len()`, covered by the safety requirements
+<a href=#270 id=270 data-nosnippet>270</a>        // of this function.
+<a href=#271 id=271 data-nosnippet>271</a>        </span><span class="kw">match unsafe </span>{ inner_node.match_full_prefix(key_bytes, depth_at_prefix_start) } {
+<a href=#272 id=272 data-nosnippet>272</a>            <span class="prelude-val">Ok</span>(PrefixMatch { matched_bytes }) =&gt; {
+<a href=#273 id=273 data-nosnippet>273</a>                <span class="comment">// Since the prefix matched, advance the depth by the size of the prefix. On a
+<a href=#274 id=274 data-nosnippet>274</a>                // match, `matched_bytes` counts pairs zipped from the prefix and
+<a href=#275 id=275 data-nosnippet>275</a>                // `key_bytes[depth_at_prefix_start..]`, so the depth stays `&lt;= key_bytes.len()`.
+<a href=#276 id=276 data-nosnippet>276</a>                </span><span class="kw-2">*</span>current_depth += matched_bytes;
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a>                <span class="kw">let </span>next_key_fragment = <span class="kw">if </span><span class="kw-2">*</span>current_depth &lt; key_bytes.len() {
+<a href=#279 id=279 data-nosnippet>279</a>                    key_bytes[<span class="kw-2">*</span>current_depth]
+<a href=#280 id=280 data-nosnippet>280</a>                } <span class="kw">else </span>{
+<a href=#281 id=281 data-nosnippet>281</a>                    <span class="comment">// The key has insufficient bytes, so it is a strict prefix of every key under
+<a href=#282 id=282 data-nosnippet>282</a>                    // this node. Shorter sequences sort first, so every key under this node is
+<a href=#283 id=283 data-nosnippet>283</a>                    // greater than the split key. See the `split_off_key_ends_before_node` test.
+<a href=#284 id=284 data-nosnippet>284</a>                    </span><span class="kw">return </span>ControlFlow::Break(
+<a href=#285 id=285 data-nosnippet>285</a>                        CollectSplitPointTerminal::InnerNodePrefixMismatch {
+<a href=#286 id=286 data-nosnippet>286</a>                            inner_node: inner_node_ptr.into(),
+<a href=#287 id=287 data-nosnippet>287</a>                            ordering_to_split_key: Ordering::Greater,
+<a href=#288 id=288 data-nosnippet>288</a>                        },
+<a href=#289 id=289 data-nosnippet>289</a>                    );
+<a href=#290 id=290 data-nosnippet>290</a>                };
+<a href=#291 id=291 data-nosnippet>291</a>
+<a href=#292 id=292 data-nosnippet>292</a>                <span class="kw">let </span>child_lookup = inner_node.lookup_child(next_key_fragment);
+<a href=#293 id=293 data-nosnippet>293</a>                <span class="kw">let </span>left_children = inner_node.range(..next_key_fragment).collect();
+<a href=#294 id=294 data-nosnippet>294</a>                <span class="comment">// Exclude the child at `next_key_fragment` from both sides, since it lies on the
+<a href=#295 id=295 data-nosnippet>295</a>                // path and will itself be split
+<a href=#296 id=296 data-nosnippet>296</a>                </span><span class="kw">let </span>right_children = inner_node
+<a href=#297 id=297 data-nosnippet>297</a>                    .range((Bound::Excluded(next_key_fragment), Bound::Unbounded))
+<a href=#298 id=298 data-nosnippet>298</a>                    .collect();
+<a href=#299 id=299 data-nosnippet>299</a>
+<a href=#300 id=300 data-nosnippet>300</a>                <span class="kw">let </span>pos = InnerNodeKeyPosition {
+<a href=#301 id=301 data-nosnippet>301</a>                    depth_at_prefix_start,
+<a href=#302 id=302 data-nosnippet>302</a>                    prefix_length: matched_bytes,
+<a href=#303 id=303 data-nosnippet>303</a>                    next_key_fragment,
+<a href=#304 id=304 data-nosnippet>304</a>                };
+<a href=#305 id=305 data-nosnippet>305</a>
+<a href=#306 id=306 data-nosnippet>306</a>                <span class="kw">match </span>child_lookup {
+<a href=#307 id=307 data-nosnippet>307</a>                    <span class="prelude-val">Some</span>(child_ptr) =&gt; {
+<a href=#308 id=308 data-nosnippet>308</a>                        <span class="comment">// Since the prefix matched and it found a child, advance the depth by 1
+<a href=#309 id=309 data-nosnippet>309</a>                        // more key byte. This branch is only reached when
+<a href=#310 id=310 data-nosnippet>310</a>                        // `*current_depth &lt; key_bytes.len()`, so the depth stays
+<a href=#311 id=311 data-nosnippet>311</a>                        // `&lt;= key_bytes.len()`.
+<a href=#312 id=312 data-nosnippet>312</a>                        </span><span class="kw-2">*</span>current_depth += <span class="number">1</span>;
+<a href=#313 id=313 data-nosnippet>313</a>
+<a href=#314 id=314 data-nosnippet>314</a>                        path.push(InnerNodePathElem {
+<a href=#315 id=315 data-nosnippet>315</a>                            inner_node_ptr: inner_node_ptr.into(),
+<a href=#316 id=316 data-nosnippet>316</a>                            left_children,
+<a href=#317 id=317 data-nosnippet>317</a>                            right_children,
+<a href=#318 id=318 data-nosnippet>318</a>                            pos,
+<a href=#319 id=319 data-nosnippet>319</a>                        });
+<a href=#320 id=320 data-nosnippet>320</a>                        ControlFlow::Continue(child_ptr)
+<a href=#321 id=321 data-nosnippet>321</a>                    },
+<a href=#322 id=322 data-nosnippet>322</a>                    <span class="prelude-val">None </span>=&gt; ControlFlow::Break(CollectSplitPointTerminal::InnerNodeMissingChild(
+<a href=#323 id=323 data-nosnippet>323</a>                        InnerNodePathElem {
+<a href=#324 id=324 data-nosnippet>324</a>                            inner_node_ptr: inner_node_ptr.into(),
+<a href=#325 id=325 data-nosnippet>325</a>                            left_children,
+<a href=#326 id=326 data-nosnippet>326</a>                            right_children,
+<a href=#327 id=327 data-nosnippet>327</a>                            pos,
+<a href=#328 id=328 data-nosnippet>328</a>                        },
+<a href=#329 id=329 data-nosnippet>329</a>                    )),
+<a href=#330 id=330 data-nosnippet>330</a>                }
+<a href=#331 id=331 data-nosnippet>331</a>            },
+<a href=#332 id=332 data-nosnippet>332</a>            <span class="prelude-val">Err</span>(mismatch) =&gt; {
+<a href=#333 id=333 data-nosnippet>333</a>                ControlFlow::Break(CollectSplitPointTerminal::InnerNodePrefixMismatch {
+<a href=#334 id=334 data-nosnippet>334</a>                    inner_node: inner_node_ptr.into(),
+<a href=#335 id=335 data-nosnippet>335</a>                    ordering_to_split_key: mismatch.node_prefix_comparison_to_search_key_segment,
+<a href=#336 id=336 data-nosnippet>336</a>                })
+<a href=#337 id=337 data-nosnippet>337</a>            },
+<a href=#338 id=338 data-nosnippet>338</a>        }
+<a href=#339 id=339 data-nosnippet>339</a>    }
+<a href=#340 id=340 data-nosnippet>340</a>
+<a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">let </span><span class="kw-2">mut </span>current_node = root;
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">let </span><span class="kw-2">mut </span>path = Vec::new();
+<a href=#343 id=343 data-nosnippet>343</a>    <span class="kw">let </span><span class="kw-2">mut </span>current_depth = <span class="number">0</span>;
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">loop </span>{
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">let </span>control = <span class="macro">match_concrete_node_ptr!</span>(<span class="kw">match </span>(current_node.to_node_ptr()) {
+<a href=#347 id=347 data-nosnippet>347</a>            InnerNode(inner_node_ptr) =&gt; {
+<a href=#348 id=348 data-nosnippet>348</a>                <span class="comment">// SAFETY: `current_node` is either `root` or a child returned by a previous
+<a href=#349 id=349 data-nosnippet>349</a>                // visit, so it is a live node of the tree, and there is no concurrent mutation,
+<a href=#350 id=350 data-nosnippet>350</a>                // covered by the safety requirements of this function. `current_depth` starts at
+<a href=#351 id=351 data-nosnippet>351</a>                // 0, and each previous visit kept it `&lt;= key_bytes.len()`.
+<a href=#352 id=352 data-nosnippet>352</a>                </span><span class="kw">unsafe </span>{
+<a href=#353 id=353 data-nosnippet>353</a>                    visit_inner_node(inner_node_ptr, key_bytes, <span class="kw-2">&amp;mut </span>path, <span class="kw-2">&amp;mut </span>current_depth)
+<a href=#354 id=354 data-nosnippet>354</a>                }
+<a href=#355 id=355 data-nosnippet>355</a>            },
+<a href=#356 id=356 data-nosnippet>356</a>            LeafNode(leaf_ptr) =&gt; {
+<a href=#357 id=357 data-nosnippet>357</a>                <span class="comment">// SAFETY: There is no concurrent mutation of the tree, covered by the safety
+<a href=#358 id=358 data-nosnippet>358</a>                // requirements of this function. The reference does not outlive this block.
+<a href=#359 id=359 data-nosnippet>359</a>                </span><span class="kw">let </span>leaf_key = <span class="kw">unsafe </span>{ leaf_ptr.as_key_ref() };
+<a href=#360 id=360 data-nosnippet>360</a>                <span class="comment">// This call may panic, since it is user-provided, we just need to ensure that there
+<a href=#361 id=361 data-nosnippet>361</a>                // are no memory leaks and we don't leave the tree in an invalid state
+<a href=#362 id=362 data-nosnippet>362</a>                </span><span class="kw">let </span>leaf_key_bytes = leaf_key.as_bytes();
+<a href=#363 id=363 data-nosnippet>363</a>                <span class="kw">let </span>ordering_to_split_key = leaf_key_bytes.cmp(key_bytes);
+<a href=#364 id=364 data-nosnippet>364</a>
+<a href=#365 id=365 data-nosnippet>365</a>                <span class="kw">return </span>CollectSplitPointResult {
+<a href=#366 id=366 data-nosnippet>366</a>                    path,
+<a href=#367 id=367 data-nosnippet>367</a>                    terminal: CollectSplitPointTerminal::Leaf {
+<a href=#368 id=368 data-nosnippet>368</a>                        leaf_ptr,
+<a href=#369 id=369 data-nosnippet>369</a>                        ordering_to_split_key,
+<a href=#370 id=370 data-nosnippet>370</a>                    },
+<a href=#371 id=371 data-nosnippet>371</a>                };
+<a href=#372 id=372 data-nosnippet>372</a>            },
+<a href=#373 id=373 data-nosnippet>373</a>        });
+<a href=#374 id=374 data-nosnippet>374</a>
+<a href=#375 id=375 data-nosnippet>375</a>        current_node = <span class="kw">match </span>control {
+<a href=#376 id=376 data-nosnippet>376</a>            ControlFlow::Continue(next_node) =&gt; next_node,
+<a href=#377 id=377 data-nosnippet>377</a>            ControlFlow::Break(terminal) =&gt; <span class="kw">return </span>CollectSplitPointResult { path, terminal },
+<a href=#378 id=378 data-nosnippet>378</a>        };
+<a href=#379 id=379 data-nosnippet>379</a>    }
+<a href=#380 id=380 data-nosnippet>380</a>}
+<a href=#381 id=381 data-nosnippet>381</a>
+<a href=#382 id=382 data-nosnippet>382</a><span class="doccomment">/// The result of [`collect_split_point_nodes`].
+<a href=#383 id=383 data-nosnippet>383</a></span><span class="kw">struct </span>CollectSplitPointResult&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; {
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="doccomment">/// The inner nodes that the split key passed through, starting from the root. Each of these
+<a href=#385 id=385 data-nosnippet>385</a>    /// has a child on the path.
+<a href=#386 id=386 data-nosnippet>386</a>    </span>path: Vec&lt;InnerNodePathElem&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#387 id=387 data-nosnippet>387</a>    <span class="doccomment">/// The node where the search for the split key stopped
+<a href=#388 id=388 data-nosnippet>388</a>    </span>terminal: CollectSplitPointTerminal&lt;K, V, PREFIX_LEN&gt;,
+<a href=#389 id=389 data-nosnippet>389</a>}
+<a href=#390 id=390 data-nosnippet>390</a>
+<a href=#391 id=391 data-nosnippet>391</a><span class="kw">impl</span>&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; fmt::Debug <span class="kw">for </span>CollectSplitPointResult&lt;K, V, PREFIX_LEN&gt; {
+<a href=#392 id=392 data-nosnippet>392</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#393 id=393 data-nosnippet>393</a>        f.debug_struct(<span class="string">"CollectSplitPointResult"</span>)
+<a href=#394 id=394 data-nosnippet>394</a>            .field(<span class="string">"path"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.path)
+<a href=#395 id=395 data-nosnippet>395</a>            .field(<span class="string">"terminal"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.terminal)
+<a href=#396 id=396 data-nosnippet>396</a>            .finish()
+<a href=#397 id=397 data-nosnippet>397</a>    }
+<a href=#398 id=398 data-nosnippet>398</a>}
+<a href=#399 id=399 data-nosnippet>399</a>
+<a href=#400 id=400 data-nosnippet>400</a><span class="doccomment">/// The node where the search for the split key stopped, and how it relates to the split key.
+<a href=#401 id=401 data-nosnippet>401</a></span><span class="kw">enum </span>CollectSplitPointTerminal&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; {
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="doccomment">/// The search reached a leaf
+<a href=#403 id=403 data-nosnippet>403</a>    </span>Leaf {
+<a href=#404 id=404 data-nosnippet>404</a>        leaf_ptr: NodePtr&lt;PREFIX_LEN, LeafNode&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="doccomment">/// The ordering of the leaf's key compared to the split key
+<a href=#406 id=406 data-nosnippet>406</a>        </span>ordering_to_split_key: Ordering,
+<a href=#407 id=407 data-nosnippet>407</a>    },
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="doccomment">/// The prefix of an inner node did not match the split key.
+<a href=#409 id=409 data-nosnippet>409</a>    ///
+<a href=#410 id=410 data-nosnippet>410</a>    /// This also covers the insufficient bytes case, since we could view it as a "mismatch" of
+<a href=#411 id=411 data-nosnippet>411</a>    /// length. In that case the `ordering_to_split_key` would always be `Ordering::Greater`
+<a href=#412 id=412 data-nosnippet>412</a>    /// because the split key is a strict prefix of every key in the node, and shorter
+<a href=#413 id=413 data-nosnippet>413</a>    /// sequences are always ordered before longer sequences in a lexicographic ordering.
+<a href=#414 id=414 data-nosnippet>414</a>    </span>InnerNodePrefixMismatch {
+<a href=#415 id=415 data-nosnippet>415</a>        inner_node: ConcreteInnerNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="doccomment">/// The ordering of every key under the inner node compared to the split key
+<a href=#417 id=417 data-nosnippet>417</a>        </span>ordering_to_split_key: Ordering,
+<a href=#418 id=418 data-nosnippet>418</a>    },
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="doccomment">/// The prefix of an inner node matched, but the child lookup for the next key byte failed
+<a href=#420 id=420 data-nosnippet>420</a>    </span>InnerNodeMissingChild(InnerNodePathElem&lt;K, V, PREFIX_LEN&gt;),
+<a href=#421 id=421 data-nosnippet>421</a>}
+<a href=#422 id=422 data-nosnippet>422</a>
+<a href=#423 id=423 data-nosnippet>423</a><span class="kw">impl</span>&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; fmt::Debug <span class="kw">for </span>CollectSplitPointTerminal&lt;K, V, PREFIX_LEN&gt; {
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#426 id=426 data-nosnippet>426</a>            <span class="self">Self</span>::Leaf {
+<a href=#427 id=427 data-nosnippet>427</a>                leaf_ptr,
+<a href=#428 id=428 data-nosnippet>428</a>                ordering_to_split_key,
+<a href=#429 id=429 data-nosnippet>429</a>            } =&gt; f
+<a href=#430 id=430 data-nosnippet>430</a>                .debug_struct(<span class="string">"Leaf"</span>)
+<a href=#431 id=431 data-nosnippet>431</a>                .field(<span class="string">"leaf_ptr"</span>, leaf_ptr)
+<a href=#432 id=432 data-nosnippet>432</a>                .field(<span class="string">"ordering_to_split_key"</span>, ordering_to_split_key)
+<a href=#433 id=433 data-nosnippet>433</a>                .finish(),
+<a href=#434 id=434 data-nosnippet>434</a>            <span class="self">Self</span>::InnerNodePrefixMismatch {
+<a href=#435 id=435 data-nosnippet>435</a>                inner_node,
+<a href=#436 id=436 data-nosnippet>436</a>                ordering_to_split_key,
+<a href=#437 id=437 data-nosnippet>437</a>            } =&gt; f
+<a href=#438 id=438 data-nosnippet>438</a>                .debug_struct(<span class="string">"InnerNodePrefixMismatch"</span>)
+<a href=#439 id=439 data-nosnippet>439</a>                .field(<span class="string">"inner_node"</span>, inner_node)
+<a href=#440 id=440 data-nosnippet>440</a>                .field(<span class="string">"ordering_to_split_key"</span>, ordering_to_split_key)
+<a href=#441 id=441 data-nosnippet>441</a>                .finish(),
+<a href=#442 id=442 data-nosnippet>442</a>            <span class="self">Self</span>::InnerNodeMissingChild(elem) =&gt; {
+<a href=#443 id=443 data-nosnippet>443</a>                f.debug_tuple(<span class="string">"InnerNodeMissingChild"</span>).field(elem).finish()
+<a href=#444 id=444 data-nosnippet>444</a>            },
+<a href=#445 id=445 data-nosnippet>445</a>        }
+<a href=#446 id=446 data-nosnippet>446</a>    }
+<a href=#447 id=447 data-nosnippet>447</a>}
+<a href=#448 id=448 data-nosnippet>448</a>
+<a href=#449 id=449 data-nosnippet>449</a><span class="doccomment">/// Find the pair of adjacent leaves where the split happens, returning the maximum leaf less than
+<a href=#450 id=450 data-nosnippet>450</a>/// the split key and the minimum leaf greater than or equal to the split key.
+<a href=#451 id=451 data-nosnippet>451</a>///
+<a href=#452 id=452 data-nosnippet>452</a>/// Either leaf is `None` when there are no leaves on that side of the split.
+<a href=#453 id=453 data-nosnippet>453</a>///
+<a href=#454 id=454 data-nosnippet>454</a>/// # Safety
+<a href=#455 id=455 data-nosnippet>455</a>///  - This function cannot be called concurrently with any mutating operation on the tree that
+<a href=#456 id=456 data-nosnippet>456</a>///    `terminal` was collected from.
+<a href=#457 id=457 data-nosnippet>457</a></span><span class="kw">unsafe fn </span>find_split_boundary&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt;(
+<a href=#458 id=458 data-nosnippet>458</a>    terminal: <span class="kw-2">&amp;</span>CollectSplitPointTerminal&lt;K, V, PREFIX_LEN&gt;,
+<a href=#459 id=459 data-nosnippet>459</a>) -&gt; SplitLeafNodes&lt;K, V, PREFIX_LEN&gt; {
+<a href=#460 id=460 data-nosnippet>460</a>    <span class="comment">// SAFETY: Covered by the safety requirements of the containing function
+<a href=#461 id=461 data-nosnippet>461</a>    </span><span class="kw">let </span>from_max_left = |max_left: NodePtr&lt;PREFIX_LEN, LeafNode&lt;K, V, PREFIX_LEN&gt;&gt;| {
+<a href=#462 id=462 data-nosnippet>462</a>        (<span class="prelude-val">Some</span>(max_left), <span class="kw">unsafe </span>{ max_left.as_ref() }.next)
+<a href=#463 id=463 data-nosnippet>463</a>    };
+<a href=#464 id=464 data-nosnippet>464</a>    <span class="comment">// SAFETY: Covered by the safety requirements of the containing function
+<a href=#465 id=465 data-nosnippet>465</a>    </span><span class="kw">let </span>from_min_right = |min_right: NodePtr&lt;PREFIX_LEN, LeafNode&lt;K, V, PREFIX_LEN&gt;&gt;| {
+<a href=#466 id=466 data-nosnippet>466</a>        (<span class="kw">unsafe </span>{ min_right.as_ref() }.previous, <span class="prelude-val">Some</span>(min_right))
+<a href=#467 id=467 data-nosnippet>467</a>    };
+<a href=#468 id=468 data-nosnippet>468</a>
+<a href=#469 id=469 data-nosnippet>469</a>    <span class="kw">match </span>terminal {
+<a href=#470 id=470 data-nosnippet>470</a>        CollectSplitPointTerminal::Leaf {
+<a href=#471 id=471 data-nosnippet>471</a>            leaf_ptr,
+<a href=#472 id=472 data-nosnippet>472</a>            ordering_to_split_key,
+<a href=#473 id=473 data-nosnippet>473</a>        } =&gt; <span class="kw">match </span>ordering_to_split_key {
+<a href=#474 id=474 data-nosnippet>474</a>            Ordering::Less =&gt; from_max_left(<span class="kw-2">*</span>leaf_ptr),
+<a href=#475 id=475 data-nosnippet>475</a>            Ordering::Equal | Ordering::Greater =&gt; from_min_right(<span class="kw-2">*</span>leaf_ptr),
+<a href=#476 id=476 data-nosnippet>476</a>        },
+<a href=#477 id=477 data-nosnippet>477</a>        CollectSplitPointTerminal::InnerNodePrefixMismatch {
+<a href=#478 id=478 data-nosnippet>478</a>            inner_node,
+<a href=#479 id=479 data-nosnippet>479</a>            ordering_to_split_key,
+<a href=#480 id=480 data-nosnippet>480</a>        } =&gt; <span class="kw">match </span>ordering_to_split_key {
+<a href=#481 id=481 data-nosnippet>481</a>            <span class="comment">// SAFETY: Covered by the safety requirements of the containing function
+<a href=#482 id=482 data-nosnippet>482</a>            </span>Ordering::Less =&gt; from_max_left(<span class="kw">unsafe </span>{ maximum_unchecked(inner_node.to_opaque()) }),
+<a href=#483 id=483 data-nosnippet>483</a>            Ordering::Equal | Ordering::Greater =&gt; {
+<a href=#484 id=484 data-nosnippet>484</a>                <span class="comment">// SAFETY: Covered by the safety requirements of the containing function
+<a href=#485 id=485 data-nosnippet>485</a>                </span>from_min_right(<span class="kw">unsafe </span>{ minimum_unchecked(inner_node.to_opaque()) })
+<a href=#486 id=486 data-nosnippet>486</a>            },
+<a href=#487 id=487 data-nosnippet>487</a>        },
+<a href=#488 id=488 data-nosnippet>488</a>        CollectSplitPointTerminal::InnerNodeMissingChild(elem) =&gt; {
+<a href=#489 id=489 data-nosnippet>489</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, child)) = elem.left_children.last() {
+<a href=#490 id=490 data-nosnippet>490</a>                <span class="comment">// SAFETY: Covered by the safety requirements of the containing function
+<a href=#491 id=491 data-nosnippet>491</a>                </span>from_max_left(<span class="kw">unsafe </span>{ maximum_unchecked(<span class="kw-2">*</span>child) })
+<a href=#492 id=492 data-nosnippet>492</a>            } <span class="kw">else if let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, child)) = elem.right_children.first() {
+<a href=#493 id=493 data-nosnippet>493</a>                <span class="comment">// SAFETY: Covered by the safety requirements of the containing function
+<a href=#494 id=494 data-nosnippet>494</a>                </span>from_min_right(<span class="kw">unsafe </span>{ minimum_unchecked(<span class="kw-2">*</span>child) })
+<a href=#495 id=495 data-nosnippet>495</a>            } <span class="kw">else </span>{
+<a href=#496 id=496 data-nosnippet>496</a>                <span class="macro">unreachable!</span>(<span class="string">"inner node must have at least one child"</span>)
+<a href=#497 id=497 data-nosnippet>497</a>            }
+<a href=#498 id=498 data-nosnippet>498</a>        },
+<a href=#499 id=499 data-nosnippet>499</a>    }
+<a href=#500 id=500 data-nosnippet>500</a>}
+<a href=#501 id=501 data-nosnippet>501</a>
+<a href=#502 id=502 data-nosnippet>502</a><span class="kw">type </span>SplitLeafNodes&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; = (
+<a href=#503 id=503 data-nosnippet>503</a>    <span class="prelude-ty">Option</span>&lt;NodePtr&lt;PREFIX_LEN, LeafNode&lt;K, V, PREFIX_LEN&gt;&gt;&gt;,
+<a href=#504 id=504 data-nosnippet>504</a>    <span class="prelude-ty">Option</span>&lt;NodePtr&lt;PREFIX_LEN, LeafNode&lt;K, V, PREFIX_LEN&gt;&gt;&gt;,
+<a href=#505 id=505 data-nosnippet>505</a>);
+<a href=#506 id=506 data-nosnippet>506</a>
+<a href=#507 id=507 data-nosnippet>507</a><span class="doccomment">/// Split an inner node on the path, given the two halves of its child on the path.
+<a href=#508 id=508 data-nosnippet>508</a>///
+<a href=#509 id=509 data-nosnippet>509</a>/// `left_child` and `right_child` are the result of splitting the child on the path (the child at
+<a href=#510 id=510 data-nosnippet>510</a>/// `elem.pos.next_key_fragment`), and either may be `None` if that side is empty. Returns the left
+<a href=#511 id=511 data-nosnippet>511</a>/// and right halves of the inner node in `elem`, in the same form.
+<a href=#512 id=512 data-nosnippet>512</a>///
+<a href=#513 id=513 data-nosnippet>513</a>/// This works because every key under the path child has the same key byte at this inner node,
+<a href=#514 id=514 data-nosnippet>514</a>/// so both halves of the path child keep that key byte. Every left sibling has a smaller key byte,
+<a href=#515 id=515 data-nosnippet>515</a>/// so the left half goes after them. Every right sibling has a larger key byte, so the right half
+<a href=#516 id=516 data-nosnippet>516</a>/// goes before them. After that, the inner node is split the same way as one with no child on the
+<a href=#517 id=517 data-nosnippet>517</a>/// path, except that its slot for the path child is stale (see [`InnerNodePathElem::split`]).
+<a href=#518 id=518 data-nosnippet>518</a>///
+<a href=#519 id=519 data-nosnippet>519</a>/// # Safety
+<a href=#520 id=520 data-nosnippet>520</a>///  - The caller must have exclusive access to the inner node of `elem` and every node reachable
+<a href=#521 id=521 data-nosnippet>521</a>///    from it, and no other operation may read or write those nodes for the duration of this
+<a href=#522 id=522 data-nosnippet>522</a>///    function.
+<a href=#523 id=523 data-nosnippet>523</a>///  - Every node reachable from the inner node of `elem`, and every node in the subtrees of
+<a href=#524 id=524 data-nosnippet>524</a>///    `left_child` and `right_child`, must have been allocated with `alloc`.
+<a href=#525 id=525 data-nosnippet>525</a>///  - `elem` must satisfy the [`InnerNodePathElem`] invariants, and its inner node must have a
+<a href=#526 id=526 data-nosnippet>526</a>///    child at `elem.pos.next_key_fragment` (the path child). That is, `elem` was pushed onto the
+<a href=#527 id=527 data-nosnippet>527</a>///    path by [`collect_split_point_nodes`], and its inner node has not been modified since.
+<a href=#528 id=528 data-nosnippet>528</a>///  - `left_child` and `right_child` must be the result of splitting the path child. Each must
+<a href=#529 id=529 data-nosnippet>529</a>///    point to a live node. They must be different nodes, and neither may be in
+<a href=#530 id=530 data-nosnippet>530</a>///    `elem.left_children` or `elem.right_children`. Apart from the stale path slot in the inner
+<a href=#531 id=531 data-nosnippet>531</a>///    node of `elem`, no node outside their own subtrees may point to them or to any node in their
+<a href=#532 id=532 data-nosnippet>532</a>///    subtrees.
+<a href=#533 id=533 data-nosnippet>533</a>///  - `key_bytes` must be the same key bytes that `elem` was collected with.
+<a href=#534 id=534 data-nosnippet>534</a>///
+<a href=#535 id=535 data-nosnippet>535</a>/// After this function returns, the inner node of `elem` must not be used except through the
+<a href=#536 id=536 data-nosnippet>536</a>/// returned pointers, since it was either reused for one side or deallocated.
+<a href=#537 id=537 data-nosnippet>537</a></span><span class="kw">unsafe fn </span>split_ancestor&lt;K: AsBytes, V, <span class="kw">const </span>PREFIX_LEN: usize&gt;(
+<a href=#538 id=538 data-nosnippet>538</a>    key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#539 id=539 data-nosnippet>539</a>    left_child: <span class="prelude-ty">Option</span>&lt;OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#540 id=540 data-nosnippet>540</a>    right_child: <span class="prelude-ty">Option</span>&lt;OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#541 id=541 data-nosnippet>541</a>    <span class="kw-2">mut </span>elem: InnerNodePathElem&lt;K, V, PREFIX_LEN&gt;,
+<a href=#542 id=542 data-nosnippet>542</a>    alloc: <span class="kw-2">&amp;</span><span class="kw">impl </span>Allocator,
+<a href=#543 id=543 data-nosnippet>543</a>) -&gt; SplitNodes&lt;K, V, PREFIX_LEN&gt; {
+<a href=#544 id=544 data-nosnippet>544</a>    <span class="kw">let </span>path_key_fragment = elem.pos.next_key_fragment;
+<a href=#545 id=545 data-nosnippet>545</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(left_child) = left_child {
+<a href=#546 id=546 data-nosnippet>546</a>        <span class="comment">// Every left sibling has a smaller key byte, so this sorts last
+<a href=#547 id=547 data-nosnippet>547</a>        </span>elem.left_children.push((path_key_fragment, left_child));
+<a href=#548 id=548 data-nosnippet>548</a>    }
+<a href=#549 id=549 data-nosnippet>549</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(right_child) = right_child {
+<a href=#550 id=550 data-nosnippet>550</a>        <span class="comment">// Every right sibling has a larger key byte, so this sorts first
+<a href=#551 id=551 data-nosnippet>551</a>        // TODO(opt): avoid shifting the whole vector
+<a href=#552 id=552 data-nosnippet>552</a>        </span>elem.right_children
+<a href=#553 id=553 data-nosnippet>553</a>            .insert(<span class="number">0</span>, (path_key_fragment, right_child));
+<a href=#554 id=554 data-nosnippet>554</a>    }
+<a href=#555 id=555 data-nosnippet>555</a>
+<a href=#556 id=556 data-nosnippet>556</a>    <span class="comment">// SAFETY: Exclusive access and the allocator are covered by the safety requirements of this
+<a href=#557 id=557 data-nosnippet>557</a>    // function. `elem` satisfied the `InnerNodePathElem` invariants on entry, and adding at most
+<a href=#558 id=558 data-nosnippet>558</a>    // one half of the path child to each side at the path key byte preserves them: every left
+<a href=#559 id=559 data-nosnippet>559</a>    // sibling has a smaller key byte and every right sibling a larger one, so both vectors stay
+<a href=#560 id=560 data-nosnippet>560</a>    // strictly ascending. The inner node has a child at `path_key_fragment`, which is the stale
+<a href=#561 id=561 data-nosnippet>561</a>    // slot. The halves are live, not already in either vector, and not pointed to by any other
+<a href=#562 id=562 data-nosnippet>562</a>    // node except through that stale slot, covered by the safety requirements of this function.
+<a href=#563 id=563 data-nosnippet>563</a>    </span><span class="kw">let </span>InnerNodeSplit { left, right, pos } =
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw">unsafe </span>{ elem.split(key_bytes, <span class="prelude-val">Some</span>(path_key_fragment), alloc) };
+<a href=#565 id=565 data-nosnippet>565</a>
+<a href=#566 id=566 data-nosnippet>566</a>    <span class="comment">// SAFETY: Exclusive access is covered by the safety requirements of this function. `split`
+<a href=#567 id=567 data-nosnippet>567</a>    // puts each child of the inner node, and each half of the path child, on exactly one side. The
+<a href=#568 id=568 data-nosnippet>568</a>    // inner node was either reused for a `Many` side or deallocated, so nothing else accesses a
+<a href=#569 id=569 data-nosnippet>569</a>    // singleton child during this call. `pos` came from a prefix match against `key_bytes`, so its
+<a href=#570 id=570 data-nosnippet>570</a>    // prefix range is in bounds.
+<a href=#571 id=571 data-nosnippet>571</a>    </span><span class="kw">unsafe </span>{
+<a href=#572 id=572 data-nosnippet>572</a>        (
+<a href=#573 id=573 data-nosnippet>573</a>            left.into_opaque(key_bytes, <span class="kw-2">&amp;</span>pos),
+<a href=#574 id=574 data-nosnippet>574</a>            right.into_opaque(key_bytes, <span class="kw-2">&amp;</span>pos),
+<a href=#575 id=575 data-nosnippet>575</a>        )
+<a href=#576 id=576 data-nosnippet>576</a>    }
+<a href=#577 id=577 data-nosnippet>577</a>}
+<a href=#578 id=578 data-nosnippet>578</a>
+<a href=#579 id=579 data-nosnippet>579</a><span class="kw">type </span>SplitNodes&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; = (
+<a href=#580 id=580 data-nosnippet>580</a>    <span class="prelude-ty">Option</span>&lt;OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#581 id=581 data-nosnippet>581</a>    <span class="prelude-ty">Option</span>&lt;OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#582 id=582 data-nosnippet>582</a>);
+<a href=#583 id=583 data-nosnippet>583</a>
+<a href=#584 id=584 data-nosnippet>584</a><span class="doccomment">/// An inner node that the split key passed through, with its children partitioned around the
+<a href=#585 id=585 data-nosnippet>585</a>/// split key.
+<a href=#586 id=586 data-nosnippet>586</a>///
+<a href=#587 id=587 data-nosnippet>587</a>/// # Invariants
+<a href=#588 id=588 data-nosnippet>588</a>///
+<a href=#589 id=589 data-nosnippet>589</a>/// Let `node` be the inner node at `inner_node_ptr` and `b` be `pos.next_key_fragment`. The type
+<a href=#590 id=590 data-nosnippet>590</a>/// does not enforce these. [`collect_split_point_nodes`] establishes them, [`split_ancestor`]
+<a href=#591 id=591 data-nosnippet>591</a>/// preserves them, and [`InnerNodePathElem::split`] requires them:
+<a href=#592 id=592 data-nosnippet>592</a>///  - **Partition:** for each child of `node` at key byte `k`, if `k &lt; b` then `(k, child)` appears
+<a href=#593 id=593 data-nosnippet>593</a>///    exactly once in `left_children`, and if `k &gt; b` then it appears exactly once in
+<a href=#594 id=594 data-nosnippet>594</a>///    `right_children`. The only other entries allowed are at most one entry with key byte `b` in
+<a href=#595 id=595 data-nosnippet>595</a>///    each vector, which are halves of the path child added by [`split_ancestor`]. So every child
+<a href=#596 id=596 data-nosnippet>596</a>///    of `node` other than the one at `b` ends up on exactly one side, which is what makes it sound
+<a href=#597 id=597 data-nosnippet>597</a>///    to give each side ownership of its children.
+<a href=#598 id=598 data-nosnippet>598</a>///  - **Ordering:** `left_children` and `right_children` are each strictly ascending by key byte.
+<a href=#599 id=599 data-nosnippet>599</a>///  - **Prefix:** for the key bytes that this element was collected with,
+<a href=#600 id=600 data-nosnippet>600</a>///    `pos.depth_at_prefix_start + pos.prefix_length &lt; key_bytes.len()`. The full prefix of `node`
+<a href=#601 id=601 data-nosnippet>601</a>///    equals `key_bytes[pos.depth_at_prefix_start..][..pos.prefix_length]`.
+<a href=#602 id=602 data-nosnippet>602</a>///  - `node` is live and has not been modified since the element was collected.
+<a href=#603 id=603 data-nosnippet>603</a></span><span class="kw">struct </span>InnerNodePathElem&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; {
+<a href=#604 id=604 data-nosnippet>604</a>    <span class="doccomment">/// Pointer to the inner node
+<a href=#605 id=605 data-nosnippet>605</a>    </span>inner_node_ptr: ConcreteInnerNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#606 id=606 data-nosnippet>606</a>    <span class="doccomment">/// The children with a key byte less than `pos.next_key_fragment`, in order
+<a href=#607 id=607 data-nosnippet>607</a>    </span>left_children: Vec&lt;(u8, OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;)&gt;,
+<a href=#608 id=608 data-nosnippet>608</a>    <span class="doccomment">/// The children with a key byte greater than `pos.next_key_fragment`, in order
+<a href=#609 id=609 data-nosnippet>609</a>    </span>right_children: Vec&lt;(u8, OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;)&gt;,
+<a href=#610 id=610 data-nosnippet>610</a>    <span class="doccomment">/// The position of the inner node relative to the split key
+<a href=#611 id=611 data-nosnippet>611</a>    </span>pos: InnerNodeKeyPosition,
+<a href=#612 id=612 data-nosnippet>612</a>}
+<a href=#613 id=613 data-nosnippet>613</a>
+<a href=#614 id=614 data-nosnippet>614</a><span class="kw">impl</span>&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; fmt::Debug <span class="kw">for </span>InnerNodePathElem&lt;K, V, PREFIX_LEN&gt; {
+<a href=#615 id=615 data-nosnippet>615</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#616 id=616 data-nosnippet>616</a>        f.debug_struct(<span class="string">"InnerNodePathElem"</span>)
+<a href=#617 id=617 data-nosnippet>617</a>            .field(<span class="string">"inner_node_ptr"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.inner_node_ptr)
+<a href=#618 id=618 data-nosnippet>618</a>            .field(<span class="string">"left_children"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.left_children)
+<a href=#619 id=619 data-nosnippet>619</a>            .field(<span class="string">"right_children"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.right_children)
+<a href=#620 id=620 data-nosnippet>620</a>            .field(<span class="string">"pos"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.pos)
+<a href=#621 id=621 data-nosnippet>621</a>            .finish()
+<a href=#622 id=622 data-nosnippet>622</a>    }
+<a href=#623 id=623 data-nosnippet>623</a>}
+<a href=#624 id=624 data-nosnippet>624</a>
+<a href=#625 id=625 data-nosnippet>625</a><span class="kw">impl</span>&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; InnerNodePathElem&lt;K, V, PREFIX_LEN&gt; {
+<a href=#626 id=626 data-nosnippet>626</a>    <span class="doccomment">/// Split the inner node into a left side made from `left_children` and a right side made from
+<a href=#627 id=627 data-nosnippet>627</a>    /// `right_children`.
+<a href=#628 id=628 data-nosnippet>628</a>    ///
+<a href=#629 id=629 data-nosnippet>629</a>    /// Each side either reuses the original inner node, becomes a single child, or is a newly
+<a href=#630 id=630 data-nosnippet>630</a>    /// allocated inner node. Only one side can reuse the original node, and if neither does, it is
+<a href=#631 id=631 data-nosnippet>631</a>    /// deallocated.
+<a href=#632 id=632 data-nosnippet>632</a>    ///
+<a href=#633 id=633 data-nosnippet>633</a>    /// `stale_path_slot` is the key byte of the child on the path, if there is one. The original
+<a href=#634 id=634 data-nosnippet>634</a>    /// inner node still has a slot at that key byte pointing to the child as it was before it was
+<a href=#635 id=635 data-nosnippet>635</a>    /// split. That pointer is stale, the child may have been reused for one of its halves or
+<a href=#636 id=636 data-nosnippet>636</a>    /// deallocated. The halves of the path child (if any) are already in `left_children` and
+<a href=#637 id=637 data-nosnippet>637</a>    /// `right_children`, so the stale slot must not be copied over if the original node is reused.
+<a href=#638 id=638 data-nosnippet>638</a>    ///
+<a href=#639 id=639 data-nosnippet>639</a>    /// # Safety
+<a href=#640 id=640 data-nosnippet>640</a>    ///  - The caller must have exclusive access to the inner node at `self.inner_node_ptr` and
+<a href=#641 id=641 data-nosnippet>641</a>    ///    every node in `left_children` and `right_children`. No other operation may read or write
+<a href=#642 id=642 data-nosnippet>642</a>    ///    them for the duration of this function.
+<a href=#643 id=643 data-nosnippet>643</a>    ///  - The inner node must have been allocated with `alloc`.
+<a href=#644 id=644 data-nosnippet>644</a>    ///  - `self` must satisfy the [`InnerNodePathElem`] invariants, and `key_bytes` must be the
+<a href=#645 id=645 data-nosnippet>645</a>    ///    same key bytes that `self` was collected with.
+<a href=#646 id=646 data-nosnippet>646</a>    ///  - If `stale_path_slot` is `None`, `left_children` and `right_children` must have no entries
+<a href=#647 id=647 data-nosnippet>647</a>    ///    at `self.pos.next_key_fragment`, and the inner node must have no child there. If
+<a href=#648 id=648 data-nosnippet>648</a>    ///    `stale_path_slot` is `Some(b)`, then `b` must equal `self.pos.next_key_fragment`, and the
+<a href=#649 id=649 data-nosnippet>649</a>    ///    inner node must have a child at `b`.
+<a href=#650 id=650 data-nosnippet>650</a>    ///  - Every node in `left_children` and `right_children` must be live. The only node allowed to
+<a href=#651 id=651 data-nosnippet>651</a>    ///    point to them is the inner node, through its own slots or the stale path slot.
+<a href=#652 id=652 data-nosnippet>652</a>    ///
+<a href=#653 id=653 data-nosnippet>653</a>    /// After this function returns, `self.inner_node_ptr` must not be used except through the
+<a href=#654 id=654 data-nosnippet>654</a>    /// returned [`SplitSide::Many`], since the inner node was either reused for one side or
+<a href=#655 id=655 data-nosnippet>655</a>    /// deallocated. Each entry of `left_children` and `right_children` ends up on exactly one side.
+<a href=#656 id=656 data-nosnippet>656</a>    </span><span class="kw">unsafe fn </span>split(
+<a href=#657 id=657 data-nosnippet>657</a>        <span class="self">self</span>,
+<a href=#658 id=658 data-nosnippet>658</a>        key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#659 id=659 data-nosnippet>659</a>        stale_path_slot: <span class="prelude-ty">Option</span>&lt;u8&gt;,
+<a href=#660 id=660 data-nosnippet>660</a>        alloc: <span class="kw-2">&amp;</span><span class="kw">impl </span>Allocator,
+<a href=#661 id=661 data-nosnippet>661</a>    ) -&gt; InnerNodeSplit&lt;K, V, PREFIX_LEN&gt; {
+<a href=#662 id=662 data-nosnippet>662</a>        <span class="doccomment">/// Allocate the new inner node at the smallest size that will fit the given list of
+<a href=#663 id=663 data-nosnippet>663</a>        /// children, then insert those children.
+<a href=#664 id=664 data-nosnippet>664</a>        </span><span class="kw">fn </span>allocate_node_for_children&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt;(
+<a href=#665 id=665 data-nosnippet>665</a>            key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#666 id=666 data-nosnippet>666</a>            children: <span class="kw-2">&amp;</span>Vec&lt;(u8, OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;)&gt;,
+<a href=#667 id=667 data-nosnippet>667</a>            pos: <span class="kw-2">&amp;</span>InnerNodeKeyPosition,
+<a href=#668 id=668 data-nosnippet>668</a>            alloc: <span class="kw-2">&amp;</span><span class="kw">impl </span>Allocator,
+<a href=#669 id=669 data-nosnippet>669</a>        ) -&gt; ConcreteInnerNodePtr&lt;K, V, PREFIX_LEN&gt; {
+<a href=#670 id=670 data-nosnippet>670</a>            <span class="kw">let </span>[(first_byte, first_child), (second_byte, second_child), ..] = children.as_slice()
+<a href=#671 id=671 data-nosnippet>671</a>            <span class="kw">else </span>{
+<a href=#672 id=672 data-nosnippet>672</a>                <span class="macro">unreachable!</span>(
+<a href=#673 id=673 data-nosnippet>673</a>                    <span class="string">"children array should have at least two elements, had instead {} elements"</span>,
+<a href=#674 id=674 data-nosnippet>674</a>                    children.len()
+<a href=#675 id=675 data-nosnippet>675</a>                )
+<a href=#676 id=676 data-nosnippet>676</a>            };
+<a href=#677 id=677 data-nosnippet>677</a>
+<a href=#678 id=678 data-nosnippet>678</a>            <span class="kw">let </span>children_rest = <span class="kw-2">&amp;</span>children.as_slice()[<span class="number">2</span>..];
+<a href=#679 id=679 data-nosnippet>679</a>
+<a href=#680 id=680 data-nosnippet>680</a>            <span class="kw">let </span>prefix_bytes = <span class="kw-2">&amp;</span>key_bytes
+<a href=#681 id=681 data-nosnippet>681</a>                [pos.depth_at_prefix_start..(pos.depth_at_prefix_start + pos.prefix_length)];
+<a href=#682 id=682 data-nosnippet>682</a>
+<a href=#683 id=683 data-nosnippet>683</a>            <span class="macro">macro_rules!</span> build_inner_node {
+<a href=#684 id=684 data-nosnippet>684</a>                (<span class="macro-nonterminal">$t</span>:ident) =&gt; {{
+<a href=#685 id=685 data-nosnippet>685</a>                    <span class="kw">let </span><span class="kw-2">mut </span>builder = <span class="macro-nonterminal">$t::builder</span>(prefix_bytes, pos.prefix_length)
+<a href=#686 id=686 data-nosnippet>686</a>                        .write_child(<span class="kw-2">*</span>first_byte, <span class="kw-2">*</span>first_child)
+<a href=#687 id=687 data-nosnippet>687</a>                        .write_child(<span class="kw-2">*</span>second_byte, <span class="kw-2">*</span>second_child);
+<a href=#688 id=688 data-nosnippet>688</a>
+<a href=#689 id=689 data-nosnippet>689</a>                    <span class="kw">for </span>(byte, child) <span class="kw">in </span>children_rest {
+<a href=#690 id=690 data-nosnippet>690</a>                        builder = builder.write_child(<span class="kw-2">*</span>byte, <span class="kw-2">*</span>child);
+<a href=#691 id=691 data-nosnippet>691</a>                    }
+<a href=#692 id=692 data-nosnippet>692</a>
+<a href=#693 id=693 data-nosnippet>693</a>                    NodePtr::allocate_node_ptr(builder.build(), alloc).into()
+<a href=#694 id=694 data-nosnippet>694</a>                }};
+<a href=#695 id=695 data-nosnippet>695</a>            }
+<a href=#696 id=696 data-nosnippet>696</a>
+<a href=#697 id=697 data-nosnippet>697</a>            <span class="kw">match </span>InnerNodeType::inner_node_type_for(children.len()) {
+<a href=#698 id=698 data-nosnippet>698</a>                InnerNodeType::Node4 =&gt; {
+<a href=#699 id=699 data-nosnippet>699</a>                    <span class="macro">build_inner_node!</span>(InnerNode4)
+<a href=#700 id=700 data-nosnippet>700</a>                },
+<a href=#701 id=701 data-nosnippet>701</a>                InnerNodeType::Node16 =&gt; {
+<a href=#702 id=702 data-nosnippet>702</a>                    <span class="macro">build_inner_node!</span>(InnerNode16)
+<a href=#703 id=703 data-nosnippet>703</a>                },
+<a href=#704 id=704 data-nosnippet>704</a>                InnerNodeType::Node48 =&gt; {
+<a href=#705 id=705 data-nosnippet>705</a>                    <span class="macro">build_inner_node!</span>(InnerNode48)
+<a href=#706 id=706 data-nosnippet>706</a>                },
+<a href=#707 id=707 data-nosnippet>707</a>                InnerNodeType::Node256 =&gt; {
+<a href=#708 id=708 data-nosnippet>708</a>                    <span class="macro">build_inner_node!</span>(InnerNodeDirect)
+<a href=#709 id=709 data-nosnippet>709</a>                },
+<a href=#710 id=710 data-nosnippet>710</a>            }
+<a href=#711 id=711 data-nosnippet>711</a>        }
+<a href=#712 id=712 data-nosnippet>712</a>
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="doccomment">/// Build one side of the split from `keep`, either by reusing the original inner node,
+<a href=#714 id=714 data-nosnippet>714</a>        /// collapsing to a single child, or allocating a new inner node.
+<a href=#715 id=715 data-nosnippet>715</a>        ///
+<a href=#716 id=716 data-nosnippet>716</a>        /// If the original inner node is reused, `*did_consume_parent` is set to `true`, and the
+<a href=#717 id=717 data-nosnippet>717</a>        /// node's children become exactly the entries of `keep`.
+<a href=#718 id=718 data-nosnippet>718</a>        ///
+<a href=#719 id=719 data-nosnippet>719</a>        /// # Safety
+<a href=#720 id=720 data-nosnippet>720</a>        ///  - If `*did_consume_parent` is `false`, `inner_node_ptr` must point to a live inner node
+<a href=#721 id=721 data-nosnippet>721</a>        ///    of type `N` that has not been reused for the other side. The caller must have
+<a href=#722 id=722 data-nosnippet>722</a>        ///    exclusive access to it, and no other operation may read or write it for the duration
+<a href=#723 id=723 data-nosnippet>723</a>        ///    of this function.
+<a href=#724 id=724 data-nosnippet>724</a>        ///  - `keep` and `discard` must be the two sides of an [`InnerNodePathElem`] that satisfies
+<a href=#725 id=725 data-nosnippet>725</a>        ///    its invariants for this inner node and `key_bytes`, and `stale_path_slot` must
+<a href=#726 id=726 data-nosnippet>726</a>        ///    satisfy the requirements of [`InnerNodePathElem::split`].
+<a href=#727 id=727 data-nosnippet>727</a>        ///  - Every node in `keep` must be live. The only node allowed to point to it is the inner
+<a href=#728 id=728 data-nosnippet>728</a>        ///    node, through its own slots or the stale path slot.
+<a href=#729 id=729 data-nosnippet>729</a>        </span><span class="attr">#[expect(clippy::too_many_arguments)]
+<a href=#730 id=730 data-nosnippet>730</a>        </span><span class="kw">unsafe fn </span>split_side&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize, N&gt;(
+<a href=#731 id=731 data-nosnippet>731</a>            inner_node_ptr: NodePtr&lt;PREFIX_LEN, N&gt;,
+<a href=#732 id=732 data-nosnippet>732</a>            key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#733 id=733 data-nosnippet>733</a>            keep: <span class="kw-2">&amp;</span>Vec&lt;(u8, OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;)&gt;,
+<a href=#734 id=734 data-nosnippet>734</a>            discard: <span class="kw-2">&amp;</span>[(u8, OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;)],
+<a href=#735 id=735 data-nosnippet>735</a>            stale_path_slot: <span class="prelude-ty">Option</span>&lt;u8&gt;,
+<a href=#736 id=736 data-nosnippet>736</a>            pos: <span class="kw-2">&amp;</span>InnerNodeKeyPosition,
+<a href=#737 id=737 data-nosnippet>737</a>            did_consume_parent: <span class="kw-2">&amp;mut </span>bool,
+<a href=#738 id=738 data-nosnippet>738</a>            alloc: <span class="kw-2">&amp;</span><span class="kw">impl </span>Allocator,
+<a href=#739 id=739 data-nosnippet>739</a>        ) -&gt; SplitSide&lt;K, V, PREFIX_LEN&gt;
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="kw">where
+<a href=#741 id=741 data-nosnippet>741</a>            </span>N: InnerNode&lt;PREFIX_LEN, Key = K, Value = V&gt;,
+<a href=#742 id=742 data-nosnippet>742</a>            NodePtr&lt;PREFIX_LEN, N&gt;: Into&lt;ConcreteInnerNodePtr&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#743 id=743 data-nosnippet>743</a>        {
+<a href=#744 id=744 data-nosnippet>744</a>            <span class="kw">if </span>keep.is_empty() {
+<a href=#745 id=745 data-nosnippet>745</a>                SplitSide::Empty
+<a href=#746 id=746 data-nosnippet>746</a>            } <span class="kw">else if </span>!<span class="kw-2">*</span>did_consume_parent &amp;&amp; N::TYPE.capacity_range().contains(<span class="kw-2">&amp;</span>keep.len()) {
+<a href=#747 id=747 data-nosnippet>747</a>                <span class="kw-2">*</span>did_consume_parent = <span class="bool-val">true</span>;
+<a href=#748 id=748 data-nosnippet>748</a>
+<a href=#749 id=749 data-nosnippet>749</a>                <span class="comment">// we can re-use the original inner node and just remove the other side's children
+<a href=#750 id=750 data-nosnippet>750</a>
+<a href=#751 id=751 data-nosnippet>751</a>                // SAFETY: `*did_consume_parent` was `false`, so `inner_node_ptr` points to a live
+<a href=#752 id=752 data-nosnippet>752</a>                // node that we have exclusive access to, covered by the safety requirements of this
+<a href=#753 id=753 data-nosnippet>753</a>                // function. The reference does not outlive this block.
+<a href=#754 id=754 data-nosnippet>754</a>                </span><span class="kw">let </span>inner_node = <span class="kw">unsafe </span>{ inner_node_ptr.as_mut() };
+<a href=#755 id=755 data-nosnippet>755</a>
+<a href=#756 id=756 data-nosnippet>756</a>                <span class="comment">// The slot for the path child points to the child before it was split, so it is
+<a href=#757 id=757 data-nosnippet>757</a>                // stale no matter which side this is. Remove it first, so that it is gone even if
+<a href=#758 id=758 data-nosnippet>758</a>                // this side has no half of the path child, and so the loop below only has to
+<a href=#759 id=759 data-nosnippet>759</a>                // remove siblings.
+<a href=#760 id=760 data-nosnippet>760</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(stale_key_fragment) = stale_path_slot {
+<a href=#761 id=761 data-nosnippet>761</a>                    <span class="kw">let </span>removed = inner_node.remove_child(stale_key_fragment);
+<a href=#762 id=762 data-nosnippet>762</a>                    <span class="macro">debug_assert!</span>(removed.is_some());
+<a href=#763 id=763 data-nosnippet>763</a>                }
+<a href=#764 id=764 data-nosnippet>764</a>
+<a href=#765 id=765 data-nosnippet>765</a>                <span class="comment">// TODO(opt): optimize removal of many children
+<a href=#766 id=766 data-nosnippet>766</a>                </span><span class="kw">for </span>(key_fragment, <span class="kw">_</span>) <span class="kw">in </span>discard {
+<a href=#767 id=767 data-nosnippet>767</a>                    <span class="kw">if </span><span class="prelude-val">Some</span>(<span class="kw-2">*</span>key_fragment) == stale_path_slot {
+<a href=#768 id=768 data-nosnippet>768</a>                        <span class="comment">// Already removed above
+<a href=#769 id=769 data-nosnippet>769</a>                        </span><span class="kw">continue</span>;
+<a href=#770 id=770 data-nosnippet>770</a>                    }
+<a href=#771 id=771 data-nosnippet>771</a>
+<a href=#772 id=772 data-nosnippet>772</a>                    <span class="kw">let </span>removed = inner_node.remove_child(<span class="kw-2">*</span>key_fragment);
+<a href=#773 id=773 data-nosnippet>773</a>                    <span class="macro">debug_assert!</span>(removed.is_some());
+<a href=#774 id=774 data-nosnippet>774</a>                }
+<a href=#775 id=775 data-nosnippet>775</a>
+<a href=#776 id=776 data-nosnippet>776</a>                <span class="comment">// If this side has a half of the path child, write it back under the same key byte
+<a href=#777 id=777 data-nosnippet>777</a>                // in place of the stale pointer.
+<a href=#778 id=778 data-nosnippet>778</a>                // TODO: convert this to if-let chain in 2024 edition
+<a href=#779 id=779 data-nosnippet>779</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(stale_key_fragment) = stale_path_slot
+<a href=#780 id=780 data-nosnippet>780</a>                    &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, child)) =
+<a href=#781 id=781 data-nosnippet>781</a>                        keep.iter().find(|(key, <span class="kw">_</span>)| <span class="kw-2">*</span>key == stale_key_fragment)
+<a href=#782 id=782 data-nosnippet>782</a>                {
+<a href=#783 id=783 data-nosnippet>783</a>                    inner_node.write_child(stale_key_fragment, <span class="kw-2">*</span>child);
+<a href=#784 id=784 data-nosnippet>784</a>                }
+<a href=#785 id=785 data-nosnippet>785</a>
+<a href=#786 id=786 data-nosnippet>786</a>                SplitSide::Many {
+<a href=#787 id=787 data-nosnippet>787</a>                    finished: inner_node_ptr.into(),
+<a href=#788 id=788 data-nosnippet>788</a>                }
+<a href=#789 id=789 data-nosnippet>789</a>            } <span class="kw">else if let </span>[(key_byte, node_ptr)] = keep.as_slice() {
+<a href=#790 id=790 data-nosnippet>790</a>                SplitSide::Singleton {
+<a href=#791 id=791 data-nosnippet>791</a>                    key_byte: <span class="kw-2">*</span>key_byte,
+<a href=#792 id=792 data-nosnippet>792</a>                    node_ptr: <span class="kw-2">*</span>node_ptr,
+<a href=#793 id=793 data-nosnippet>793</a>                }
+<a href=#794 id=794 data-nosnippet>794</a>            } <span class="kw">else </span>{
+<a href=#795 id=795 data-nosnippet>795</a>                <span class="comment">// we need to allocate a new inner node for these children, since the number of
+<a href=#796 id=796 data-nosnippet>796</a>                // children does not fit in the existing inner node.
+<a href=#797 id=797 data-nosnippet>797</a>
+<a href=#798 id=798 data-nosnippet>798</a>                </span><span class="kw">let </span>new_inner_node = allocate_node_for_children(key_bytes, keep, pos, alloc);
+<a href=#799 id=799 data-nosnippet>799</a>
+<a href=#800 id=800 data-nosnippet>800</a>                SplitSide::Many {
+<a href=#801 id=801 data-nosnippet>801</a>                    finished: new_inner_node,
+<a href=#802 id=802 data-nosnippet>802</a>                }
+<a href=#803 id=803 data-nosnippet>803</a>            }
+<a href=#804 id=804 data-nosnippet>804</a>        }
+<a href=#805 id=805 data-nosnippet>805</a>
+<a href=#806 id=806 data-nosnippet>806</a>        <span class="doccomment">/// Split the inner node at `inner_node_ptr`, see [`InnerNodePathElem::split`].
+<a href=#807 id=807 data-nosnippet>807</a>        ///
+<a href=#808 id=808 data-nosnippet>808</a>        /// # Safety
+<a href=#809 id=809 data-nosnippet>809</a>        ///  - Same as [`InnerNodePathElem::split`], where `inner_node_ptr`, `left_children`,
+<a href=#810 id=810 data-nosnippet>810</a>        ///    `right_children`, and `pos` are the fields of the [`InnerNodePathElem`], and
+<a href=#811 id=811 data-nosnippet>811</a>        ///    `inner_node_ptr` points to an inner node of type `N`.
+<a href=#812 id=812 data-nosnippet>812</a>        </span><span class="kw">unsafe fn </span>split_inner_node&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize, N&gt;(
+<a href=#813 id=813 data-nosnippet>813</a>            inner_node_ptr: NodePtr&lt;PREFIX_LEN, N&gt;,
+<a href=#814 id=814 data-nosnippet>814</a>            key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#815 id=815 data-nosnippet>815</a>            left_children: Vec&lt;(u8, OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;)&gt;,
+<a href=#816 id=816 data-nosnippet>816</a>            right_children: Vec&lt;(u8, OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;)&gt;,
+<a href=#817 id=817 data-nosnippet>817</a>            stale_path_slot: <span class="prelude-ty">Option</span>&lt;u8&gt;,
+<a href=#818 id=818 data-nosnippet>818</a>            pos: InnerNodeKeyPosition,
+<a href=#819 id=819 data-nosnippet>819</a>            alloc: <span class="kw-2">&amp;</span><span class="kw">impl </span>Allocator,
+<a href=#820 id=820 data-nosnippet>820</a>        ) -&gt; InnerNodeSplit&lt;K, V, PREFIX_LEN&gt;
+<a href=#821 id=821 data-nosnippet>821</a>        <span class="kw">where
+<a href=#822 id=822 data-nosnippet>822</a>            </span>N: InnerNode&lt;PREFIX_LEN, Key = K, Value = V&gt;,
+<a href=#823 id=823 data-nosnippet>823</a>            NodePtr&lt;PREFIX_LEN, N&gt;: Into&lt;ConcreteInnerNodePtr&lt;K, V, PREFIX_LEN&gt;&gt;,
+<a href=#824 id=824 data-nosnippet>824</a>        {
+<a href=#825 id=825 data-nosnippet>825</a>            <span class="kw">let </span><span class="kw-2">mut </span>did_consume_parent = <span class="bool-val">false</span>;
+<a href=#826 id=826 data-nosnippet>826</a>            <span class="comment">// SAFETY: `did_consume_parent` is `false`, and the inner node is live and exclusively
+<a href=#827 id=827 data-nosnippet>827</a>            // accessed, covered by the safety requirements of this function. `left_children` and
+<a href=#828 id=828 data-nosnippet>828</a>            // `right_children` are the two sides of the element, and the left side's nodes are
+<a href=#829 id=829 data-nosnippet>829</a>            // live and only pointed to by the inner node.
+<a href=#830 id=830 data-nosnippet>830</a>            </span><span class="kw">let </span>left = <span class="kw">unsafe </span>{
+<a href=#831 id=831 data-nosnippet>831</a>                split_side(
+<a href=#832 id=832 data-nosnippet>832</a>                    inner_node_ptr,
+<a href=#833 id=833 data-nosnippet>833</a>                    key_bytes,
+<a href=#834 id=834 data-nosnippet>834</a>                    <span class="kw-2">&amp;</span>left_children,
+<a href=#835 id=835 data-nosnippet>835</a>                    <span class="kw-2">&amp;</span>right_children,
+<a href=#836 id=836 data-nosnippet>836</a>                    stale_path_slot,
+<a href=#837 id=837 data-nosnippet>837</a>                    <span class="kw-2">&amp;</span>pos,
+<a href=#838 id=838 data-nosnippet>838</a>                    <span class="kw-2">&amp;mut </span>did_consume_parent,
+<a href=#839 id=839 data-nosnippet>839</a>                    alloc,
+<a href=#840 id=840 data-nosnippet>840</a>                )
+<a href=#841 id=841 data-nosnippet>841</a>            };
+<a href=#842 id=842 data-nosnippet>842</a>            <span class="comment">// SAFETY: If `did_consume_parent` is still `false`, the left side did not touch the
+<a href=#843 id=843 data-nosnippet>843</a>            // inner node (it built an `Empty`, a `Singleton`, or a new node from
+<a href=#844 id=844 data-nosnippet>844</a>            // `left_children`), so the inner node is still live and exclusively accessed. If it is
+<a href=#845 id=845 data-nosnippet>845</a>            // `true`, this call does not access the inner node. Either way, the left side never
+<a href=#846 id=846 data-nosnippet>846</a>            // accesses the nodes in `right_children`. The remaining requirements are the same as
+<a href=#847 id=847 data-nosnippet>847</a>            // for the left side.
+<a href=#848 id=848 data-nosnippet>848</a>            </span><span class="kw">let </span>right = <span class="kw">unsafe </span>{
+<a href=#849 id=849 data-nosnippet>849</a>                split_side(
+<a href=#850 id=850 data-nosnippet>850</a>                    inner_node_ptr,
+<a href=#851 id=851 data-nosnippet>851</a>                    key_bytes,
+<a href=#852 id=852 data-nosnippet>852</a>                    <span class="kw-2">&amp;</span>right_children,
+<a href=#853 id=853 data-nosnippet>853</a>                    <span class="kw-2">&amp;</span>left_children,
+<a href=#854 id=854 data-nosnippet>854</a>                    stale_path_slot,
+<a href=#855 id=855 data-nosnippet>855</a>                    <span class="kw-2">&amp;</span>pos,
+<a href=#856 id=856 data-nosnippet>856</a>                    <span class="kw-2">&amp;mut </span>did_consume_parent,
+<a href=#857 id=857 data-nosnippet>857</a>                    alloc,
+<a href=#858 id=858 data-nosnippet>858</a>                )
+<a href=#859 id=859 data-nosnippet>859</a>            };
+<a href=#860 id=860 data-nosnippet>860</a>
+<a href=#861 id=861 data-nosnippet>861</a>            <span class="kw">if </span>!did_consume_parent {
+<a href=#862 id=862 data-nosnippet>862</a>                <span class="comment">// If the original inner node was not used, then we need to deallocate it
+<a href=#863 id=863 data-nosnippet>863</a>
+<a href=#864 id=864 data-nosnippet>864</a>                // SAFETY: Neither side reused the original inner node. By the partition invariant
+<a href=#865 id=865 data-nosnippet>865</a>                // of `InnerNodePathElem`, every child other than the stale path slot was moved to
+<a href=#866 id=866 data-nosnippet>866</a>                // one of the sides. So no returned side points to the inner node, and the caller
+<a href=#867 id=867 data-nosnippet>867</a>                // must not use `inner_node_ptr` again, which means it is only deallocated once.
+<a href=#868 id=868 data-nosnippet>868</a>                // The inner node was allocated with `alloc`, covered by the safety requirements of
+<a href=#869 id=869 data-nosnippet>869</a>                // this function.
+<a href=#870 id=870 data-nosnippet>870</a>                </span><span class="kw">let _ </span>= <span class="kw">unsafe </span>{ NodePtr::deallocate_node_ptr(inner_node_ptr, alloc) };
+<a href=#871 id=871 data-nosnippet>871</a>            }
+<a href=#872 id=872 data-nosnippet>872</a>
+<a href=#873 id=873 data-nosnippet>873</a>            InnerNodeSplit { left, right, pos }
+<a href=#874 id=874 data-nosnippet>874</a>        }
+<a href=#875 id=875 data-nosnippet>875</a>
+<a href=#876 id=876 data-nosnippet>876</a>        <span class="macro">match_concrete_inner_node_ptr!</span>(<span class="kw">match </span>(<span class="self">self</span>.inner_node_ptr) {
+<a href=#877 id=877 data-nosnippet>877</a>            <span class="comment">// SAFETY: Covered by the safety requirements of this function, the arguments are the
+<a href=#878 id=878 data-nosnippet>878</a>            // fields of `self`, and `inner_node_ptr` has the concrete type of the inner node.
+<a href=#879 id=879 data-nosnippet>879</a>            </span>InnerNode(inner_node_ptr) =&gt; <span class="kw">unsafe </span>{
+<a href=#880 id=880 data-nosnippet>880</a>                split_inner_node(
+<a href=#881 id=881 data-nosnippet>881</a>                    inner_node_ptr,
+<a href=#882 id=882 data-nosnippet>882</a>                    key_bytes,
+<a href=#883 id=883 data-nosnippet>883</a>                    <span class="self">self</span>.left_children,
+<a href=#884 id=884 data-nosnippet>884</a>                    <span class="self">self</span>.right_children,
+<a href=#885 id=885 data-nosnippet>885</a>                    stale_path_slot,
+<a href=#886 id=886 data-nosnippet>886</a>                    <span class="self">self</span>.pos,
+<a href=#887 id=887 data-nosnippet>887</a>                    alloc,
+<a href=#888 id=888 data-nosnippet>888</a>                )
+<a href=#889 id=889 data-nosnippet>889</a>            },
+<a href=#890 id=890 data-nosnippet>890</a>        })
+<a href=#891 id=891 data-nosnippet>891</a>    }
+<a href=#892 id=892 data-nosnippet>892</a>}
+<a href=#893 id=893 data-nosnippet>893</a>
+<a href=#894 id=894 data-nosnippet>894</a><span class="doccomment">/// The result of [`InnerNodePathElem::split`].
+<a href=#895 id=895 data-nosnippet>895</a></span><span class="kw">struct </span>InnerNodeSplit&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; {
+<a href=#896 id=896 data-nosnippet>896</a>    left: SplitSide&lt;K, V, PREFIX_LEN&gt;,
+<a href=#897 id=897 data-nosnippet>897</a>    right: SplitSide&lt;K, V, PREFIX_LEN&gt;,
+<a href=#898 id=898 data-nosnippet>898</a>    pos: InnerNodeKeyPosition,
+<a href=#899 id=899 data-nosnippet>899</a>}
+<a href=#900 id=900 data-nosnippet>900</a>
+<a href=#901 id=901 data-nosnippet>901</a><span class="kw">impl</span>&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; fmt::Debug <span class="kw">for </span>InnerNodeSplit&lt;K, V, PREFIX_LEN&gt; {
+<a href=#902 id=902 data-nosnippet>902</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#903 id=903 data-nosnippet>903</a>        f.debug_struct(<span class="string">"InnerNodeSplit"</span>)
+<a href=#904 id=904 data-nosnippet>904</a>            .field(<span class="string">"left"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.left)
+<a href=#905 id=905 data-nosnippet>905</a>            .field(<span class="string">"right"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.right)
+<a href=#906 id=906 data-nosnippet>906</a>            .field(<span class="string">"pos"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.pos)
+<a href=#907 id=907 data-nosnippet>907</a>            .finish()
+<a href=#908 id=908 data-nosnippet>908</a>    }
+<a href=#909 id=909 data-nosnippet>909</a>}
+<a href=#910 id=910 data-nosnippet>910</a>
+<a href=#911 id=911 data-nosnippet>911</a><span class="doccomment">/// One side of a split inner node.
+<a href=#912 id=912 data-nosnippet>912</a></span><span class="kw">enum </span>SplitSide&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; {
+<a href=#913 id=913 data-nosnippet>913</a>    <span class="doccomment">/// The side has no children
+<a href=#914 id=914 data-nosnippet>914</a>    </span>Empty,
+<a href=#915 id=915 data-nosnippet>915</a>    <span class="doccomment">/// The side has a single child, so the inner node level will be collapsed into it
+<a href=#916 id=916 data-nosnippet>916</a>    </span>Singleton {
+<a href=#917 id=917 data-nosnippet>917</a>        key_byte: u8,
+<a href=#918 id=918 data-nosnippet>918</a>        node_ptr: OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#919 id=919 data-nosnippet>919</a>    },
+<a href=#920 id=920 data-nosnippet>920</a>    <span class="doccomment">/// The side has enough children to need an inner node, either the reused original or a new one
+<a href=#921 id=921 data-nosnippet>921</a>    </span>Many {
+<a href=#922 id=922 data-nosnippet>922</a>        finished: ConcreteInnerNodePtr&lt;K, V, PREFIX_LEN&gt;,
+<a href=#923 id=923 data-nosnippet>923</a>    },
+<a href=#924 id=924 data-nosnippet>924</a>}
+<a href=#925 id=925 data-nosnippet>925</a>
+<a href=#926 id=926 data-nosnippet>926</a><span class="kw">impl</span>&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; fmt::Debug <span class="kw">for </span>SplitSide&lt;K, V, PREFIX_LEN&gt; {
+<a href=#927 id=927 data-nosnippet>927</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#928 id=928 data-nosnippet>928</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#929 id=929 data-nosnippet>929</a>            <span class="self">Self</span>::Empty =&gt; f.write_str(<span class="string">"Empty"</span>),
+<a href=#930 id=930 data-nosnippet>930</a>            <span class="self">Self</span>::Singleton { key_byte, node_ptr } =&gt; f
+<a href=#931 id=931 data-nosnippet>931</a>                .debug_struct(<span class="string">"Singleton"</span>)
+<a href=#932 id=932 data-nosnippet>932</a>                .field(<span class="string">"key_byte"</span>, key_byte)
+<a href=#933 id=933 data-nosnippet>933</a>                .field(<span class="string">"node_ptr"</span>, node_ptr)
+<a href=#934 id=934 data-nosnippet>934</a>                .finish(),
+<a href=#935 id=935 data-nosnippet>935</a>            <span class="self">Self</span>::Many { finished } =&gt; f.debug_struct(<span class="string">"Many"</span>).field(<span class="string">"finished"</span>, finished).finish(),
+<a href=#936 id=936 data-nosnippet>936</a>        }
+<a href=#937 id=937 data-nosnippet>937</a>    }
+<a href=#938 id=938 data-nosnippet>938</a>}
+<a href=#939 id=939 data-nosnippet>939</a>
+<a href=#940 id=940 data-nosnippet>940</a><span class="doccomment">/// This struct represents the position of an inner node with respect to the split key.
+<a href=#941 id=941 data-nosnippet>941</a></span><span class="attr">#[derive(Debug, Copy, Clone)]
+<a href=#942 id=942 data-nosnippet>942</a></span><span class="kw">struct </span>InnerNodeKeyPosition {
+<a href=#943 id=943 data-nosnippet>943</a>    <span class="doccomment">/// Position in split key matching the start of the inner node prefix
+<a href=#944 id=944 data-nosnippet>944</a>    </span>depth_at_prefix_start: usize,
+<a href=#945 id=945 data-nosnippet>945</a>    <span class="doccomment">/// The length of the inner node prefix
+<a href=#946 id=946 data-nosnippet>946</a>    </span>prefix_length: usize,
+<a href=#947 id=947 data-nosnippet>947</a>    <span class="doccomment">/// The key byte corresponding to the next child in the split path
+<a href=#948 id=948 data-nosnippet>948</a>    </span>next_key_fragment: u8,
+<a href=#949 id=949 data-nosnippet>949</a>}
+<a href=#950 id=950 data-nosnippet>950</a>
+<a href=#951 id=951 data-nosnippet>951</a><span class="kw">impl</span>&lt;K, V, <span class="kw">const </span>PREFIX_LEN: usize&gt; SplitSide&lt;K, V, PREFIX_LEN&gt; {
+<a href=#952 id=952 data-nosnippet>952</a>    <span class="doccomment">/// Convert this split result into the node pointer that should replace the original inner
+<a href=#953 id=953 data-nosnippet>953</a>    /// node, collapsing a [`Singleton`][Self::Singleton] into its parent's position.
+<a href=#954 id=954 data-nosnippet>954</a>    ///
+<a href=#955 id=955 data-nosnippet>955</a>    /// For a [`Singleton`][Self::Singleton] child that is an inner node, its prefix is rewritten
+<a href=#956 id=956 data-nosnippet>956</a>    /// to be the parent's prefix, then `key_byte`, then its old prefix. The returned pointer takes
+<a href=#957 id=957 data-nosnippet>957</a>    /// the place of the original inner node, and the caller is responsible for linking it into
+<a href=#958 id=958 data-nosnippet>958</a>    /// exactly one parent (or using it as a root).
+<a href=#959 id=959 data-nosnippet>959</a>    ///
+<a href=#960 id=960 data-nosnippet>960</a>    /// # Safety
+<a href=#961 id=961 data-nosnippet>961</a>    ///  - For a [`Singleton`][Self::Singleton], `node_ptr` must point to a live node. For the
+<a href=#962 id=962 data-nosnippet>962</a>    ///    duration of this function, the node's memory must not be accessed (read or written)
+<a href=#963 id=963 data-nosnippet>963</a>    ///    through any other pointer, as required by [`OpaqueNodePtr::header_mut`].
+<a href=#964 id=964 data-nosnippet>964</a>    ///  - `pos` must be the position of the original inner node, from a prefix match against
+<a href=#965 id=965 data-nosnippet>965</a>    ///    `key_bytes`. So `pos.depth_at_prefix_start + pos.prefix_length &lt;= key_bytes.len()`, and
+<a href=#966 id=966 data-nosnippet>966</a>    ///    that range of `key_bytes` is the full prefix of the original inner node.
+<a href=#967 id=967 data-nosnippet>967</a>    </span><span class="kw">unsafe fn </span>into_opaque(
+<a href=#968 id=968 data-nosnippet>968</a>        <span class="self">self</span>,
+<a href=#969 id=969 data-nosnippet>969</a>        key_bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#970 id=970 data-nosnippet>970</a>        pos: <span class="kw-2">&amp;</span>InnerNodeKeyPosition,
+<a href=#971 id=971 data-nosnippet>971</a>    ) -&gt; <span class="prelude-ty">Option</span>&lt;OpaqueNodePtr&lt;K, V, PREFIX_LEN&gt;&gt; {
+<a href=#972 id=972 data-nosnippet>972</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#973 id=973 data-nosnippet>973</a>            SplitSide::Empty =&gt; <span class="prelude-val">None</span>,
+<a href=#974 id=974 data-nosnippet>974</a>            SplitSide::Singleton { key_byte, node_ptr } =&gt; {
+<a href=#975 id=975 data-nosnippet>975</a>                <span class="comment">// SAFETY: `node_ptr` is live and not accessed through any other pointer during
+<a href=#976 id=976 data-nosnippet>976</a>                // this function, covered by the safety requirements of this function. The
+<a href=#977 id=977 data-nosnippet>977</a>                // reference only lasts for the scope of this `if` block.
+<a href=#978 id=978 data-nosnippet>978</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(child_header) = <span class="kw">unsafe </span>{ node_ptr.header_mut() } {
+<a href=#979 id=979 data-nosnippet>979</a>                    <span class="comment">// The removed node's prefix matched the search key, so its full prefix (even
+<a href=#980 id=980 data-nosnippet>980</a>                    // past `PREFIX_LEN`) can be read from `key_bytes`.
+<a href=#981 id=981 data-nosnippet>981</a>                    </span><span class="kw">let </span>parent_prefix = <span class="kw-2">&amp;</span>key_bytes[pos.depth_at_prefix_start
+<a href=#982 id=982 data-nosnippet>982</a>                        ..(pos.depth_at_prefix_start + pos.prefix_length)];
+<a href=#983 id=983 data-nosnippet>983</a>
+<a href=#984 id=984 data-nosnippet>984</a>                    <span class="kw">let </span>(old_prefix, old_len, old_capped_len) = child_header.clear_prefix();
+<a href=#985 id=985 data-nosnippet>985</a>                    child_header.push_prefix(parent_prefix, pos.prefix_length);
+<a href=#986 id=986 data-nosnippet>986</a>                    child_header.push_prefix(<span class="kw-2">&amp;</span>[key_byte], <span class="number">1</span>);
+<a href=#987 id=987 data-nosnippet>987</a>                    child_header.push_prefix(<span class="kw-2">&amp;</span>old_prefix[..old_capped_len], old_len);
+<a href=#988 id=988 data-nosnippet>988</a>                }
+<a href=#989 id=989 data-nosnippet>989</a>                <span class="comment">// the else case here is that the child does not have a header, and is a leaf
+<a href=#990 id=990 data-nosnippet>990</a>
+<a href=#991 id=991 data-nosnippet>991</a>                </span><span class="prelude-val">Some</span>(node_ptr)
+<a href=#992 id=992 data-nosnippet>992</a>            },
+<a href=#993 id=993 data-nosnippet>993</a>            SplitSide::Many { finished } =&gt; <span class="prelude-val">Some</span>(finished.to_opaque()),
+<a href=#994 id=994 data-nosnippet>994</a>        }
+<a href=#995 id=995 data-nosnippet>995</a>    }
+<a href=#996 id=996 data-nosnippet>996</a>}
+<a href=#997 id=997 data-nosnippet>997</a>
+<a href=#998 id=998 data-nosnippet>998</a><span class="attr">#[cfg(test)]
+<a href=#999 id=999 data-nosnippet>999</a></span><span class="kw">mod </span>tests;
+</code></pre></div></section></main></body></html>

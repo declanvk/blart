@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PrefixMatchBehavior"],"fn":["check_prefix_lookup_child","prefix_search_unchecked","search_unchecked"]};
