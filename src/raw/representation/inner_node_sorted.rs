@@ -258,6 +258,10 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
         }
         #[cfg(not(feature = "nightly"))]
         {
+            // TODO(opt): possible optimization when we can't use SIMD is to try a
+            // SWAR sort of thing using a bitmask of matches and taking the trailing zeros.
+            // I tried it initially and it was faster on most workloads, but slower when
+            // the normal loop would sotp after a few keys (common in dense trees and `retain`).
             self.default_lookup_child_index(key_fragment)
         }
     }
