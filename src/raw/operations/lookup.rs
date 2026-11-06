@@ -1,9 +1,9 @@
 use crate::{
-    raw::{
-        match_concrete_node_ptr, AttemptOptimisticPrefixMatch, InnerNode, LeafNode, NodePtr,
-        OpaqueNodePtr, OptionalLeafPtr, PessimisticMismatch, PrefixMatch,
-    },
     AsBytes,
+    raw::{
+        AttemptOptimisticPrefixMatch, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, OptionalLeafPtr,
+        PessimisticMismatch, PrefixMatch, match_concrete_node_ptr,
+    },
 };
 
 #[rustfmt::skip]

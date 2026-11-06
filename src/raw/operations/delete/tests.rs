@@ -5,10 +5,10 @@ use alloc::{
 
 use super::*;
 use crate::{
-    allocator::Global,
-    raw::{deallocate_tree, search_unchecked, NodeType},
-    testing::{generate_key_with_prefix, setup_tree_from_entries, swap, PrefixExpansion},
     TreeMap,
+    allocator::Global,
+    raw::{NodeType, deallocate_tree, search_unchecked},
+    testing::{PrefixExpansion, generate_key_with_prefix, setup_tree_from_entries, swap},
 };
 
 #[test]

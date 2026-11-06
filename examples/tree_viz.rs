@@ -9,8 +9,8 @@ use std::{
 
 use argh::FromArgs;
 use blart::{
-    visitor::{DotPrinter, DotPrinterSettings},
     AsBytes, NoPrefixesBytes, TreeMap,
+    visitor::{DotPrinter, DotPrinterSettings},
 };
 
 #[derive(FromArgs)]

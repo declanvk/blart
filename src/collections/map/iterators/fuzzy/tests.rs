@@ -2,11 +2,11 @@ use alloc::ffi::CString;
 
 use super::*;
 use crate::{
-    raw::{
-        visitor::{TreeStats, TreeStatsCollector},
-        InnerNodeType,
-    },
     AsBytes, TreeMap,
+    raw::{
+        InnerNodeType,
+        visitor::{TreeStats, TreeStatsCollector},
+    },
 };
 
 #[test]
@@ -224,12 +224,16 @@ fn test_fuzzy_search_prefix() {
     let results: Vec<_> = tree.fuzzy(search_key, 1).collect();
     // It should match "apple-pie" (dist 0) and "apply-pie" (dist 1)
     assert_eq!(results.len(), 2);
-    assert!(results
-        .iter()
-        .any(|(k, _)| k.as_ref() == b"apple-pie".as_ref()));
-    assert!(results
-        .iter()
-        .any(|(k, _)| k.as_ref() == b"apply-pie".as_ref()));
+    assert!(
+        results
+            .iter()
+            .any(|(k, _)| k.as_ref() == b"apple-pie".as_ref())
+    );
+    assert!(
+        results
+            .iter()
+            .any(|(k, _)| k.as_ref() == b"apply-pie".as_ref())
+    );
 
     // A search that should not find anything, to ensure fuzzy_search_prefix can
     // return false.

@@ -14,9 +14,9 @@ pub use well_formed::*;
 
 pub use super::InnerNodeType;
 use super::{
-    InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node, NodePtr, OpaqueNodePtr,
+    InnerNode4, InnerNode16, InnerNode48, InnerNodeDirect, LeafNode, Node, NodePtr, OpaqueNodePtr,
 };
-use crate::raw::{match_concrete_node_ptr, InnerNode, InnerNodeCommon};
+use crate::raw::{InnerNode, InnerNodeCommon, match_concrete_node_ptr};
 
 /// The `Visitable` trait allows [`Visitor`]s to traverse the structure of the
 /// implementing type and produce some output.

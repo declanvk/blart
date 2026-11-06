@@ -3,12 +3,12 @@
 use alloc::vec::Vec;
 
 use crate::{
+    AsBytes,
     allocator::Allocator,
     raw::{
-        deallocate_tree, match_concrete_inner_node_ptr, match_concrete_node_ptr,
         ConcreteInnerNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr, OpaqueNodePtr,
+        deallocate_tree, match_concrete_inner_node_ptr, match_concrete_node_ptr,
     },
-    AsBytes,
 };
 
 /// The result of cloning a trie
@@ -269,12 +269,12 @@ mod tests {
 
     use super::*;
     use crate::{
+        TreeMap,
         testing::{
-            generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
-            PrefixExpansion,
+            PrefixExpansion, generate_key_fixed_length, generate_key_with_prefix,
+            generate_keys_skewed, swap,
         },
         visitor::WellFormedChecker,
-        TreeMap,
     };
 
     #[track_caller]
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn clone_panicking_value_does_not_leak() {
         use std::{
-            panic::{catch_unwind, AssertUnwindSafe},
+            panic::{AssertUnwindSafe, catch_unwind},
             sync::atomic::{AtomicUsize, Ordering},
         };
 

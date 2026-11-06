@@ -10,8 +10,8 @@ use core::{
 };
 
 use crate::raw::{
-    representation::assert_valid_range_bounds, Header, InnerNode, InnerNode48, InnerNodeCommon,
-    InnerNodeIndirect, InnerNodeSorted, Node, NodeType, OpaqueNodePtr,
+    Header, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeIndirect, InnerNodeSorted, Node,
+    NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
 };
 
 /// Inner node that stores up to 256 children, where lookup is performed by
@@ -346,11 +346,11 @@ mod tests {
 
     use super::*;
     use crate::raw::{
-        representation::tests::{
-            inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
-            inner_node_write_child_test, FixtureReturn,
-        },
         LeafNode, NodePtr,
+        representation::tests::{
+            FixtureReturn, inner_node_min_max_test, inner_node_remove_child_test,
+            inner_node_shrink_test, inner_node_write_child_test,
+        },
     };
 
     #[test]

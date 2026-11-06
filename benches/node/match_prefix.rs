@@ -1,5 +1,5 @@
 use blart::raw::{InnerNode48, InnerNodeCommon, InnerNodeDirect, LeafNode, NodePtr};
-use criterion::{criterion_group, Criterion};
+use criterion::{Criterion, criterion_group};
 
 fn bench(c: &mut Criterion) {
     let leaf = LeafNode::with_no_siblings(

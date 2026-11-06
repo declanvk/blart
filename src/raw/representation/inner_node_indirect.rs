@@ -10,8 +10,8 @@ use core::{
 use self::index::NonMaxIndex;
 use crate::{
     raw::{
-        representation::assert_valid_range_bounds, Header, InnerNode, InnerNode16, InnerNodeCommon,
-        InnerNodeDirect, InnerNodeSorted, LeafNode, Node, NodeType, OpaqueNodePtr,
+        Header, InnerNode, InnerNode16, InnerNodeCommon, InnerNodeDirect, InnerNodeSorted,
+        LeafNode, Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
     },
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
@@ -518,11 +518,11 @@ mod tests {
 
     use super::*;
     use crate::raw::{
-        representation::tests::{
-            inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
-            inner_node_write_child_test, FixtureReturn,
-        },
         LeafNode, NodePtr,
+        representation::tests::{
+            FixtureReturn, inner_node_min_max_test, inner_node_remove_child_test,
+            inner_node_shrink_test, inner_node_write_child_test,
+        },
     };
 
     #[test]

@@ -1,8 +1,8 @@
 use core::cmp::Ordering;
 
 use crate::{
-    raw::{Node, NodePtr, NodeType},
     AsBytes,
+    raw::{Node, NodePtr, NodeType},
 };
 
 /// This type alias represents an optional pointer to a leaf node.

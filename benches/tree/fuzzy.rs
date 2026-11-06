@@ -1,6 +1,6 @@
 use std::ffi::CString;
 
-use criterion::{criterion_group, measurement::Measurement, Criterion};
+use criterion::{Criterion, criterion_group, measurement::Measurement};
 
 use crate::common::dictionary_tree;
 

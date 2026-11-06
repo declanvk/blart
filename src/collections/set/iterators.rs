@@ -7,9 +7,9 @@ use core::{
 };
 
 use crate::{
+    OrderedBytes,
     allocator::{Allocator, Global},
     map::{self, DEFAULT_PREFIX_LEN},
-    OrderedBytes,
 };
 
 /// An iterator over the items of a [`TreeSet`][crate::TreeSet].

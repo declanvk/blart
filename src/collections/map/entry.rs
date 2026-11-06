@@ -2,9 +2,9 @@ use core::mem::replace;
 
 use super::DEFAULT_PREFIX_LEN;
 use crate::{
+    AsBytes, TreeMap,
     allocator::{Allocator, Global},
     raw::{DeletePoint, InsertParentNodeChange, InsertPoint, InsertResult, TreePath},
-    AsBytes, TreeMap,
 };
 
 /// A view into an occupied entry in a [`TreeMap`]. It is part of the [`Entry`]

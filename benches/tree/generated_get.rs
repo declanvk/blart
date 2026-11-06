@@ -1,13 +1,13 @@
 use std::time::Duration;
 
 use blart::{
-    testing::{
-        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
-    },
     TreeMap,
+    testing::{
+        PrefixExpansion, generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
+    },
 };
-use criterion::{criterion_group, measurement::Measurement, BenchmarkGroup, Criterion, Throughput};
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use criterion::{BenchmarkGroup, Criterion, Throughput, criterion_group, measurement::Measurement};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 
 fn run_benchmarks<M: Measurement>(
     group: &mut BenchmarkGroup<M>,

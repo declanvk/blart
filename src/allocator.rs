@@ -1,6 +1,6 @@
 #[cfg(all(test, any(feature = "nightly", feature = "allocator-api2")))]
 pub(crate) use self::inner::AllocError;
-pub(crate) use self::inner::{do_alloc, Allocator, Global};
+pub(crate) use self::inner::{Allocator, Global, do_alloc};
 
 // Nightly-case.
 // Use unstable `allocator_api` feature.
@@ -57,7 +57,7 @@ mod inner {
 // or `nightly` without disturbing users that don't want to use it.
 #[cfg(not(any(feature = "nightly", feature = "allocator-api2")))]
 mod inner {
-    use alloc::alloc::{alloc, dealloc, Layout};
+    use alloc::alloc::{Layout, alloc, dealloc};
     use core::{num::NonZeroUsize, ptr::NonNull};
 
     #[expect(clippy::missing_safety_doc)] // not exposed outside of this crate

@@ -1,12 +1,12 @@
 use alloc::{boxed::Box, string::String};
 
 use crate::{
-    raw::{
-        search_unchecked, InnerNode16, InnerNode4, InnerNode48, InnerNodeCommon, InnerNodeDirect,
-        LeafNode, NodePtr, OpaqueNodePtr,
-    },
-    testing::{generate_key_with_prefix, swap, PrefixExpansion},
     TreeMap,
+    raw::{
+        InnerNode4, InnerNode16, InnerNode48, InnerNodeCommon, InnerNodeDirect, LeafNode, NodePtr,
+        OpaqueNodePtr, search_unchecked,
+    },
+    testing::{PrefixExpansion, generate_key_with_prefix, swap},
 };
 
 #[test]

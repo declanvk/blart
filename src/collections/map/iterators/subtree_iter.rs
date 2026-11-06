@@ -1,10 +1,10 @@
 use core::{iter::FusedIterator, marker::PhantomData};
 
 use crate::{
+    AsBytes, TreeMap,
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
-    raw::{maximum_unchecked, minimum_unchecked, OpaqueNodePtr, RawIterator},
-    AsBytes, TreeMap,
+    raw::{OpaqueNodePtr, RawIterator, maximum_unchecked, minimum_unchecked},
 };
 
 macro_rules! implement_prefix_iter {

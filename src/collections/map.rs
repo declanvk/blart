@@ -15,17 +15,17 @@ use core::{
 #[cfg(feature = "std")]
 use crate::visitor::{MalformedTreeError, WellFormedChecker};
 use crate::{
+    AsBytes, NoPrefixesBytes,
     allocator::{Allocator, Global},
     raw::{
-        clone_unchecked, deallocate_tree, find_maximum_to_delete, find_minimum_to_delete,
-        maximum_unchecked, minimum_unchecked, prefix_search_unchecked, search_for_delete_point,
-        search_for_insert_point, search_for_prefix_insert_point, search_unchecked,
-        split_off_unchecked, CloneResult, DeletePoint, DeleteResult, InsertKind, InsertPoint,
-        InsertPrefixError, InsertResult, LeafNode, NodePtr, OpaqueNodePtr, PrefixInsertPoint,
-        RawIterator, SplitOffResult,
+        CloneResult, DeletePoint, DeleteResult, InsertKind, InsertPoint, InsertPrefixError,
+        InsertResult, LeafNode, NodePtr, OpaqueNodePtr, PrefixInsertPoint, RawIterator,
+        SplitOffResult, clone_unchecked, deallocate_tree, find_maximum_to_delete,
+        find_minimum_to_delete, maximum_unchecked, minimum_unchecked, prefix_search_unchecked,
+        search_for_delete_point, search_for_insert_point, search_for_prefix_insert_point,
+        search_unchecked, split_off_unchecked,
     },
     rust_nightly_apis::hasher_write_length_prefix,
-    AsBytes, NoPrefixesBytes,
 };
 
 mod entry;
@@ -1001,9 +1001,8 @@ let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
         //    operation can be concurrent with this one.
         //  - The same allocator is used for all inserts and deletes
         let insert_result = unsafe { insert_point.apply(key, value, &self.alloc) };
-        let insert_result = self.apply_insert_result(insert_result);
 
-        insert_result
+        self.apply_insert_result(insert_result)
     }
 
     fn apply_prefix_insert_point(
@@ -2307,12 +2306,12 @@ mod tests {
 
     use super::*;
     use crate::{
+        TreeMap,
         testing::{
-            generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
-            PrefixExpansion,
+            PrefixExpansion, generate_key_fixed_length, generate_key_with_prefix,
+            generate_keys_skewed, swap,
         },
         visitor::WellFormedChecker,
-        TreeMap,
     };
 
     #[test]
@@ -3132,23 +3131,25 @@ mod tests {
             let _ = WellFormedChecker::check(tree).unwrap();
         }
 
-        assert!(map
-            .keys()
-            .all(|key| key.as_ref() < [2u8, 2, 2, 2, 0, 0].as_slice()));
+        assert!(
+            map.keys()
+                .all(|key| key.as_ref() < [2u8, 2, 2, 2, 0, 0].as_slice())
+        );
         assert!(after.keys().all(|key| {
             [2u8, 2, 2, 2, 0, 0].as_slice() <= key.as_ref()
                 && key.as_ref() < [3u8, 3, 3, 3, 1, 2].as_slice()
         }));
-        assert!(last
-            .keys()
-            .all(|key| [3u8, 3, 3, 3, 1, 2].as_slice() <= key.as_ref()));
+        assert!(
+            last.keys()
+                .all(|key| [3u8, 3, 3, 3, 1, 2].as_slice() <= key.as_ref())
+        );
         assert!(!map.is_empty() && !after.is_empty() && !last.is_empty());
     }
 
     #[test]
     fn tree_map_split_off_panicking_as_bytes_leaves_tree_intact() {
         use std::{
-            panic::{catch_unwind, AssertUnwindSafe},
+            panic::{AssertUnwindSafe, catch_unwind},
             sync::atomic::{AtomicBool, Ordering},
         };
 
@@ -3236,7 +3237,7 @@ mod custom_allocator_tests {
         mem::MaybeUninit,
         num::NonZeroUsize,
         pin::Pin,
-        ptr::{addr_of_mut, NonNull},
+        ptr::{NonNull, addr_of_mut},
     };
 
     use super::*;

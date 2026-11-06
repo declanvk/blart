@@ -1,4 +1,4 @@
-use crate::raw::{match_concrete_node_ptr, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr};
+use crate::raw::{InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr, match_concrete_node_ptr};
 
 /// Search for the leaf with the minimum key, by lexicographic ordering.
 ///
@@ -52,7 +52,7 @@ mod tests {
     use crate::{
         allocator::Global,
         raw::{
-            deallocate_tree, maximum_unchecked, minimum_unchecked, LeafNode, NodePtr, OpaqueNodePtr,
+            LeafNode, NodePtr, OpaqueNodePtr, deallocate_tree, maximum_unchecked, minimum_unchecked,
         },
         testing::{generate_key_fixed_length, generate_keys_skewed, insert_unchecked},
     };

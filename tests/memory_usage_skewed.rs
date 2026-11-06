@@ -12,7 +12,7 @@ fn main() {
 
 #[cfg(not(miri))]
 fn test_memory_usage() {
-    use blart::{testing, TreeMap};
+    use blart::{TreeMap, testing};
     use common::{get_profiler, test_heap};
 
     const KEY_LENGTH_LIMIT: usize = u8::MAX as usize;

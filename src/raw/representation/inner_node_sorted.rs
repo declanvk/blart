@@ -13,8 +13,8 @@ use core::{
 
 use crate::{
     raw::{
-        representation::assert_valid_range_bounds, Header, InnerNode, InnerNode48, InnerNodeCommon,
-        InnerNodeDirect, InnerNodeIndirect, LeafNode, Node, NodeType, OpaqueNodePtr,
+        Header, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeDirect, InnerNodeIndirect,
+        LeafNode, Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
     },
     rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
 };
@@ -556,8 +556,8 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
             }
 
             // Must have at least two children right
-            let second = *children.get_unchecked(1);
-            second
+
+            *children.get_unchecked(1)
         }
     }
 }
@@ -614,11 +614,11 @@ mod tests {
 
     use super::*;
     use crate::raw::{
-        representation::tests::{
-            inner_node_min_max_test, inner_node_remove_child_test, inner_node_shrink_test,
-            inner_node_write_child_test, FixtureReturn,
-        },
         LeafNode, NodePtr,
+        representation::tests::{
+            FixtureReturn, inner_node_min_max_test, inner_node_remove_child_test,
+            inner_node_shrink_test, inner_node_write_child_test,
+        },
     };
 
     #[test]
