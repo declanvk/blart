@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
  - `WellFormedChecker::check_without_ordering` checks the tree well-formed-ness, but doesn't check the `K::as_bytes` ordering at all.
+ - Implement `Clone` for `TreeMap` iterators `Iter`, `Keys`, `Values`, `IntoIter`, `IntoKeys`, and `IntoValues`.
+ - Added the `_internal` feature, which makes the `raw` module public. The `raw` module is intended for mucking about with the crate internals, so it doesn't have the same SemVer guarantees as the rest of the crate.
 
 ### Changed
  - Update MSRV to `1.90`.
@@ -22,6 +24,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Removed
  - Removed the unsound `OrderedBytes` implementations for `Path` and `PathBuf`.
  - Made the `Visitor`, `Visitable`, and `TreeStatsCollector::collect_ptr` items all private.
+ - The `raw` module is now private by default, but `OpaqueNodePtr` is publically exported. You can enable the `_internal` crate feature to re-pub `raw`.
 
 ### Fixed
  - Fixed undefined behavior that a non-determinisitic `AsBytes` implementation could trigger from safe code in `TreeMap::{insert, entry, fuzzy, extract_if}`.
