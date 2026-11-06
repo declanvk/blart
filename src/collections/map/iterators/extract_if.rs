@@ -1,11 +1,11 @@
 use core::{iter::FusedIterator, ops::Bound};
 
 use crate::{
+    AsBytes,
     allocator::Allocator,
     collections::map::TreeMap,
     map::{find_leaf_pointer_for_bound, validate_range_bounds},
-    raw::{search_for_delete_point, LeafNode, NodePtr, RawIterator},
-    AsBytes,
+    raw::{LeafNode, NodePtr, RawIterator, search_for_delete_point},
 };
 
 /// An iterator which uses a closure to determine if an element should be
@@ -220,8 +220,8 @@ mod tests {
     use alloc::vec::Vec;
 
     use crate::{
-        testing::{generate_key_fixed_length, swap},
         TreeMap,
+        testing::{generate_key_fixed_length, swap},
     };
 
     #[test]

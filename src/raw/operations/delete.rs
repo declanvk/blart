@@ -2,12 +2,12 @@ use core::fmt;
 
 use super::PrefixMatchBehavior;
 use crate::{
+    AsBytes,
     allocator::Allocator,
     raw::{
-        match_concrete_node_ptr, operations::lookup, InnerNode, InnerNodeCommon, LeafNode, NodePtr,
-        OpaqueNodePtr, TreePath, TreePathSearch,
+        InnerNode, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr, TreePath, TreePathSearch,
+        match_concrete_node_ptr, operations::lookup,
     },
-    AsBytes,
 };
 
 /// Remove a child node from the given inner node, return the child node
@@ -163,21 +163,21 @@ unsafe fn inner_delete_non_root_unchecked<K, V, const PREFIX_LEN: usize, A: Allo
 
     // If the parent node was changed to something else, we have to write the new
     // value to the grandparent
-    if let Some(new_parent_node_ptr) = new_parent_node_ptr {
-        if let Some((grandparent_node_ptr, parent_key_byte)) = grandparent_node_ptr {
-            match_concrete_node_ptr!(match (grandparent_node_ptr.to_node_ptr()) {
-                InnerNode(inner_node_ptr) => {
-                    // SAFETY: The scope of the mutable reference is limited to this block, and
-                    // the containing function safety requirements mean that there are no other
-                    // mutable references to the same node.
-                    let inner_node = unsafe { inner_node_ptr.as_mut() };
-                    inner_node.write_child(parent_key_byte, new_parent_node_ptr);
-                },
-                LeafNode(_leaf) => {
-                    unreachable!("Cannot modify children of a leaf node")
-                },
-            })
-        }
+    if let Some(new_parent_node_ptr) = new_parent_node_ptr
+        && let Some((grandparent_node_ptr, parent_key_byte)) = grandparent_node_ptr
+    {
+        match_concrete_node_ptr!(match (grandparent_node_ptr.to_node_ptr()) {
+            InnerNode(inner_node_ptr) => {
+                // SAFETY: The scope of the mutable reference is limited to this block, and
+                // the containing function safety requirements mean that there are no other
+                // mutable references to the same node.
+                let inner_node = unsafe { inner_node_ptr.as_mut() };
+                inner_node.write_child(parent_key_byte, new_parent_node_ptr);
+            },
+            LeafNode(_leaf) => {
+                unreachable!("Cannot modify children of a leaf node")
+            },
+        })
     }
 
     // SAFETY: Function safety doc covers the no concurrent read or modification of

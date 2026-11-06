@@ -4,14 +4,14 @@ use std::{ffi::CStr, hint::black_box, ops::RangeBounds};
 
 use blart::{AsBytes, NoPrefixesBytes, TreeMap};
 use gungraun::{
-    client_requests::callgrind, library_benchmark, library_benchmark_group, main, Callgrind,
-    EntryPoint, LibraryBenchmarkConfig, OutputFormat,
+    Callgrind, EntryPoint, LibraryBenchmarkConfig, OutputFormat, client_requests::callgrind,
+    library_benchmark, library_benchmark_group, main,
 };
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 
 use crate::common::{
-    dense_fixed_length_key_tree, dictionary_tree, get_middle_key, sample_keys, sample_ranges,
-    skewed_tree, sparse_fixed_length_key_tree, with_prefixes_tree, SAMPLE_SEED,
+    SAMPLE_SEED, dense_fixed_length_key_tree, dictionary_tree, get_middle_key, sample_keys,
+    sample_ranges, skewed_tree, sparse_fixed_length_key_tree, with_prefixes_tree,
 };
 
 #[macro_use]

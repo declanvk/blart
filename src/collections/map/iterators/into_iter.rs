@@ -5,10 +5,10 @@ use core::{
 };
 
 use crate::{
+    TreeMap,
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
-    raw::{deallocate_leaves, deallocate_tree_non_leaves, NodePtr, RawIterator},
-    TreeMap,
+    raw::{NodePtr, RawIterator, deallocate_leaves, deallocate_tree_non_leaves},
 };
 
 /// An owning iterator over the entries of a `TreeMap`.
@@ -267,7 +267,7 @@ mod tests {
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
-    use crate::{testing::swap, AsBytes, NoPrefixesBytes, OrderedBytes};
+    use crate::{AsBytes, NoPrefixesBytes, OrderedBytes, testing::swap};
 
     #[test]
     fn iterators_are_send_sync() {

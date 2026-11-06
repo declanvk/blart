@@ -3,10 +3,10 @@ use alloc::{boxed::Box, vec::Vec};
 use super::*;
 use crate::{
     allocator::Global,
-    raw::{deallocate_tree, search_unchecked, NodeType},
+    raw::{NodeType, deallocate_tree, search_unchecked},
     testing::{
-        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
-        setup_tree_from_entries, PrefixExpansion,
+        PrefixExpansion, generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
+        setup_tree_from_entries,
     },
     visitor::WellFormedChecker,
 };

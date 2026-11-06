@@ -6,8 +6,8 @@ use alloc::{
 use crate::{
     allocator::Global,
     raw::{
-        deallocate_tree, search_unchecked, InnerNode4, InnerNodeCommon, InnerNodeSorted,
-        InsertPrefixError, LeafNode, NodePtr, NodeType, OpaqueNodePtr,
+        InnerNode4, InnerNodeCommon, InnerNodeSorted, InsertPrefixError, LeafNode, NodePtr,
+        NodeType, OpaqueNodePtr, deallocate_tree, search_unchecked,
     },
     testing::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
 };
@@ -39,24 +39,15 @@ fn insert_to_small_trees() {
         assert_eq!(root.lookup_child(3), Some(first_leaf.to_opaque()));
         assert_eq!(root.lookup_child(1), None);
     }
-    assert_eq!(
-        unsafe {
-            &search_unchecked(new_root.to_opaque(), [1, 2, 5, 6].as_ref())
-                .unwrap()
-                .read()
-                .value_ref()
-        },
-        &"1256"
-    );
-    assert_eq!(
-        unsafe {
-            &search_unchecked(new_root.to_opaque(), [1, 2, 3, 4].as_ref())
-                .unwrap()
-                .read()
-                .value_ref()
-        },
-        &"1234"
-    );
+
+    let leaf_ptr =
+        unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 5, 6].as_ref()).unwrap() };
+    assert_eq!(leaf_ptr.read().value_ref(), &"1256");
+
+    let leaf_ptr =
+        unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 3, 4].as_ref()).unwrap() };
+    assert_eq!(&leaf_ptr.read().value_ref(), &"1234");
+
     assert!(unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 5, 7].as_ref()).is_none() });
     assert!(unsafe { search_unchecked(new_root.to_opaque(), [1, 2, 3, 5].as_ref()).is_none() });
 
@@ -160,33 +151,16 @@ fn insert_key_with_long_prefix_then_split() {
             .new_root
     };
 
-    assert_eq!(
-        unsafe {
-            search_unchecked(tree, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255].as_ref())
-                .unwrap()
-                .read()
-                .value_ref()
-        },
-        &0
-    );
-    assert_eq!(
-        unsafe {
-            search_unchecked(tree, [1, 1, 1, 1, 1, 1, 1, 1, 1, 255].as_ref())
-                .unwrap()
-                .read()
-                .value_ref()
-        },
-        &1
-    );
-    assert_eq!(
-        unsafe {
-            search_unchecked(tree, [1, 1, 255].as_ref())
-                .unwrap()
-                .read()
-                .value_ref()
-        },
-        &2
-    );
+    let leaf_ptr =
+        unsafe { search_unchecked(tree, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 255].as_ref()).unwrap() };
+    assert_eq!(leaf_ptr.read().value_ref(), &0);
+
+    let leaf_ptr =
+        unsafe { search_unchecked(tree, [1, 1, 1, 1, 1, 1, 1, 1, 1, 255].as_ref()).unwrap() };
+    assert_eq!(leaf_ptr.read().value_ref(), &1);
+
+    let leaf_ptr = unsafe { search_unchecked(tree, [1, 1, 255].as_ref()).unwrap() };
+    assert_eq!(leaf_ptr.read().value_ref(), &2);
 
     unsafe {
         deallocate_tree(tree, &Global);

@@ -7,14 +7,14 @@ use core::{
 };
 
 use crate::{
+    AsBytes,
     allocator::Allocator,
     raw::{
-        deallocate_tree, match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
         ExplicitMismatch, InnerNode, InnerNode4, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr,
-        PrefixMatch, TreePath, TreePathSearch,
+        PrefixMatch, TreePath, TreePathSearch, deallocate_tree, match_concrete_node_ptr,
+        maximum_unchecked, minimum_unchecked,
     },
     rust_nightly_apis::{likely, unlikely},
-    AsBytes,
 };
 
 /// The results of a successful tree insert
@@ -1108,7 +1108,7 @@ where
                             },
                             path: path.finish(),
                             root,
-                        })
+                        });
                     },
                 }
             },
@@ -1253,7 +1253,7 @@ where
                             },
                             path: path.finish(),
                             root,
-                        })
+                        });
                     },
                 }
             },

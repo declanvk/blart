@@ -11,9 +11,9 @@ use core::{
 };
 
 use crate::{
-    allocator::{do_alloc, Allocator},
+    allocator::{Allocator, do_alloc},
     raw::{
-        Header, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, LeafNode, Node, NodeType,
+        Header, InnerNode4, InnerNode16, InnerNode48, InnerNodeDirect, LeafNode, Node, NodeType,
     },
     tagged_pointer::TaggedPointer,
 };

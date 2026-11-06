@@ -2,10 +2,10 @@ use alloc::{boxed::Box, vec::Vec};
 use core::{iter::FusedIterator, mem::MaybeUninit};
 
 use crate::{
+    AsBytes, TreeMap,
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
-    raw::{match_concrete_node_ptr, InnerNode, LeafNode, OpaqueNodePtr},
-    AsBytes, TreeMap,
+    raw::{InnerNode, LeafNode, OpaqueNodePtr, match_concrete_node_ptr},
 };
 
 pub(crate) struct StackArena {

@@ -1,8 +1,8 @@
-use super::{OccupiedEntry, SubtreeIter, SubtreeIterMut, TreeMap, VacantEntry, DEFAULT_PREFIX_LEN};
+use super::{DEFAULT_PREFIX_LEN, OccupiedEntry, SubtreeIter, SubtreeIterMut, TreeMap, VacantEntry};
 use crate::{
+    AsBytes,
     allocator::{Allocator, Global},
     raw::{ConcreteNodePtr, DeletePoint, LeafNode, NodePtr, OverwritePoint, PrefixInsertPoint},
-    AsBytes,
 };
 
 /// A view into an occupied subtree in a [`TreeMap`].

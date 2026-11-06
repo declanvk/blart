@@ -8,7 +8,7 @@ use std::{
 };
 
 use argh::FromArgs;
-use blart::{visitor::TreeStatsCollector, TreeMap};
+use blart::{TreeMap, visitor::TreeStatsCollector};
 
 #[derive(FromArgs)]
 /// TREES

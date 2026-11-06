@@ -9,13 +9,13 @@ use core::{
 };
 
 use crate::{
-    allocator::{Allocator, Global},
-    map::{NonEmptyTree, DEFAULT_PREFIX_LEN},
-    raw::{
-        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, ExplicitMismatch, InnerNode,
-        LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, RawIterator,
-    },
     AsBytes, TreeMap,
+    allocator::{Allocator, Global},
+    map::{DEFAULT_PREFIX_LEN, NonEmptyTree},
+    raw::{
+        ExplicitMismatch, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, RawIterator,
+        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
+    },
 };
 
 /// This struct contains details of where and why the search stopped in an inner
@@ -712,7 +712,7 @@ mod tests {
     use alloc::{boxed::Box, vec::Vec};
 
     use super::*;
-    use crate::testing::{generate_key_with_prefix, swap, PrefixExpansion};
+    use crate::testing::{PrefixExpansion, generate_key_with_prefix, swap};
 
     #[test]
     fn iterators_are_send_sync() {

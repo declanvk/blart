@@ -1,10 +1,10 @@
 use blart::{
-    testing::{
-        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, PrefixExpansion,
-    },
     TreeMap,
+    testing::{
+        PrefixExpansion, generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
+    },
 };
-use criterion::{criterion_group, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group};
 
 fn gen_group(c: &mut Criterion, group: &str, keys: Vec<Box<[u8]>>) {
     let mut group = c.benchmark_group(group);

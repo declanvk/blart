@@ -76,7 +76,7 @@ pub mod testing;
 
 pub use bytes::*;
 pub use collections::*;
-pub use raw::{visitor, OpaqueNodePtr};
+pub use raw::{OpaqueNodePtr, visitor};
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

@@ -11,7 +11,7 @@
 
 use core::cell::Cell;
 
-use blart::{visitor::WellFormedChecker, AsBytes, NoPrefixesBytes, TreeMap};
+use blart::{AsBytes, NoPrefixesBytes, TreeMap, visitor::WellFormedChecker};
 
 /// A malicious `AsBytes` implemenetor that is non-deterministic.
 ///
@@ -47,11 +47,7 @@ impl AsBytes for Adversary {
     fn as_bytes(&self) -> &[u8] {
         let n = self.calls.get();
         self.calls.set(n + 1);
-        if n == 0 {
-            &self.first
-        } else {
-            &self.rest
-        }
+        if n == 0 { &self.first } else { &self.rest }
     }
 }
 

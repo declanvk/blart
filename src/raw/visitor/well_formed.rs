@@ -5,15 +5,15 @@ use core::{
     fmt,
     ops::{Add, AddAssign},
 };
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 
 use crate::{
+    AsBytes, TreeMap,
     allocator::Allocator,
     raw::{
-        visitor::{InnerNodeType, Visitable, Visitor},
         InnerNode, LeafNode, NodePtr, OpaqueNodePtr, OptionalLeafPtr,
+        visitor::{InnerNodeType, Visitable, Visitor},
     },
-    AsBytes, TreeMap,
 };
 
 /// A portion of an entire key that should uniquely identify each node in
@@ -679,10 +679,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        allocator::Global,
-        raw::{InnerNode16, InnerNode4, InnerNodeCommon, LeafNode, NodePtr},
-        testing::{generate_key_fixed_length, setup_tree_from_entries},
         TreeMap,
+        allocator::Global,
+        raw::{InnerNode4, InnerNode16, InnerNodeCommon, LeafNode, NodePtr},
+        testing::{generate_key_fixed_length, setup_tree_from_entries},
     };
 
     #[test]

@@ -1,4 +1,4 @@
-use criterion::{criterion_group, Criterion};
+use criterion::{Criterion, criterion_group};
 
 use crate::common::{dictionary_tree, skewed_tree, with_prefixes_tree};
 

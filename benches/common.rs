@@ -1,16 +1,16 @@
 use std::{ffi::CString, sync::OnceLock};
 
 use blart::{
-    testing::{
-        generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed, swap,
-        PrefixExpansion,
-    },
     AsBytes, TreeMap,
+    testing::{
+        PrefixExpansion, generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,
+        swap,
+    },
 };
 use rand::{
+    Rng, SeedableRng,
     rngs::StdRng,
     seq::{IndexedRandom, SliceRandom},
-    Rng, SeedableRng,
 };
 
 static DICTIONARY: &str = include_str!("data/medium-dict.txt");

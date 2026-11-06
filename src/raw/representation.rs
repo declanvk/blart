@@ -8,7 +8,7 @@ use core::{
     ops::{Bound, RangeBounds, RangeInclusive},
 };
 
-use crate::{rust_nightly_apis::likely, AsBytes};
+use crate::{AsBytes, rust_nightly_apis::likely};
 
 mod header;
 pub use header::*;

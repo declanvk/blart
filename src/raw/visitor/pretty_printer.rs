@@ -5,10 +5,10 @@ use std::{
 };
 
 use crate::{
+    AsBytes, TreeMap,
     allocator::Allocator,
     raw::{InnerNode, NodePtr, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
-    AsBytes, TreeMap,
 };
 
 /// Settings which customize the output of the [`DotPrinter`] visitor.

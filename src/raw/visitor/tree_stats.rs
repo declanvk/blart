@@ -5,10 +5,10 @@ use core::{
 };
 
 use crate::{
+    AsBytes, TreeMap,
     allocator::Allocator,
     raw::{InnerNode, LeafNode, OpaqueNodePtr},
     visitor::{InnerNodeType, Visitable, Visitor},
-    AsBytes, TreeMap,
 };
 
 /// A visitor of the radix tree which collects statistics about the tree, like
@@ -299,7 +299,7 @@ mod tests {
     use expect_test::{expect, expect_file};
 
     use super::*;
-    use crate::{testing::generate_key_fixed_length, TreeMap};
+    use crate::{TreeMap, testing::generate_key_fixed_length};
 
     #[test]
     #[cfg(not(miri))]

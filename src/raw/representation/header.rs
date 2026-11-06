@@ -3,8 +3,8 @@
 use core::fmt::Debug;
 
 use crate::{
-    raw::{LeafNode, NodePtr},
     AsBytes,
+    raw::{LeafNode, NodePtr},
 };
 
 /// The common header for all inner nodes
@@ -236,7 +236,7 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn ltrim_by_with_leaf_panic_leaves_header_unchanged() {
-        use std::panic::{catch_unwind, AssertUnwindSafe};
+        use std::panic::{AssertUnwindSafe, catch_unwind};
 
         use crate::{
             allocator::Global,

@@ -5,9 +5,9 @@ use core::iter;
 
 #[cfg(test)]
 use crate::{
+    AsBytes, TreeMap,
     allocator::Global,
     raw::{InsertPrefixError, InsertResult, OpaqueNodePtr},
-    AsBytes, TreeMap,
 };
 
 /// This function swaps the elements of a 2-tuple.

@@ -1,11 +1,11 @@
 use std::ffi::CString;
 
 use blart::TreeMap;
-use criterion::{criterion_group, Criterion};
+use criterion::{Criterion, criterion_group};
 use rand::{
+    SeedableRng,
     rngs::StdRng,
     seq::{IndexedRandom, SliceRandom},
-    SeedableRng,
 };
 
 fn insert(words: Vec<CString>) -> TreeMap<CString, usize> {

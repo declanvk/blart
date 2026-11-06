@@ -6,14 +6,14 @@ use core::{
 };
 
 use crate::{
+    AsBytes, OpaqueNodePtr,
     allocator::Allocator,
     raw::{
+        ConcreteInnerNodePtr, InnerNode, InnerNode4, InnerNode16, InnerNode48, InnerNodeCommon,
+        InnerNodeDirect, InnerNodeType, LeafNode, NodePtr, PrefixMatch,
         match_concrete_inner_node_ptr, match_concrete_node_ptr,
         operations::{maximum_unchecked, minimum_unchecked},
-        ConcreteInnerNodePtr, InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeCommon,
-        InnerNodeDirect, InnerNodeType, LeafNode, NodePtr, PrefixMatch,
     },
-    AsBytes, OpaqueNodePtr,
 };
 
 /// Split the tree rooted by `root` into two at the given `key_bytes`.
@@ -776,12 +776,11 @@ impl<K, V, const PREFIX_LEN: usize> InnerNodePathElem<K, V, PREFIX_LEN> {
                 // If this side has a half of the path child, write it back under the same key byte
                 // in place of the stale pointer.
                 // TODO: convert this to if-let chain in 2024 edition
-                if let Some(stale_key_fragment) = stale_path_slot {
-                    if let Some((_, child)) =
+                if let Some(stale_key_fragment) = stale_path_slot
+                    && let Some((_, child)) =
                         keep.iter().find(|(key, _)| *key == stale_key_fragment)
-                    {
-                        inner_node.write_child(stale_key_fragment, *child);
-                    }
+                {
+                    inner_node.write_child(stale_key_fragment, *child);
                 }
 
                 SplitSide::Many {

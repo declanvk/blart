@@ -1,8 +1,8 @@
 use std::{ffi::CString, ptr::NonNull};
 
-use blart::raw::{InnerNode, InnerNode16, InnerNode4, InnerNode48, InnerNodeDirect, NodePtr};
-use criterion::{criterion_group, measurement::Measurement, Criterion};
-use rand::{rngs::StdRng, seq::IndexedRandom, SeedableRng};
+use blart::raw::{InnerNode, InnerNode4, InnerNode16, InnerNode48, InnerNodeDirect, NodePtr};
+use criterion::{Criterion, criterion_group, measurement::Measurement};
+use rand::{SeedableRng, rngs::StdRng, seq::IndexedRandom};
 
 use crate::common::{dictionary_tree, get_middle_key};
 

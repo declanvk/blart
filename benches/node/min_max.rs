@@ -1,7 +1,7 @@
 use std::{ffi::CString, ptr::NonNull};
 
 use blart::raw::{InnerNode48, InnerNodeCommon, InnerNodeDirect, NodePtr};
-use criterion::{criterion_group, Criterion};
+use criterion::{Criterion, criterion_group};
 
 fn bench(c: &mut Criterion) {
     let dangling_ptr =

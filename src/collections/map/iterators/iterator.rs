@@ -1,10 +1,10 @@
 use core::iter::FusedIterator;
 
 use crate::{
+    TreeMap,
     allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::RawIterator,
-    TreeMap,
 };
 
 macro_rules! gen_iter {
@@ -328,7 +328,7 @@ mod tests {
     use alloc::{boxed::Box, vec::Vec};
 
     use super::*;
-    use crate::{testing::generate_key_fixed_length, Mapped, ToIBE, TreeMap};
+    use crate::{Mapped, ToIBE, TreeMap, testing::generate_key_fixed_length};
 
     #[test]
     fn iterators_are_send_sync() {
