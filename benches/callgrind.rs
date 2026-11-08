@@ -10,8 +10,9 @@ use gungraun::{
 use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 
 use crate::common::{
-    SAMPLE_SEED, dense_fixed_length_key_tree, dictionary_tree, get_middle_key, sample_keys,
-    sample_ranges, skewed_tree, sparse_fixed_length_key_tree, with_prefixes_tree,
+    SAMPLE_SEED, dense_fixed_length_key_tree, dictionary_tree, dictionary_words, get_middle_key,
+    prefix_queries, range_queries, sample_keys, sample_ranges, skewed_tree,
+    sparse_fixed_length_key_tree, url_tree, with_prefixes_tree,
 };
 
 #[macro_use]
@@ -236,6 +237,8 @@ fn bulk_insert_setup<K: AsBytes + Clone, V: Clone>(
 #[bench::skewed_shuffled(bulk_insert_setup(skewed_tree(), true))]
 #[bench::with_prefixes_sorted(bulk_insert_setup(with_prefixes_tree(), false))]
 #[bench::with_prefixes_shuffled(bulk_insert_setup(with_prefixes_tree(), true))]
+#[bench::urls_sorted(bulk_insert_setup(url_tree(), false))]
+#[bench::urls_shuffled(bulk_insert_setup(url_tree(), true))]
 fn bench_from_iter<K: NoPrefixesBytes, V>(entries: Vec<(K, V)>) -> TreeMap<K, V> {
     measure!(TreeMap::from_iter(entries))
 }
@@ -251,13 +254,41 @@ fn bench_from_iter<K: NoPrefixesBytes, V>(entries: Vec<(K, V)>) -> TreeMap<K, V>
 #[bench::skewed_shuffled(bulk_insert_setup(skewed_tree(), true))]
 #[bench::with_prefixes_sorted(bulk_insert_setup(with_prefixes_tree(), false))]
 #[bench::with_prefixes_shuffled(bulk_insert_setup(with_prefixes_tree(), true))]
+#[bench::urls_sorted(bulk_insert_setup(url_tree(), false))]
+#[bench::urls_shuffled(bulk_insert_setup(url_tree(), true))]
 fn bench_from_vec<K: NoPrefixesBytes, V>(entries: Vec<(K, V)>) -> TreeMap<K, V> {
     measure!(TreeMap::from(entries))
 }
 
+#[library_benchmark]
+#[bench::dictionary(dictionary_words())]
+fn bench_insert_prefix_len_4(keys: Vec<std::ffi::CString>) -> TreeMap<std::ffi::CString, usize, 4> {
+    let mut tree = TreeMap::with_prefix_len();
+    measure!({
+        for (idx, key) in keys.into_iter().enumerate() {
+            let _ = tree.try_insert(key, idx);
+        }
+    });
+    tree
+}
+
+#[library_benchmark]
+#[bench::dictionary(bulk_insert_setup(dictionary_tree(), true))]
+#[bench::urls(bulk_insert_setup(url_tree(), true))]
+fn bench_prefix_insert<K: AsBytes, V>(keys: Vec<(K, V)>) -> TreeMap<K, V> {
+    let mut tree = TreeMap::new();
+    measure!({
+        for (key, value) in keys {
+            tree.prefix_insert(key, value);
+        }
+    });
+    tree
+}
+
 library_benchmark_group!(
     name = bench_insert_group;
-    benchmarks = bench_insert_new, bench_insert_existing, bench_from_vec, bench_from_iter
+    benchmarks = bench_insert_new, bench_insert_existing, bench_from_vec, bench_from_iter,
+        bench_insert_prefix_len_4, bench_prefix_insert
 );
 
 // ITERATORS
@@ -398,10 +429,43 @@ fn bench_short_range_iter<K: AsBytes, V>(tree: &TreeMap<K, V>, ranges: Vec<(&K, 
     })
 }
 
+fn tree_keys(tree: &TreeMap<std::ffi::CString, usize>) -> Vec<std::ffi::CString> {
+    tree.keys().cloned().collect()
+}
+
+#[library_benchmark]
+#[bench::dictionary(dictionary_tree(), range_queries(&tree_keys(dictionary_tree()), 1000))]
+#[bench::urls(url_tree(), range_queries(&tree_keys(url_tree()), 1000))]
+fn bench_range_many(
+    tree: &TreeMap<std::ffi::CString, usize>,
+    queries: Vec<std::ffi::CString>,
+) -> usize {
+    measure!({
+        let mut count = 0;
+        for query in &queries {
+            count += tree.range::<std::ffi::CString, _>(query..).take(4).count();
+        }
+        count
+    })
+}
+
+#[library_benchmark]
+#[bench::dictionary(dictionary_tree(), prefix_queries(&tree_keys(dictionary_tree()), 1000))]
+#[bench::urls(url_tree(), prefix_queries(&tree_keys(url_tree()), 1000))]
+fn bench_prefix_many(tree: &TreeMap<std::ffi::CString, usize>, queries: Vec<Vec<u8>>) -> usize {
+    measure!({
+        let mut count = 0;
+        for query in &queries {
+            count += tree.prefix(query).take(4).count();
+        }
+        count
+    })
+}
+
 library_benchmark_group!(
     name = bench_iterator_group;
     benchmarks = bench_iter, bench_iter_rev, bench_prefix_iter, bench_fuzzy_iter, bench_range_iter,
-        bench_short_range_iter
+        bench_short_range_iter, bench_range_many, bench_prefix_many
 );
 
 // MODIFYING
