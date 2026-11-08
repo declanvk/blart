@@ -620,8 +620,9 @@ mod tests {
     use crate::raw::{
         LeafNode, NodePtr,
         representation::tests::{
-            FixtureReturn, inner_node_min_max_test, inner_node_remove_child_test,
-            inner_node_shrink_test, inner_node_write_child_test,
+            FixtureReturn, SiblingKey, inner_node_min_max_test, inner_node_nearest_sibling_test,
+            inner_node_remove_child_test, inner_node_shrink_test, inner_node_write_child_test,
+            nearest_sibling_keys,
         },
     };
 
@@ -793,6 +794,70 @@ mod tests {
     #[test]
     fn node16_min_max() {
         inner_node_min_max_test::<16, InnerNode16<Box<[u8]>, (), 16>>(16);
+    }
+
+    #[test]
+    fn node4_nearest_sibling() {
+        type Node = InnerNode4<Box<[u8]>, (), 16>;
+
+        inner_node_nearest_sibling_test::<16, Node>(&[7]);
+        inner_node_nearest_sibling_test::<16, Node>(&[10, 200]);
+        inner_node_nearest_sibling_test::<16, Node>(&[3, 255, 0, 85]);
+        inner_node_nearest_sibling_test::<16, Node>(&[1, 2, 3]);
+    }
+
+    #[test]
+    fn node16_nearest_sibling() {
+        type Node = InnerNode16<Box<[u8]>, (), 16>;
+
+        inner_node_nearest_sibling_test::<16, Node>(&[7]);
+        inner_node_nearest_sibling_test::<16, Node>(&[10, 200]);
+        inner_node_nearest_sibling_test::<16, Node>(&[3, 255, 0, 85]);
+        inner_node_nearest_sibling_test::<16, Node>(&(0..=u8::MAX).step_by(17).collect::<Vec<_>>());
+        inner_node_nearest_sibling_test::<16, Node>(&(240..=u8::MAX).rev().collect::<Vec<_>>());
+    }
+
+    fn nearest_sibling_prefers_next_test<N>()
+    where
+        N: InnerNode<16, Key = Box<[u8]>, Value = ()>,
+    {
+        use SiblingKey::{Next, Previous};
+
+        let queries = [0, 9, 10, 11, 104, 105, 106, 199, 200, 201, 255];
+        let results = nearest_sibling_keys::<16, N>(&[10, 200], queries);
+
+        // The next child is always preferred, even when the previous child is
+        // closer. The previous child is only returned if there are no greater
+        // children.
+        assert_eq!(
+            results,
+            [
+                Some(Next(10)),
+                Some(Next(10)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Next(200)),
+                Some(Previous(10)),
+                Some(Previous(200)),
+                Some(Previous(200)),
+            ]
+        );
+
+        let results = nearest_sibling_keys::<16, N>(&[7], [0, 7, 255]);
+        assert_eq!(results, [Some(Next(7)), None, Some(Previous(7))]);
+    }
+
+    #[test]
+    fn node4_nearest_sibling_prefers_next() {
+        nearest_sibling_prefers_next_test::<InnerNode4<Box<[u8]>, (), 16>>();
+    }
+
+    #[test]
+    fn node16_nearest_sibling_prefers_next() {
+        nearest_sibling_prefers_next_test::<InnerNode16<Box<[u8]>, (), 16>>();
     }
 
     fn node4_fixture() -> FixtureReturn<InnerNode4<Box<[u8]>, (), 16>, 4> {

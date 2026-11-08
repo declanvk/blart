@@ -577,6 +577,27 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
         // The minimum child is a valid choice
         self.min().1
     }
+    /// Return the nearest sibling to the given child key byte.
+    ///
+    /// The given key byte doesn't need to exist as a child in this inner node.
+    fn nearest_sibling(&self, child_key_byte: u8) -> Option<Sibling<K, V, PREFIX_LEN>> {
+        self.range((Bound::Excluded(child_key_byte), Bound::Unbounded))
+            .next()
+            .map(|(_, next_node)| Sibling::Next(next_node))
+            .or_else(|| {
+                self.range((Bound::Unbounded, Bound::Excluded(child_key_byte)))
+                    .next_back()
+                    .map(|(_, previous_node)| Sibling::Previous(previous_node))
+            })
+    }
+}
+
+/// Represents the nearby inner node child that was found relative to some original search.
+pub enum Sibling<K, V, const PREFIX_LEN: usize> {
+    /// The found inner node child was after (key byte larger) than the search start.
+    Next(OpaqueNodePtr<K, V, PREFIX_LEN>),
+    /// The found inner node child was before (key byte smaller) than the search start.
+    Previous(OpaqueNodePtr<K, V, PREFIX_LEN>),
 }
 
 /// Common methods implemented by all inner nodes that will be used in the tree.
@@ -1237,6 +1258,94 @@ mod tests {
         }
 
         assert_eq!(node.header().num_children(), 0);
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum SiblingKey {
+        Next(u8),
+        Previous(u8),
+    }
+
+    pub(crate) fn nearest_sibling_keys<const PREFIX_LEN: usize, N>(
+        child_keys: &[u8],
+        queries: impl IntoIterator<Item = u8>,
+    ) -> Vec<Option<SiblingKey>>
+    where
+        N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+    {
+        assert!(
+            !child_keys.is_empty(),
+            "test harness must specify at least 1 child"
+        );
+
+        let mut leaves: Vec<LeafNode<Box<[u8]>, (), PREFIX_LEN>> = child_keys
+            .iter()
+            .map(|_| LeafNode::with_no_siblings(vec![].into(), ()))
+            .collect();
+
+        let leaf_pointers: Vec<OpaqueNodePtr<Box<[u8]>, (), PREFIX_LEN>> = leaves
+            .iter_mut()
+            .map(|leaf| NodePtr::from(leaf).to_opaque())
+            .collect();
+
+        // When there is only a single child key, the builder writes the same
+        // child twice, which leaves the node with one child.
+        let second = 1.min(child_keys.len() - 1);
+        let mut node = N::builder(&[], 0)
+            .write_child(child_keys[0], leaf_pointers[0])
+            .write_child(child_keys[second], leaf_pointers[second])
+            .build();
+
+        for (key, leaf_pointer) in child_keys.iter().zip(&leaf_pointers).skip(2) {
+            node.write_child(*key, *leaf_pointer);
+        }
+
+        assert_eq!(node.header().num_children(), child_keys.len());
+
+        let key_for_pointer = |ptr: OpaqueNodePtr<Box<[u8]>, (), PREFIX_LEN>| {
+            let idx = leaf_pointers.iter().position(|p| *p == ptr).unwrap();
+            child_keys[idx]
+        };
+
+        queries
+            .into_iter()
+            .map(|query| {
+                node.nearest_sibling(query).map(|sibling| match sibling {
+                    Sibling::Next(ptr) => SiblingKey::Next(key_for_pointer(ptr)),
+                    Sibling::Previous(ptr) => SiblingKey::Previous(key_for_pointer(ptr)),
+                })
+            })
+            .collect()
+    }
+
+    pub(crate) fn inner_node_nearest_sibling_test<const PREFIX_LEN: usize, N>(child_keys: &[u8])
+    where
+        N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
+    {
+        let results = nearest_sibling_keys::<PREFIX_LEN, N>(child_keys, 0..=u8::MAX);
+
+        for (query, result) in (0..=u8::MAX).zip(results) {
+            let successor = child_keys.iter().copied().filter(|k| *k > query).min();
+            let predecessor = child_keys.iter().copied().filter(|k| *k < query).max();
+
+            match result {
+                Some(SiblingKey::Next(key)) => assert_eq!(
+                    Some(key),
+                    successor,
+                    "query [{query}] returned a next sibling that is not the successor"
+                ),
+                Some(SiblingKey::Previous(key)) => assert_eq!(
+                    Some(key),
+                    predecessor,
+                    "query [{query}] returned a previous sibling that is not the predecessor"
+                ),
+                None => assert!(
+                    successor.is_none() && predecessor.is_none(),
+                    "query [{query}] returned no sibling, expected one of [{successor:?}] or \
+                     [{predecessor:?}]"
+                ),
+            }
+        }
     }
 
     // --------------------------------------- ITERATORS
