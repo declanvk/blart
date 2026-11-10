@@ -1,5 +1,8 @@
 //! Trie node lookup and manipulation
 
+mod search;
+pub(crate) use search::*;
+
 mod insert;
 pub(crate) use insert::*;
 

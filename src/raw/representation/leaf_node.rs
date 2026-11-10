@@ -195,14 +195,6 @@ impl<const PREFIX_LEN: usize, K, V> LeafNode<K, V, PREFIX_LEN> {
         (self.key, self.value)
     }
 
-    /// Check that the provided full key is the same one as the stored key.
-    pub fn matches_full_key(&self, possible_key: &[u8]) -> bool
-    where
-        K: AsBytes,
-    {
-        self.key.as_bytes().eq(possible_key)
-    }
-
     /// Compare lexicographically the leaf stored key bytes with the given
     /// search key bytes.
     pub fn compare_full_key(&self, possible_key: &[u8]) -> Ordering

@@ -1,15 +1,22 @@
 use alloc::{
     boxed::Box,
+    collections::BTreeMap,
     string::{String, ToString},
+    vec::Vec,
 };
+use core::iter::repeat_with;
+
+use rand::{RngCore, SeedableRng};
 
 use crate::{
+    TreeMap,
     allocator::Global,
     raw::{
         InnerNode4, InnerNodeCommon, InnerNodeSorted, InsertPrefixError, LeafNode, NodePtr,
         NodeType, OpaqueNodePtr, deallocate_tree, search_unchecked,
     },
     testing::{generate_keys_skewed, insert_unchecked, setup_tree_from_entries},
+    visitor::WellFormedChecker,
 };
 
 #[test]
@@ -360,5 +367,107 @@ fn insert_existing_key_overwrite() {
 
     unsafe {
         deallocate_tree(current_root, &Global);
+    }
+}
+
+#[test]
+#[cfg(not(miri))]
+fn insert_keys_with_long_shared_runs_small_prefix_len() {
+    for seed in 1..=8 {
+        insert_keys_with_long_shared_runs::<0>(seed);
+        insert_keys_with_long_shared_runs::<1>(seed);
+        insert_keys_with_long_shared_runs::<2>(seed);
+        insert_keys_with_long_shared_runs::<4>(seed);
+        insert_keys_with_long_shared_runs::<8>(seed);
+        insert_keys_with_long_shared_runs::<16>(seed);
+    }
+}
+
+/// Insert keys which share long runs of bytes into a tree with a small
+/// `PREFIX_LEN`, so that most inner nodes have implicit prefix bytes that the
+/// insert search skips. Uses both `try_insert` and `prefix_insert`, and checks
+/// the result against a [`BTreeMap`] model.
+#[cfg(not(miri))]
+fn insert_keys_with_long_shared_runs<const PREFIX_LEN: usize>(seed: u64) {
+    use rand::rngs::SmallRng;
+
+    let mut rng = SmallRng::seed_from_u64(seed);
+    let mut next = || rng.next_u64();
+
+    let base: Vec<u8> = repeat_with(|| (next() % 3) as u8).take(48).collect();
+    let mut tree = TreeMap::<Box<[u8]>, usize, PREFIX_LEN>::with_prefix_len();
+    let mut model = BTreeMap::<Box<[u8]>, usize>::new();
+    let mut keys: Vec<Box<[u8]>> = Vec::new();
+
+    for value in 0..100 {
+        // Derive the new key from the base or a previous key, so that keys share
+        // long runs and differ at random depths
+        let mut key: Vec<u8> = if keys.is_empty() || next() % 4 == 0 {
+            base.clone()
+        } else {
+            keys[next() as usize % keys.len()].to_vec()
+        };
+        let num_edits = 1 + next() % 2;
+        for _ in 0..num_edits {
+            let idx = next() as usize % key.len();
+            key[idx] = (next() % 3) as u8;
+        }
+        match next() % 16 {
+            // Occasionally truncate or extend the key, to exercise the prefix errors
+            0 => key.truncate(1 + (next() as usize % key.len())),
+            1 => key.push((next() % 3) as u8),
+            _ => {},
+        }
+        let key: Box<[u8]> = key.into_boxed_slice();
+
+        if next() % 4 == 0 {
+            // `prefix_insert` removes all keys which are a prefix of the new key or the
+            // other way around, then inserts the new key
+            tree.prefix_insert(key.clone(), value);
+            model.retain(|existing, _| !(existing.starts_with(&key) || key.starts_with(existing)));
+            model.insert(key.clone(), value);
+            keys.push(key.clone());
+            assert_eq!(
+                tree.len(),
+                model.len(),
+                "length mismatch after prefix insert of {key:?}, PREFIX_LEN {PREFIX_LEN}, seed \
+                 {seed}"
+            );
+        } else {
+            let expect_prefix_error = model.keys().any(|existing| {
+                existing != &key && (existing.starts_with(&key) || key.starts_with(existing))
+            });
+
+            match tree.try_insert(key.clone(), value) {
+                Ok(old_value) => {
+                    assert!(
+                        !expect_prefix_error,
+                        "expected prefix error for key {key:?}, PREFIX_LEN {PREFIX_LEN}, seed \
+                         {seed}"
+                    );
+                    assert_eq!(old_value, model.insert(key.clone(), value));
+                    keys.push(key.clone());
+                },
+                Err(_) => {
+                    assert!(
+                        expect_prefix_error,
+                        "unexpected prefix error for key {key:?}, PREFIX_LEN {PREFIX_LEN}, seed \
+                         {seed}"
+                    );
+                },
+            }
+        }
+
+        WellFormedChecker::check(&tree).unwrap_or_else(|err| {
+            panic!(
+                "tree malformed after inserting {key:?}, PREFIX_LEN {PREFIX_LEN}, seed {seed}: \
+                 {err}"
+            )
+        });
+    }
+
+    assert!(tree.iter().eq(model.iter()));
+    for (key, value) in &model {
+        assert_eq!(tree.get(key), Some(value));
     }
 }
