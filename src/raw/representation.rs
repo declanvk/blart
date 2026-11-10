@@ -245,6 +245,43 @@ pub struct ExplicitMismatch<K, V, const PREFIX_LEN: usize> {
     pub node_prefix_comparison_to_search_key_segment: Ordering,
 }
 
+impl<K, V, const PREFIX_LEN: usize> ExplicitMismatch<K, V, PREFIX_LEN> {
+    /// Build the mismatch for a node prefix which differs from the search key segment at
+    /// `matched_bytes`.
+    ///
+    /// `key_segment` is a portion of the key bytes, starting at the depth where `prefix` starts.
+    /// `matched_bytes` is the number of common leading bytes between `prefix` and `key_segment`.
+    ///
+    /// # Panics
+    /// If `matched_bytes` is not less than `prefix.len()`.
+    pub fn new(
+        prefix: &[u8],
+        key_segment: &[u8],
+        matched_bytes: usize,
+        leaf_ptr: OptionalLeafPtr<K, V, PREFIX_LEN>,
+    ) -> Self {
+        let prefix_byte = prefix[matched_bytes];
+
+        let node_prefix_comparison_to_search_key_segment = match key_segment.get(matched_bytes) {
+            Some(key_byte) => prefix_byte.cmp(key_byte),
+            None => Ordering::Greater,
+        };
+
+        debug_assert_ne!(
+            node_prefix_comparison_to_search_key_segment,
+            Ordering::Equal,
+            "if there was a mismatch, the prefix must not be equal"
+        );
+
+        Self {
+            matched_bytes,
+            prefix_byte,
+            leaf_ptr,
+            node_prefix_comparison_to_search_key_segment,
+        }
+    }
+}
+
 impl<K, V, const PREFIX_LEN: usize> Clone for ExplicitMismatch<K, V, PREFIX_LEN> {
     fn clone(&self) -> Self {
         *self
@@ -484,28 +521,20 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
 
         let (prefix, leaf_ptr) = self.read_full_prefix(current_depth);
 
-        let matched_bytes = prefix
-            .iter()
-            .zip(&key[current_depth..])
-            .take_while(|(a, b)| **a == **b)
-            .count();
+        let matched_bytes = if leaf_ptr.is_some() {
+            // The prefix was reconstructed from a leaf, so it is longer than `PREFIX_LEN`
+            longest_common_prefix_len(prefix, &key[current_depth..])
+        } else {
+            short_common_prefix_len(prefix, &key[current_depth..])
+        };
+
         if matched_bytes < prefix.len() {
-            let upper_bound = (current_depth + prefix.len()).min(key.len());
-            let key_segment = &key[current_depth..upper_bound];
-            let node_prefix_comparison_to_search_key_segment = prefix.cmp(key_segment);
-
-            debug_assert_ne!(
-                node_prefix_comparison_to_search_key_segment,
-                Ordering::Equal,
-                "if there was a mismatch, the prefix must not be equal"
-            );
-
-            Err(ExplicitMismatch {
+            Err(ExplicitMismatch::new(
+                prefix,
+                &key[current_depth..],
                 matched_bytes,
-                prefix_byte: prefix[matched_bytes],
                 leaf_ptr,
-                node_prefix_comparison_to_search_key_segment,
-            })
+            ))
         } else {
             Ok(PrefixMatch { matched_bytes })
         }
@@ -934,6 +963,81 @@ fn assert_valid_range_bounds(bound: &impl RangeBounds<u8>) {
     }
 }
 
+/// Returns the number of leading bytes that are equal in `a` and `b`, comparing
+/// one byte at a time.
+///
+/// Use this for inputs with a small length bound, like the prefix stored in an
+/// inner node header (at most `PREFIX_LEN` bytes). It is always inlined, so the
+/// comparison does not add a function call to the hot search loops. For inputs
+/// without a small bound, use [`longest_common_prefix_len`].
+#[inline(always)]
+pub fn short_common_prefix_len(a: &[u8], b: &[u8]) -> usize {
+    a.iter().zip(b).take_while(|(a, b)| a == b).count()
+}
+
+/// Returns the number of leading bytes that are equal in `a` and `b`, comparing
+/// 16 bytes at a time.
+///
+/// Use this for inputs which can be long, like whole keys or prefixes
+/// reconstructed from a leaf. It is kept out of line, so callers do not pay for
+/// the larger comparison loop in their own code. For inputs with a small length
+/// bound, use [`short_common_prefix_len`].
+#[inline(never)]
+pub fn longest_common_prefix_len(a: &[u8], b: &[u8]) -> usize {
+    /// Return the number of leading bytes that are equal in the two words.
+    ///
+    /// Little endian loads put the earliest bytes in the lowest bits on every
+    /// platform, so the trailing zeros of the difference count the equal bytes.
+    #[inline(always)]
+    fn word_common_prefix_len(a: &[u8; 8], b: &[u8; 8]) -> Option<usize> {
+        let diff = u64::from_le_bytes(*a) ^ u64::from_le_bytes(*b);
+        (diff != 0).then(|| (diff.trailing_zeros() / 8) as usize)
+    }
+
+    let len = a.len().min(b.len());
+    let (a, b) = (&a[..len], &b[..len]);
+    let (Some(a_last), Some(b_last)) = (a.last_chunk::<8>(), b.last_chunk::<8>()) else {
+        return short_common_prefix_len(a, b);
+    };
+
+    // Compare 16 bytes per iteration, as two words
+    let mut matched = 0;
+    for (a_chunk, b_chunk) in a.as_chunks::<16>().0.iter().zip(b.as_chunks::<16>().0) {
+        let diff = u128::from_le_bytes(*a_chunk) ^ u128::from_le_bytes(*b_chunk);
+        if diff != 0 {
+            return matched + (diff.trailing_zeros() / 8) as usize;
+        }
+        matched += 16;
+    }
+
+    // At most 15 bytes are left, compare one more word if there are at least 8
+    if let (Some(a_word), Some(b_word)) = (
+        a[matched..].first_chunk::<8>(),
+        b[matched..].first_chunk::<8>(),
+    ) {
+        if let Some(word_matched) = word_common_prefix_len(a_word, b_word) {
+            return matched + word_matched;
+        }
+        matched += 8;
+    }
+
+    if matched == len {
+        return len;
+    }
+
+    // Compare the last 8 bytes, which overlap the end of the last full chunk.
+    // The overlapping bytes are already known to be equal, so any difference
+    // is after them.
+    match word_common_prefix_len(a_last, b_last) {
+        Some(last_matched) => len - 8 + last_matched,
+        None => len,
+    }
+
+    // TODO: I should simplify some of this function, or run more comprehensive benchmarks to see
+    // if its really worthwhile to have all these different chunk sizes (could we just replace the
+    // end bit with a call to `short_common_prefix_len`?)
+}
+
 /// Find any leaf in the subtree rooted by `root`.
 ///
 /// # Safety
@@ -967,6 +1071,43 @@ mod tests {
 
     use super::*;
     use crate::rust_nightly_apis::ptr::const_addr;
+
+    #[test]
+    fn longest_common_prefix_len_matches_short() {
+        fn check(a: &[u8], b: &[u8]) {
+            let expected = short_common_prefix_len(a, b);
+            assert_eq!(
+                longest_common_prefix_len(a, b),
+                expected,
+                "a: {a:?}, b: {b:?}"
+            );
+            assert_eq!(
+                longest_common_prefix_len(b, a),
+                expected,
+                "a: {b:?}, b: {a:?}"
+            );
+        }
+
+        let base: Vec<u8> = (0..40u8).collect();
+        for len in 0..=base.len() {
+            let a = &base[..len];
+
+            // Inputs of different lengths, where one is a prefix of the other
+            check(a, &base);
+
+            // A mismatch at every position, in every 16 byte chunk, the trailing
+            // 8 byte word, and the remaining bytes. Flipping only the lowest or
+            // highest bit checks that a bit difference maps to the right byte.
+            for mismatch_at in 0..len {
+                for flip in [0x01, 0x80, 0xFF] {
+                    let mut b = a.to_vec();
+                    b[mismatch_at] ^= flip;
+                    check(a, &b);
+                    check(a, &b[..=mismatch_at]);
+                }
+            }
+        }
+    }
 
     #[test]
     #[cfg(target_pointer_width = "64")]
