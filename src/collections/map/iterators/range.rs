@@ -1,20 +1,17 @@
 //! This module contains types and functions relating to iterating over a
 //! range of the [`TreeMap`].
 
-use core::{
-    cmp::Ordering,
-    fmt,
-    iter::FusedIterator,
-    ops::{Bound, ControlFlow},
-};
+use core::{cmp::Ordering, fmt, iter::FusedIterator, ops::Bound};
 
 use crate::{
     AsBytes, TreeMap,
     allocator::{Allocator, Global},
     map::{DEFAULT_PREFIX_LEN, NonEmptyTree},
     raw::{
-        ExplicitMismatch, InnerNode, LeafNode, NodePtr, OpaqueNodePtr, PrefixMatch, RawIterator,
-        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
+        Descent, DescentEnd, InnerNode, LeafNode, NoPath, NodePtr, OpaqueNodePtr, RawIterator,
+        SkippedPrefixMismatch, any_leaf, leaf_common_prefix_len, locate_skipped_mismatch,
+        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, optimistic_descent,
+        verify_descent,
     },
 };
 
@@ -99,6 +96,9 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for TerminatingNodeSearchResult<K
 
 /// Find the node (inner or leaf) that is identified by the given bytestring.
 ///
+/// This uses an [`optimistic_descent`], which skips inner node prefixes longer
+/// than `PREFIX_LEN`, and then checks the skipped bytes against a single leaf.
+///
 /// # Safety
 ///
 /// This function cannot be called concurrently with any mutating operation
@@ -108,134 +108,151 @@ pub(crate) unsafe fn find_terminating_node<K: AsBytes, V, const PREFIX_LEN: usiz
     root: OpaqueNodePtr<K, V, PREFIX_LEN>,
     key_bytes: &[u8],
 ) -> TerminatingNodeSearchResult<K, V, PREFIX_LEN> {
-    /// This function will search some key bytes at a specific depth in the
-    /// given inner node, returning different results depending on if the search
-    /// terminated or needs to continue down the trie.
-    ///
-    /// If this function returns [`ControlFlow::Continue`] then the search
-    /// continues down the trie, otherwise it terminates at this inner node.
-    ///
-    /// # Safety
-    ///
-    /// Callers must guarantee that there is no concurrent mutation of the given
-    /// inner node for the duration of this function.
-    unsafe fn check_prefix_lookup_child<K, V, N, const PREFIX_LEN: usize>(
-        inner_ptr: NodePtr<PREFIX_LEN, N>,
-        key_bytes: &[u8],
-        current_depth: &mut usize,
-    ) -> ControlFlow<InnerNodeSearchResult<K, V, PREFIX_LEN>, OpaqueNodePtr<K, V, PREFIX_LEN>>
-    where
-        N: InnerNode<PREFIX_LEN, Key = K, Value = V>,
-        K: AsBytes,
-    {
-        // SAFETY: The lifetime produced from this is bounded to this scope and does not
-        // escape. Further, no other code mutates the node referenced, which is further
-        // enforced the "no concurrent reads or writes" requirement on the
-        // `check_prefix_lookup_child` function.
-        let inner_node = unsafe { inner_ptr.as_ref() };
+    // SAFETY: Covered by the safety requirements of this function
+    let Descent {
+        end,
+        node,
+        depth,
+        unverified_from,
+        ..
+    } = unsafe { optimistic_descent::<_, _, _, NoPath>(root, key_bytes) };
 
-        assert!(*current_depth <= key_bytes.len());
-        // SAFETY: The condition that "`current_depth` must be less than or equal to
-        // `key.len()`" is checked via assertion just above.
-        // TODO: Figure out a better reasoning for this safety condition, I think it
-        // should be possible just via reasoning through the range lookup
-        // process (without needing an assert).
-        let match_prefix = unsafe { inner_node.match_full_prefix(key_bytes, *current_depth) };
-        match match_prefix {
-            Err(ExplicitMismatch {
-                matched_bytes,
-                node_prefix_comparison_to_search_key_segment,
-                ..
-            }) => {
-                // We report a prefix mismatch if the prefix is longer that the remaining
-                // portion of the key bytes. However, in the context of the
-                // `InnerNodeSearchResultReason` running out of bytes is really a different
-                // thing than a mismatch. We should only report mismatch as the reason if there
-                // was an actual byte difference.
-                let reason = if matched_bytes == key_bytes[*current_depth..].len() {
-                    InnerNodeSearchResultReason::InsufficientBytes
+    // Check the skipped prefix bytes (if any) up to `verified_depth` against a
+    // leaf in the subtree of `node`. Returns the corrected search result if the
+    // key differs from the trie in a skipped prefix.
+    let verify = |verified_depth: usize| {
+        // SAFETY: Covered by the safety requirements of this function
+        let mismatch = unsafe {
+            verify_descent::<_, _, _, NoPath>(
+                root,
+                key_bytes,
+                unverified_from,
+                verified_depth,
+                || any_leaf(node),
+            )
+        }?;
+        // SAFETY: Covered by the safety requirements of this function
+        Some(unsafe { skipped_mismatch_result(mismatch, key_bytes) })
+    };
+
+    match end {
+        DescentEnd::Leaf(leaf_ptr) => {
+            // SAFETY: The shared reference is bounded to this block and there are no
+            // concurrent modifications, by the safety conditions of this function.
+            let leaf_node = unsafe { leaf_ptr.as_ref() };
+
+            let leaf_key_comparison_to_search_key = match unverified_from {
+                None => leaf_node.compare_full_key(key_bytes),
+                Some(_) => {
+                    let leaf_bytes = leaf_node.key_ref().as_bytes();
+                    let common_len =
+                        leaf_common_prefix_len(leaf_bytes, key_bytes, depth, unverified_from);
+
+                    if common_len < depth {
+                        // The key differs from the trie in a skipped prefix, so this leaf
+                        // is not necessarily next to the key in the ordering
+                        //
+                        // SAFETY: Covered by the safety requirements of this function
+                        return unsafe {
+                            skipped_mismatch_result(
+                                locate_skipped_mismatch::<_, _, _, NoPath>(
+                                    root, key_bytes, common_len, leaf_ptr,
+                                ),
+                                key_bytes,
+                            )
+                        };
+                    }
+
+                    // Lexicographic comparison, starting from the first differing byte
+                    match (leaf_bytes.get(common_len), key_bytes.get(common_len)) {
+                        (Some(leaf_byte), Some(key_byte)) => leaf_byte.cmp(key_byte),
+                        (leaf_byte, key_byte) => leaf_byte.is_some().cmp(&key_byte.is_some()),
+                    }
+                },
+            };
+
+            TerminatingNodeSearchResult::Leaf {
+                leaf_ptr,
+                leaf_key_comparison_to_search_key,
+            }
+        },
+        DescentEnd::MissingChild => {
+            if let Some(result) = verify(depth) {
+                return result;
+            }
+
+            TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+                node_ptr: node,
+                current_depth: depth,
+                reason: InnerNodeSearchResultReason::MissingChild,
+                node_prefix_comparison_to_search_key_segment: Ordering::Equal,
+            })
+        },
+        DescentEnd::KeyExhausted => {
+            if let Some(result) = verify(key_bytes.len()) {
+                return result;
+            }
+
+            // SAFETY: `node` is an inner node when the key is exhausted, and there are no
+            // concurrent modifications, by the safety conditions of this function.
+            let prefix_len = unsafe { node.header_ref_unchecked() }.prefix_len();
+
+            TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+                node_ptr: node,
+                current_depth: depth,
+                reason: InnerNodeSearchResultReason::InsufficientBytes,
+                // If the key ends inside the prefix, then the prefix is longer than the
+                // matching key segment
+                node_prefix_comparison_to_search_key_segment: if key_bytes.len()
+                    < depth + prefix_len
+                {
+                    Ordering::Greater
                 } else {
-                    InnerNodeSearchResultReason::PrefixMismatch
-                };
+                    Ordering::Equal
+                },
+            })
+        },
+        DescentEnd::PrefixMismatch {
+            matched_bytes,
+            prefix_byte,
+        } => {
+            if let Some(result) = verify(depth) {
+                return result;
+            }
 
-                ControlFlow::Break(InnerNodeSearchResult {
-                    node_ptr: inner_ptr.to_opaque(),
-                    current_depth: *current_depth,
-                    reason,
-                    node_prefix_comparison_to_search_key_segment,
-                })
-            },
-            Ok(PrefixMatch { matched_bytes }) => {
-                // Since the prefix matched, advance the depth by the size of the prefix
-                *current_depth += matched_bytes;
-
-                let next_key_fragment = if *current_depth < key_bytes.len() {
-                    key_bytes[*current_depth]
-                } else {
-                    // the key has insufficient bytes, it is a prefix of an existing key. Thus, the
-                    // key must not exist in the tree by the requirements of the insert function
-                    // (any key in the tree must not be the prefix of any other key in the tree)
-                    return ControlFlow::Break(InnerNodeSearchResult {
-                        node_ptr: inner_ptr.to_opaque(),
-                        current_depth: *current_depth,
-                        reason: InnerNodeSearchResultReason::InsufficientBytes,
-                        node_prefix_comparison_to_search_key_segment: Ordering::Equal,
-                    });
-                };
-
-                let child_lookup = inner_node.lookup_child(next_key_fragment);
-
-                match child_lookup {
-                    Some(child_ptr) => {
-                        // Since the prefix matched and it found a child, advance the depth by 1
-                        // more key byte
-                        *current_depth += 1;
-                        ControlFlow::Continue(child_ptr)
-                    },
-                    None => ControlFlow::Break(InnerNodeSearchResult {
-                        node_ptr: inner_ptr.to_opaque(),
-                        current_depth: *current_depth,
-                        reason: InnerNodeSearchResultReason::MissingChild,
-                        node_prefix_comparison_to_search_key_segment: Ordering::Equal,
-                    }),
-                }
-            },
-        }
+            TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+                node_ptr: node,
+                current_depth: depth,
+                reason: InnerNodeSearchResultReason::PrefixMismatch,
+                node_prefix_comparison_to_search_key_segment: prefix_byte
+                    .cmp(&key_bytes[depth + matched_bytes]),
+            })
+        },
     }
+}
 
-    let mut current_node = root;
-    let mut current_depth = 0;
+/// Convert a mismatch inside a prefix skipped by the descent into a search
+/// result for the inner node which contains the mismatch.
+///
+/// # Safety
+///  - This function cannot be called concurrently with any mutating operation on the trie.
+unsafe fn skipped_mismatch_result<K: AsBytes, V, const PREFIX_LEN: usize>(
+    mismatch: SkippedPrefixMismatch<K, V, PREFIX_LEN, NoPath>,
+    key_bytes: &[u8],
+) -> TerminatingNodeSearchResult<K, V, PREFIX_LEN> {
+    // SAFETY: Covered by the safety requirements of this function
+    let leaf_bytes = unsafe { mismatch.leaf_ptr.as_key_ref() }.as_bytes();
 
-    loop {
-        let next_node = match_concrete_node_ptr!(match (current_node.to_node_ptr()) {
-            InnerNode(inner_ptr) => unsafe {
-                // SAFETY: The safety requirement is covered by the safety documentation on the
-                // containing function
-                check_prefix_lookup_child(inner_ptr, key_bytes, &mut current_depth)
-            },
-            LeafNode(leaf_ptr) => {
-                // SAFETY: The shared reference is bounded to this block and there are no
-                // concurrent modifications, by the safety conditions of this function.
-                let leaf_node = unsafe { leaf_ptr.as_ref() };
-
-                let leaf_key_comparison_to_search_key = leaf_node.compare_full_key(key_bytes);
-
-                return TerminatingNodeSearchResult::Leaf {
-                    leaf_ptr,
-                    leaf_key_comparison_to_search_key,
-                };
-            },
-        });
-
-        match next_node {
-            ControlFlow::Continue(next_node) => {
-                current_node = next_node;
-            },
-            ControlFlow::Break(reason) => {
-                return TerminatingNodeSearchResult::InnerNode(reason);
-            },
-        }
-    }
+    // The leaf has the full prefix of the node in its key, and the mismatch is
+    // always inside the key, so this compares the first differing byte of the
+    // node prefix and the key
+    TerminatingNodeSearchResult::InnerNode(InnerNodeSearchResult {
+        node_ptr: mismatch.node,
+        current_depth: mismatch.node_depth,
+        reason: InnerNodeSearchResultReason::PrefixMismatch,
+        node_prefix_comparison_to_search_key_segment: leaf_bytes[mismatch.mismatch_depth]
+            .cmp(&key_bytes[mismatch.mismatch_depth]),
+    })
 }
 
 /// Panic if the given range bounds
