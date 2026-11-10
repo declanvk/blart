@@ -7,6 +7,7 @@ mod node;
 mod tree;
 
 criterion_main!(
+    node::common_prefix_len::bench_common_prefix_len_group,
     node::match_prefix::bench_match_prefix_group,
     node::min_max::bench_min_max_group,
     tree::clone::bench_clone_group,
