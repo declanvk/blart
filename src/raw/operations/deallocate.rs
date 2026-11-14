@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
+use core::alloc::Allocator;
 
-use crate::{
-    allocator::Allocator,
-    raw::{InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawIterator, match_concrete_node_ptr},
+use crate::raw::{
+    InnerNode, LeafNode, NodePtr, OpaqueNodePtr, RawIterator, match_concrete_node_ptr,
 };
 
 /// Deallocate all the leaf nodes in the linked list starting that are within

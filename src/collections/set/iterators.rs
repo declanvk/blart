@@ -1,14 +1,15 @@
 //! Module containing iterator types for
 //! [`TreeSet`][crate::TreeSet][crate::TreeSet].
 
+use alloc::alloc::Global;
 use core::{
+    alloc::Allocator,
     cmp::Ordering,
     iter::{FusedIterator, Peekable},
 };
 
 use crate::{
     OrderedBytes,
-    allocator::{Allocator, Global},
     map::{self, DEFAULT_PREFIX_LEN},
 };
 

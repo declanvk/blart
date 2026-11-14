@@ -1,7 +1,9 @@
 //! Module containing the implementation of the [`TreeSet`] and associated
 //! iterators.
 
+use alloc::alloc::Global;
 use core::{
+    alloc::Allocator,
     borrow::Borrow,
     fmt::{self, Debug},
     hash::Hash,
@@ -9,11 +11,8 @@ use core::{
 };
 
 use crate::{
-    AsBytes, NoPrefixesBytes, OrderedBytes, TreeMap,
-    allocator::{Allocator, Global},
-    map::DEFAULT_PREFIX_LEN,
-    raw::InsertPrefixError,
-    rust_nightly_apis::hasher_write_length_prefix,
+    AsBytes, NoPrefixesBytes, OrderedBytes, TreeMap, map::DEFAULT_PREFIX_LEN,
+    raw::InsertPrefixError, rust_nightly_apis::hasher_write_length_prefix,
 };
 
 mod iterators;
@@ -47,20 +46,16 @@ impl<K, A: Allocator> TreeSet<K, DEFAULT_PREFIX_LEN, A> {
     /// using the given allocator.
     ///
     /// This function will not pre-allocate anything.
-    #[cfg_attr(
-        any(feature = "nightly", feature = "allocator-api2"),
-        doc = r##"
-# Examples
-
-```rust
-use blart::{TreeSet, map::DEFAULT_PREFIX_LEN};
-use std::alloc::System;
-
-let set = TreeSet::<u8, DEFAULT_PREFIX_LEN, _>::new_in(System);
-assert!(set.is_empty());
-```
-    "##
-    )]
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::{TreeSet, map::DEFAULT_PREFIX_LEN};
+    /// use std::alloc::System;
+    ///
+    /// let set = TreeSet::<u8, DEFAULT_PREFIX_LEN, _>::new_in(System);
+    /// assert!(set.is_empty());
+    /// ```
     pub fn new_in(alloc: A) -> Self {
         Self::with_prefix_len_in(alloc)
     }

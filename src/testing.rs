@@ -1,12 +1,13 @@
 //! Helper function for writing tests
 
+#[cfg(test)]
+use alloc::alloc::Global;
 use alloc::boxed::Box;
 use core::iter;
 
 #[cfg(test)]
 use crate::{
     AsBytes, TreeMap,
-    allocator::Global,
     raw::{InsertPrefixError, InsertResult, OpaqueNodePtr},
 };
 

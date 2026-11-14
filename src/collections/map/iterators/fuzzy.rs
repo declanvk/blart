@@ -1,9 +1,8 @@
-use alloc::{boxed::Box, vec::Vec};
-use core::{iter::FusedIterator, mem::MaybeUninit};
+use alloc::{alloc::Global, boxed::Box, vec::Vec};
+use core::{alloc::Allocator, iter::FusedIterator, mem::MaybeUninit};
 
 use crate::{
     AsBytes, TreeMap,
-    allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{InnerNode, LeafNode, OpaqueNodePtr, match_concrete_node_ptr},
 };

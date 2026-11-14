@@ -1,4 +1,5 @@
 use alloc::{
+    alloc::Global,
     boxed::Box,
     collections::BTreeMap,
     string::{String, ToString},
@@ -10,7 +11,6 @@ use rand::{RngCore, SeedableRng};
 
 use crate::{
     TreeMap,
-    allocator::Global,
     raw::{
         InnerNode4, InnerNodeCommon, InnerNodeSorted, InsertPrefixError, LeafNode, NodePtr,
         NodeType, OpaqueNodePtr, deallocate_tree, search_unchecked,

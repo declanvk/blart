@@ -1,5 +1,6 @@
 use alloc::{boxed::Box, vec::Vec};
 use core::{
+    alloc::Allocator,
     cmp::Ordering,
     error::Error,
     fmt,
@@ -9,7 +10,6 @@ use std::collections::{HashMap, hash_map::Entry};
 
 use crate::{
     AsBytes, TreeMap,
-    allocator::Allocator,
     raw::{
         InnerNode, LeafNode, NodePtr, OpaqueNodePtr, OptionalLeafPtr,
         visitor::{InnerNodeType, Visitable, Visitor},
@@ -675,12 +675,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloc::ffi::CString;
+    use alloc::{alloc::Global, ffi::CString};
 
     use super::*;
     use crate::{
         TreeMap,
-        allocator::Global,
         raw::{InnerNode4, InnerNode16, InnerNodeCommon, LeafNode, NodePtr},
         testing::{generate_key_fixed_length, setup_tree_from_entries},
     };

@@ -1,8 +1,9 @@
 //! Module containing implementations of the `TreeMap` and associated
 //! iterators/etc.
 
-use alloc::vec::Vec;
+use alloc::{alloc::Global, vec::Vec};
 use core::{
+    alloc::Allocator,
     borrow::Borrow,
     fmt::Debug,
     hash::Hash,
@@ -16,7 +17,6 @@ use core::{
 use crate::visitor::{MalformedTreeError, WellFormedChecker};
 use crate::{
     AsBytes, NoPrefixesBytes,
-    allocator::{Allocator, Global},
     raw::{
         CloneResult, DeletePoint, DeleteResult, InsertKind, InsertPoint, InsertPrefixError,
         InsertResult, LeafNode, NodePtr, OpaqueNodePtr, PrefixInsertPoint, RawIterator,
@@ -90,22 +90,18 @@ impl<K, V, A: Allocator> TreeMap<K, V, DEFAULT_PREFIX_LEN, A> {
     /// (16), which will allocate tree nodes using the given allocator.
     ///
     /// This function will not pre-allocate anything.
-    #[cfg_attr(
-        any(feature = "nightly", feature = "allocator-api2"),
-        doc = r##"
-# Examples
-
-```rust
-use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
-use std::alloc::System;
-
-let mut map = TreeMap::<_, i32, DEFAULT_PREFIX_LEN, _>::new_in(System);
-assert!(map.is_empty());
-map.insert(c"abc", 0);
-assert_eq!(*map.get(c"abc").unwrap(), 0);
-```
-    "##
-    )]
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
+    /// use std::alloc::System;
+    ///
+    /// let mut map = TreeMap::<_, i32, DEFAULT_PREFIX_LEN, _>::new_in(System);
+    /// assert!(map.is_empty());
+    /// map.insert(c"abc", 0);
+    /// assert_eq!(*map.get(c"abc").unwrap(), 0);
+    /// ```
     pub fn new_in(alloc: A) -> Self {
         Self::with_prefix_len_in(alloc)
     }
@@ -217,20 +213,16 @@ impl<K, V, const PREFIX_LEN: usize> TreeMap<K, V, PREFIX_LEN> {
 
 impl<K, V, const PREFIX_LEN: usize, A: Allocator> TreeMap<K, V, PREFIX_LEN, A> {
     /// Returns a reference to the underlying allocator.
-    #[cfg_attr(
-        any(feature = "nightly", feature = "allocator-api2"),
-        doc = r##"
-# Examples
-
-```rust
-use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
-use std::alloc::System;
-
-let map = TreeMap::<Box<[u8]>, i32, DEFAULT_PREFIX_LEN, _>::new_in(System);
-assert!(matches!(map.allocator(), &System));
-```
-    "##
-    )]
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
+    /// use std::alloc::System;
+    ///
+    /// let map = TreeMap::<Box<[u8]>, i32, DEFAULT_PREFIX_LEN, _>::new_in(System);
+    /// assert!(matches!(map.allocator(), &System));
+    /// ```
     pub fn allocator(&self) -> &A {
         &self.alloc
     }
@@ -240,20 +232,16 @@ assert!(matches!(map.allocator(), &System));
     ///
     /// This function will not pre-allocate anything. The prefix length is
     /// inferred as a const-generic parameter on the type.
-    #[cfg_attr(
-        any(feature = "nightly", feature = "allocator-api2"),
-        doc = r##"
-# Examples
-
-```rust
-use blart::TreeMap;
-use std::alloc::System;
-
-let map = TreeMap::<Box<[u8]>, i32, 8, _>::with_prefix_len_in(System);
-assert!(matches!(map.allocator(), &System));
-```
-    "##
-    )]
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    /// use std::alloc::System;
+    ///
+    /// let map = TreeMap::<Box<[u8]>, i32, 8, _>::with_prefix_len_in(System);
+    /// assert!(matches!(map.allocator(), &System));
+    /// ```
     pub fn with_prefix_len_in(alloc: A) -> Self {
         TreeMap {
             num_entries: 0,
@@ -418,50 +406,46 @@ assert!(matches!(map.allocator(), &System));
     /// This function runs a series of checks to ensure that the returned tree
     /// is well-formed. See [`WellFormedChecker`] for details on the
     /// requirements.
-    #[cfg_attr(
-        any(feature = "nightly", feature = "allocator-api2"),
-        doc = r##"
-# Examples
-
-Using the [`TreeMap::into_raw`] function to get the root node pointer:
-
-```rust
-use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
-use std::alloc::System;
-
-let mut map = TreeMap::<Box<[u8]>, char, DEFAULT_PREFIX_LEN, _>::new_in(System);
-
-map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-assert_eq!(map.len(), 1);
-assert!(matches!(map.allocator(), &System));
-
-let root = TreeMap::into_raw(map);
-assert!(root.is_some());
-
-// SAFETY: The root pointer came directly from the `into_raw` result.
-let _map = unsafe { TreeMap::from_raw_in(root, System) }.unwrap();
-```
-
-Using the [`TreeMap::into_raw_with_allocator`] function to get the root
-node pointer and allocator:
-
-```rust
-use blart::TreeMap;
-
-let mut map = TreeMap::<Box<[u8]>, char>::new();
-
-map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
-assert_eq!(map.len(), 1);
-
-let (root, alloc) = TreeMap::into_raw_with_allocator(map);
-
-assert!(root.is_some());
-
-// SAFETY: The root pointer came directly from the `into_raw` result.
-let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
-```
-    "##
-    )]
+    ///
+    /// # Examples
+    ///
+    /// Using the [`TreeMap::into_raw`] function to get the root node pointer:
+    ///
+    /// ```rust
+    /// use blart::{TreeMap, map::DEFAULT_PREFIX_LEN};
+    /// use std::alloc::System;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char, DEFAULT_PREFIX_LEN, _>::new_in(System);
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    /// assert!(matches!(map.allocator(), &System));
+    ///
+    /// let root = TreeMap::into_raw(map);
+    /// assert!(root.is_some());
+    ///
+    /// // SAFETY: The root pointer came directly from the `into_raw` result.
+    /// let _map = unsafe { TreeMap::from_raw_in(root, System) }.unwrap();
+    /// ```
+    ///
+    /// Using the [`TreeMap::into_raw_with_allocator`] function to get the root
+    /// node pointer and allocator:
+    ///
+    /// ```rust
+    /// use blart::TreeMap;
+    ///
+    /// let mut map = TreeMap::<Box<[u8]>, char>::new();
+    ///
+    /// map.try_insert(Box::new([1, 2, 3]), 'a').unwrap();
+    /// assert_eq!(map.len(), 1);
+    ///
+    /// let (root, alloc) = TreeMap::into_raw_with_allocator(map);
+    ///
+    /// assert!(root.is_some());
+    ///
+    /// // SAFETY: The root pointer came directly from the `into_raw` result.
+    /// let _map = unsafe { TreeMap::from_raw_in(root, alloc) }.unwrap();
+    /// ```
     pub unsafe fn from_raw_in(
         root: Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         alloc: A,
@@ -3226,12 +3210,12 @@ mod tests {
     }
 }
 
-#[cfg(all(test, any(feature = "allocator-api2", feature = "nightly")))]
+#[cfg(test)]
 #[cfg_attr(test, mutants::skip)]
 mod custom_allocator_tests {
     use alloc::boxed::Box;
     use core::{
-        alloc::Layout,
+        alloc::{AllocError, Layout},
         cell::{Cell, UnsafeCell},
         marker::PhantomPinned,
         mem::MaybeUninit,
@@ -3241,7 +3225,6 @@ mod custom_allocator_tests {
     };
 
     use super::*;
-    use crate::allocator::AllocError;
 
     struct BumpAllocator<const N: usize> {
         block: UnsafeCell<MaybeUninit<[u8; N]>>,

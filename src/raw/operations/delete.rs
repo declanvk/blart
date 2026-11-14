@@ -1,8 +1,7 @@
-use core::fmt;
+use core::{alloc::Allocator, fmt};
 
 use crate::{
     AsBytes,
-    allocator::Allocator,
     raw::{
         Descent, DescentEnd, InnerNode, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr,
         TreePath, TreePathSearch, match_concrete_node_ptr, optimistic_descent,

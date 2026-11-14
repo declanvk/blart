@@ -17,7 +17,7 @@ TOOLCHAIN_ARG="+${TOOLCHAIN}"
 if [ "${TOOLCHAIN}" = "nightly" ]; then
     declare -a TOOLCHAIN_EXTRA_ARGS=("" "--all-features")
 else
-    declare -a TOOLCHAIN_EXTRA_ARGS=("" "--features allocator-api2")
+    declare -a TOOLCHAIN_EXTRA_ARGS=("")
 fi
 
 for extra_args in "${TOOLCHAIN_EXTRA_ARGS[@]}"
@@ -47,9 +47,6 @@ done
 NO_STD_TARGET="x86_64-unknown-none"
 rustup target add --toolchain "${TOOLCHAIN}" "${NO_STD_TARGET}"
 
-for no_std_args in "" "--features allocator-api2"
-do
-    cargo "${TOOLCHAIN_ARG}" build  --lib --no-default-features $no_std_args
-    cargo "${TOOLCHAIN_ARG}" build  --lib --no-default-features $no_std_args --target "${NO_STD_TARGET}"
-    cargo "${TOOLCHAIN_ARG}" clippy --lib --no-default-features $no_std_args
-done
+cargo "${TOOLCHAIN_ARG}" build  --lib --no-default-features
+cargo "${TOOLCHAIN_ARG}" build  --lib --no-default-features --target "${NO_STD_TARGET}"
+cargo "${TOOLCHAIN_ARG}" clippy --lib --no-default-features

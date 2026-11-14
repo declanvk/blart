@@ -1,8 +1,7 @@
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{alloc::Global, boxed::Box, vec::Vec};
 
 use super::*;
 use crate::{
-    allocator::Global,
     raw::{NodeType, deallocate_tree, search_unchecked},
     testing::{
         PrefixExpansion, generate_key_fixed_length, generate_key_with_prefix, generate_keys_skewed,

@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::{
+    alloc::Allocator,
     cmp::Ordering,
     fmt,
     ops::{Bound, ControlFlow},
@@ -7,7 +8,6 @@ use core::{
 
 use crate::{
     AsBytes, OpaqueNodePtr,
-    allocator::Allocator,
     raw::{
         ConcreteInnerNodePtr, InnerNode, InnerNode4, InnerNode16, InnerNode48, InnerNodeCommon,
         InnerNodeDirect, InnerNodeType, LeafNode, NodePtr, PrefixMatch,

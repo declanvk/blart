@@ -1,8 +1,8 @@
-use core::{iter::FusedIterator, marker::PhantomData};
+use alloc::alloc::Global;
+use core::{alloc::Allocator, iter::FusedIterator, marker::PhantomData};
 
 use crate::{
     AsBytes, TreeMap,
-    allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{OpaqueNodePtr, RawIterator, maximum_unchecked, minimum_unchecked},
 };

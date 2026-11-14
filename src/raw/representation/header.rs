@@ -236,12 +236,10 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn ltrim_by_with_leaf_panic_leaves_header_unchanged() {
+        use alloc::alloc::Global;
         use std::panic::{AssertUnwindSafe, catch_unwind};
 
-        use crate::{
-            allocator::Global,
-            raw::{LeafNode, NodePtr},
-        };
+        use crate::raw::{LeafNode, NodePtr};
 
         // A prefix with implicit bytes (prefix_len 20 > PREFIX_LEN 16), which is the
         // situation in which the `_with_leaf` variant is used.
