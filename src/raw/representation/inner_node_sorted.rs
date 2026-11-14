@@ -5,7 +5,7 @@ use core::simd::{
 };
 use core::{
     fmt,
-    iter::{Copied, Zip},
+    iter::{Copied, FusedIterator, Zip},
     mem::{self, MaybeUninit},
     ops::{Bound, RangeBounds},
     slice::Iter,
@@ -353,11 +353,6 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
 {
-    type Iter<'a>
-        = InnerNodeSortedIter<'a, K, V, PREFIX_LEN>
-    where
-        Self: 'a;
-
     fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
         use core::mem::MaybeUninit;
         Self {
@@ -446,14 +441,17 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         Some(unsafe { MaybeUninit::assume_init(child_ptr) })
     }
 
-    fn iter(&self) -> Self::Iter<'_> {
+    fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
+    {
         self.inner_iter()
     }
 
     fn range(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + core::iter::FusedIterator
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
     {
         assert_valid_range_bounds(&bound);
 

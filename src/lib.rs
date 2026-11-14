@@ -1,8 +1,5 @@
 #![no_std]
-#![cfg_attr(
-    feature = "nightly",
-    feature(hasher_prefixfree_extras, impl_trait_in_assoc_type, portable_simd,)
-)]
+#![cfg_attr(feature = "nightly", feature(hasher_prefixfree_extras, portable_simd,))]
 #![warn(clippy::dbg_macro)]
 #![deny(
     missing_docs,

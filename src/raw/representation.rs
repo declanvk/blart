@@ -243,13 +243,6 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ExplicitMismatch<K, V, PREFIX
 /// All structures that implement this trait must be `repr(C)` and have a
 /// [`Header`] as the first field of the struct.
 pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
-    /// The type of the iterator over all children of the inner node
-    type Iter<'a>: Iterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>
-        + DoubleEndedIterator
-        + FusedIterator
-    where
-        Self: 'a;
-
     /// Create a new inner empty inner node from the given header.
     ///
     /// # Safety (sorta?)
@@ -298,7 +291,9 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
 
     /// Create an iterator over all `(key bytes, child pointers)` in this inner
     /// node.
-    fn iter(&self) -> Self::Iter<'_>;
+    fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator;
 
     /// Create an iterator over a subset of `(key bytes, child pointers)`, using
     /// the given `bound` as a restriction on the set of key bytes.
