@@ -1,0 +1,44 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Split the tree rooted by `root` into two at the given `key_bytes`."><title>split_off_unchecked in blart::raw - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1f5a765c.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="blart" data-themes="" data-resource-suffix="" data-rustdoc-version="1.102.0-nightly (5f4effd57 2026-11-13)" data-channel="nightly" data-search-js="search-69faa2c4.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-9b351432.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-419f3a3f.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-101b5a15.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">split_off_unchecked</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../blart/index.html">blart</a><span class="version">0.6.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">split_<wbr>off_<wbr>unchecked</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#safety" title="Safety">Safety</a></li><li><a href="#panics" title="Panics">Panics</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In blart::<wbr>raw</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">blart</a>::<wbr><a href="index.html">raw</a></div><h1>Function <span class="fn">split_<wbr>off_<wbr>unchecked</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/blart/raw/operations/split_off.rs.html#57-158">Source</a> </span></div><pre class="rust item-decl"><code>pub(crate) unsafe fn split_off_unchecked&lt;K: <a class="trait" href="../trait.AsBytes.html" title="trait blart::AsBytes">AsBytes</a>, V, A: <a class="trait" href="https://doc.rust-lang.org/nightly/core/alloc/trait.Allocator.html" title="trait core::alloc::Allocator">Allocator</a>, const PREFIX_LEN: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>&gt;(
+    root: <a class="struct" href="struct.OpaqueNodePtr.html" title="struct blart::raw::OpaqueNodePtr">OpaqueNodePtr</a>&lt;K, V, PREFIX_LEN&gt;,
+    key_bytes: &amp;[<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.u8.html">u8</a>],
+    alloc: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.reference.html">&amp;A</a>,
+) -&gt; <a class="enum" href="enum.SplitOffResult.html" title="enum blart::raw::SplitOffResult">SplitOffResult</a>&lt;K, V, PREFIX_LEN&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Split the tree rooted by <code>root</code> into two at the given <code>key_bytes</code>.</p>
+<p>The keys less than <code>key_bytes</code> end up in one tree, and the keys greater than or equal to
+<code>key_bytes</code> end up in the other.</p>
+<p>The split happens in three phases:</p>
+<ol>
+<li>Search for <code>key_bytes</code> from the root, recording every inner node on the path and which of
+its children are to the left and right of the path (see <a href="fn.collect_split_point_nodes.html" title="fn blart::raw::operations::collect_split_point_nodes"><code>collect_split_point_nodes</code></a>). The
+search stops at one of the following:
+<ul>
+<li>a leaf, which goes to the left if its key is less than <code>key_bytes</code> and to the right
+otherwise.</li>
+<li>an inner node whose prefix does not match <code>key_bytes</code>. The whole node goes to the left or
+right depending on how its prefix compares to <code>key_bytes</code>.</li>
+<li>an inner node with no child for the next key byte, which is split at that key byte.</li>
+</ul>
+</li>
+<li>Cut the leaf linked list between the maximum leaf on the left and the minimum leaf on the
+right. If one side is empty, return the tree unchanged instead.</li>
+<li>Walk back up the path, splitting each inner node into a left and right node (see
+<a href="fn.split_ancestor.html" title="fn blart::raw::operations::split_ancestor"><code>split_ancestor</code></a>).</li>
+</ol>
+<p>Leaf nodes are never split, each one is moved whole to one of the two trees. When an inner node
+is split, its allocation is reused for one side if the number of children on that side fits the
+node type, otherwise a new node of the right size is allocated. If a side has only one child,
+that level of the tree is collapsed into the child, by prepending the inner node’s prefix and
+key byte to the child’s prefix. Inner nodes that are not reused are deallocated.</p>
+<h2 id="safety"><a class="doc-anchor" href="#safety">§</a>Safety</h2>
+<ul>
+<li><code>root</code> must be the root of a well-formed tree, and every node of the tree must have been
+allocated with <code>alloc</code>.</li>
+<li>This function requires exclusive access to the tree, no other operation may read or write any
+node of the tree for the duration of this function.</li>
+<li>After this function returns, <code>root</code> must not be used except through the root pointers in the
+returned <a href="enum.SplitOffResult.html" title="enum blart::raw::operations::SplitOffResult"><code>SplitOffResult</code></a>. For a <a href="enum.SplitOffResult.html#variant.NormalSplit" title="variant blart::raw::SplitOffResult::NormalSplit"><code>SplitOffResult::NormalSplit</code></a>, some of the inner nodes
+on the path to the split point have been modified or deallocated.</li>
+</ul>
+<h2 id="panics"><a class="doc-anchor" href="#panics">§</a>Panics</h2>
+<p>This function calls <a href="../trait.AsBytes.html#tymethod.as_bytes" title="method blart::AsBytes::as_bytes"><code>AsBytes::as_bytes</code></a> on keys in the tree, which may panic. Those calls all
+happen before the tree is modified, so a panic leaves the tree unchanged.</p>
+</div></details></section></div></main></body></html>

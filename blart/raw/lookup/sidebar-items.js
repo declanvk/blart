@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["prefix_search_unchecked","search_unchecked"]};
