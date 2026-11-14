@@ -3241,10 +3241,7 @@ mod custom_allocator_tests {
     };
 
     use super::*;
-    use crate::{
-        allocator::AllocError,
-        rust_nightly_apis::ptr::{nonnull_addr, nonnull_with_addr},
-    };
+    use crate::allocator::AllocError;
 
     struct BumpAllocator<const N: usize> {
         block: UnsafeCell<MaybeUninit<[u8; N]>>,
@@ -3303,20 +3300,20 @@ mod custom_allocator_tests {
             debug_assert!(align > 0);
             debug_assert!(align.is_power_of_two());
 
-            let ptr = nonnull_addr(self.ptr.get());
+            let ptr = self.ptr.get().addr();
 
             let new_ptr = ptr.get().checked_sub(size).unwrap();
 
             // Round down to the requested alignment.
             let new_ptr = NonZeroUsize::new(new_ptr & !(align - 1)).unwrap();
 
-            let start = nonnull_addr(self.start.get());
+            let start = self.start.get().addr();
             if new_ptr < start {
                 // Didn't have enough capacity!
                 return Err(AllocError);
             }
 
-            self.ptr.set(nonnull_with_addr(self.ptr.get(), new_ptr));
+            self.ptr.set(self.ptr.get().with_addr(new_ptr));
             Ok(NonNull::slice_from_raw_parts(self.ptr.get(), size))
         }
 

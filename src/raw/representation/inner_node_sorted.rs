@@ -11,12 +11,9 @@ use core::{
     slice::Iter,
 };
 
-use crate::{
-    raw::{
-        Header, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeDirect, InnerNodeIndirect,
-        LeafNode, Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
-    },
-    rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
+use crate::raw::{
+    Header, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeDirect, InnerNodeIndirect, LeafNode,
+    Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
 };
 
 /// Where a write should happen inside the node
@@ -151,9 +148,9 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 
             (
                 self.keys.get_unchecked(0..num_children),
-                maybe_uninit_slice_assume_init_ref(
-                    self.child_pointers.get_unchecked(0..num_children),
-                ),
+                self.child_pointers
+                    .get_unchecked(0..num_children)
+                    .assume_init_ref(),
             )
         }
     }

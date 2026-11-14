@@ -9,12 +9,9 @@ use core::{
 
 use self::index::NonMaxIndex;
 use super::Sibling;
-use crate::{
-    raw::{
-        Header, InnerNode, InnerNode16, InnerNodeCommon, InnerNodeDirect, InnerNodeSorted,
-        LeafNode, Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
-    },
-    rust_nightly_apis::maybe_uninit_slice_assume_init_ref,
+use crate::raw::{
+    Header, InnerNode, InnerNode16, InnerNodeCommon, InnerNodeDirect, InnerNodeSorted, LeafNode,
+    Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
 };
 
 mod index;
@@ -157,7 +154,7 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeIndirect<K, V, P
             // SAFETY: The array prefix with length `header.num_children` is guaranteed to
             // be initialized
             core::hint::assert_unchecked(self.header.num_children() <= self.child_pointers.len());
-            maybe_uninit_slice_assume_init_ref(&self.child_pointers[..self.header.num_children()])
+            self.child_pointers[..self.header.num_children()].assume_init_ref()
         }
     }
 }

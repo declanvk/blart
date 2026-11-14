@@ -4,13 +4,13 @@ use core::{error::Error, fmt, marker::PhantomData};
 use crate::{
     AsBytes,
     allocator::Allocator,
+    hint::unlikely,
     raw::{
         Descent, DescentEnd, ExplicitMismatch, InnerNode, InnerNode4, InnerNodeCommon, LeafNode,
         NodePtr, OpaqueNodePtr, Sibling, SkippedPrefixMismatch, TreePath, TreePathSearch, any_leaf,
         deallocate_tree, leaf_common_prefix_len, locate_skipped_mismatch, match_concrete_node_ptr,
         maximum_unchecked, minimum_unchecked, optimistic_descent, verify_descent,
     },
-    rust_nightly_apis::unlikely,
 };
 
 /// The results of a successful tree insert
@@ -1107,7 +1107,7 @@ where
             let new_key_bytes_used =
                 leaf_common_prefix_len(leaf_bytes, key_bytes, depth, unverified_from);
 
-            if unlikely!(new_key_bytes_used < depth) {
+            if unlikely(new_key_bytes_used < depth) {
                 // The key differs from the trie inside a skipped prefix
                 //
                 // SAFETY: Covered by the safety requirements of this function
@@ -1122,8 +1122,8 @@ where
                 });
             }
 
-            if unlikely!(
-                new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len()
+            if unlikely(
+                new_key_bytes_used >= key_bytes.len() || new_key_bytes_used >= leaf_bytes.len(),
             ) {
                 // then the key has insufficient bytes to be unique. It must be
                 // a prefix of an existing key OR an existing key is a prefix of it

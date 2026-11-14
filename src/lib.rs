@@ -5,9 +5,6 @@
         allocator_api,
         hasher_prefixfree_extras,
         impl_trait_in_assoc_type,
-        likely_unlikely,
-        maybe_uninit_array_assume_init,
-        maybe_uninit_slice,
         portable_simd,
         slice_ptr_get,
     )
@@ -63,6 +60,7 @@ extern crate std;
 mod allocator;
 mod bytes;
 mod collections;
+mod hint;
 mod rust_nightly_apis;
 mod tagged_pointer;
 

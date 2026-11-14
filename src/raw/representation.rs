@@ -8,7 +8,7 @@ use core::{
     ops::{Bound, RangeBounds, RangeInclusive},
 };
 
-use crate::{AsBytes, rust_nightly_apis::likely};
+use crate::{AsBytes, hint::likely};
 
 mod header;
 pub use header::*;
@@ -422,7 +422,7 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
     {
         let header = &self.header();
         let len = header.prefix_len();
-        if likely!(len <= PREFIX_LEN) {
+        if likely(len <= PREFIX_LEN) {
             (header.read_prefix(), None)
         } else {
             // SAFETY: Given we have a shared reference to this leaf node, there must be no
@@ -959,7 +959,6 @@ mod tests {
     use core::mem;
 
     use super::*;
-    use crate::rust_nightly_apis::ptr::const_addr;
 
     #[test]
     fn longest_common_prefix_len_matches_short() {
@@ -1117,10 +1116,10 @@ mod tests {
             .write_child(1, leaf_ptr)
             .build();
 
-        let n4_ptr = const_addr(&n4 as *const InnerNode4<Box<[u8]>, (), 16>);
-        let n16_ptr = const_addr(&n16 as *const InnerNode4<Box<[u8]>, (), 16>);
-        let n48_ptr = const_addr(&n48 as *const InnerNode4<Box<[u8]>, (), 16>);
-        let n256_ptr = const_addr(&n256 as *const InnerNode4<Box<[u8]>, (), 16>);
+        let n4_ptr = (&n4 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+        let n16_ptr = (&n16 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+        let n48_ptr = (&n48 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
+        let n256_ptr = (&n256 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
 
         // Ensure that there are 3 bits of unused space in the node pointer because of
         // the alignment.
