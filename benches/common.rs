@@ -56,11 +56,11 @@ pub fn get_middle_key<K: AsBytes + Clone, V, const PREFIX_LEN: usize>(
 
 /// Seed for every random choice the benchmarks make, so that runs are
 /// comparable.
-#[cfg_attr(not(test), expect(dead_code))]
+#[allow(dead_code)]
 pub const SAMPLE_SEED: u64 = 0x5EED_B1A7;
 
 /// Choose `num_elements` randomly-selected distinct keys from `tree`.
-#[cfg_attr(not(test), expect(dead_code))]
+#[allow(dead_code)]
 pub fn sample_keys<K: AsBytes, V, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
     num_elements: usize,
@@ -78,7 +78,7 @@ pub fn sample_keys<K: AsBytes, V, const PREFIX_LEN: usize>(
 
 /// Choose `num_ranges` ranges of `range_len` consecutive keys from `tree`,
 /// returned as `(start, end)` pairs for a half-open `start..end` range.
-#[cfg_attr(not(test), expect(dead_code))]
+#[allow(dead_code)]
 pub fn sample_ranges<K: AsBytes, V, const PREFIX_LEN: usize>(
     tree: &TreeMap<K, V, PREFIX_LEN>,
     num_ranges: usize,
@@ -95,14 +95,13 @@ pub fn sample_ranges<K: AsBytes, V, const PREFIX_LEN: usize>(
         .collect()
 }
 
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn skewed_tree() -> &'static TreeMap<Box<[u8]>, usize> {
     static TREE: OnceLock<TreeMap<Box<[u8]>, usize>> = OnceLock::new();
 
     TREE.get_or_init(|| tree_from_keys(generate_keys_skewed(256 * 32)))
 }
 
-#[cfg_attr(not(test), expect(dead_code))]
+#[allow(dead_code)]
 pub fn dense_fixed_length_key_tree() -> &'static TreeMap<[u8; 2], usize> {
     static TREE: OnceLock<TreeMap<[u8; 2], usize>> = OnceLock::new();
 
@@ -113,7 +112,7 @@ pub fn dense_fixed_length_key_tree() -> &'static TreeMap<[u8; 2], usize> {
 //     tree_from_keys(generate_key_fixed_length([63; 3]))
 // }
 
-#[cfg_attr(not(test), expect(dead_code))]
+#[allow(dead_code)]
 pub fn sparse_fixed_length_key_tree() -> &'static TreeMap<[u8; 16], usize> {
     static TREE: OnceLock<TreeMap<[u8; 16], usize>> = OnceLock::new();
 

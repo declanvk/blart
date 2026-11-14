@@ -105,6 +105,7 @@ impl InnerNodeType {
     }
 
     /// Convert into [`NodeType`].
+    #[cfg(any(test, feature = "std"))]
     pub(crate) const fn to_node_type(self) -> NodeType {
         match self {
             InnerNodeType::Node4 => NodeType::Node4,
