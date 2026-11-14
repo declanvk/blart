@@ -16,12 +16,12 @@ use core::ops::ControlFlow;
 
 use crate::{
     AsBytes,
+    hint::unlikely,
     raw::{
         ExplicitMismatch, InnerNode, InnerNodeCommon, LeafNode, NodePtr, OpaqueNodePtr,
         TreePathSearch, longest_common_prefix_len, match_concrete_node_ptr,
         short_common_prefix_len,
     },
-    rust_nightly_apis::unlikely,
 };
 
 /// Walk down the trie starting from `root`, following `key_bytes`.
@@ -70,7 +70,7 @@ where
 
         debug_assert!(*current_depth <= key_bytes.len());
 
-        let prefix_bytes_used = if unlikely!(prefix_len > PREFIX_LEN) {
+        let prefix_bytes_used = if unlikely(prefix_len > PREFIX_LEN) {
             // Skip the whole prefix, the caller checks it after the descent
             unverified_from.get_or_insert(*current_depth);
             prefix_len
@@ -81,7 +81,7 @@ where
 
             // `prefix.len() == prefix_len` here, since the prefix is not longer than
             // `PREFIX_LEN`
-            if unlikely!(matched_bytes < prefix_len) {
+            if unlikely(matched_bytes < prefix_len) {
                 return if matched_bytes == (key_bytes.len() - *current_depth) {
                     // The key ends inside the prefix
                     ControlFlow::Break(DescentEnd::KeyExhausted)
@@ -99,7 +99,7 @@ where
         };
 
         let child_key_byte_depth = *current_depth + prefix_bytes_used;
-        if unlikely!(child_key_byte_depth >= key_bytes.len()) {
+        if unlikely(child_key_byte_depth >= key_bytes.len()) {
             // The key ends inside the prefix, or right after it
             return ControlFlow::Break(DescentEnd::KeyExhausted);
         }

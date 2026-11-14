@@ -10,8 +10,6 @@
 
 use core::{fmt, mem::align_of, num::NonZeroUsize, ptr::NonNull};
 
-use crate::rust_nightly_apis::ptr;
-
 /// A non-null pointer type which carries several bits of metadata.
 ///
 /// The `MIN_BITS` constant is used to ensure that any type that is used with
@@ -80,7 +78,7 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
         // assumes that null is always a zero value.
         let unchecked_ptr = unsafe { NonNull::new_unchecked(pointer) };
 
-        let ptr_addr = ptr::mut_addr(unchecked_ptr.as_ptr());
+        let ptr_addr = unchecked_ptr.as_ptr().addr();
 
         // Double-check that there are no existing bits stored in the data-carrying
         // positions
@@ -114,20 +112,21 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
     /// This pointer is guaranteed to be non-null.
     #[inline]
     pub fn to_ptr(self) -> NonNull<P> {
-        ptr::nonnull_map_addr(self.0, |ptr_addr|
+        self.0.map_addr(|ptr_addr| unsafe {
             // SAFETY:
             //  1. The `new` function requires that the pointer passed is not null
-            //  2. The `new_unchecked` function requires that the pointer is aligned such
-            //     that the bottom NUM_BITS are all zero.
+            //  2. The `new_unchecked` function requires that the pointer is aligned such that the
+            //     bottom NUM_BITS are all zero.
             // This means that the rest of the bits must be non-zero for the original
             // non-null condition to hold.
-            unsafe { NonZeroUsize::new_unchecked(ptr_addr.get() & Self::POINTER_MASK) })
+            NonZeroUsize::new_unchecked(ptr_addr.get() & Self::POINTER_MASK)
+        })
     }
 
     /// Consume this tagged pointer and produce the data it carries.
     #[inline]
     pub fn to_data(self) -> usize {
-        let ptr_addr = ptr::mut_addr(self.0.as_ptr());
+        let ptr_addr = self.0.as_ptr().addr();
         ptr_addr & Self::DATA_MASK
     }
 
@@ -144,7 +143,7 @@ impl<P, const MIN_BITS: u32> TaggedPointer<P, MIN_BITS> {
         );
         let data = data & Self::DATA_MASK;
 
-        self.0 = ptr::nonnull_map_addr(self.0, |ptr_addr| unsafe {
+        self.0 = self.0.map_addr(|ptr_addr| unsafe {
             // SAFETY: The `ptr_with_new_data` is guaranteed to be non-null because it's
             // pointer address was derived from a non-null pointer using
             // operations that would not have zeroed out the address.
