@@ -41,7 +41,7 @@ fn insert_to_small_trees() {
     {
         let root = new_root.read();
 
-        assert_eq!(root.header.read_prefix(), &[1, 2]);
+        assert_eq!(root.header().read_prefix(), &[1, 2]);
         assert!(root.lookup_child(5).is_some());
         assert_eq!(root.lookup_child(3), Some(first_leaf.to_opaque()));
         assert_eq!(root.lookup_child(1), None);

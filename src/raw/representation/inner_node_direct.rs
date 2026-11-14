@@ -19,16 +19,16 @@ use crate::raw::{
 #[repr(C, align(8))]
 pub struct InnerNodeDirect<K, V, const PREFIX_LEN: usize> {
     /// The common node fields.
-    pub header: Header<PREFIX_LEN>,
+    header: Header<PREFIX_LEN>,
     /// An array that directly maps a key byte (as index) to a child node.
-    pub child_pointers: [Option<OpaqueNodePtr<K, V, PREFIX_LEN>>; 256],
+    child_pointers: [Option<OpaqueNodePtr<K, V, PREFIX_LEN>>; 256],
 }
 
 impl<K, V, const PREFIX_LEN: usize, const OTHER_SIZE: usize>
     From<&InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>> for InnerNodeDirect<K, V, PREFIX_LEN>
 {
     fn from(value: &InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
-        let header = value.header.clone();
+        let header = value.header().clone();
         let mut child_pointers = [None; 256];
         for (key_fragment, child_pointer) in value.inner_iter() {
             child_pointers[usize::from(key_fragment)] = Some(child_pointer);
@@ -45,24 +45,10 @@ impl<K, V, const PREFIX_LEN: usize, const OTHER_SIZE: usize>
     From<&InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>> for InnerNodeDirect<K, V, PREFIX_LEN>
 {
     fn from(value: &InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
-        let header = value.header.clone();
+        let header = value.header().clone();
         let mut child_pointers = [None; 256];
-        let initialized_child_pointers = value.initialized_child_pointers();
-        for (key_fragment, idx) in value.child_indices.iter().enumerate() {
-            let Some(idx) = idx else {
-                continue;
-            };
-
-            let idx = usize::from(*idx);
-
-            unsafe {
-                // SAFETY: When growing initialized_child_pointers should be full
-                // i.e initialized_child_pointers len == 48. And idx <= 47, since
-                // we can't insert in a full, node
-                core::hint::assert_unchecked(idx < initialized_child_pointers.len());
-            }
-            let child_pointer = initialized_child_pointers[idx];
-            child_pointers[key_fragment] = Some(child_pointer);
+        for (key_fragment, child_pointer) in value.iter() {
+            child_pointers[usize::from(key_fragment)] = Some(child_pointer);
         }
 
         InnerNodeDirect {

@@ -36,18 +36,18 @@ enum WritePoint {
 #[repr(C, align(8))]
 pub struct InnerNodeSorted<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     /// The common node fields.
-    pub header: Header<PREFIX_LEN>,
+    header: Header<PREFIX_LEN>,
     /// An array that contains single key bytes in the same index as the
     /// `child_pointers` array contains the matching child tree.
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
-    pub keys: [u8; SIZE],
+    keys: [u8; SIZE],
     /// An array that contains the child data.
     ///
     /// This array will only be initialized for the first `header.num_children`
     /// values.
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
+    child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
 }
 
 impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, V, PREFIX_LEN>>
@@ -55,13 +55,13 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, 
 {
     fn from(value: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self {
         assert!(
-            value.header.num_children() <= SIZE,
+            value.header().num_children() <= SIZE,
             "Cannot shrink a InnerNodeDirect when it has more than {SIZE} children. Currently has \
              [{}] children.",
-            value.header.num_children()
+            value.header().num_children()
         );
 
-        let header = value.header.clone();
+        let header = value.header().clone();
         let mut keys = [u8::MAX; SIZE];
         let mut child_pointers = [MaybeUninit::uninit(); SIZE];
 
@@ -84,13 +84,13 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
 {
     fn from(value: &InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
         assert!(
-            value.header.num_children() <= SIZE,
+            value.header().num_children() <= SIZE,
             "Cannot shrink a InnerNodeIndirect when it has more than {SIZE} children. Currently \
              has [{}] children.",
-            value.header.num_children()
+            value.header().num_children()
         );
 
-        let header = value.header.clone();
+        let header = value.header().clone();
         let mut keys = [0; SIZE];
         let mut child_pointers = [MaybeUninit::uninit(); SIZE];
 
