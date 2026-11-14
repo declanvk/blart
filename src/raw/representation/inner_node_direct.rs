@@ -114,6 +114,13 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
         },
     }
 
+    fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
+        Self {
+            header,
+            child_pointers: [None; 256],
+        }
+    }
+
     fn header(&self) -> &Header<PREFIX_LEN> {
         &self.header
     }

@@ -358,6 +358,15 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
     where
         Self: 'a;
 
+    fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
+        use core::mem::MaybeUninit;
+        Self {
+            header,
+            child_pointers: [MaybeUninit::uninit(); SIZE],
+            keys: [0; SIZE],
+        }
+    }
+
     fn header(&self) -> &Header<PREFIX_LEN> {
         &self.header
     }
