@@ -42,40 +42,50 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
     for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
 {
     fn from(value: &InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
-        assert!(
-            value.header().num_children() <= SIZE,
-            "Cannot shrink a InnerNodeDirect when it has more than {SIZE} children. Currently has \
-             [{}] children.",
-            value.header().num_children()
-        );
+        // Every child index stored in `child_indices` is `< SIZE`, and it must be
+        // representable as a `NonMaxIndex` (i.e. `< u8::MAX`).
+        const {
+            assert!(
+                SIZE < u8::MAX as usize,
+                "InnerNodeIndirect capacity must be less than u8::MAX"
+            )
+        };
 
         let header = value.header().clone();
         let mut child_indices = [None; 256];
         let mut child_pointers = [MaybeUninit::uninit(); SIZE];
 
+        // `keys` and `children` are the initialized prefixes of the sorted node's
+        // arrays, so their length is the number of children.
         let (keys, children) = value.initialized_portion();
+        let num_children = keys.len();
 
+        // Growing is only expected once the sorted node has run out of space.
         assert_eq!(
-            keys.len(),
-            OTHER_SIZE,
-            "Node must be full to grow to node 48"
+            num_children, OTHER_SIZE,
+            "Cannot grow an InnerNodeSorted that is not full. Expected [{OTHER_SIZE}] children, \
+             found [{num_children}]."
+        );
+        // The children must fit in the new node.
+        assert!(
+            num_children <= SIZE,
+            "Cannot grow an InnerNodeSorted with [{num_children}] children into an \
+             InnerNodeIndirect with capacity [{SIZE}]."
         );
 
-        for (index, key) in keys.iter().copied().enumerate() {
-            // SAFETY: This `try_from` will not panic because index is guaranteed to
-            // be 15 or less because of the length of the `InnerNode16.keys` array.
+        for (index, ((key, child), slot)) in keys
+            .iter()
+            .copied()
+            .zip(children.iter().copied())
+            .zip(child_pointers.iter_mut())
+            .enumerate()
+        {
+            // SAFETY: `index < num_children <= SIZE < u8::MAX`, by the asserts above,
+            // so `try_from` cannot fail.
             child_indices[usize::from(key)] =
                 Some(unsafe { NonMaxIndex::try_from(index).unwrap_unchecked() });
+            slot.write(child);
         }
-
-        let num_children = header.num_children();
-
-        unsafe {
-            // SAFETY: We know that the new size is >= old size, so this is safe
-            core::hint::assert_unchecked(num_children <= child_pointers.len());
-        }
-
-        child_pointers[..num_children].write_copy_of_slice(children);
 
         Self {
             header,
@@ -89,6 +99,13 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, 
     for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
 {
     fn from(value: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self {
+        const {
+            assert!(
+                SIZE < u8::MAX as usize,
+                "InnerNodeIndirect capacity must be less than u8::MAX"
+            )
+        };
+
         assert!(
             value.header().num_children() <= SIZE,
             "Cannot shrink a InnerNodeDirect when it has more than {SIZE} children. Currently has \
@@ -101,9 +118,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, 
         let mut child_pointers = [MaybeUninit::uninit(); SIZE];
 
         for (child_index, (key_byte, child_ptr)) in value.iter().enumerate() {
-            // PANIC SAFETY: This `try_from` will not panic because the `next_index` value
-            // is guaranteed to be 48 or less by the `assert!(num_children < 48)` at the
-            // start of the function.
+            // PANIC SAFETY: `child_index < num_children <= SIZE < u8::MAX`, by the
+            // asserts at the start of the function, so this `try_from` cannot fail.
             let key_byte = usize::from(key_byte);
             child_indices[key_byte] = Some(NonMaxIndex::try_from(child_index).unwrap());
             child_pointers[child_index].write(child_ptr);

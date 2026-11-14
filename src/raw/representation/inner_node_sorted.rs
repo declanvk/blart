@@ -740,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "Node must be full to grow to node 48"]
+    #[should_panic = "Cannot grow an InnerNodeSorted that is not full"]
     fn node16_grow_panic() {
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
