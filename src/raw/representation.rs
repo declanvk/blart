@@ -49,9 +49,9 @@ impl NodeType {
     ///
     /// # Safety
     ///  - `src` must be a valid variant from the enum
-    const unsafe fn from_u8(src: u8) -> NodeType {
+    const unsafe fn from_u8(src: u8) -> Self {
         // SAFETY: `NodeType` is repr(u8)
-        unsafe { core::mem::transmute::<u8, NodeType>(src) }
+        unsafe { core::mem::transmute::<u8, Self>(src) }
     }
 
     /// Return true if an [`InnerNode`] with the given [`NodeType`] and
@@ -61,8 +61,8 @@ impl NodeType {
     ///  - Panics if `node_type` equals [`NodeType::Leaf`]
     pub fn should_shrink_inner_node(self, num_children: usize) -> bool {
         match self {
-            NodeType::Node4 => false,
-            NodeType::Leaf => panic!("cannot shrink leaf"),
+            Self::Node4 => false,
+            Self::Leaf => panic!("cannot shrink leaf"),
             _ => num_children < *self.capacity_range().start(),
         }
     }
@@ -70,11 +70,11 @@ impl NodeType {
     /// Return the range of number of children that each node type accepts.
     pub const fn capacity_range(self) -> RangeInclusive<usize> {
         match self {
-            NodeType::Node4 => 2..=4,
-            NodeType::Node16 => 5..=16,
-            NodeType::Node48 => 17..=48,
-            NodeType::Node256 => 49..=256,
-            NodeType::Leaf => 0..=0,
+            Self::Node4 => 2..=4,
+            Self::Node16 => 5..=16,
+            Self::Node48 => 17..=48,
+            Self::Node256 => 49..=256,
+            Self::Leaf => 0..=0,
         }
     }
 }
@@ -96,10 +96,10 @@ impl InnerNodeType {
     /// Convert a [`NodeType`] into an [`InnerNodeType`], returning `None` for [`NodeType::Leaf`].
     pub(crate) const fn from_node_type(node_type: NodeType) -> Option<Self> {
         Some(match node_type {
-            NodeType::Node4 => InnerNodeType::Node4,
-            NodeType::Node16 => InnerNodeType::Node16,
-            NodeType::Node48 => InnerNodeType::Node48,
-            NodeType::Node256 => InnerNodeType::Node256,
+            NodeType::Node4 => Self::Node4,
+            NodeType::Node16 => Self::Node16,
+            NodeType::Node48 => Self::Node48,
+            NodeType::Node256 => Self::Node256,
             NodeType::Leaf => return None,
         })
     }
@@ -108,10 +108,10 @@ impl InnerNodeType {
     #[cfg(any(test, feature = "std"))]
     pub(crate) const fn to_node_type(self) -> NodeType {
         match self {
-            InnerNodeType::Node4 => NodeType::Node4,
-            InnerNodeType::Node16 => NodeType::Node16,
-            InnerNodeType::Node48 => NodeType::Node48,
-            InnerNodeType::Node256 => NodeType::Node256,
+            Self::Node4 => NodeType::Node4,
+            Self::Node16 => NodeType::Node16,
+            Self::Node48 => NodeType::Node48,
+            Self::Node256 => NodeType::Node256,
         }
     }
 
@@ -122,10 +122,10 @@ impl InnerNodeType {
     ///  - Panics if `num_children` is greater than 256
     pub(crate) const fn inner_node_type_for(num_children: usize) -> Self {
         match num_children {
-            0..=4 => InnerNodeType::Node4,
-            5..=16 => InnerNodeType::Node16,
-            17..=48 => InnerNodeType::Node48,
-            49..=256 => InnerNodeType::Node256,
+            0..=4 => Self::Node4,
+            5..=16 => Self::Node16,
+            17..=48 => Self::Node48,
+            49..=256 => Self::Node256,
             _ => panic!("inner nodes cannot hold more than 256 children"),
         }
     }

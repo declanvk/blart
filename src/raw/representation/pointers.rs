@@ -305,7 +305,7 @@ macro_rules! impl_concrete_node_ptr {
         pub(crate) use match_concrete_inner_node_ptr;
 
         impl<K, V, const PREFIX_LEN: usize> ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
-            /// TODO
+            /// Cast node pointer back to an opaque version, losing type information
             pub(crate) fn to_opaque(self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
                 match_concrete_inner_node_ptr!(match (self) {
                     InnerNode(inner_node_ptr) => inner_node_ptr.to_opaque(),
