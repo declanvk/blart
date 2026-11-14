@@ -24,17 +24,17 @@ mod index;
 #[repr(C, align(8))]
 pub struct InnerNodeIndirect<K, V, const PREFIX_LEN: usize, const SIZE: usize> {
     /// The common node fields.
-    pub header: Header<PREFIX_LEN>,
+    header: Header<PREFIX_LEN>,
     /// For each element in this array, it is assumed to be initialized if
     /// there is a index in the `child_indices` array that points to
     /// it
-    pub child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
+    child_pointers: [MaybeUninit<OpaqueNodePtr<K, V, PREFIX_LEN>>; SIZE],
     /// An array that maps key bytes (as the index) to the index value in
     /// the `child_pointers` array.
     ///
     /// All the `child_indices` values are guaranteed to be
     /// `None` when the node is constructed.
-    pub child_indices: [Option<NonMaxIndex>; 256],
+    child_indices: [Option<NonMaxIndex>; 256],
 }
 
 impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
@@ -43,21 +43,21 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
 {
     fn from(value: &InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
         assert!(
-            value.header.num_children() <= SIZE,
+            value.header().num_children() <= SIZE,
             "Cannot shrink a InnerNodeDirect when it has more than {SIZE} children. Currently has \
              [{}] children.",
-            value.header.num_children()
+            value.header().num_children()
         );
 
-        let header = value.header.clone();
+        let header = value.header().clone();
         let mut child_indices = [None; 256];
         let mut child_pointers = [MaybeUninit::uninit(); SIZE];
 
-        let (keys, _) = value.initialized_portion();
+        let (keys, children) = value.initialized_portion();
 
         assert_eq!(
             keys.len(),
-            value.keys.len(),
+            OTHER_SIZE,
             "Node must be full to grow to node 48"
         );
 
@@ -71,17 +71,11 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize, const OTHER_SIZE: usize>
         let num_children = header.num_children();
 
         unsafe {
-            // SAFETY: By construction the number of children in the header
-            // is kept in sync with the number of children written in the node
-            // and if this number exceeds the maximum len the node should have
-            // already grown. So we know for a fact that that num_children <= node len
-            core::hint::assert_unchecked(num_children <= value.child_pointers.len());
-
             // SAFETY: We know that the new size is >= old size, so this is safe
             core::hint::assert_unchecked(num_children <= child_pointers.len());
         }
 
-        child_pointers[..num_children].copy_from_slice(&value.child_pointers[..num_children]);
+        child_pointers[..num_children].write_copy_of_slice(children);
 
         Self {
             header,
@@ -96,13 +90,13 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> From<&InnerNodeDirect<K, 
 {
     fn from(value: &InnerNodeDirect<K, V, PREFIX_LEN>) -> Self {
         assert!(
-            value.header.num_children() <= SIZE,
+            value.header().num_children() <= SIZE,
             "Cannot shrink a InnerNodeDirect when it has more than {SIZE} children. Currently has \
              [{}] children.",
-            value.header.num_children()
+            value.header().num_children()
         );
 
-        let header = value.header.clone();
+        let header = value.header().clone();
         let mut child_indices = [None; 256];
         let mut child_pointers = [MaybeUninit::uninit(); SIZE];
 
