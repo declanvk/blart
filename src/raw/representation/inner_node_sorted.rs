@@ -245,21 +245,21 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 
     #[inline]
     fn lookup_child_index(&self, key_fragment: u8) -> Option<usize> {
-        #[cfg(feature = "nightly")]
-        {
-            if SIZE == 16 {
-                self.n16_lookup_child_index(key_fragment)
-            } else {
+        cfg_select! {
+            feature = "nightly" => {
+                if SIZE == 16 {
+                    self.n16_lookup_child_index(key_fragment)
+                } else {
+                    self.default_lookup_child_index(key_fragment)
+                }
+            },
+            _ => {
+                // TODO(opt): possible optimization when we can't use SIMD is to try a
+                // SWAR sort of thing using a bitmask of matches and taking the trailing zeros.
+                // I tried it initially and it was faster on most workloads, but slower when
+                // the normal loop would sotp after a few keys (common in dense trees and `retain`).
                 self.default_lookup_child_index(key_fragment)
-            }
-        }
-        #[cfg(not(feature = "nightly"))]
-        {
-            // TODO(opt): possible optimization when we can't use SIMD is to try a
-            // SWAR sort of thing using a bitmask of matches and taking the trailing zeros.
-            // I tried it initially and it was faster on most workloads, but slower when
-            // the normal loop would sotp after a few keys (common in dense trees and `retain`).
-            self.default_lookup_child_index(key_fragment)
+            },
         }
     }
 
@@ -296,17 +296,15 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 
     #[inline]
     fn find_write_point(&self, key_fragment: u8) -> WritePoint {
-        #[cfg(feature = "nightly")]
-        {
-            if SIZE == 16 {
-                self.n16_find_write_point(key_fragment)
-            } else {
-                self.default_find_write_point(key_fragment)
-            }
-        }
-        #[cfg(not(feature = "nightly"))]
-        {
-            self.default_find_write_point(key_fragment)
+        cfg_select! {
+            feature = "nightly" => {
+                if SIZE == 16 {
+                    self.n16_find_write_point(key_fragment)
+                } else {
+                    self.default_find_write_point(key_fragment)
+                }
+            },
+            _ => self.default_find_write_point(key_fragment),
         }
     }
 

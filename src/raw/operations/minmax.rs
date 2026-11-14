@@ -77,10 +77,10 @@ mod tests {
 
     #[test]
     fn large_tree_same_length_keys_min_max() {
-        #[cfg(not(miri))]
-        const VALUE_STOPS: u8 = 5;
-        #[cfg(miri)]
-        const VALUE_STOPS: u8 = 2;
+        const VALUE_STOPS: u8 = cfg_select! {
+            miri => 2,
+            _ => 5,
+        };
 
         let mut keys = generate_key_fixed_length([VALUE_STOPS; 3]);
         let mut root: OpaqueNodePtr<[u8; 3], usize, 16> = NodePtr::allocate_node_ptr(

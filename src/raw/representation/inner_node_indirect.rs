@@ -299,132 +299,134 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
             })
     }
 
-    #[cfg(feature = "nightly")]
-    #[cfg_attr(test, mutants::skip)]
+    #[cfg_attr(all(test, feature = "nightly"), mutants::skip)]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        let child_indices = NonMaxIndex::transmute_child_indices_to_u8(&self.child_indices);
-        let empty = u8x64::splat(0);
-        let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r1 = u8x64::from_array(child_indices[64..128].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r2 = u8x64::from_array(child_indices[128..192].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r3 = u8x64::from_array(child_indices[192..256].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
+        cfg_select! {
+            feature = "nightly" => {
+                let child_indices = NonMaxIndex::transmute_child_indices_to_u8(&self.child_indices);
+                let empty = u8x64::splat(0);
+                let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r1 = u8x64::from_array(child_indices[64..128].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r2 = u8x64::from_array(child_indices[128..192].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r3 = u8x64::from_array(child_indices[192..256].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
 
-        let key = if r0 != u64::MAX {
-            r0.trailing_ones()
-        } else if r1 != u64::MAX {
-            r1.trailing_ones() + 64
-        } else if r2 != u64::MAX {
-            r2.trailing_ones() + 128
-        } else {
-            r3.trailing_ones() + 192
-        } as usize;
+                let key = if r0 != u64::MAX {
+                    r0.trailing_ones()
+                } else if r1 != u64::MAX {
+                    r1.trailing_ones() + 64
+                } else if r2 != u64::MAX {
+                    r2.trailing_ones() + 128
+                } else {
+                    r3.trailing_ones() + 192
+                } as usize;
 
-        unsafe {
-            // SAFETY: key can be at up to 256, but we are in a inner node
-            // this means that this node has at least 1 child (it's even more
-            // strict since, if we have 1 child the node would collapse), so we
-            // know that exists at least one idx where != 48
-            core::hint::assert_unchecked(key < self.child_indices.len());
+                unsafe {
+                    // SAFETY: key can be at up to 256, but we are in a inner node
+                    // this means that this node has at least 1 child (it's even more
+                    // strict since, if we have 1 child the node would collapse), so we
+                    // know that exists at least one idx where != 48
+                    core::hint::assert_unchecked(key < self.child_indices.len());
+                }
+
+                // SAFETY: We know the value at `key` index is not `None` because this node must
+                // contain at least one child (similar to the logic above).
+                let idx = usize::from(unsafe { self.child_indices[key].unwrap_unchecked() });
+                let child_pointers = self.initialized_child_pointers();
+
+                unsafe {
+                    // SAFETY: We know that idx is in bounds, because the value can't be
+                    // constructed if it >= 48 and also it has to be < num children, since
+                    // it's constructed from the num children before being incremented during
+                    // insertion process
+                    core::hint::assert_unchecked(idx < child_pointers.len());
+                }
+
+                (key as u8, child_pointers[idx])
+            },
+            _ => {
+                for (key, idx) in self.child_indices.iter().enumerate() {
+                    let Some(idx) = idx else {
+                        continue;
+                    };
+                    let child_pointers = self.initialized_child_pointers();
+                    return (key as u8, child_pointers[usize::from(*idx)]);
+                }
+                unreachable!("inner node must have non-zero number of children");
+            },
         }
-
-        // SAFETY: We know the value at `key` index is not `None` because this node must
-        // contain at least one child (similar to the logic above).
-        let idx = usize::from(unsafe { self.child_indices[key].unwrap_unchecked() });
-        let child_pointers = self.initialized_child_pointers();
-
-        unsafe {
-            // SAFETY: We know that idx is in bounds, because the value can't be
-            // constructed if it >= 48 and also it has to be < num children, since
-            // it's constructed from the num children before being incremented during
-            // insertion process
-            core::hint::assert_unchecked(idx < child_pointers.len());
-        }
-
-        (key as u8, child_pointers[idx])
     }
 
-    #[cfg(not(feature = "nightly"))]
-    fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        for (key, idx) in self.child_indices.iter().enumerate() {
-            let Some(idx) = idx else {
-                continue;
-            };
-            let child_pointers = self.initialized_child_pointers();
-            return (key as u8, child_pointers[usize::from(*idx)]);
-        }
-        unreachable!("inner node must have non-zero number of children");
-    }
-
-    #[cfg(feature = "nightly")]
-    #[cfg_attr(test, mutants::skip)]
+    #[cfg_attr(all(test, feature = "nightly"), mutants::skip)]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        let child_indices = NonMaxIndex::transmute_child_indices_to_u8(&self.child_indices);
-        let empty = u8x64::splat(0);
-        let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r1 = u8x64::from_array(child_indices[64..128].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r2 = u8x64::from_array(child_indices[128..192].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r3 = u8x64::from_array(child_indices[192..256].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
+        cfg_select! {
+            feature = "nightly" => {
+                let child_indices = NonMaxIndex::transmute_child_indices_to_u8(&self.child_indices);
+                let empty = u8x64::splat(0);
+                let r0 = u8x64::from_array(child_indices[0..64].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r1 = u8x64::from_array(child_indices[64..128].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r2 = u8x64::from_array(child_indices[128..192].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r3 = u8x64::from_array(child_indices[192..256].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
 
-        let key = if r3 != u64::MAX {
-            255 - r3.leading_ones()
-        } else if r2 != u64::MAX {
-            191 - r2.leading_ones()
-        } else if r1 != u64::MAX {
-            127 - r1.leading_ones()
-        } else {
-            // SAFETY: This subtraction can't fail, because we know that
-            // we have at least one child, so the number of leading ones
-            // in this last case is <= 63
-            63 - r0.leading_ones()
-        } as usize;
+                let key = if r3 != u64::MAX {
+                    255 - r3.leading_ones()
+                } else if r2 != u64::MAX {
+                    191 - r2.leading_ones()
+                } else if r1 != u64::MAX {
+                    127 - r1.leading_ones()
+                } else {
+                    // SAFETY: This subtraction can't fail, because we know that
+                    // we have at least one child, so the number of leading ones
+                    // in this last case is <= 63
+                    63 - r0.leading_ones()
+                } as usize;
 
-        unsafe {
-            // SAFETY: idx can be at up to 255 so it's in bounds
-            core::hint::assert_unchecked(key < self.child_indices.len());
+                unsafe {
+                    // SAFETY: idx can be at up to 255 so it's in bounds
+                    core::hint::assert_unchecked(key < self.child_indices.len());
+                }
+
+                // SAFETY: We know the value at `key` index is not `None` because this node must
+                // contain at least one child (similar to the logic above).
+                let idx = usize::from(unsafe { self.child_indices[key].unwrap_unchecked() });
+                let child_pointers = self.initialized_child_pointers();
+
+                unsafe {
+                    // SAFETY: We know that idx is in bounds, because the value can't be
+                    // constructed if it >= 48 and also it has to be < num children, since
+                    // it's constructed from the num children before being incremented during
+                    // insertion process
+                    core::hint::assert_unchecked(idx < child_pointers.len());
+                }
+
+                (key as u8, child_pointers[idx])
+            },
+            _ => {
+                for (key, idx) in self.child_indices.iter().enumerate().rev() {
+                    let Some(idx) = idx else {
+                        continue;
+                    };
+                    let child_pointers = self.initialized_child_pointers();
+                    return (key as u8, child_pointers[usize::from(*idx)]);
+                }
+                unreachable!("inner node must have non-zero number of children");
+            },
         }
-
-        // SAFETY: We know the value at `key` index is not `None` because this node must
-        // contain at least one child (similar to the logic above).
-        let idx = usize::from(unsafe { self.child_indices[key].unwrap_unchecked() });
-        let child_pointers = self.initialized_child_pointers();
-
-        unsafe {
-            // SAFETY: We know that idx is in bounds, because the value can't be
-            // constructed if it >= 48 and also it has to be < num children, since
-            // it's constructed from the num children before being incremented during
-            // insertion process
-            core::hint::assert_unchecked(idx < child_pointers.len());
-        }
-
-        (key as u8, child_pointers[idx])
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        for (key, idx) in self.child_indices.iter().enumerate().rev() {
-            let Some(idx) = idx else {
-                continue;
-            };
-            let child_pointers = self.initialized_child_pointers();
-            return (key as u8, child_pointers[usize::from(*idx)]);
-        }
-        unreachable!("inner node must have non-zero number of children");
     }
 
     fn any_child_prefer_leaf(&self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
