@@ -173,11 +173,6 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeIndirect<K, V, P
 unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
 {
-    type Iter<'a>
-        = NodeIndirectIter<'a, K, V, PREFIX_LEN>
-    where
-        Self: 'a;
-
     fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
         Self {
             header,
@@ -273,7 +268,10 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         Some(unsafe { MaybeUninit::assume_init(child_ptr) })
     }
 
-    fn iter(&self) -> NodeIndirectIter<'_, K, V, PREFIX_LEN> {
+    fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
+    {
         let child_pointers = self.initialized_child_pointers();
 
         NodeIndirectIter {
@@ -503,9 +501,9 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNode48<K, V, 
 }
 
 /// This struct is an iterator over the children of a [`InnerNodeIndirect`].
-pub struct NodeIndirectIter<'a, K, V, const PREFIX_LEN: usize> {
-    pub(crate) it: Enumerate<Iter<'a, Option<NonMaxIndex>>>,
-    pub(crate) child_pointers: &'a [OpaqueNodePtr<K, V, PREFIX_LEN>],
+struct NodeIndirectIter<'a, K, V, const PREFIX_LEN: usize> {
+    it: Enumerate<Iter<'a, Option<NonMaxIndex>>>,
+    child_pointers: &'a [OpaqueNodePtr<K, V, PREFIX_LEN>],
 }
 
 impl<K, V, const PREFIX_LEN: usize> Iterator for NodeIndirectIter<'_, K, V, PREFIX_LEN> {

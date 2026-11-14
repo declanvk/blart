@@ -1,13 +1,6 @@
-use core::{
-    fmt,
-    iter::{Enumerate, FusedIterator},
-    slice::Iter,
-};
 #[cfg(feature = "nightly")]
-use core::{
-    iter::FilterMap,
-    simd::{cmp::SimdPartialEq, usizex64},
-};
+use core::simd::{cmp::SimdPartialEq, usizex64};
+use core::{fmt, iter::FusedIterator};
 
 use crate::raw::{
     Header, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeIndirect, InnerNodeSorted, Node,
@@ -80,26 +73,6 @@ impl<K, V, const PREFIX_LEN: usize> Clone for InnerNodeDirect<K, V, PREFIX_LEN> 
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeDirect<K, V, PREFIX_LEN>
 {
-    cfg_select! {
-        feature = "nightly" => {
-            type Iter<'a>
-                = FilterMap<
-                Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>>,
-                impl FnMut(
-                    (usize, &'a Option<OpaqueNodePtr<K, V, PREFIX_LEN>>),
-                ) -> Option<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
-            >
-            where
-                Self: 'a;
-        },
-        _ => {
-            type Iter<'a>
-                = NodeDirectIter<'a, K, V, PREFIX_LEN>
-            where
-                Self: 'a;
-        },
-    }
-
     fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
         Self {
             header,
@@ -134,17 +107,14 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
         removed_child
     }
 
-    fn iter(&self) -> Self::Iter<'_> {
-        cfg_select! {
-            feature = "nightly" => self
-                .child_pointers
-                .iter()
-                .enumerate()
-                .filter_map(|(key, node)| node.map(|node| (key as u8, node))),
-            _ => NodeDirectIter {
-                it: self.child_pointers.iter().enumerate(),
-            },
-        }
+    fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
+    {
+        self.child_pointers
+            .iter()
+            .enumerate()
+            .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
     }
 
     fn range(
@@ -313,43 +283,6 @@ impl<K, V, const PREFIX_LEN: usize> InnerNode<PREFIX_LEN> for InnerNodeDirect<K,
         self.into()
     }
 }
-
-/// This struct is an iterator over the children of a [`InnerNodeDirect`].
-#[cfg(not(feature = "nightly"))]
-pub struct NodeDirectIter<'a, K, V, const PREFIX_LEN: usize> {
-    pub(crate) it: Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>>,
-}
-
-#[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> Iterator for NodeDirectIter<'_, K, V, PREFIX_LEN> {
-    type Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        for (key, node) in self.it.by_ref() {
-            match node {
-                Some(node) => return Some((key as u8, *node)),
-                None => continue,
-            }
-        }
-        None
-    }
-}
-
-#[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> DoubleEndedIterator for NodeDirectIter<'_, K, V, PREFIX_LEN> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        while let Some((key, node)) = self.it.next_back() {
-            match node {
-                Some(node) => return Some((key as u8, *node)),
-                None => continue,
-            }
-        }
-        None
-    }
-}
-
-#[cfg(not(feature = "nightly"))]
-impl<K, V, const PREFIX_LEN: usize> FusedIterator for NodeDirectIter<'_, K, V, PREFIX_LEN> {}
 
 #[cfg(test)]
 mod tests {
