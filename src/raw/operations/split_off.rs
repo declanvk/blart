@@ -775,7 +775,6 @@ impl<K, V, const PREFIX_LEN: usize> InnerNodePathElem<K, V, PREFIX_LEN> {
 
                 // If this side has a half of the path child, write it back under the same key byte
                 // in place of the stale pointer.
-                // TODO: convert this to if-let chain in 2024 edition
                 if let Some(stale_key_fragment) = stale_path_slot
                     && let Some((_, child)) =
                         keep.iter().find(|(key, _)| *key == stale_key_fragment)
