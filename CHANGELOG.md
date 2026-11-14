@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
  - Added the `_internal` feature, which makes the `raw` module public. The `raw` module is intended for mucking about with the crate internals, so it doesn't have the same SemVer guarantees as the rest of the crate.
 
 ### Changed
- - Update MSRV to `1.90`.
+ - Update MSRV to `1.90`, then bumped to `1.100`.
  - Update crate edition to 2024.
  - Within the visitor module, replaced some uses of `NodeType` (which is now private) with a new enum that only contains variants for inner node kinds called `InnerNodeKind`.
  - Optimized the `TreeMap::split_off` function so that now it splits "in place", instead of creating a whole new tree and removing the necessary entries from the old tree. This is much faster, using about 96-98% fewer instructions in the project's benchmarks.
