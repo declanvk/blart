@@ -1,13 +1,7 @@
 #![no_std]
 #![cfg_attr(
     feature = "nightly",
-    feature(
-        allocator_api,
-        hasher_prefixfree_extras,
-        impl_trait_in_assoc_type,
-        portable_simd,
-        slice_ptr_get,
-    )
+    feature(hasher_prefixfree_extras, impl_trait_in_assoc_type, portable_simd,)
 )]
 #![warn(clippy::dbg_macro)]
 #![deny(
@@ -37,9 +31,7 @@
 //! # Crate Features
 //!
 //!  - **nightly** - Enables internal and public use of nightly APIs in the crate. The most
-//!    important features enabled is use of the [`std::simd`] module and the nightly allocator API.
-//!  - **allocator-api2** - This feature is an alternative to the *ni*ghtly* fe*ature which allows
-//!    customizing the allocators.
+//!    important feature enabled is use of the [`std::simd`] module.
 //!  - **std** - When enabled, this will cause the crate to use the standard library.
 //!  - **testing** - This feature exposes the `testing` module, which contains helper function for
 //!    writing tests.
@@ -57,7 +49,6 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-mod allocator;
 mod bytes;
 mod collections;
 mod hint;

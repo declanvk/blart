@@ -1,9 +1,9 @@
-use core::mem::replace;
+use alloc::alloc::Global;
+use core::{alloc::Allocator, mem::replace};
 
 use super::DEFAULT_PREFIX_LEN;
 use crate::{
     AsBytes, TreeMap,
-    allocator::{Allocator, Global},
     raw::{DeletePoint, InsertParentNodeChange, InsertPoint, InsertResult, TreePath},
 };
 

@@ -1,8 +1,7 @@
-use core::{iter::FusedIterator, ops::Bound};
+use core::{alloc::Allocator, iter::FusedIterator, ops::Bound};
 
 use crate::{
     AsBytes,
-    allocator::Allocator,
     collections::map::TreeMap,
     map::{find_leaf_pointer_for_bound, validate_range_bounds},
     raw::{LeafNode, NodePtr, RawIterator, search_for_delete_point},

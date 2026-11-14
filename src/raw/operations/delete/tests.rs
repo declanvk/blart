@@ -1,4 +1,5 @@
 use alloc::{
+    alloc::Global,
     boxed::Box,
     string::{String, ToString},
 };
@@ -6,7 +7,6 @@ use alloc::{
 use super::*;
 use crate::{
     TreeMap,
-    allocator::Global,
     raw::{NodeType, deallocate_tree, search_unchecked},
     testing::{PrefixExpansion, generate_key_with_prefix, setup_tree_from_entries, swap},
 };

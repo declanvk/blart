@@ -1,11 +1,7 @@
-use core::iter::FusedIterator;
+use alloc::alloc::Global;
+use core::{alloc::Allocator, iter::FusedIterator};
 
-use crate::{
-    TreeMap,
-    allocator::{Allocator, Global},
-    map::DEFAULT_PREFIX_LEN,
-    raw::RawIterator,
-};
+use crate::{TreeMap, map::DEFAULT_PREFIX_LEN, raw::RawIterator};
 
 macro_rules! gen_iter {
     (

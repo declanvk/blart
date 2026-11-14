@@ -1,4 +1,6 @@
+use alloc::alloc::Global;
 use core::{
+    alloc::Allocator,
     iter::FusedIterator,
     mem::{self, ManuallyDrop},
     ptr,
@@ -6,7 +8,6 @@ use core::{
 
 use crate::{
     TreeMap,
-    allocator::{Allocator, Global},
     map::DEFAULT_PREFIX_LEN,
     raw::{NodePtr, RawIterator, deallocate_leaves, deallocate_tree_non_leaves},
 };

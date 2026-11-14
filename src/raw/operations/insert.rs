@@ -1,9 +1,8 @@
 use alloc::boxed::Box;
-use core::{error::Error, fmt, marker::PhantomData};
+use core::{alloc::Allocator, error::Error, fmt, marker::PhantomData};
 
 use crate::{
     AsBytes,
-    allocator::Allocator,
     hint::unlikely,
     raw::{
         Descent, DescentEnd, ExplicitMismatch, InnerNode, InnerNode4, InnerNodeCommon, LeafNode,

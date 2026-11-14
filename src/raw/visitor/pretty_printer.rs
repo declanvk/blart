@@ -1,3 +1,4 @@
+use core::alloc::Allocator;
 use std::{
     fmt,
     io::{self, Write},
@@ -6,7 +7,6 @@ use std::{
 
 use crate::{
     AsBytes, TreeMap,
-    allocator::Allocator,
     raw::{InnerNode, NodePtr, NodeType, OpaqueNodePtr},
     visitor::{Visitable, Visitor},
 };

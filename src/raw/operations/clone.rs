@@ -1,10 +1,10 @@
 //! This module contains the implementation of `clone()` for the trie.
 
 use alloc::vec::Vec;
+use core::alloc::Allocator;
 
 use crate::{
     AsBytes,
-    allocator::Allocator,
     raw::{
         ConcreteInnerNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr, OpaqueNodePtr,
         deallocate_tree, match_concrete_inner_node_ptr, match_concrete_node_ptr,

@@ -1,12 +1,12 @@
 use alloc::collections::BTreeMap;
 use core::{
+    alloc::Allocator,
     fmt,
     ops::{Add, Index},
 };
 
 use crate::{
     AsBytes, TreeMap,
-    allocator::Allocator,
     raw::{InnerNode, LeafNode, OpaqueNodePtr},
     visitor::{InnerNodeType, Visitable, Visitor},
 };

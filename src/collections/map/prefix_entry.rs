@@ -1,7 +1,9 @@
+use alloc::alloc::Global;
+use core::alloc::Allocator;
+
 use super::{DEFAULT_PREFIX_LEN, OccupiedEntry, SubtreeIter, SubtreeIterMut, TreeMap, VacantEntry};
 use crate::{
     AsBytes,
-    allocator::{Allocator, Global},
     raw::{ConcreteNodePtr, DeletePoint, LeafNode, NodePtr, OverwritePoint, PrefixInsertPoint},
 };
 

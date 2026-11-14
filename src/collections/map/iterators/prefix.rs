@@ -1,4 +1,5 @@
-use core::iter::FusedIterator;
+use alloc::alloc::Global;
+use core::{alloc::Allocator, iter::FusedIterator};
 
 use super::{
     InnerNodeSearchResult, InnerNodeSearchResultReason, TerminatingNodeSearchResult,
@@ -6,7 +7,6 @@ use super::{
 };
 use crate::{
     AsBytes, TreeMap,
-    allocator::{Allocator, Global},
     map::{DEFAULT_PREFIX_LEN, NonEmptyTree},
     raw::{RawIterator, maximum_unchecked, minimum_unchecked},
 };

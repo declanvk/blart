@@ -1,7 +1,6 @@
-use core::fmt;
+use core::{alloc::Allocator, fmt};
 
 use super::{LeafNode, NodePtr};
-use crate::allocator::Allocator;
 
 type LeafPtr<K, V, const PREFIX_LEN: usize> = NodePtr<PREFIX_LEN, LeafNode<K, V, PREFIX_LEN>>;
 

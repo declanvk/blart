@@ -1,8 +1,8 @@
 //! This module contains definitions of pointers types used in the tree.
 
-use alloc::alloc::handle_alloc_error;
+use alloc::boxed::Box;
 use core::{
-    alloc::Layout,
+    alloc::Allocator,
     fmt,
     hash::Hash,
     marker::PhantomData,
@@ -11,7 +11,6 @@ use core::{
 };
 
 use crate::{
-    allocator::{Allocator, do_alloc},
     raw::{
         Header, InnerNode4, InnerNode16, InnerNode48, InnerNodeDirect, LeafNode, Node, NodeType,
     },
@@ -377,22 +376,10 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
         unsafe { NodePtr(NonNull::new_unchecked(ptr)) }
     }
 
-    /// Allocate the given [`Node`] on the [`alloc::alloc::Global`] heap and
-    /// return a [`NodePtr`] that wrap the raw pointer.
+    /// Allocate the given [`Node`] using the given allocator and return a
+    /// [`NodePtr`] that wraps the raw pointer.
     pub fn allocate_node_ptr(node: N, alloc: &impl Allocator) -> Self {
-        let layout = Layout::new::<mem::MaybeUninit<N>>();
-        let mut ptr: NonNull<mem::MaybeUninit<N>> = match do_alloc(alloc, layout) {
-            Ok(ptr) => ptr.cast(),
-            Err(()) => handle_alloc_error(layout),
-        };
-
-        // SAFETY: The pointer from [`Box::into_raw`] is non-null, aligned, and valid
-        // for reads and writes of the [`Node`] `N`.
-        let ptr: NonNull<N> = unsafe {
-            ptr.as_mut().write(node);
-            ptr.cast()
-        };
-
+        let (ptr, _) = Box::into_non_null_with_allocator(Box::new_in(node, alloc));
         NodePtr(ptr)
     }
 
@@ -405,29 +392,12 @@ impl<const PREFIX_LEN: usize, N: Node<PREFIX_LEN>> NodePtr<PREFIX_LEN, N> {
     ///    [`NodePtr::allocate_node_ptr`]
     #[must_use]
     pub unsafe fn deallocate_node_ptr(node: Self, alloc: &impl Allocator) -> N {
-        // Read the value out onto the stack
-        // SAFETY: From the constructors (`new`/`allocate_node_ptr`) we know that this
-        // pointer will valid for reads, properly aligned, and initialized. We prevent
-        // double drop by deallocating the memory in the following lines without ever
-        // calling `drop_in_place`.
-        let value = unsafe { ptr::read(node.0.as_ptr()) };
-
-        let layout = Layout::new::<N>();
-        if layout.size() != 0 {
-            // If the value has a non-zero size (should be true of all nodes),
-            // then deallocate the node object without dropping it (even) though
-            // all `Node`s don't implement drop.
-
-            // SAFETY:
-            //  - The safety condition on this function requires that this allocator is the same one
-            //    which initially allocated the memory block
-            //  - The layout fits the block of memory because it was the same layout used to create
-            //    the block (in `allocate_node_ptr`).
-            unsafe {
-                alloc.deallocate(node.0.cast(), layout);
-            }
-        }
-        value
+        // SAFETY: The node pointer was created by `allocate_node_ptr`, which got it
+        // from `Box::into_non_null_with_allocator` using `Box::new_in` with the same
+        // allocator (required by the safety condition of this function). It has not
+        // been deallocated yet, because this function is only called once per node.
+        let node = unsafe { Box::from_non_null_in(node.0, alloc) };
+        *node
     }
 
     /// Moves `new_value` into the referenced `dest`, returning the previous

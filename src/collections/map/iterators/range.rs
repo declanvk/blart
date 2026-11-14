@@ -1,11 +1,11 @@
 //! This module contains types and functions relating to iterating over a
 //! range of the [`TreeMap`].
 
-use core::{cmp::Ordering, fmt, iter::FusedIterator, ops::Bound};
+use alloc::alloc::Global;
+use core::{alloc::Allocator, cmp::Ordering, fmt, iter::FusedIterator, ops::Bound};
 
 use crate::{
     AsBytes, TreeMap,
-    allocator::{Allocator, Global},
     map::{DEFAULT_PREFIX_LEN, NonEmptyTree},
     raw::{
         Descent, DescentEnd, InnerNode, LeafNode, NoPath, NodePtr, OpaqueNodePtr, RawIterator,
