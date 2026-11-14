@@ -131,71 +131,8 @@ impl InnerNodeType {
     }
 }
 
-pub(crate) mod private {
-    /// This trait is used to seal other traits, such that they cannot be
-    /// implemented outside of the crate.
-    pub trait Sealed {}
-
-    impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Sealed
-        for super::InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
-    {
-    }
-    impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> Sealed
-        for super::InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
-    {
-    }
-    impl<K, V, const PREFIX_LEN: usize> Sealed for super::InnerNodeDirect<K, V, PREFIX_LEN> {}
-    impl<K, V, const PREFIX_LEN: usize> Sealed for super::LeafNode<K, V, PREFIX_LEN> {}
-
-    /// Internal construction trait for inner nodes.
-    pub trait InnerNodeInit<const PREFIX_LEN: usize>: Sealed + Sized {
-        fn from_header(header: super::Header<PREFIX_LEN>) -> Self;
-
-        fn from_prefix(prefix: &[u8], prefix_len: usize) -> Self {
-            Self::from_header(super::Header::new(prefix, prefix_len))
-        }
-    }
-
-    impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeInit<PREFIX_LEN>
-        for super::InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
-    {
-        fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
-            use core::mem::MaybeUninit;
-            Self {
-                header,
-                child_pointers: [MaybeUninit::uninit(); SIZE],
-                keys: [0; SIZE],
-            }
-        }
-    }
-
-    impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeInit<PREFIX_LEN>
-        for super::InnerNodeIndirect<K, V, PREFIX_LEN, SIZE>
-    {
-        fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
-            use core::mem::MaybeUninit;
-            super::InnerNodeIndirect {
-                header,
-                child_indices: [None; 256],
-                child_pointers: [MaybeUninit::uninit(); SIZE],
-            }
-        }
-    }
-
-    impl<K, V, const PREFIX_LEN: usize> InnerNodeInit<PREFIX_LEN>
-        for super::InnerNodeDirect<K, V, PREFIX_LEN>
-    {
-        fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
-            super::InnerNodeDirect {
-                header,
-                child_pointers: [None; 256],
-            }
-        }
-    }
-}
-
 /// All nodes which contain a runtime tag that validates their type.
-pub trait Node<const PREFIX_LEN: usize>: private::Sealed {
+pub trait Node<const PREFIX_LEN: usize> {
     // TODO: See if possible to remove PREFIX_LEN generic from this trait
 
     /// The runtime type of the node.
@@ -305,15 +242,22 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ExplicitMismatch<K, V, PREFIX
 ///
 /// All structures that implement this trait must be `repr(C)` and have a
 /// [`Header`] as the first field of the struct.
-pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
-    Sized + private::InnerNodeInit<PREFIX_LEN>
-{
+pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     /// The type of the iterator over all children of the inner node
     type Iter<'a>: Iterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>
         + DoubleEndedIterator
         + FusedIterator
     where
         Self: 'a;
+
+    /// Create a new inner empty inner node from the given header.
+    ///
+    /// # Safety (sorta?)
+    ///
+    /// Many of the operations inside the `raw` module will assume that an inner node has two or
+    /// more children, so you need to be very careful. Ideally this should only be used in a context
+    /// where you're immediatelly filling the inner node with more children.
+    fn from_header(header: Header<PREFIX_LEN>) -> Self;
 
     /// Create a builder for constructing an inner node with at least one child.
     ///
@@ -325,7 +269,7 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>:
         prefix_len: usize,
     ) -> InnerNodeBuilder<K, V, PREFIX_LEN, Self, NoChild> {
         InnerNodeBuilder {
-            node: <Self as private::InnerNodeInit<PREFIX_LEN>>::from_prefix(prefix, prefix_len),
+            node: Self::from_header(Header::new(prefix, prefix_len)),
             _state: PhantomData,
         }
     }
