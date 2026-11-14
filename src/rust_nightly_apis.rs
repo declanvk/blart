@@ -30,13 +30,12 @@
 /// [issue-96762]: https://github.com/rust-lang/rust/issues/96762
 #[inline]
 pub fn hasher_write_length_prefix<H: core::hash::Hasher>(state: &mut H, num_entries: usize) {
-    #[cfg(feature = "nightly")]
-    {
-        <H as core::hash::Hasher>::write_length_prefix(state, num_entries);
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    {
-        state.write_usize(num_entries);
+    cfg_select! {
+        feature = "nightly" => {
+            <H as core::hash::Hasher>::write_length_prefix(state, num_entries);
+        },
+        _ => {
+            state.write_usize(num_entries);
+        },
     }
 }

@@ -63,11 +63,10 @@ fn insert_to_small_trees() {
 
 #[test]
 fn insert_into_left_skewed_tree_deallocate() {
-    #[cfg(not(miri))]
-    const KEY_LENGTH_LIMIT: usize = u8::MAX as usize;
-
-    #[cfg(miri)]
-    const KEY_LENGTH_LIMIT: usize = 16usize;
+    const KEY_LENGTH_LIMIT: usize = cfg_select! {
+        miri => 16,
+        _ => u8::MAX as usize,
+    };
 
     let mut keys = generate_keys_skewed(KEY_LENGTH_LIMIT);
     let mut current_root: OpaqueNodePtr<Box<[u8]>, usize, 16> =

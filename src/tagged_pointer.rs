@@ -430,10 +430,10 @@ mod tests {
             0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1000_usize
         );
 
-        #[cfg(feature = "std")]
-        let arch = std::env::consts::ARCH;
-        #[cfg(not(feature = "std"))]
-        let arch = "no_std";
+        let arch = cfg_select! {
+            feature = "std" => std::env::consts::ARCH,
+            _ => "no_std",
+        };
 
         // Something weird about the representation of u128 on intel architectures:
         // https://github.com/rust-lang/rust/issues/54341 - This was fixed in 1.77

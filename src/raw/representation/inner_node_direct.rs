@@ -94,21 +94,25 @@ impl<K, V, const PREFIX_LEN: usize> Clone for InnerNodeDirect<K, V, PREFIX_LEN> 
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeDirect<K, V, PREFIX_LEN>
 {
-    #[cfg(not(feature = "nightly"))]
-    type Iter<'a>
-        = NodeDirectIter<'a, K, V, PREFIX_LEN>
-    where
-        Self: 'a;
-    #[cfg(feature = "nightly")]
-    type Iter<'a>
-        = FilterMap<
-        Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>>,
-        impl FnMut(
-            (usize, &'a Option<OpaqueNodePtr<K, V, PREFIX_LEN>>),
-        ) -> Option<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
-    >
-    where
-        Self: 'a;
+    cfg_select! {
+        feature = "nightly" => {
+            type Iter<'a>
+                = FilterMap<
+                Enumerate<Iter<'a, Option<OpaqueNodePtr<K, V, PREFIX_LEN>>>>,
+                impl FnMut(
+                    (usize, &'a Option<OpaqueNodePtr<K, V, PREFIX_LEN>>),
+                ) -> Option<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
+            >
+            where
+                Self: 'a;
+        },
+        _ => {
+            type Iter<'a>
+                = NodeDirectIter<'a, K, V, PREFIX_LEN>
+            where
+                Self: 'a;
+        },
+    }
 
     fn header(&self) -> &Header<PREFIX_LEN> {
         &self.header
@@ -138,19 +142,15 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     }
 
     fn iter(&self) -> Self::Iter<'_> {
-        #[cfg(not(feature = "nightly"))]
-        {
-            NodeDirectIter {
-                it: self.child_pointers.iter().enumerate(),
-            }
-        }
-
-        #[cfg(feature = "nightly")]
-        {
-            self.child_pointers
+        cfg_select! {
+            feature = "nightly" => self
+                .child_pointers
                 .iter()
                 .enumerate()
-                .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
+                .filter_map(|(key, node)| node.map(|node| (key as u8, node))),
+            _ => NodeDirectIter {
+                it: self.child_pointers.iter().enumerate(),
+            },
         }
     }
 
@@ -177,108 +177,112 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
             })
     }
 
-    #[cfg(feature = "nightly")]
-    #[cfg_attr(test, mutants::skip)]
+    #[cfg_attr(all(test, feature = "nightly"), mutants::skip)]
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        let child_pointers = OpaqueNodePtr::transmute_child_pointers_to_usize(&self.child_pointers);
-        let empty = usizex64::splat(0);
-        let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r1 = usizex64::from_array(child_pointers[64..128].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r2 = usizex64::from_array(child_pointers[128..192].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r3 = usizex64::from_array(child_pointers[192..256].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
+        cfg_select! {
+            feature = "nightly" => {
+                let child_pointers =
+                    OpaqueNodePtr::transmute_child_pointers_to_usize(&self.child_pointers);
+                let empty = usizex64::splat(0);
+                let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r1 = usizex64::from_array(child_pointers[64..128].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r2 = usizex64::from_array(child_pointers[128..192].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r3 = usizex64::from_array(child_pointers[192..256].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
 
-        let key = if r0 != u64::MAX {
-            r0.trailing_ones()
-        } else if r1 != u64::MAX {
-            r1.trailing_ones() + 64
-        } else if r2 != u64::MAX {
-            r2.trailing_ones() + 128
-        } else {
-            r3.trailing_ones() + 192
-        } as usize;
+                let key = if r0 != u64::MAX {
+                    r0.trailing_ones()
+                } else if r1 != u64::MAX {
+                    r1.trailing_ones() + 64
+                } else if r2 != u64::MAX {
+                    r2.trailing_ones() + 128
+                } else {
+                    r3.trailing_ones() + 192
+                } as usize;
 
-        unsafe {
-            // SAFETY: key can be at up to 256, but we know that we have
-            // at least one inner child, it's guarantee to be in bounds
-            core::hint::assert_unchecked(key < self.child_pointers.len());
+                unsafe {
+                    // SAFETY: key can be at up to 256, but we know that we have
+                    // at least one inner child, it's guarantee to be in bounds
+                    core::hint::assert_unchecked(key < self.child_pointers.len());
+                }
+
+                // SAFETY: Covered by the containing function
+                (key as u8, unsafe {
+                    self.child_pointers[key].unwrap_unchecked()
+                })
+            },
+            _ => {
+                for (key, child_pointer) in self.child_pointers.iter().enumerate() {
+                    match child_pointer {
+                        Some(child_pointer) => return (key as u8, *child_pointer),
+                        None => continue,
+                    }
+                }
+                unreachable!("inner node must have non-zero number of children");
+            },
         }
-
-        // SAFETY: Covered by the containing function
-        (key as u8, unsafe {
-            self.child_pointers[key].unwrap_unchecked()
-        })
     }
 
-    #[cfg(not(feature = "nightly"))]
-    fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        for (key, child_pointer) in self.child_pointers.iter().enumerate() {
-            match child_pointer {
-                Some(child_pointer) => return (key as u8, *child_pointer),
-                None => continue,
-            }
-        }
-        unreachable!("inner node must have non-zero number of children");
-    }
-
-    #[cfg(feature = "nightly")]
-    #[cfg_attr(test, mutants::skip)]
+    #[cfg_attr(all(test, feature = "nightly"), mutants::skip)]
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        let child_pointers = OpaqueNodePtr::transmute_child_pointers_to_usize(&self.child_pointers);
-        let empty = usizex64::splat(0);
-        let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r1 = usizex64::from_array(child_pointers[64..128].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r2 = usizex64::from_array(child_pointers[128..192].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
-        let r3 = usizex64::from_array(child_pointers[192..256].try_into().unwrap())
-            .simd_eq(empty)
-            .to_bitmask();
+        cfg_select! {
+            feature = "nightly" => {
+                let child_pointers =
+                    OpaqueNodePtr::transmute_child_pointers_to_usize(&self.child_pointers);
+                let empty = usizex64::splat(0);
+                let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r1 = usizex64::from_array(child_pointers[64..128].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r2 = usizex64::from_array(child_pointers[128..192].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
+                let r3 = usizex64::from_array(child_pointers[192..256].try_into().unwrap())
+                    .simd_eq(empty)
+                    .to_bitmask();
 
-        let key = if r3 != u64::MAX {
-            255 - r3.leading_ones()
-        } else if r2 != u64::MAX {
-            191 - r2.leading_ones()
-        } else if r1 != u64::MAX {
-            127 - r1.leading_ones()
-        } else {
-            // SAFETY: This subtraction can't fail, because we know that
-            // we have at least one child, so the number of leading ones
-            // in this last case is <= 63
-            63 - r0.leading_ones()
-        } as usize;
+                let key = if r3 != u64::MAX {
+                    255 - r3.leading_ones()
+                } else if r2 != u64::MAX {
+                    191 - r2.leading_ones()
+                } else if r1 != u64::MAX {
+                    127 - r1.leading_ones()
+                } else {
+                    // SAFETY: This subtraction can't fail, because we know that
+                    // we have at least one child, so the number of leading ones
+                    // in this last case is <= 63
+                    63 - r0.leading_ones()
+                } as usize;
 
-        unsafe {
-            // SAFETY: idx can be at up to 255, so it's in bounds
-            core::hint::assert_unchecked(key < self.child_pointers.len());
+                unsafe {
+                    // SAFETY: idx can be at up to 255, so it's in bounds
+                    core::hint::assert_unchecked(key < self.child_pointers.len());
+                }
+
+                // SAFETY: covered by the containing function
+                (key as u8, unsafe {
+                    self.child_pointers[key].unwrap_unchecked()
+                })
+            },
+            _ => {
+                for (key, child_pointer) in self.child_pointers.iter().enumerate().rev() {
+                    match child_pointer {
+                        Some(child_pointer) => return (key as u8, *child_pointer),
+                        None => continue,
+                    }
+                }
+                unreachable!("inner node must have non-zero number of children");
+            },
         }
-
-        // SAFETY: covered by the containing function
-        (key as u8, unsafe {
-            self.child_pointers[key].unwrap_unchecked()
-        })
-    }
-
-    #[cfg(not(feature = "nightly"))]
-    fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        for (key, child_pointer) in self.child_pointers.iter().enumerate().rev() {
-            match child_pointer {
-                Some(child_pointer) => return (key as u8, *child_pointer),
-                None => continue,
-            }
-        }
-        unreachable!("inner node must have non-zero number of children");
     }
 
     fn nearest_sibling(&self, new_leaf_key_byte: u8) -> Option<Sibling<K, V, PREFIX_LEN>> {

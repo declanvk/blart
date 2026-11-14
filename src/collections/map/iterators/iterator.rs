@@ -482,19 +482,19 @@ mod tests {
             last_half_last: [u8; 3],
         }
 
-        #[cfg(not(miri))]
-        const TEST_PARAMS: TestValues = TestValues {
-            value_stops: 5,
-            half_len: 108,
-            first_half_last: [2, 5, 5],
-            last_half_last: [3, 0, 0],
-        };
-        #[cfg(miri)]
-        const TEST_PARAMS: TestValues = TestValues {
-            value_stops: 3,
-            half_len: 32,
-            first_half_last: [1, 3, 3],
-            last_half_last: [2, 0, 0],
+        const TEST_PARAMS: TestValues = cfg_select! {
+            miri => TestValues {
+                value_stops: 3,
+                half_len: 32,
+                first_half_last: [1, 3, 3],
+                last_half_last: [2, 0, 0],
+            },
+            _ => TestValues {
+                value_stops: 5,
+                half_len: 108,
+                first_half_last: [2, 5, 5],
+                last_half_last: [3, 0, 0],
+            },
         };
 
         let keys = generate_key_fixed_length([TEST_PARAMS.value_stops; 3]);
