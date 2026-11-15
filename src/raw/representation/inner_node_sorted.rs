@@ -857,17 +857,17 @@ mod tests {
         assert_eq!(
             results,
             [
-                Some(Next(10)),
-                Some(Next(10)),
-                Some(Next(200)),
-                Some(Next(200)),
-                Some(Next(200)),
-                Some(Next(200)),
-                Some(Next(200)),
-                Some(Next(200)),
-                Some(Previous(10)),
-                Some(Previous(200)),
-                Some(Previous(200)),
+                Next(10),
+                Next(10),
+                Next(200),
+                Next(200),
+                Next(200),
+                Next(200),
+                Next(200),
+                Next(200),
+                Previous(10),
+                Previous(200),
+                Previous(200),
             ]
         );
     }

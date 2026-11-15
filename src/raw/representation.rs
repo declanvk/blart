@@ -444,8 +444,13 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     /// Return the nearest sibling to the given child key byte.
     ///
     /// The given key byte doesn't need to exist as a child in this inner node.
-    fn nearest_sibling(&self, child_key_byte: u8) -> Option<Sibling<K, V, PREFIX_LEN>> {
-        self.range((Bound::Excluded(child_key_byte), Bound::Unbounded))
+    ///
+    /// # Panics
+    ///
+    /// Panics if this node has no child other than the one at `child_key_byte`.
+    fn nearest_sibling(&self, child_key_byte: u8) -> Sibling<K, V, PREFIX_LEN> {
+        let Some(sib) = self
+            .range((Bound::Excluded(child_key_byte), Bound::Unbounded))
             .next()
             .map(|(_, next_node)| Sibling::Next(next_node))
             .or_else(|| {
@@ -453,6 +458,11 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
                     .next_back()
                     .map(|(_, previous_node)| Sibling::Previous(previous_node))
             })
+        else {
+            panic!("Inner node has no child other than key byte [{child_key_byte}]")
+        };
+
+        sib
     }
 }
 
@@ -1108,7 +1118,7 @@ mod tests {
     pub(crate) fn nearest_sibling_keys<const PREFIX_LEN: usize, N>(
         child_keys: &[u8],
         queries: impl IntoIterator<Item = u8>,
-    ) -> Vec<Option<SiblingKey>>
+    ) -> Vec<SiblingKey>
     where
         N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
     {
@@ -1147,11 +1157,9 @@ mod tests {
 
         queries
             .into_iter()
-            .map(|query| {
-                node.nearest_sibling(query).map(|sibling| match sibling {
-                    Sibling::Next(ptr) => SiblingKey::Next(key_for_pointer(ptr)),
-                    Sibling::Previous(ptr) => SiblingKey::Previous(key_for_pointer(ptr)),
-                })
+            .map(|query| match node.nearest_sibling(query) {
+                Sibling::Next(ptr) => SiblingKey::Next(key_for_pointer(ptr)),
+                Sibling::Previous(ptr) => SiblingKey::Previous(key_for_pointer(ptr)),
             })
             .collect()
     }
@@ -1167,20 +1175,15 @@ mod tests {
             let predecessor = child_keys.iter().copied().filter(|k| *k < query).max();
 
             match result {
-                Some(SiblingKey::Next(key)) => assert_eq!(
+                SiblingKey::Next(key) => assert_eq!(
                     Some(key),
                     successor,
                     "query [{query}] returned a next sibling that is not the successor"
                 ),
-                Some(SiblingKey::Previous(key)) => assert_eq!(
+                SiblingKey::Previous(key) => assert_eq!(
                     Some(key),
                     predecessor,
                     "query [{query}] returned a previous sibling that is not the predecessor"
-                ),
-                None => assert!(
-                    successor.is_none() && predecessor.is_none(),
-                    "query [{query}] returned no sibling, expected one of [{successor:?}] or \
-                     [{predecessor:?}]"
                 ),
             }
         }

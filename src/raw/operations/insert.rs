@@ -230,7 +230,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     let sibling = inner_node.nearest_sibling(new_leaf_key_byte);
 
                     match sibling {
-                        Some(Sibling::Next(next_node)) => {
+                        Sibling::Next(next_node) => {
                             // The minimum leaf of the next larger child is the `next` sibling
 
                             // SAFETY: There are no concurrent modifications, the `apply` safety
@@ -242,7 +242,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                             // requirements of the `apply` function.
                             unsafe { LeafNode::insert_before(new_leaf_ptr, next_leaf) };
                         },
-                        Some(Sibling::Previous(previous_node)) => {
+                        Sibling::Previous(previous_node) => {
                             // The maximum leaf of the next smaller child is the `previous` sibling
 
                             // SAFETY: There are no concurrent modifications, the `apply` safety
@@ -253,9 +253,6 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                             // the existing leaf node, or its siblings because of the safety
                             // requirements of the `apply` function.
                             unsafe { LeafNode::insert_after(new_leaf_ptr, previous_leaf) };
-                        },
-                        None => {
-                            unreachable!("the inner node should have at least one other child")
                         },
                     }
                 }
