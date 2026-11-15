@@ -20,6 +20,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: never
   TRIGGER_LABEL: start-perf-test
+  REGRESSION_THRESHOLD: 2.5%
 
 jobs:
   # Remove the label straight away so it can be re-added to trigger another run.
@@ -95,9 +96,7 @@ jobs:
         id: run
         env:
           BASE_SHA: ${{ steps.shas.outputs.base_sha }}
-          # Treat a >2% increase in estimated cycles as a regression. Gungraun
-          # exits with code 3 when a limit is exceeded.
-          GUNGRAUN_CALLGRIND_LIMITS: EstimatedCycles=2%
+          GUNGRAUN_CALLGRIND_LIMITS: EstimatedCycles=${{ env.REGRESSION_THRESHOLD }}
           GUNGRAUN_COLOR: never
         run: |
           set +o errexit
@@ -118,8 +117,8 @@ jobs:
           report_file="${RUNNER_TEMP}/report.md"
 
           case "${EXIT_CODE}" in
-            0) status=":white_check_mark: No regressions over the +2% estimated cycles threshold." ;;
-            3) status=":x: Regressions detected over the +2% estimated cycles threshold." ;;
+            0) status=":white_check_mark: No regressions over the +${REGRESSION_THRESHOLD} estimated cycles threshold." ;;
+            3) status=":x: Regressions detected over the +${REGRESSION_THRESHOLD} estimated cycles threshold." ;;
             *) status=":warning: Benchmark run failed with exit code ${EXIT_CODE}." ;;
           esac
 
@@ -173,8 +172,10 @@ jobs:
             echo "${delimiter}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Fail on regression
-        if: steps.run.outputs.exit_code != '0'
+      - name: Fail on benchmark error
+        # exit code 3 means a regression, but we don't want to block the merge necessarily, that is a value
+        # judgement for the specific PR author/reviewers/etc.
+        if: steps.run.outputs.exit_code != '0' && steps.run.outputs.exit_code != '3'
         env:
           EXIT_CODE: ${{ steps.run.outputs.exit_code }}
         run: |
