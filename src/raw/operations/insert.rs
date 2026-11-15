@@ -5,10 +5,11 @@ use crate::{
     AsBytes,
     hint::unlikely,
     raw::{
-        Descent, DescentEnd, ExplicitMismatch, InnerNode, InnerNode4, InnerNodeCommon, LeafNode,
-        NodePtr, OpaqueNodePtr, Sibling, SkippedPrefixMismatch, TreePath, TreePathSearch, any_leaf,
-        deallocate_tree, leaf_common_prefix_len, locate_skipped_mismatch, match_concrete_node_ptr,
-        maximum_unchecked, minimum_unchecked, optimistic_descent, verify_descent,
+        Descent, DescentEnd, ExplicitMismatch, Header, InnerNode, InnerNode4, InnerNodeCommon,
+        LeafNode, NodePtr, OpaqueNodePtr, Sibling, SkippedPrefixMismatch, TreePath, TreePathSearch,
+        any_leaf, deallocate_tree, leaf_common_prefix_len, locate_skipped_mismatch,
+        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, optimistic_descent,
+        verify_descent,
     },
 };
 
@@ -329,10 +330,10 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     "search should have found different key bytes"
                 );
 
-                // Read the matched portion of the mismatched node's prefix into a new N4 builder.
+                // Read the matched portion of the mismatched node's prefix into the new N4 header.
                 // This must happen before the prefix is trimmed below, because trimming removes
                 // those bytes from the mismatched node's header.
-                let n4_builder = {
+                let n4_header = {
                     // SAFETY: The `header` pointer is bounded to this block and must be pointing to
                     // an existing inner node.
                     let header = unsafe { mismatched_inner_node_ptr.header_ref_unchecked() };
@@ -341,7 +342,7 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                     // common prefix into a new parent node
                     let prefix = header.read_prefix();
                     let prefix = &prefix[..prefix.len().min(mismatch.matched_bytes)];
-                    InnerNode4::builder(prefix, mismatch.matched_bytes)
+                    Header::new(prefix, mismatch.matched_bytes)
                 };
 
                 // Trim the mismatched node's prefix down to the portion below the split point.
@@ -384,14 +385,14 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 let new_leaf_pointer_opaque = new_leaf_pointer.to_opaque();
 
                 let new_n4 = if mismatch.prefix_byte < key_byte {
-                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
-                    // starts empty and we're adding 2 children (out of a capacity of 4)
-                    // in the correct sorted order (given by the if-else condition).
+                    // SAFETY: `if` condition means that `mismatch.prefix_byte` is strictly less
+                    // than `key_byte`.
                     let new_n4 = unsafe {
-                        n4_builder
-                            .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr)
-                            .write_child_unchecked(key_byte, new_leaf_pointer_opaque)
-                            .build()
+                        InnerNode4::from_two_sorted_children_unchecked(
+                            n4_header,
+                            (mismatch.prefix_byte, mismatched_inner_node_ptr),
+                            (key_byte, new_leaf_pointer_opaque),
+                        )
                     };
 
                     // SAFETY: There are no concurrent modifications, the `apply` safety doc
@@ -404,14 +405,16 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
 
                     new_n4
                 } else {
-                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
-                    // starts empty and we're adding 2 children (out of a capacity of 4)
-                    // in the correct sorted order (given by the if-else condition).
+                    // SAFETY: From the condition of the `if-else`, `key_byte` must be less than or
+                    // equal to `mismatch.prefix_byte`. We know that they can't be equal because 1)
+                    // search guaranteed a mismatch 2) debug_assert, so we know `key_byte` must be
+                    // strictly less than.
                     let new_n4 = unsafe {
-                        n4_builder
-                            .write_child_unchecked(key_byte, new_leaf_pointer_opaque)
-                            .write_child_unchecked(mismatch.prefix_byte, mismatched_inner_node_ptr)
-                            .build()
+                        InnerNode4::from_two_sorted_children_unchecked(
+                            n4_header,
+                            (key_byte, new_leaf_pointer_opaque),
+                            (mismatch.prefix_byte, mismatched_inner_node_ptr),
+                        )
                     };
 
                     // SAFETY: There are no concurrent modifications, the `apply` safety doc
@@ -469,24 +472,20 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
                 );
 
                 let prefix_len = new_key_bytes_used - key_bytes_used;
-                let n4_builder =
-                    InnerNode4::builder(&prefix[..prefix_len.min(PREFIX_LEN)], prefix_len);
+                let n4_header = Header::new(&prefix[..prefix_len.min(PREFIX_LEN)], prefix_len);
 
                 let new_leaf_node_pointer =
                     NodePtr::allocate_node_ptr(LeafNode::with_no_siblings(key, value), alloc);
 
                 let new_n4 = if leaf_node_key_byte < new_leaf_node_key_byte {
-                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
-                    // starts empty and we're adding 2 children (out of a capacity of 4)
-                    // in the correct sorted order (given by the if-else condition).
+                    // SAFETY: `if` condition means that `leaf_node_key_byte` is strictly less than
+                    // `new_leaf_node_key_byte`.
                     let new_n4 = unsafe {
-                        n4_builder
-                            .write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque())
-                            .write_child_unchecked(
-                                new_leaf_node_key_byte,
-                                new_leaf_node_pointer.to_opaque(),
-                            )
-                            .build()
+                        InnerNode4::from_two_sorted_children_unchecked(
+                            n4_header,
+                            (leaf_node_key_byte, leaf_node_ptr.to_opaque()),
+                            (new_leaf_node_key_byte, new_leaf_node_pointer.to_opaque()),
+                        )
                     };
 
                     // SAFETY: There is no concurrent modification of the new leaf node, the
@@ -496,17 +495,16 @@ impl<K, V, const PREFIX_LEN: usize> InsertPoint<K, V, PREFIX_LEN> {
 
                     new_n4
                 } else {
-                    // SAFETY: The `write_child_unchecked` are safe because we know the builder
-                    // starts empty and we're adding 2 children (out of a capacity of 4)
-                    // in the correct sorted order (given by the if-else condition).
+                    // SAFETY: `if-else` condition means that `new_leaf_node_key_byte` is less than
+                    // OR equal to `leaf_node_key_byte`. We know they are not equal because of the
+                    // condition of the search results, see the `debug_assert_ne!` at top of match
+                    // block.
                     let new_n4 = unsafe {
-                        n4_builder
-                            .write_child_unchecked(
-                                new_leaf_node_key_byte,
-                                new_leaf_node_pointer.to_opaque(),
-                            )
-                            .write_child_unchecked(leaf_node_key_byte, leaf_node_ptr.to_opaque())
-                            .build()
+                        InnerNode4::from_two_sorted_children_unchecked(
+                            n4_header,
+                            (new_leaf_node_key_byte, new_leaf_node_pointer.to_opaque()),
+                            (leaf_node_key_byte, leaf_node_ptr.to_opaque()),
+                        )
                     };
 
                     // SAFETY: There is no concurrent modification of the new leaf node, the

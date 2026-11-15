@@ -159,11 +159,14 @@ pub unsafe fn clone_unchecked<
         // in-order, not reversed
         dfs_stack.extend(inner.iter().rev());
 
-        let mut header = inner.header().clone();
-        header.reset_num_children();
-        let new_node = N::from_header(header);
+        // SAFETY: We're creating a new empty inner node here, which is dangerous until we can fill
+        // it with children. We're not at risk of anything happening because the new inner node is
+        // only (1) allocated (2) placed on stack (3) children written to it (4, finally) popped off
+        // stack once it has all expected children. The expected number of children is greater than
+        // or equal to 2 because the input inner node was also valid.
+        let new_node = unsafe { N::from_header(inner.header().clone()) };
         // At this point the header records 0 children, but has a copy of the prefix
-        // from the original node There are no child pointers in the node
+        // from the original node. There are no child pointers in the node.
 
         let new_node_ptr = NodePtr::allocate_node_ptr(new_node, alloc);
 

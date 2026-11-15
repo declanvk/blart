@@ -682,15 +682,18 @@ impl<K, V, const PREFIX_LEN: usize> InnerNodePathElem<K, V, PREFIX_LEN> {
 
             macro_rules! build_inner_node {
                 ($t:ident) => {{
-                    let mut builder = $t::builder(prefix_bytes, pos.prefix_length)
-                        .write_child(*first_byte, *first_child)
-                        .write_child(*second_byte, *second_child);
+                    let mut node = $t::from_two_children(
+                        prefix_bytes,
+                        pos.prefix_length,
+                        (*first_byte, *first_child),
+                        (*second_byte, *second_child),
+                    );
 
                     for (byte, child) in children_rest {
-                        builder = builder.write_child(*byte, *child);
+                        node.write_child(*byte, *child);
                     }
 
-                    NodePtr::allocate_node_ptr(builder.build(), alloc).into()
+                    NodePtr::allocate_node_ptr(node, alloc).into()
                 }};
             }
 
