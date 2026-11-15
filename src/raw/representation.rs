@@ -230,6 +230,10 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ExplicitMismatch<K, V, PREFIX
     }
 }
 
+/// A `(key_byte, child_pointer)` pair which represents an edge in the tree from an inner node to
+/// one of its children.
+pub type ChildEdge<K, V, const PREFIX_LEN: usize> = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
+
 /// This trait contains all the functions/types that every inner node must
 /// implement.
 ///
@@ -273,8 +277,8 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     fn from_two_children(
         prefix: &[u8],
         prefix_len: usize,
-        first: (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
-        second: (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
+        first: ChildEdge<K, V, PREFIX_LEN>,
+        second: ChildEdge<K, V, PREFIX_LEN>,
     ) -> Self {
         assert_ne!(
             first.0, second.0,
@@ -313,16 +317,14 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
 
     /// Create an iterator over all `(key bytes, child pointers)` in this inner
     /// node.
-    fn iter(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator;
+    fn iter(&self) -> impl DoubleEndedIterator<Item = ChildEdge<K, V, PREFIX_LEN>> + FusedIterator;
 
     /// Create an iterator over a subset of `(key bytes, child pointers)`, using
     /// the given `bound` as a restriction on the set of key bytes.
     fn range(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator;
+    ) -> impl DoubleEndedIterator<Item = ChildEdge<K, V, PREFIX_LEN>> + FusedIterator;
 
     /// Compares the compressed path of a node with the key and returns the
     /// number of equal bytes.
@@ -420,7 +422,7 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     /// have collapsed) so in this way we can avoid the [`Option`]. This is safe
     /// because if we had no children this current node should have been
     /// deleted.
-    fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
+    fn min(&self) -> ChildEdge<K, V, PREFIX_LEN>;
 
     /// Returns the maximum child pointer from this node and it's key
     ///
@@ -429,7 +431,7 @@ pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
     /// have collapsed) so in this way we can avoid the [`Option`]. This is safe
     /// because if we had, no children this current node should have been
     /// deleted.
-    fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
+    fn max(&self) -> ChildEdge<K, V, PREFIX_LEN>;
 
     /// Returns any child pointer from this node, preferring children that are
     /// pointers to leaf nodes.

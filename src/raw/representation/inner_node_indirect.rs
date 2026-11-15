@@ -10,8 +10,8 @@ use core::{
 use self::index::NonMaxIndex;
 use super::Sibling;
 use crate::raw::{
-    Header, InnerNode, InnerNode16, InnerNodeCommon, InnerNodeDirect, InnerNodeSorted, LeafNode,
-    Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
+    ChildEdge, Header, InnerNode, InnerNode16, InnerNodeCommon, InnerNodeDirect, InnerNodeSorted,
+    LeafNode, Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
 };
 
 mod index;
@@ -269,10 +269,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         Some(unsafe { MaybeUninit::assume_init(child_ptr) })
     }
 
-    fn iter(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
-    {
+    fn iter(&self) -> impl DoubleEndedIterator<Item = ChildEdge<K, V, PREFIX_LEN>> + FusedIterator {
         let child_pointers = self.initialized_child_pointers();
 
         NodeIndirectIter {
@@ -284,8 +281,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
     fn range(
         &self,
         bound: impl core::ops::RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
-    {
+    ) -> impl DoubleEndedIterator<Item = ChildEdge<K, V, PREFIX_LEN>> + FusedIterator {
         assert_valid_range_bounds(&bound);
 
         let child_pointers = self.initialized_child_pointers();
@@ -317,7 +313,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
     }
 
     #[cfg_attr(all(test, feature = "nightly"), mutants::skip)]
-    fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
+    fn min(&self) -> ChildEdge<K, V, PREFIX_LEN> {
         cfg_select! {
             feature = "nightly" => {
                 let child_indices = NonMaxIndex::transmute_child_indices_to_u8(&self.child_indices);
@@ -382,7 +378,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
     }
 
     #[cfg_attr(all(test, feature = "nightly"), mutants::skip)]
-    fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
+    fn max(&self) -> ChildEdge<K, V, PREFIX_LEN> {
         cfg_select! {
             feature = "nightly" => {
                 let child_indices = NonMaxIndex::transmute_child_indices_to_u8(&self.child_indices);
@@ -512,7 +508,7 @@ struct NodeIndirectIter<'a, K, V, const PREFIX_LEN: usize> {
 }
 
 impl<K, V, const PREFIX_LEN: usize> Iterator for NodeIndirectIter<'_, K, V, PREFIX_LEN> {
-    type Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>);
+    type Item = ChildEdge<K, V, PREFIX_LEN>;
 
     fn next(&mut self) -> Option<Self::Item> {
         for (key, idx) in self.it.by_ref() {
@@ -722,7 +718,7 @@ mod tests {
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
             node: &InnerNode48<K, V, PREFIX_LEN>,
             bound: impl RangeBounds<u8>,
-            expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
+            expected_pairs: [ChildEdge<K, V, PREFIX_LEN>; N],
         ) {
             let pairs = node.range(bound).collect::<Vec<_>>();
             assert_eq!(pairs, expected_pairs);
@@ -793,7 +789,7 @@ mod tests {
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
             node: &InnerNode48<K, V, PREFIX_LEN>,
             bound: impl RangeBounds<u8>,
-            expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
+            expected_pairs: [ChildEdge<K, V, PREFIX_LEN>; N],
         ) {
             let pairs = node.range(bound).collect::<Vec<_>>();
             assert_eq!(pairs, expected_pairs);

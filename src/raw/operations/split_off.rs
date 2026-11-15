@@ -9,8 +9,8 @@ use core::{
 use crate::{
     AsBytes, OpaqueNodePtr,
     raw::{
-        ConcreteInnerNodePtr, InnerNode, InnerNode4, InnerNode16, InnerNode48, InnerNodeCommon,
-        InnerNodeDirect, InnerNodeType, LeafNode, NodePtr, PrefixMatch,
+        ChildEdge, ConcreteInnerNodePtr, InnerNode, InnerNode4, InnerNode16, InnerNode48,
+        InnerNodeCommon, InnerNodeDirect, InnerNodeType, LeafNode, NodePtr, PrefixMatch,
         match_concrete_inner_node_ptr, match_concrete_node_ptr,
         operations::{maximum_unchecked, minimum_unchecked},
     },
@@ -604,9 +604,9 @@ struct InnerNodePathElem<K, V, const PREFIX_LEN: usize> {
     /// Pointer to the inner node
     inner_node_ptr: ConcreteInnerNodePtr<K, V, PREFIX_LEN>,
     /// The children with a key byte less than `pos.next_key_fragment`, in order
-    left_children: Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
+    left_children: Vec<ChildEdge<K, V, PREFIX_LEN>>,
     /// The children with a key byte greater than `pos.next_key_fragment`, in order
-    right_children: Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
+    right_children: Vec<ChildEdge<K, V, PREFIX_LEN>>,
     /// The position of the inner node relative to the split key
     pos: InnerNodeKeyPosition,
 }
@@ -663,7 +663,7 @@ impl<K, V, const PREFIX_LEN: usize> InnerNodePathElem<K, V, PREFIX_LEN> {
         /// children, then insert those children.
         fn allocate_node_for_children<K, V, const PREFIX_LEN: usize>(
             key_bytes: &[u8],
-            children: &Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
+            children: &Vec<ChildEdge<K, V, PREFIX_LEN>>,
             pos: &InnerNodeKeyPosition,
             alloc: &impl Allocator,
         ) -> ConcreteInnerNodePtr<K, V, PREFIX_LEN> {
@@ -733,8 +733,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNodePathElem<K, V, PREFIX_LEN> {
         unsafe fn split_side<K, V, const PREFIX_LEN: usize, N>(
             inner_node_ptr: NodePtr<PREFIX_LEN, N>,
             key_bytes: &[u8],
-            keep: &Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
-            discard: &[(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)],
+            keep: &Vec<ChildEdge<K, V, PREFIX_LEN>>,
+            discard: &[ChildEdge<K, V, PREFIX_LEN>],
             stale_path_slot: Option<u8>,
             pos: &InnerNodeKeyPosition,
             did_consume_parent: &mut bool,
@@ -814,8 +814,8 @@ impl<K, V, const PREFIX_LEN: usize> InnerNodePathElem<K, V, PREFIX_LEN> {
         unsafe fn split_inner_node<K, V, const PREFIX_LEN: usize, N>(
             inner_node_ptr: NodePtr<PREFIX_LEN, N>,
             key_bytes: &[u8],
-            left_children: Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
-            right_children: Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
+            left_children: Vec<ChildEdge<K, V, PREFIX_LEN>>,
+            right_children: Vec<ChildEdge<K, V, PREFIX_LEN>>,
             stale_path_slot: Option<u8>,
             pos: InnerNodeKeyPosition,
             alloc: &impl Allocator,

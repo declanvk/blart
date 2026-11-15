@@ -12,8 +12,8 @@ use core::{
 };
 
 use crate::raw::{
-    Header, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeDirect, InnerNodeIndirect, LeafNode,
-    Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
+    ChildEdge, Header, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeDirect, InnerNodeIndirect,
+    LeafNode, Node, NodeType, OpaqueNodePtr, representation::assert_valid_range_bounds,
 };
 
 /// Where a write should happen inside the node
@@ -164,8 +164,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
     /// `second`.
     pub unsafe fn from_two_sorted_children_unchecked(
         header: Header<PREFIX_LEN>,
-        first: (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
-        second: (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
+        first: ChildEdge<K, V, PREFIX_LEN>,
+        second: ChildEdge<K, V, PREFIX_LEN>,
     ) -> Self {
         const {
             assert!(
@@ -477,18 +477,14 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         Some(unsafe { MaybeUninit::assume_init(child_ptr) })
     }
 
-    fn iter(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
-    {
+    fn iter(&self) -> impl DoubleEndedIterator<Item = ChildEdge<K, V, PREFIX_LEN>> + FusedIterator {
         self.inner_iter()
     }
 
     fn range(
         &self,
         bound: impl RangeBounds<u8>,
-    ) -> impl DoubleEndedIterator<Item = (u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> + FusedIterator
-    {
+    ) -> impl DoubleEndedIterator<Item = ChildEdge<K, V, PREFIX_LEN>> + FusedIterator {
         assert_valid_range_bounds(&bound);
 
         fn fixup_bound_lookup(bound: Bound<WritePoint>, is_start: bool) -> Bound<usize> {
@@ -563,7 +559,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         keys.iter().copied().zip(nodes.iter().copied())
     }
 
-    fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
+    fn min(&self) -> ChildEdge<K, V, PREFIX_LEN> {
         let (keys, children) = self.initialized_portion();
         // SAFETY: An inner node always has at least two children (see
         // `InnerNodeCommon::from_header`), so `keys` and `children` are non-empty.
@@ -575,7 +571,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         }
     }
 
-    fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
+    fn max(&self) -> ChildEdge<K, V, PREFIX_LEN> {
         let (keys, children) = self.initialized_portion();
         // SAFETY: An inner node always has at least two children (see
         // `InnerNodeCommon::from_header`), so `keys` and `children` are non-empty.
@@ -933,7 +929,7 @@ mod tests {
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
             node: &InnerNodeSorted<K, V, PREFIX_LEN, 4>,
             bound: impl RangeBounds<u8>,
-            expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
+            expected_pairs: [ChildEdge<K, V, PREFIX_LEN>; N],
         ) {
             let pairs = node.range(bound).collect::<Vec<_>>();
             assert_eq!(pairs, expected_pairs);
@@ -999,7 +995,7 @@ mod tests {
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
             node: &InnerNodeSorted<K, V, PREFIX_LEN, 4>,
             bound: impl RangeBounds<u8>,
-            expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
+            expected_pairs: [ChildEdge<K, V, PREFIX_LEN>; N],
         ) {
             let pairs = node.range(bound).collect::<Vec<_>>();
             assert_eq!(pairs, expected_pairs);
@@ -1147,7 +1143,7 @@ mod tests {
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
             node: &InnerNodeSorted<K, V, PREFIX_LEN, 16>,
             bound: impl RangeBounds<u8>,
-            expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
+            expected_pairs: [ChildEdge<K, V, PREFIX_LEN>; N],
         ) {
             let pairs = node.range(bound).collect::<Vec<_>>();
             assert_eq!(pairs, expected_pairs);
@@ -1218,7 +1214,7 @@ mod tests {
         fn check<K, V, const PREFIX_LEN: usize, const N: usize>(
             node: &InnerNodeSorted<K, V, PREFIX_LEN, 16>,
             bound: impl RangeBounds<u8>,
-            expected_pairs: [(u8, OpaqueNodePtr<K, V, PREFIX_LEN>); N],
+            expected_pairs: [ChildEdge<K, V, PREFIX_LEN>; N],
         ) {
             let pairs = node.range(bound).collect::<Vec<_>>();
             assert_eq!(pairs, expected_pairs);
