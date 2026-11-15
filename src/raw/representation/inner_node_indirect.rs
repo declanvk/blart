@@ -462,8 +462,8 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
         *second
     }
 
-    fn nearest_sibling(&self, new_leaf_key_byte: u8) -> Option<Sibling<K, V, PREFIX_LEN>> {
-        (1..=u8::MAX).find_map(|distance| {
+    fn nearest_sibling(&self, new_leaf_key_byte: u8) -> Sibling<K, V, PREFIX_LEN> {
+        let Some(sib) = (1..=u8::MAX).find_map(|distance| {
             new_leaf_key_byte
                 .checked_add(distance)
                 .and_then(|key_byte| self.lookup_child(key_byte))
@@ -474,7 +474,11 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
                         .and_then(|key_byte| self.lookup_child(key_byte))
                         .map(Sibling::Previous)
                 })
-        })
+        }) else {
+            panic!("Inner node has no child other than key byte [{new_leaf_key_byte}]")
+        };
+
+        sib
     }
 }
 
@@ -652,17 +656,17 @@ mod tests {
         assert_eq!(
             results,
             [
-                Some(Next(10)),
-                Some(Next(10)),
-                Some(Next(200)),
-                Some(Previous(10)),
-                Some(Previous(10)),
-                Some(Next(200)),
-                Some(Next(200)),
-                Some(Next(200)),
-                Some(Previous(10)),
-                Some(Previous(200)),
-                Some(Previous(200)),
+                Next(10),
+                Next(10),
+                Next(200),
+                Previous(10),
+                Previous(10),
+                Next(200),
+                Next(200),
+                Next(200),
+                Previous(10),
+                Previous(200),
+                Previous(200),
             ]
         );
     }
