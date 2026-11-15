@@ -1,0 +1,208 @@
+name: Perf Test
+
+# Triggered by adding the `start-perf-test` label to a PR. Runs the callgrind
+# benchmarks at the PR's branch point (merge base with the base branch) and then
+# at the PR head, and reports the comparison in the job summary and as a PR
+# comment.
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+# Include the label name so that adding an unrelated label does not cancel an
+# in-progress perf test.
+concurrency:
+  group: perf-test-${{ github.event.pull_request.number }}-${{ github.event.label.name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  TRIGGER_LABEL: start-perf-test
+
+jobs:
+  # Remove the label straight away so it can be re-added to trigger another run.
+  remove-label:
+    if: github.event.label.name == 'start-perf-test'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove trigger label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Fork PRs only get a read-only token, so this can fail. Warn rather
+          # than fail the run; the label then has to be removed by hand.
+          if ! gh api --method DELETE "repos/${REPO}/issues/${PR_NUMBER}/labels/${TRIGGER_LABEL}" > /dev/null; then
+            echo "::warning::Could not remove the '${TRIGGER_LABEL}' label, remove it manually before re-running."
+          fi
+
+  # Runs PR code, so it only gets a read-only token and does not persist
+  # credentials in the checkout.
+  bench:
+    if: github.event.label.name == 'start-perf-test'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      report: ${{ steps.report.outputs.report }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve branch point
+        id: shas
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          branch_point="$(git merge-base "${BASE_SHA}" "${HEAD_SHA}")"
+          echo "PR head: ${HEAD_SHA}"
+          echo "Branch point: ${branch_point}"
+          echo "head_sha=${HEAD_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "base_sha=${branch_point}" >> "${GITHUB_OUTPUT}"
+
+      # `bench-against.sh` uses `git switch -` to come back, which needs a
+      # branch rather than a detached HEAD.
+      - name: Create local branch for PR head
+        run: git switch --create perf-test-head
+
+      - name: Resolve version
+        id: resolve_version
+        run: echo "version=$(./scripts/resolve-toolchain-version.sh stable)" >> "${GITHUB_OUTPUT}"
+
+      - name: Install ${{ steps.resolve_version.outputs.version }} toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: ${{ steps.resolve_version.outputs.version }}
+
+      - uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
+        with:
+          tool: cargo-binstall
+
+      - name: Setup gungraun-runner and Valgrind
+        uses: gungraun/setup-gungraun@62591572561bb2f4ed2ae300b8a8bea99ea8ddaf # v1.1.3
+
+      - name: Run benchmarks against branch point
+        id: run
+        env:
+          BASE_SHA: ${{ steps.shas.outputs.base_sha }}
+          # Treat a >2% increase in estimated cycles as a regression. Gungraun
+          # exits with code 3 when a limit is exceeded.
+          GUNGRAUN_CALLGRIND_LIMITS: EstimatedCycles=2%
+          GUNGRAUN_COLOR: never
+        run: |
+          set +o errexit
+          ./scripts/bench-against.sh "${BASE_SHA}" 2>&1 | tee "${RUNNER_TEMP}/bench-output.txt"
+          exit_code="${PIPESTATUS[0]}"
+          echo "exit_code=${exit_code}" >> "${GITHUB_OUTPUT}"
+          echo "bench-against.sh exited with ${exit_code}"
+
+      - name: Build report
+        id: report
+        env:
+          BASE_SHA: ${{ steps.shas.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.shas.outputs.head_sha }}
+          EXIT_CODE: ${{ steps.run.outputs.exit_code }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          output_file="${RUNNER_TEMP}/bench-output.txt"
+          report_file="${RUNNER_TEMP}/report.md"
+
+          case "${EXIT_CODE}" in
+            0) status=":white_check_mark: No regressions over the +2% estimated cycles threshold." ;;
+            3) status=":x: Regressions detected over the +2% estimated cycles threshold." ;;
+            *) status=":warning: Benchmark run failed with exit code ${EXIT_CODE}." ;;
+          esac
+
+          # GitHub comments are limited to 65536 characters, leave headroom for
+          # the surrounding markdown.
+          max_chars=60000
+          output="$(cat "${output_file}")"
+          truncated_note=""
+          if (( ${#output} > max_chars )); then
+            output="${output: -max_chars}"
+            truncated_note="_Output truncated to the last ${max_chars} characters, see the [workflow run](${RUN_URL}) for the full log._"
+          fi
+
+          {
+            echo "## Perf test results"
+            echo
+            echo "Comparing PR head \`${HEAD_SHA::10}\` against branch point \`${BASE_SHA::10}\`."
+            echo
+            echo "${status}"
+            echo
+            if [[ "${EXIT_CODE}" == "3" ]]; then
+              echo "### Regressions"
+              echo
+              echo '```'
+              # Gungraun prints a summary of the regressions at the end of the run.
+              sed -n '/^Regressions:/,$p' "${output_file}"
+              echo '```'
+              echo
+            fi
+            echo "<details><summary>Full benchmark output</summary>"
+            echo
+            echo '```'
+            printf '%s\n' "${output}"
+            echo '```'
+            echo
+            echo "</details>"
+            echo
+            if [[ -n "${truncated_note}" ]]; then
+              echo "${truncated_note}"
+              echo
+            fi
+            echo "[Workflow run](${RUN_URL})"
+          } > "${report_file}"
+
+          cat "${report_file}" >> "${GITHUB_STEP_SUMMARY}"
+
+          delimiter="EOF_$(openssl rand -hex 16)"
+          {
+            echo "report<<${delimiter}"
+            cat "${report_file}"
+            echo "${delimiter}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Fail on regression
+        if: steps.run.outputs.exit_code != '0'
+        env:
+          EXIT_CODE: ${{ steps.run.outputs.exit_code }}
+        run: |
+          echo "bench-against.sh exited with ${EXIT_CODE:-<none>}"
+          exit 1
+
+  # Fork PRs only get a read-only token, so they get the job summary only.
+  comment:
+    needs: bench
+    if: >-
+      always()
+      && github.event.label.name == 'start-perf-test'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Post results
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPORT: ${{ needs.bench.outputs.report }}
+          BENCH_RESULT: ${{ needs.bench.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ -z "${REPORT}" ]]; then
+            REPORT="## Perf test results"$'\n\n'":warning: Perf test job ended with \`${BENCH_RESULT}\` before producing a report. See the [workflow run](${RUN_URL})."
+          fi
+          printf '%s\n' "${REPORT}" > report.md
+          gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body-file report.md
