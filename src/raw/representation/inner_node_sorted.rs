@@ -155,6 +155,42 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
         }
     }
 
+    /// Create a new node with the prefix from `header` and exactly two
+    /// children, without checking their order.
+    ///
+    /// # Safety
+    ///
+    /// The key byte of `first` must be strictly less than the key byte of
+    /// `second`.
+    pub unsafe fn from_two_sorted_children_unchecked(
+        header: Header<PREFIX_LEN>,
+        first: (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
+        second: (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
+    ) -> Self {
+        const {
+            assert!(
+                SIZE >= 2,
+                "InnerNodeSorted must be able to hold at least two children"
+            )
+        };
+        debug_assert!(
+            first.0 < second.0,
+            "children must be sorted by key byte and distinct"
+        );
+
+        // SAFETY: Only `write_child_unchecked` is called before the node is
+        // returned, and the caller guarantees the two keys are sorted and
+        // distinct, so the node is left with two children.
+        let mut node = unsafe { Self::from_header(header) };
+        // SAFETY: The node starts empty and `SIZE >= 2` (checked above), so both
+        // writes are in bounds. The caller guarantees the keys are in order.
+        unsafe {
+            node.write_child_unchecked(first.0, first.1);
+            node.write_child_unchecked(second.0, second.1);
+        }
+        node
+    }
+
     /// Writes a child to the node without bounds check or order
     ///
     /// # Safety
@@ -353,8 +389,8 @@ impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeSorted<K, V, PRE
 unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeSorted<K, V, PREFIX_LEN, SIZE>
 {
-    fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
-        use core::mem::MaybeUninit;
+    unsafe fn from_header(mut header: Header<PREFIX_LEN>) -> Self {
+        header.reset_num_children();
         Self {
             header,
             child_pointers: [MaybeUninit::uninit(); SIZE],
@@ -529,8 +565,8 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
 
     fn min(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let (keys, children) = self.initialized_portion();
-        // SAFETY: Any Node4 must have at least 2 children, so the `keys` and `children`
-        // arrays must be non-empty
+        // SAFETY: An inner node always has at least two children (see
+        // `InnerNodeCommon::from_header`), so `keys` and `children` are non-empty.
         unsafe {
             (
                 keys.first().copied().unwrap_unchecked(),
@@ -541,8 +577,8 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
 
     fn max(&self) -> (u8, OpaqueNodePtr<K, V, PREFIX_LEN>) {
         let (keys, children) = self.initialized_portion();
-        // SAFETY: Any Node4 must have at least 2 children, so the `keys` and `children`
-        // arrays must be non-empty
+        // SAFETY: An inner node always has at least two children (see
+        // `InnerNodeCommon::from_header`), so `keys` and `children` are non-empty.
         unsafe {
             (
                 keys.last().copied().unwrap_unchecked(),
@@ -553,18 +589,15 @@ unsafe impl<K, V, const PREFIX_LEN: usize, const SIZE: usize> InnerNodeCommon<K,
 
     fn any_child_prefer_leaf(&self) -> OpaqueNodePtr<K, V, PREFIX_LEN> {
         let (_, children) = self.initialized_portion();
-        // SAFETY: Any Node4 must have at least 2 children, so the `keys` and
-        // `children` arrays must be non-empty
-        unsafe {
-            let first = *children.get_unchecked(0);
-            if first.is::<LeafNode<K, V, PREFIX_LEN>>() {
-                return first;
-            }
-
-            // Must have at least two children right
-
-            *children.get_unchecked(1)
+        // SAFETY: An inner node always has at least two children (see
+        // `InnerNodeCommon::from_header`), so index 0 is in bounds.
+        let first = unsafe { *children.get_unchecked(0) };
+        if first.is::<LeafNode<K, V, PREFIX_LEN>>() {
+            return first;
         }
+
+        // SAFETY: Same as above, index 1 is in bounds.
+        unsafe { *children.get_unchecked(1) }
     }
 }
 
@@ -637,11 +670,9 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        let n = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(123, l2_ptr)
-            .write_child(1, l3_ptr)
-            .build();
+        let mut n =
+            InnerNode4::<Box<[u8]>, (), 16>::from_two_children(&[], 0, (3, l1_ptr), (123, l2_ptr));
+        n.write_child(1, l3_ptr);
 
         assert_eq!(n.lookup_child(123), Some(l2_ptr));
     }
@@ -671,11 +702,9 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        let n4 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(123, l2_ptr)
-            .write_child(1, l3_ptr)
-            .build();
+        let mut n4 =
+            InnerNode4::<Box<[u8]>, (), 16>::from_two_children(&[], 0, (3, l1_ptr), (123, l2_ptr));
+        n4.write_child(1, l3_ptr);
 
         let n16 = n4.grow();
 
@@ -690,10 +719,12 @@ mod tests {
     fn node4_shrink() {
         let mut leaf = LeafNode::<Box<[u8]>, (), 16>::with_no_siblings(vec![].into(), ());
         let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
-        let n4 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
+        let n4 = InnerNode4::<Box<[u8]>, (), 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
 
         n4.shrink();
     }
@@ -712,11 +743,9 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        let n = InnerNode16::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(123, l2_ptr)
-            .write_child(1, l3_ptr)
-            .build();
+        let mut n =
+            InnerNode16::<Box<[u8]>, (), 16>::from_two_children(&[], 0, (3, l1_ptr), (123, l2_ptr));
+        n.write_child(1, l3_ptr);
 
         assert_eq!(n.lookup_child(123), Some(l2_ptr));
     }
@@ -747,11 +776,9 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        let n16 = InnerNode16::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(123, l2_ptr)
-            .write_child(1, l3_ptr)
-            .build();
+        let mut n16 =
+            InnerNode16::<Box<[u8]>, (), 16>::from_two_children(&[], 0, (3, l1_ptr), (123, l2_ptr));
+        n16.write_child(1, l3_ptr);
 
         let _n48 = n16.grow();
     }
@@ -766,10 +793,8 @@ mod tests {
             .map(|l| NodePtr::from(l).to_opaque())
             .collect();
 
-        let mut n16 = InnerNode16::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(0, v[0])
-            .write_child(2, v[1])
-            .build();
+        let mut n16 =
+            InnerNode16::<Box<[u8]>, (), 16>::from_two_children(&[], 0, (0, v[0]), (2, v[1]));
         for i in 2..16u8 {
             n16.write_child(i * 2, v[usize::from(i)]);
         }
@@ -802,7 +827,6 @@ mod tests {
     fn node4_nearest_sibling() {
         type Node = InnerNode4<Box<[u8]>, (), 16>;
 
-        inner_node_nearest_sibling_test::<16, Node>(&[7]);
         inner_node_nearest_sibling_test::<16, Node>(&[10, 200]);
         inner_node_nearest_sibling_test::<16, Node>(&[3, 255, 0, 85]);
         inner_node_nearest_sibling_test::<16, Node>(&[1, 2, 3]);
@@ -812,7 +836,6 @@ mod tests {
     fn node16_nearest_sibling() {
         type Node = InnerNode16<Box<[u8]>, (), 16>;
 
-        inner_node_nearest_sibling_test::<16, Node>(&[7]);
         inner_node_nearest_sibling_test::<16, Node>(&[10, 200]);
         inner_node_nearest_sibling_test::<16, Node>(&[3, 255, 0, 85]);
         inner_node_nearest_sibling_test::<16, Node>(&(0..=u8::MAX).step_by(17).collect::<Vec<_>>());
@@ -847,9 +870,6 @@ mod tests {
                 Some(Previous(200)),
             ]
         );
-
-        let results = nearest_sibling_keys::<16, N>(&[7], [0, 7, 255]);
-        assert_eq!(results, [Some(Next(7)), None, Some(Previous(7))]);
     }
 
     #[test]
@@ -872,12 +892,9 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let n4 = InnerNode4::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(255, l2_ptr)
-            .write_child(0u8, l3_ptr)
-            .write_child(85, l4_ptr)
-            .build();
+        let mut n4 = InnerNode4::from_two_children(&[], 0, (3, l1_ptr), (255, l2_ptr));
+        n4.write_child(0u8, l3_ptr);
+        n4.write_child(85, l4_ptr);
 
         (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }
@@ -967,12 +984,9 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let n4 = InnerNode4::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(254, l2_ptr)
-            .write_child(2u8, l3_ptr)
-            .write_child(85, l4_ptr)
-            .build();
+        let mut n4 = InnerNode4::from_two_children(&[], 0, (3, l1_ptr), (254, l2_ptr));
+        n4.write_child(2u8, l3_ptr);
+        n4.write_child(85, l4_ptr);
 
         (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }
@@ -1092,12 +1106,9 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let n16 = InnerNode16::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(255, l2_ptr)
-            .write_child(0u8, l3_ptr)
-            .write_child(85, l4_ptr)
-            .build();
+        let mut n16 = InnerNode16::from_two_children(&[], 0, (3, l1_ptr), (255, l2_ptr));
+        n16.write_child(0u8, l3_ptr);
+        n16.write_child(85, l4_ptr);
 
         (n16, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }
@@ -1192,12 +1203,9 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let n16 = InnerNode16::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(254, l2_ptr)
-            .write_child(2u8, l3_ptr)
-            .write_child(85, l4_ptr)
-            .build();
+        let mut n16 = InnerNode16::from_two_children(&[], 0, (3, l1_ptr), (254, l2_ptr));
+        n16.write_child(2u8, l3_ptr);
+        n16.write_child(85, l4_ptr);
 
         (n16, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }

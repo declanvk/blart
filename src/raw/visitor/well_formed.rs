@@ -734,24 +734,30 @@ mod tests {
         let l3_ptr = NodePtr::allocate_node_ptr(l3, &Global);
 
         // Build n4_left with both children upfront
-        let n4_left = InnerNode4::builder(&[5, 6], 2)
-            .write_child(1, l1_ptr.to_opaque())
-            .write_child(2, l2_ptr.to_opaque())
-            .build();
+        let n4_left = InnerNode4::from_two_children(
+            &[5, 6],
+            2,
+            (1, l1_ptr.to_opaque()),
+            (2, l2_ptr.to_opaque()),
+        );
         let n4_left_ptr = NodePtr::allocate_node_ptr(n4_left, &Global);
 
         // Build n4_right with l3 and a placeholder; loop child (root) added later
-        let n4_right = InnerNode4::builder(&[7, 8], 2)
-            .write_child(3, l3_ptr.to_opaque())
-            .write_child(4, l3_ptr.to_opaque())
-            .build();
+        let n4_right = InnerNode4::from_two_children(
+            &[7, 8],
+            2,
+            (3, l3_ptr.to_opaque()),
+            (4, l3_ptr.to_opaque()),
+        );
         let n4_right_ptr = NodePtr::allocate_node_ptr(n4_right, &Global);
 
         // Build n16 with n4_left and a placeholder; n4_right added later
-        let n16 = InnerNode16::builder(&[1, 2], 2)
-            .write_child(3, n4_left_ptr.to_opaque())
-            .write_child(4, n4_left_ptr.to_opaque())
-            .build();
+        let n16 = InnerNode16::from_two_children(
+            &[1, 2],
+            2,
+            (3, n4_left_ptr.to_opaque()),
+            (4, n4_left_ptr.to_opaque()),
+        );
 
         // construct root early
         let root = NodePtr::allocate_node_ptr(n16, &Global);
@@ -820,23 +826,15 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let mut n4_left = InnerNode4::builder(&[5, 6], 2)
-            .write_child(1, l1_ptr)
-            .write_child(2, l2_ptr)
-            .build();
+        let mut n4_left = InnerNode4::from_two_children(&[5, 6], 2, (1, l1_ptr), (2, l2_ptr));
 
-        let mut n4_right = InnerNode4::builder(&[7, 8], 2)
-            .write_child(3, l3_ptr)
-            .write_child(4, l4_ptr)
-            .build();
+        let mut n4_right = InnerNode4::from_two_children(&[7, 8], 2, (3, l3_ptr), (4, l4_ptr));
 
         let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
         let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-        let mut n16 = InnerNode16::builder(&[1, 2], 2)
-            .write_child(3, n4_left_ptr)
-            .write_child(4, n4_right_ptr)
-            .build();
+        let mut n16 =
+            InnerNode16::from_two_children(&[1, 2], 2, (3, n4_left_ptr), (4, n4_right_ptr));
 
         let root = NodePtr::from(&mut n16).to_opaque();
 
@@ -936,23 +934,15 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let mut n4_left = InnerNode4::builder(&[5, 6], 2)
-            .write_child(1, l1_ptr)
-            .write_child(2, l2_ptr)
-            .build();
+        let mut n4_left = InnerNode4::from_two_children(&[5, 6], 2, (1, l1_ptr), (2, l2_ptr));
 
-        let mut n4_right = InnerNode4::builder(&[7, 8], 2)
-            .write_child(3, l3_ptr)
-            .write_child(4, l4_ptr)
-            .build();
+        let mut n4_right = InnerNode4::from_two_children(&[7, 8], 2, (3, l3_ptr), (4, l4_ptr));
 
         let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
         let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-        let mut n16 = InnerNode16::builder(&[1, 2], 2)
-            .write_child(3, n4_left_ptr)
-            .write_child(4, n4_right_ptr)
-            .build();
+        let mut n16 =
+            InnerNode16::from_two_children(&[1, 2], 2, (3, n4_left_ptr), (4, n4_right_ptr));
 
         let root = NodePtr::from(&mut n16).to_opaque();
 

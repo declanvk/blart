@@ -18,11 +18,7 @@ fn lookup_on_non_copy_leaf() {
     let l1_ptr: OpaqueNodePtr<Box<[u8]>, String, 16> = NodePtr::from(&mut l1).to_opaque();
     let l2_ptr = NodePtr::from(&mut l2).to_opaque();
 
-    let mut inner_node = InnerNode4::builder(&[1, 2], 2)
-        // Update inner node prefix and child slots
-        .write_child(3, l1_ptr)
-        .write_child(4, l2_ptr)
-        .build();
+    let mut inner_node = InnerNode4::from_two_children(&[1, 2], 2, (3, l1_ptr), (4, l2_ptr));
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
@@ -69,13 +65,9 @@ fn lookup_on_full_node4() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode4::builder(&[1, 2], 2)
-        // Update inner node prefix and child slots
-        .write_child(1, l1_ptr)
-        .write_child(2, l2_ptr)
-        .write_child(3, l3_ptr)
-        .write_child(4, l4_ptr)
-        .build();
+    let mut inner_node = InnerNode4::from_two_children(&[1, 2], 2, (1, l1_ptr), (2, l2_ptr));
+    inner_node.write_child(3, l3_ptr);
+    inner_node.write_child(4, l4_ptr);
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
@@ -131,13 +123,9 @@ fn lookup_on_node16() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode16::builder(&[1, 2], 2)
-        // Update inner node prefix and child slots
-        .write_child(1, l1_ptr)
-        .write_child(2, l2_ptr)
-        .write_child(3, l3_ptr)
-        .write_child(4, l4_ptr)
-        .build();
+    let mut inner_node = InnerNode16::from_two_children(&[1, 2], 2, (1, l1_ptr), (2, l2_ptr));
+    inner_node.write_child(3, l3_ptr);
+    inner_node.write_child(4, l4_ptr);
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
@@ -193,13 +181,9 @@ fn lookup_on_node48() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNode48::builder(&[1, 2], 2)
-        // Update inner node prefix and child slots
-        .write_child(1, l1_ptr)
-        .write_child(2, l2_ptr)
-        .write_child(3, l3_ptr)
-        .write_child(4, l4_ptr)
-        .build();
+    let mut inner_node = InnerNode48::from_two_children(&[1, 2], 2, (1, l1_ptr), (2, l2_ptr));
+    inner_node.write_child(3, l3_ptr);
+    inner_node.write_child(4, l4_ptr);
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
@@ -255,13 +239,9 @@ fn lookup_on_node256() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut inner_node = InnerNodeDirect::builder(&[1, 2], 2)
-        // Update inner node prefix and child slots
-        .write_child(1, l1_ptr)
-        .write_child(2, l2_ptr)
-        .write_child(3, l3_ptr)
-        .write_child(4, l4_ptr)
-        .build();
+    let mut inner_node = InnerNodeDirect::from_two_children(&[1, 2], 2, (1, l1_ptr), (2, l2_ptr));
+    inner_node.write_child(3, l3_ptr);
+    inner_node.write_child(4, l4_ptr);
 
     let root = NodePtr::from(&mut inner_node).to_opaque();
 
@@ -346,23 +326,14 @@ fn lookup_on_n16_n4_layer_tree() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut n4_left = InnerNode4::builder(&[5, 6], 2)
-        .write_child(1, l1_ptr)
-        .write_child(2, l2_ptr)
-        .build();
+    let mut n4_left = InnerNode4::from_two_children(&[5, 6], 2, (1, l1_ptr), (2, l2_ptr));
 
-    let mut n4_right = InnerNode4::builder(&[7, 8], 2)
-        .write_child(3, l3_ptr)
-        .write_child(4, l4_ptr)
-        .build();
+    let mut n4_right = InnerNode4::from_two_children(&[7, 8], 2, (3, l3_ptr), (4, l4_ptr));
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    let mut n16 = InnerNode16::builder(&[1, 2], 2)
-        .write_child(3, n4_left_ptr)
-        .write_child(4, n4_right_ptr)
-        .build();
+    let mut n16 = InnerNode16::from_two_children(&[1, 2], 2, (3, n4_left_ptr), (4, n4_right_ptr));
 
     let root = NodePtr::from(&mut n16).to_opaque();
 
@@ -427,23 +398,14 @@ fn lookup_on_n48_n4_layer_tree() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut n4_left = InnerNode4::builder(&[5, 6], 2)
-        .write_child(1, l1_ptr)
-        .write_child(2, l2_ptr)
-        .build();
+    let mut n4_left = InnerNode4::from_two_children(&[5, 6], 2, (1, l1_ptr), (2, l2_ptr));
 
-    let mut n4_right = InnerNode4::builder(&[7, 8], 2)
-        .write_child(3, l3_ptr)
-        .write_child(4, l4_ptr)
-        .build();
+    let mut n4_right = InnerNode4::from_two_children(&[7, 8], 2, (3, l3_ptr), (4, l4_ptr));
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    let mut n48 = InnerNode4::builder(&[1, 2], 2)
-        .write_child(3, n4_left_ptr)
-        .write_child(4, n4_right_ptr)
-        .build();
+    let mut n48 = InnerNode4::from_two_children(&[1, 2], 2, (3, n4_left_ptr), (4, n4_right_ptr));
 
     let root = NodePtr::from(&mut n48).to_opaque();
 
@@ -508,23 +470,15 @@ fn lookup_on_n256_n4_layer_tree() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut n4_left = InnerNode4::builder(&[5, 6], 2)
-        .write_child(1, l1_ptr)
-        .write_child(2, l2_ptr)
-        .build();
+    let mut n4_left = InnerNode4::from_two_children(&[5, 6], 2, (1, l1_ptr), (2, l2_ptr));
 
-    let mut n4_right = InnerNode4::builder(&[7, 8], 2)
-        .write_child(3, l3_ptr)
-        .write_child(4, l4_ptr)
-        .build();
+    let mut n4_right = InnerNode4::from_two_children(&[7, 8], 2, (3, l3_ptr), (4, l4_ptr));
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    let mut n256 = InnerNodeDirect::builder(&[1, 2], 2)
-        .write_child(3, n4_left_ptr)
-        .write_child(4, n4_right_ptr)
-        .build();
+    let mut n256 =
+        InnerNodeDirect::from_two_children(&[1, 2], 2, (3, n4_left_ptr), (4, n4_right_ptr));
 
     let root = NodePtr::from(&mut n256).to_opaque();
 
@@ -589,23 +543,14 @@ fn lookup_on_n4_n4_layer_tree() {
     let l3_ptr = NodePtr::from(&mut l3).to_opaque();
     let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-    let mut n4_left = InnerNode4::builder(&[5, 6], 2)
-        .write_child(1, l1_ptr)
-        .write_child(2, l2_ptr)
-        .build();
+    let mut n4_left = InnerNode4::from_two_children(&[5, 6], 2, (1, l1_ptr), (2, l2_ptr));
 
-    let mut n4_right = InnerNode4::builder(&[7, 8], 2)
-        .write_child(3, l3_ptr)
-        .write_child(4, l4_ptr)
-        .build();
+    let mut n4_right = InnerNode4::from_two_children(&[7, 8], 2, (3, l3_ptr), (4, l4_ptr));
 
     let n4_left_ptr = NodePtr::from(&mut n4_left).to_opaque();
     let n4_right_ptr = NodePtr::from(&mut n4_right).to_opaque();
 
-    let mut n4 = InnerNode4::builder(&[1, 2], 2)
-        .write_child(3, n4_left_ptr)
-        .write_child(4, n4_right_ptr)
-        .build();
+    let mut n4 = InnerNode4::from_two_children(&[1, 2], 2, (3, n4_left_ptr), (4, n4_right_ptr));
 
     let root = NodePtr::from(&mut n4).to_opaque();
 

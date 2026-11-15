@@ -601,22 +601,30 @@ mod tests {
         let mut leaf = LeafNode::<Box<[u8]>, usize, 16>::with_no_siblings(vec![].into(), 0);
         let leaf_ptr: OpaqueNodePtr<Box<[u8]>, usize, 16> = NodePtr::from(&mut leaf).to_opaque();
 
-        let mut n4 = InnerNode4::<Box<[u8]>, usize, 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
-        let mut n16 = InnerNode16::<Box<[u8]>, usize, 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
-        let mut n48 = InnerNode48::<Box<[u8]>, usize, 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
-        let mut n256 = InnerNodeDirect::<Box<[u8]>, usize, 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
+        let mut n4 = InnerNode4::<Box<[u8]>, usize, 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
+        let mut n16 = InnerNode16::<Box<[u8]>, usize, 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
+        let mut n48 = InnerNode48::<Box<[u8]>, usize, 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
+        let mut n256 = InnerNodeDirect::<Box<[u8]>, usize, 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
 
         let n4_ptr = NodePtr::from(&mut n4).to_opaque();
         let n16_ptr = NodePtr::from(&mut n16).to_opaque();

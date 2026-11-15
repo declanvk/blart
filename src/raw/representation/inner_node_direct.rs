@@ -73,7 +73,8 @@ impl<K, V, const PREFIX_LEN: usize> Clone for InnerNodeDirect<K, V, PREFIX_LEN> 
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeDirect<K, V, PREFIX_LEN>
 {
-    fn from_header(header: super::Header<PREFIX_LEN>) -> Self {
+    unsafe fn from_header(mut header: Header<PREFIX_LEN>) -> Self {
+        header.reset_num_children();
         Self {
             header,
             child_pointers: [None; 256],
@@ -308,11 +309,13 @@ mod tests {
         let l2_ptr = NodePtr::from(&mut l2).to_opaque();
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
 
-        let n = InnerNodeDirect::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(1, l1_ptr)
-            .write_child(123, l2_ptr)
-            .write_child(3, l3_ptr)
-            .build();
+        let mut n = InnerNodeDirect::<Box<[u8]>, (), 16>::from_two_children(
+            &[],
+            0,
+            (1, l1_ptr),
+            (123, l2_ptr),
+        );
+        n.write_child(3, l3_ptr);
 
         assert_eq!(n.lookup_child(123), Some(l2_ptr));
     }
@@ -332,10 +335,12 @@ mod tests {
     fn grow() {
         let mut leaf = LeafNode::<Box<[u8]>, (), 16>::with_no_siblings(vec![].into(), ());
         let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
-        let n = InnerNodeDirect::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
+        let n = InnerNodeDirect::<Box<[u8]>, (), 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
 
         n.grow();
     }
@@ -361,7 +366,6 @@ mod tests {
     fn nearest_sibling() {
         type Node = InnerNodeDirect<Box<[u8]>, (), 16>;
 
-        inner_node_nearest_sibling_test::<16, Node>(&[7]);
         inner_node_nearest_sibling_test::<16, Node>(&[10, 200]);
         inner_node_nearest_sibling_test::<16, Node>(&[3, 255, 0, 85]);
         inner_node_nearest_sibling_test::<16, Node>(&(0..=u8::MAX).step_by(2).collect::<Vec<_>>());
@@ -396,21 +400,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn nearest_sibling_single_child() {
-        let results =
-            nearest_sibling_keys::<16, InnerNodeDirect<Box<[u8]>, (), 16>>(&[7], [0, 7, 255]);
-
-        assert_eq!(
-            results,
-            [
-                Some(SiblingKey::Next(7)),
-                None,
-                Some(SiblingKey::Previous(7))
-            ]
-        );
-    }
-
     fn fixture() -> FixtureReturn<InnerNodeDirect<Box<[u8]>, (), 16>, 4> {
         let mut l1 = LeafNode::with_no_siblings(vec![].into(), ());
         let mut l2 = LeafNode::with_no_siblings(vec![].into(), ());
@@ -421,12 +410,9 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let n256 = InnerNodeDirect::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(255, l2_ptr)
-            .write_child(0u8, l3_ptr)
-            .write_child(85, l4_ptr)
-            .build();
+        let mut n256 = InnerNodeDirect::from_two_children(&[], 0, (3, l1_ptr), (255, l2_ptr));
+        n256.write_child(0u8, l3_ptr);
+        n256.write_child(85, l4_ptr);
 
         (n256, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }
@@ -521,12 +507,9 @@ mod tests {
         let l3_ptr = NodePtr::from(&mut l3).to_opaque();
         let l4_ptr = NodePtr::from(&mut l4).to_opaque();
 
-        let n4 = InnerNodeDirect::builder(&[], 0)
-            .write_child(3, l1_ptr)
-            .write_child(254, l2_ptr)
-            .write_child(2u8, l3_ptr)
-            .write_child(85, l4_ptr)
-            .build();
+        let mut n4 = InnerNodeDirect::from_two_children(&[], 0, (3, l1_ptr), (254, l2_ptr));
+        n4.write_child(2u8, l3_ptr);
+        n4.write_child(85, l4_ptr);
 
         (n4, [l1, l2, l3, l4], [l1_ptr, l2_ptr, l3_ptr, l4_ptr])
     }

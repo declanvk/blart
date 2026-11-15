@@ -4,7 +4,6 @@ use core::{
     cmp::Ordering,
     fmt,
     iter::FusedIterator,
-    marker::PhantomData,
     ops::{Bound, RangeBounds, RangeInclusive},
 };
 
@@ -243,28 +242,51 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for ExplicitMismatch<K, V, PREFIX
 /// All structures that implement this trait must be `repr(C)` and have a
 /// [`Header`] as the first field of the struct.
 pub unsafe trait InnerNodeCommon<K, V, const PREFIX_LEN: usize>: Sized {
-    /// Create a new inner empty inner node from the given header.
+    /// Create a new inner node with no children, using the prefix from `header`.
     ///
-    /// # Safety (sorta?)
+    /// The child count stored in the given `header` must be reset to zero by the
+    /// implementation, since the returned node has no children and not resetting
+    /// can cause UB.
     ///
-    /// Many of the operations inside the `raw` module will assume that an inner node has two or
-    /// more children, so you need to be very careful. Ideally this should only be used in a context
-    /// where you're immediatelly filling the inner node with more children.
-    fn from_header(header: Header<PREFIX_LEN>) -> Self;
+    /// Prefer [`from_two_children`](Self::from_two_children), which upholds the
+    /// contract below.
+    ///
+    /// # Safety
+    ///
+    /// The new inner node has zero children, which violates assumptions that other inner node
+    /// operations make that every inner node has at least two distinct children. Until two distinct
+    /// children are inserted into the inner node, callers may only:
+    ///  - write children to the node (`write_child` or a type-specific `write_child_unchecked`),
+    ///  - read [`header`](Self::header) from the node
+    ///  - move, allocate, or store a pointer to the node
+    ///
+    /// Calling any other method on the node before it has two distinct children is undefined
+    /// behavior.
+    unsafe fn from_header(header: Header<PREFIX_LEN>) -> Self;
 
-    /// Create a builder for constructing an inner node with at least one child.
+    /// Create a new inner node with the given prefix and exactly two
+    /// children.
     ///
-    /// The builder uses the typestate pattern to ensure
-    /// [`InnerNodeBuilder::build`] cannot be called until at least one
-    /// child has been added via [`InnerNodeBuilder::write_child`].
-    fn builder(
+    /// # Panics
+    ///
+    /// Panics if both entries have the same key byte.
+    fn from_two_children(
         prefix: &[u8],
         prefix_len: usize,
-    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, Self, NoChild> {
-        InnerNodeBuilder {
-            node: Self::from_header(Header::new(prefix, prefix_len)),
-            _state: PhantomData,
-        }
+        first: (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
+        second: (u8, OpaqueNodePtr<K, V, PREFIX_LEN>),
+    ) -> Self {
+        assert_ne!(
+            first.0, second.0,
+            "The two children of a new inner node must have distinct key bytes"
+        );
+
+        // SAFETY: Only `write_child` is called before the node is returned, and
+        // the assert above ensures the two writes leave it with two children.
+        let mut node = unsafe { Self::from_header(Header::new(prefix, prefix_len)) };
+        node.write_child(first.0, first.1);
+        node.write_child(second.0, second.1);
+        node
     }
 
     /// Get the `Header` from the [`InnerNode`]
@@ -472,154 +494,6 @@ pub trait InnerNode<const PREFIX_LEN: usize>:
     /// Returns true if this node has no more space to store children.
     fn is_full(&self) -> bool {
         self.header().num_children() >= *Self::TYPE.capacity_range().end()
-    }
-}
-
-/// Marker type for [`InnerNodeBuilder`]: no children have been added yet.
-pub struct NoChild;
-
-/// Marker type for [`InnerNodeBuilder`]: exactly one child has been added.
-pub struct HasOneChild;
-
-/// Marker type for [`InnerNodeBuilder`]: at least two children have been added.
-pub struct HasChild;
-
-/// Typestate builder for inner nodes that enforces the two-child minimum
-/// invariant.
-///
-/// The only way to call [`build`][InnerNodeBuilder::build] is to first add at
-/// least two children via [`write_child`][InnerNodeBuilder::write_child]. This
-/// is checked at compile time via the `S` typestate parameter.
-///
-/// Obtain a builder via [`InnerNodeCommon::builder`].
-#[expect(clippy::type_complexity)]
-pub struct InnerNodeBuilder<K, V, const PREFIX_LEN: usize, N, S = NoChild> {
-    node: N,
-    _state: PhantomData<fn() -> (K, V, S)>,
-}
-
-impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, NoChild>
-where
-    N: InnerNodeCommon<K, V, PREFIX_LEN>,
-{
-    /// Add the first child, transitioning the builder to the [`HasOneChild`]
-    /// state.
-    pub fn write_child(
-        mut self,
-        key_byte: u8,
-        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasOneChild> {
-        self.node.write_child(key_byte, child);
-        InnerNodeBuilder {
-            node: self.node,
-            _state: PhantomData,
-        }
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasOneChild>
-where
-    N: InnerNodeCommon<K, V, PREFIX_LEN>,
-{
-    /// Add the second child, transitioning the builder to the [`HasChild`]
-    /// state and enabling [`build`][InnerNodeBuilder::build].
-    pub fn write_child(
-        mut self,
-        key_byte: u8,
-        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasChild> {
-        self.node.write_child(key_byte, child);
-        InnerNodeBuilder {
-            node: self.node,
-            _state: PhantomData,
-        }
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize>
-    InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, NoChild>
-{
-    /// Add the first child to the node without bounds check or order.
-    ///
-    /// This function transitions the builder to the [`HasOneChild`] state.
-    ///
-    /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
-    ///   is done previously to the call of this function)
-    pub unsafe fn write_child_unchecked(
-        mut self,
-        key_byte: u8,
-        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasOneChild> {
-        // SAFETY: Covered by function safety requirements
-        unsafe { self.node.write_child_unchecked(key_byte, child) };
-        InnerNodeBuilder {
-            node: self.node,
-            _state: PhantomData,
-        }
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize>
-    InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasOneChild>
-{
-    /// Add the second child to the node without bounds check or order.
-    ///
-    /// This function transitions the builder to the [`HasChild`] state and
-    /// enabling [`build`][InnerNodeBuilder::build].
-    ///
-    /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
-    ///   is done previously to the call of this function)
-    pub unsafe fn write_child_unchecked(
-        mut self,
-        key_byte: u8,
-        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) -> InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasChild> {
-        // SAFETY: Covered by function safety requirements
-        unsafe { self.node.write_child_unchecked(key_byte, child) };
-        InnerNodeBuilder {
-            node: self.node,
-            _state: PhantomData,
-        }
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize, N> InnerNodeBuilder<K, V, PREFIX_LEN, N, HasChild>
-where
-    N: InnerNodeCommon<K, V, PREFIX_LEN>,
-{
-    /// Add another child to the node being built.
-    pub fn write_child(mut self, key_byte: u8, child: OpaqueNodePtr<K, V, PREFIX_LEN>) -> Self {
-        self.node.write_child(key_byte, child);
-        self
-    }
-
-    /// Consume the builder and return the finished inner node.
-    ///
-    /// Only callable after at least one child has been added.
-    pub fn build(self) -> N {
-        self.node
-    }
-}
-
-impl<K, V, const PREFIX_LEN: usize>
-    InnerNodeBuilder<K, V, PREFIX_LEN, InnerNode4<K, V, PREFIX_LEN>, HasChild>
-{
-    /// Add a child to the node without bounds check or order.
-    ///
-    /// # Safety
-    /// - This functions assumes that the write is gonna be inbound (i.e the check for a full node
-    ///   is done previously to the call of this function)
-    #[cfg_attr(not(feature = "_internal"), expect(dead_code))]
-    pub unsafe fn write_child_unchecked(
-        mut self,
-        key_byte: u8,
-        child: OpaqueNodePtr<K, V, PREFIX_LEN>,
-    ) -> Self {
-        // SAFETY: Covered by function safety requirements
-        unsafe { self.node.write_child_unchecked(key_byte, child) };
-        self
     }
 }
 
@@ -1039,22 +913,30 @@ mod tests {
         let mut leaf = LeafNode::<Box<[u8]>, (), 16>::with_no_siblings(vec![].into(), ());
         let leaf_ptr = NodePtr::from(&mut leaf).to_opaque();
 
-        let n4 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
-        let n16 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
-        let n48 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
-        let n256 = InnerNode4::<Box<[u8]>, (), 16>::builder(&[], 0)
-            .write_child(0, leaf_ptr)
-            .write_child(1, leaf_ptr)
-            .build();
+        let n4 = InnerNode4::<Box<[u8]>, (), 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
+        let n16 = InnerNode4::<Box<[u8]>, (), 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
+        let n48 = InnerNode4::<Box<[u8]>, (), 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
+        let n256 = InnerNode4::<Box<[u8]>, (), 16>::from_two_children(
+            &[],
+            0,
+            (0, leaf_ptr),
+            (1, leaf_ptr),
+        );
 
         let n4_ptr = (&n4 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
         let n16_ptr = (&n16 as *const InnerNode4<Box<[u8]>, (), 16>).addr();
@@ -1082,10 +964,7 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        let mut node = N::builder(&[], 0)
-            .write_child(0, leaf_pointers[0])
-            .write_child(1, leaf_pointers[1])
-            .build();
+        let mut node = N::from_two_children(&[], 0, (0, leaf_pointers[0]), (1, leaf_pointers[1]));
 
         assert!(!node.is_full());
 
@@ -1116,10 +995,7 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        let mut node = N::builder(&[], 0)
-            .write_child(0, leaf_pointers[0])
-            .write_child(1, leaf_pointers[1])
-            .build();
+        let mut node = N::from_two_children(&[], 0, (0, leaf_pointers[0]), (1, leaf_pointers[1]));
 
         assert!(!node.is_full());
 
@@ -1159,10 +1035,7 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        let mut node = N::builder(&[], 0)
-            .write_child(0, leaf_pointers[0])
-            .write_child(1, leaf_pointers[1])
-            .build();
+        let mut node = N::from_two_children(&[], 0, (0, leaf_pointers[0]), (1, leaf_pointers[1]));
 
         for (idx, leaf_pointer) in leaf_pointers[2..].iter().copied().enumerate() {
             node.write_child(u8::try_from(idx + 2).unwrap(), leaf_pointer);
@@ -1196,10 +1069,7 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        let mut node = N::builder(&[], 0)
-            .write_child(0, leaf_pointers[0])
-            .write_child(1, leaf_pointers[1])
-            .build();
+        let mut node = N::from_two_children(&[], 0, (0, leaf_pointers[0]), (1, leaf_pointers[1]));
 
         for (idx, leaf_pointer) in leaf_pointers[2..].iter().copied().enumerate() {
             node.write_child(u8::try_from(idx + 2).unwrap(), leaf_pointer);
@@ -1243,8 +1113,8 @@ mod tests {
         N: InnerNode<PREFIX_LEN, Key = Box<[u8]>, Value = ()>,
     {
         assert!(
-            !child_keys.is_empty(),
-            "test harness must specify at least 1 child"
+            child_keys.len() >= 2,
+            "test harness must specify at least 2 children"
         );
 
         let mut leaves: Vec<LeafNode<Box<[u8]>, (), PREFIX_LEN>> = child_keys
@@ -1257,13 +1127,12 @@ mod tests {
             .map(|leaf| NodePtr::from(leaf).to_opaque())
             .collect();
 
-        // When there is only a single child key, the builder writes the same
-        // child twice, which leaves the node with one child.
-        let second = 1.min(child_keys.len() - 1);
-        let mut node = N::builder(&[], 0)
-            .write_child(child_keys[0], leaf_pointers[0])
-            .write_child(child_keys[second], leaf_pointers[second])
-            .build();
+        let mut node = N::from_two_children(
+            &[],
+            0,
+            (child_keys[0], leaf_pointers[0]),
+            (child_keys[1], leaf_pointers[1]),
+        );
 
         for (key, leaf_pointer) in child_keys.iter().zip(&leaf_pointers).skip(2) {
             node.write_child(*key, *leaf_pointer);
