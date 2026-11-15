@@ -8,10 +8,10 @@ use crate::{
     AsBytes, TreeMap,
     map::{DEFAULT_PREFIX_LEN, NonEmptyTree},
     raw::{
-        Descent, DescentEnd, InnerNode, LeafNode, NoPath, NodePtr, OpaqueNodePtr, RawIterator,
-        SkippedPrefixMismatch, any_leaf, leaf_common_prefix_len, locate_skipped_mismatch,
-        match_concrete_node_ptr, maximum_unchecked, minimum_unchecked, optimistic_descent,
-        verify_descent,
+        ChildEdge, Descent, DescentEnd, InnerNode, LeafNode, NoPath, NodePtr, OpaqueNodePtr,
+        RawIterator, SkippedPrefixMismatch, any_leaf, leaf_common_prefix_len,
+        locate_skipped_mismatch, match_concrete_node_ptr, maximum_unchecked, minimum_unchecked,
+        optimistic_descent, verify_descent,
     },
 };
 
@@ -271,8 +271,6 @@ pub(crate) fn validate_range_bounds(start_bound: &Bound<&[u8]>, end_bound: &Boun
     }
 }
 
-type KeyByteAndChild<K, V, const PREFIX_LEN: usize> = Option<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>;
-
 /// This function searches a trie for the smallest/largest leaf node that is
 /// greater than or equal (GTE) / less than or equal (LTE) to the given bound.
 ///
@@ -451,7 +449,8 @@ pub(crate) unsafe fn find_leaf_pointer_for_bound<K: AsBytes, V, const PREFIX_LEN
                             inner_ptr: NodePtr<PREFIX_LEN, N>,
                             child_bounds: (Bound<u8>, Bound<u8>),
                             is_start: bool,
-                        ) -> KeyByteAndChild<N::Key, N::Value, PREFIX_LEN> {
+                        ) -> Option<ChildEdge<N::Key, N::Value, PREFIX_LEN>>
+                        {
                             // SAFETY: Covered by outer function safety doc
                             let inner = unsafe { inner_ptr.as_ref() };
                             let mut child_it = inner.range(child_bounds);

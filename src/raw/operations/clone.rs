@@ -6,8 +6,8 @@ use core::alloc::Allocator;
 use crate::{
     AsBytes,
     raw::{
-        ConcreteInnerNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr, OpaqueNodePtr,
-        deallocate_tree, match_concrete_inner_node_ptr, match_concrete_node_ptr,
+        ChildEdge, ConcreteInnerNodePtr, InnerNode, InnerNodeCommon, LeafNode, Node, NodePtr,
+        OpaqueNodePtr, deallocate_tree, match_concrete_inner_node_ptr, match_concrete_node_ptr,
     },
 };
 
@@ -141,7 +141,7 @@ pub unsafe fn clone_unchecked<
     ///    `unfinished_nodes_stack` stack.
     unsafe fn clone_inner_node<N, K, V, A, const PREFIX_LEN: usize>(
         unfinished_nodes_stack: &mut Vec<(usize, ConcreteInnerNodePtr<K, V, PREFIX_LEN>)>,
-        dfs_stack: &mut Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)>,
+        dfs_stack: &mut Vec<ChildEdge<K, V, PREFIX_LEN>>,
         new_root_node: &mut Option<OpaqueNodePtr<K, V, PREFIX_LEN>>,
         key_byte: u8,
         inner_ptr: NodePtr<PREFIX_LEN, N>,
@@ -193,7 +193,7 @@ pub unsafe fn clone_unchecked<
     let mut unfinished_nodes_stack: Vec<(usize, ConcreteInnerNodePtr<K, V, PREFIX_LEN>)> =
         Vec::new();
     // (Key byte of this node, node pointer)
-    let mut dfs_stack: Vec<(u8, OpaqueNodePtr<K, V, PREFIX_LEN>)> = Vec::new();
+    let mut dfs_stack: Vec<ChildEdge<K, V, PREFIX_LEN>> = Vec::new();
 
     // Guard deallocates partial root on unwinding
     let mut guard = PartialCloneGuard {
