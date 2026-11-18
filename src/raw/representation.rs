@@ -9,6 +9,9 @@ use core::{
 
 use crate::{AsBytes, hint::likely};
 
+mod bitmap;
+pub(crate) use bitmap::Bitmap;
+
 mod header;
 pub use header::*;
 
@@ -853,10 +856,11 @@ mod tests {
             mem::size_of::<InnerNode48<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
             EXPECTED_HEADER_SIZE + 636
         );
+        // presence bitmap: 256 bits = 32 bytes
         // child & key map: 256 * (8 bytes (on 64-bit platform)) = 2048
         assert_eq!(
             mem::size_of::<InnerNodeDirect<Box<[u8]>, usize, DEFAULT_PREFIX_LEN>>(),
-            EXPECTED_HEADER_SIZE + 2044
+            EXPECTED_HEADER_SIZE + 2076
         );
 
         // Assert that pointer is expected size and has non-null optimization
