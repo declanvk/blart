@@ -1,10 +1,9 @@
-#[cfg(feature = "nightly")]
-use core::simd::{cmp::SimdPartialEq, usizex64};
-use core::{fmt, iter::FusedIterator};
+use core::{fmt, iter::FusedIterator, ops::RangeBounds};
 
 use crate::raw::{
     ChildEdge, Header, InnerNode, InnerNode48, InnerNodeCommon, InnerNodeIndirect, InnerNodeSorted,
-    Node, NodeType, OpaqueNodePtr, Sibling, representation::assert_valid_range_bounds,
+    Node, NodeType, OpaqueNodePtr, Sibling,
+    representation::{Bitmap, assert_valid_range_bounds},
 };
 
 /// Inner node that stores up to 256 children, where lookup is performed by
@@ -13,24 +12,65 @@ use crate::raw::{
 pub struct InnerNodeDirect<K, V, const PREFIX_LEN: usize> {
     /// The common node fields.
     header: Header<PREFIX_LEN>,
+    /// The set of key bytes which have a child in `child_pointers`.
+    ///
+    /// This lets iteration, min/max, and sibling search skip directly to the
+    /// populated slots instead of scanning all 256 child pointers.
+    ///
+    /// Invariant: for every key byte `k`, `present.contains(k)` is true if and only if
+    /// `child_pointers[k]` is `Some`.
+    present: Bitmap,
     /// An array that directly maps a key byte (as index) to a child node.
     child_pointers: [Option<OpaqueNodePtr<K, V, PREFIX_LEN>>; 256],
+}
+
+impl<K, V, const PREFIX_LEN: usize> InnerNodeDirect<K, V, PREFIX_LEN> {
+    /// Create a new node with the given header and children.
+    ///
+    /// The number of children in the header is overwritten with the number of
+    /// children yielded by `children`.
+    fn from_header_and_children(
+        mut header: Header<PREFIX_LEN>,
+        children: impl Iterator<Item = ChildEdge<K, V, PREFIX_LEN>>,
+    ) -> Self {
+        header.reset_num_children();
+        let mut node = InnerNodeDirect {
+            header,
+            present: Bitmap::new(),
+            child_pointers: [None; 256],
+        };
+        for (key_fragment, child_pointer) in children {
+            node.write_child(key_fragment, child_pointer);
+        }
+        node
+    }
+
+    /// Return the child edge for a key byte which is a member of
+    /// `self.present`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must only pass key bytes obtained from `self.present`. This
+    /// is checked in debug builds.
+    #[inline]
+    unsafe fn present_child(&self, key_fragment: u8) -> ChildEdge<K, V, PREFIX_LEN> {
+        debug_assert!(
+            self.present.contains(key_fragment),
+            "key fragment [{key_fragment}] is not present in node"
+        );
+        let child_pointer = self.child_pointers[usize::from(key_fragment)];
+        // SAFETY: Every key fragment passed to this function is a member of
+        // `self.present` (by caller requirement). Its an invariant of the `present` field bitmap
+        // that `child_pointers[k]` is `Some` for every member `k` of `self.present`.
+        (key_fragment, unsafe { child_pointer.unwrap_unchecked() })
+    }
 }
 
 impl<K, V, const PREFIX_LEN: usize, const OTHER_SIZE: usize>
     From<&InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>> for InnerNodeDirect<K, V, PREFIX_LEN>
 {
     fn from(value: &InnerNodeSorted<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
-        let header = value.header().clone();
-        let mut child_pointers = [None; 256];
-        for (key_fragment, child_pointer) in value.inner_iter() {
-            child_pointers[usize::from(key_fragment)] = Some(child_pointer);
-        }
-
-        InnerNodeDirect {
-            header,
-            child_pointers,
-        }
+        Self::from_header_and_children(value.header().clone(), value.inner_iter())
     }
 }
 
@@ -38,16 +78,7 @@ impl<K, V, const PREFIX_LEN: usize, const OTHER_SIZE: usize>
     From<&InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>> for InnerNodeDirect<K, V, PREFIX_LEN>
 {
     fn from(value: &InnerNodeIndirect<K, V, PREFIX_LEN, OTHER_SIZE>) -> Self {
-        let header = value.header().clone();
-        let mut child_pointers = [None; 256];
-        for (key_fragment, child_pointer) in value.iter() {
-            child_pointers[usize::from(key_fragment)] = Some(child_pointer);
-        }
-
-        InnerNodeDirect {
-            header,
-            child_pointers,
-        }
+        Self::from_header_and_children(value.header().clone(), value.iter())
     }
 }
 
@@ -55,6 +86,7 @@ impl<K, V, const PREFIX_LEN: usize> fmt::Debug for InnerNodeDirect<K, V, PREFIX_
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InnerNodeDirect")
             .field("header", &self.header)
+            .field("present", &self.present)
             .field("child_pointers", &self.child_pointers)
             .finish()
     }
@@ -64,6 +96,7 @@ impl<K, V, const PREFIX_LEN: usize> Clone for InnerNodeDirect<K, V, PREFIX_LEN> 
     fn clone(&self) -> Self {
         Self {
             header: self.header.clone(),
+            present: self.present,
             child_pointers: self.child_pointers,
         }
     }
@@ -73,12 +106,8 @@ impl<K, V, const PREFIX_LEN: usize> Clone for InnerNodeDirect<K, V, PREFIX_LEN> 
 unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     for InnerNodeDirect<K, V, PREFIX_LEN>
 {
-    unsafe fn from_header(mut header: Header<PREFIX_LEN>) -> Self {
-        header.reset_num_children();
-        Self {
-            header,
-            child_pointers: [None; 256],
-        }
+    unsafe fn from_header(header: Header<PREFIX_LEN>) -> Self {
+        Self::from_header_and_children(header, core::iter::empty())
     }
 
     fn header(&self) -> &Header<PREFIX_LEN> {
@@ -90,10 +119,8 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     }
 
     fn write_child(&mut self, key_fragment: u8, child_pointer: OpaqueNodePtr<K, V, PREFIX_LEN>) {
-        let key_fragment_idx = usize::from(key_fragment);
-        let existing_pointer = self.child_pointers[key_fragment_idx];
-        self.child_pointers[key_fragment_idx] = Some(child_pointer);
-        if existing_pointer.is_none() {
+        self.child_pointers[usize::from(key_fragment)] = Some(child_pointer);
+        if self.present.insert(key_fragment) {
             self.header.inc_num_children();
         }
     }
@@ -101,7 +128,7 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     fn remove_child(&mut self, key_fragment: u8) -> Option<OpaqueNodePtr<K, V, PREFIX_LEN>> {
         let removed_child = self.child_pointers[usize::from(key_fragment)].take();
 
-        if removed_child.is_some() {
+        if self.present.remove(key_fragment) {
             self.header.dec_num_children();
         }
 
@@ -109,159 +136,75 @@ unsafe impl<K, V, const PREFIX_LEN: usize> InnerNodeCommon<K, V, PREFIX_LEN>
     }
 
     fn iter(&self) -> impl DoubleEndedIterator<Item = ChildEdge<K, V, PREFIX_LEN>> + FusedIterator {
-        self.child_pointers
-            .iter()
-            .enumerate()
-            .filter_map(|(key, node)| node.map(|node| (key as u8, node)))
+        self.present.iter().map(|key| unsafe {
+            // SAFETY: `key` comes from `present`
+            self.present_child(key)
+        })
     }
 
     fn range(
         &self,
-        bound: impl core::ops::RangeBounds<u8>,
+        bound: impl RangeBounds<u8>,
     ) -> impl DoubleEndedIterator<Item = ChildEdge<K, V, PREFIX_LEN>> + FusedIterator {
         assert_valid_range_bounds(&bound);
 
-        let start = bound.start_bound().map(|val| usize::from(*val));
-        let key_offset = match bound.start_bound() {
-            core::ops::Bound::Included(val) => *val,
-            core::ops::Bound::Excluded(val) => val.saturating_add(1),
-            core::ops::Bound::Unbounded => 0,
-        };
-        let end = bound.end_bound().map(|val| usize::from(*val));
-
-        self.child_pointers[(start, end)]
-            .iter()
-            .enumerate()
-            .filter_map(move |(key, child)| {
-                child.map(|child| ((key as u8).saturating_add(key_offset), child))
-            })
+        self.present.range(bound).into_iter().map(|key| unsafe {
+            // SAFETY: `key` comes from `present`
+            self.present_child(key)
+        })
     }
 
-    #[cfg_attr(all(test, feature = "nightly"), mutants::skip)]
     fn min(&self) -> ChildEdge<K, V, PREFIX_LEN> {
-        cfg_select! {
-            feature = "nightly" => {
-                let child_pointers =
-                    OpaqueNodePtr::transmute_child_pointers_to_usize(&self.child_pointers);
-                let empty = usizex64::splat(0);
-                let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
-                    .simd_eq(empty)
-                    .to_bitmask();
-                let r1 = usizex64::from_array(child_pointers[64..128].try_into().unwrap())
-                    .simd_eq(empty)
-                    .to_bitmask();
-                let r2 = usizex64::from_array(child_pointers[128..192].try_into().unwrap())
-                    .simd_eq(empty)
-                    .to_bitmask();
-                let r3 = usizex64::from_array(child_pointers[192..256].try_into().unwrap())
-                    .simd_eq(empty)
-                    .to_bitmask();
-
-                let key = if r0 != u64::MAX {
-                    r0.trailing_ones()
-                } else if r1 != u64::MAX {
-                    r1.trailing_ones() + 64
-                } else if r2 != u64::MAX {
-                    r2.trailing_ones() + 128
-                } else {
-                    r3.trailing_ones() + 192
-                } as usize;
-
-                unsafe {
-                    // SAFETY: key can be at up to 256, but we know that we have
-                    // at least one inner child, it's guarantee to be in bounds
-                    core::hint::assert_unchecked(key < self.child_pointers.len());
-                }
-
-                // SAFETY: Covered by the containing function
-                (key as u8, unsafe {
-                    self.child_pointers[key].unwrap_unchecked()
-                })
-            },
-            _ => {
-                for (key, child_pointer) in self.child_pointers.iter().enumerate() {
-                    match child_pointer {
-                        Some(child_pointer) => return (key as u8, *child_pointer),
-                        None => continue,
-                    }
-                }
-                unreachable!("inner node must have non-zero number of children");
-            },
-        }
+        let Some(key) = self.present.first() else {
+            unreachable!("inner node must have non-zero number of children");
+        };
+        // SAFETY: `key` comes from `present`
+        unsafe { self.present_child(key) }
     }
 
-    #[cfg_attr(all(test, feature = "nightly"), mutants::skip)]
     fn max(&self) -> ChildEdge<K, V, PREFIX_LEN> {
-        cfg_select! {
-            feature = "nightly" => {
-                let child_pointers =
-                    OpaqueNodePtr::transmute_child_pointers_to_usize(&self.child_pointers);
-                let empty = usizex64::splat(0);
-                let r0 = usizex64::from_array(child_pointers[0..64].try_into().unwrap())
-                    .simd_eq(empty)
-                    .to_bitmask();
-                let r1 = usizex64::from_array(child_pointers[64..128].try_into().unwrap())
-                    .simd_eq(empty)
-                    .to_bitmask();
-                let r2 = usizex64::from_array(child_pointers[128..192].try_into().unwrap())
-                    .simd_eq(empty)
-                    .to_bitmask();
-                let r3 = usizex64::from_array(child_pointers[192..256].try_into().unwrap())
-                    .simd_eq(empty)
-                    .to_bitmask();
-
-                let key = if r3 != u64::MAX {
-                    255 - r3.leading_ones()
-                } else if r2 != u64::MAX {
-                    191 - r2.leading_ones()
-                } else if r1 != u64::MAX {
-                    127 - r1.leading_ones()
-                } else {
-                    // SAFETY: This subtraction can't fail, because we know that
-                    // we have at least one child, so the number of leading ones
-                    // in this last case is <= 63
-                    63 - r0.leading_ones()
-                } as usize;
-
-                unsafe {
-                    // SAFETY: idx can be at up to 255, so it's in bounds
-                    core::hint::assert_unchecked(key < self.child_pointers.len());
-                }
-
-                // SAFETY: covered by the containing function
-                (key as u8, unsafe {
-                    self.child_pointers[key].unwrap_unchecked()
-                })
-            },
-            _ => {
-                for (key, child_pointer) in self.child_pointers.iter().enumerate().rev() {
-                    match child_pointer {
-                        Some(child_pointer) => return (key as u8, *child_pointer),
-                        None => continue,
-                    }
-                }
-                unreachable!("inner node must have non-zero number of children");
-            },
-        }
+        let Some(key) = self.present.last() else {
+            unreachable!("inner node must have non-zero number of children");
+        };
+        // SAFETY: `key` comes from `present`
+        unsafe { self.present_child(key) }
     }
 
     fn nearest_sibling(&self, new_leaf_key_byte: u8) -> Sibling<K, V, PREFIX_LEN> {
-        let Some(sib) = (1..=u8::MAX).find_map(|distance| {
-            new_leaf_key_byte
-                .checked_add(distance)
-                .and_then(|key_byte| self.lookup_child(key_byte))
-                .map(Sibling::Next)
-                .or_else(|| {
-                    new_leaf_key_byte
-                        .checked_sub(distance)
-                        .and_then(|key_byte| self.lookup_child(key_byte))
-                        .map(Sibling::Previous)
-                })
-        }) else {
-            panic!("Inner node has no child other than key byte [{new_leaf_key_byte}]")
+        let next = self.present.next_after(new_leaf_key_byte);
+        if let Some(next) = next
+            && next - new_leaf_key_byte == 1
+        {
+            // Fast path, common in dense nodes: no sibling can be closer than the
+            // adjacent one, and ties prefer the next sibling.
+            //
+            // SAFETY: `key` comes from `present`
+            return Sibling::Next(unsafe { self.present_child(next).1 });
+        }
+        let previous = self.present.prev_before(new_leaf_key_byte);
+
+        // Prefer the closest sibling, and the next sibling when both are
+        // equally distant.
+        let use_next = match (previous, next) {
+            (Some(previous), Some(next)) => {
+                (next - new_leaf_key_byte) <= (new_leaf_key_byte - previous)
+            },
+            (None, Some(_)) => true,
+            (Some(_), None) => false,
+            (None, None) => {
+                panic!("Inner node has no child other than key byte [{new_leaf_key_byte}]")
+            },
         };
 
-        sib
+        if use_next {
+            // PANIC SAFETY: `use_next` is only true when `next` is `Some`
+            // SAFETY: `key` comes from `present`
+            Sibling::Next(unsafe { self.present_child(next.unwrap()).1 })
+        } else {
+            // PANIC SAFETY: `use_next` is only false when `previous` is `Some`
+            // SAFETY: `key` comes from `present`
+            Sibling::Previous(unsafe { self.present_child(previous.unwrap()).1 })
+        }
     }
 }
 
